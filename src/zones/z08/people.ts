@@ -106,43 +106,38 @@ export function updateLitters(z: ZoneRuntime, dt: number): void {
 // ---------------------------------------------------------------------------------------------------------------------
 
 /**
- * Medics, stretcher cases and walking wounded as the given stage finds them. `walkersOut` = the walking wounded
- * have already reached the east manual shutter (East priority, after it opened).
+ * Two medics with the two stretcher cases (west), two walking wounded (east), as the given stage finds them.
+ * `walkersOut` = the walking wounded have already reached the east manual shutter (East priority, after it opened).
  */
-export function spawnSurvivors(z: ZoneRuntime, o: { walkersOut: boolean; gone: boolean }): void {
-  if (o.gone) return;
+export function spawnSurvivors(z: ZoneRuntime, o: { walkersOut: boolean }): void {
   z.npc('medic', 'medicA', 'kneelTend', 'medicA');
   z.npc('medic', 'medicB', 'kneelTend', 'medicB');
-  z.npc('survivor', 'helperW', 'kneel', 'helperW');
   makeLitter(z, 'W1', 'litterW1', 'dominionSoldier', 811);
   makeLitter(z, 'W2', 'litterW2', 'reformationSoldier', 812);
   const lo = makeLitter(z, 'O', 'litterO', null, 0);
   lo.group.visible = false;
   if (o.walkersOut) {
     z.npc('survivor', 'shutterWheel', undefined, 'walker1');
-    z.npc('survivor', 'walkerGate1', 'limp', 'walker2');
-    z.npc('reformationSoldier', 'walkerGate2', 'limp', 'walker3');
+    z.npc('reformationSoldier', 'walkerGate1', 'limp', 'walker2');
   } else {
     z.npc('survivor', 'walker1', 'sitInjured', 'walker1');
-    z.npc('survivor', 'walker2', 'limp', 'walker2');
-    z.npc('reformationSoldier', 'walker3', 'sit', 'walker3');
+    z.npc('reformationSoldier', 'walker2', 'limp', 'walker2');
   }
 }
 
 /** East priority, phase A: the walking wounded reach the manual shutter and wind it open */
 export function* walkersToShutter(z: ZoneRuntime): Routine {
-  const w = ['walker1', 'walker2', 'walker3'].map((n) => z.cast(n));
+  const w = ['walker1', 'walker2'].map((n) => z.cast(n));
   for (const c of w) c?.stopAction();
   walkTo(z, w[0], 'shutterWheel');
   walkTo(z, w[1], 'walkerGate1');
-  walkTo(z, w[2], 'walkerGate2');
+  const wheel = z.m('shutterWheel');
   const until = z.time + 14;
-  yield () => z.time >= until || (w[0] ? w[0].arrived || Math.hypot(w[0].actor.pos.x - z.m('shutterWheel').x, w[0].actor.pos.z - z.m('shutterWheel').z) < 0.9 : true);
-  w[0]?.face(S.gateN ? S.gateN.pos : z.m('shutterWheel'));
+  yield () => z.time >= until || !w[0] || w[0].arrived || Math.hypot(w[0].actor.pos.x - wheel.x, w[0].actor.pos.z - wheel.z) < 0.9;
+  w[0]?.face(S.gateN ? S.gateN.pos : wheel);
   const t = w[0]?.play('interact') ?? 0;
   yield Math.max(1.6, Math.min(3, t));
   w[1]?.play('limp', { loop: true });
-  w[2]?.play('limp', { loop: true });
 }
 
 /** who escorts what out of the court, by priority (the chosen group leaves first) */
@@ -153,15 +148,17 @@ export interface ExitPlan {
 
 /**
  * The exit order (SCRIPT_SOURCE Z08 `quarantine`): West chosen — the stretcher cases first, then the walking
- * wounded; East chosen — the walking wounded first, then one of them turns back for the last stretcher.
+ * wounded; East chosen — the walking wounded first, then one of them turns back for the last stretcher. Under
+ * SPARE the second medic takes the officer (`medicB` → litter 'O', sent after his line, not listed here).
  * Each entry is [escort cast name, litter id it guides or null].
  */
 export function exitPlan(west: boolean, spared: boolean): ExitPlan {
-  const medics: Array<[string, string | null]> = [['medicA', 'W1'], ['medicB', spared ? 'O' : null]];
   if (west) {
-    return { first: [...medics, ['helperW', 'W2']], second: [['walker1', null], ['walker2', null], ['walker3', null]] };
+    return spared
+      ? { first: [['medicA', 'W1']], second: [['walker1', null], ['walker2', 'W2']] }
+      : { first: [['medicA', 'W1'], ['medicB', 'W2']], second: [['walker1', null], ['walker2', null]] };
   }
-  return { first: [['walker1', null], ['walker2', null], ['helperW', null]], second: [...medics, ['walker3', 'W2']] };
+  return { first: [['walker1', null]], second: spared ? [['medicA', 'W1'], ['walker2', 'W2']] : [['medicA', 'W1'], ['walker2', 'W2'], ['medicB', null]] };
 }
 
 /** start one group walking to the south door (litters attach to their escorts) */
@@ -183,7 +180,7 @@ export function sendOut(z: ZoneRuntime, group: Array<[string, string | null]>): 
 
 /** the court is clear: everyone who left is out of the room (end state of the clearing scene) */
 export function survivorsGone(z: ZoneRuntime): void {
-  for (const n of ['medicA', 'medicB', 'helperW', 'walker1', 'walker2', 'walker3']) z.cast(n)?.remove();
+  for (const n of ['medicA', 'medicB', 'walker1', 'walker2']) z.cast(n)?.remove();
   for (const l of S.litters) {
     l.escort = null;
     l.group.visible = false;

@@ -35,7 +35,6 @@ export function* quarantineScene(z: ZoneRuntime, west: boolean, fate: 'killed' |
       z.openDoor(S.entry, true);
     }
     const plan = exitPlan(west, spared);
-    const notMedicB = (g: Array<[string, string | null]>) => g.filter(([w]) => !(spared && w === 'medicB'));
     // Lyessa and the squad pair fall back west of the court, covering the exit
     walkTo(z, lyessa, 'lyessaQ');
     walkTo(z, s1, 'soldierQ1');
@@ -48,13 +47,13 @@ export function* quarantineScene(z: ZoneRuntime, west: boolean, fate: 'killed' |
       mb?.play('kneelTend', { loop: true });
     }
     c.cut({ pos: z.P(30.5, 21.5, 2.1), look: west ? z.P(10, 36, 1.2) : z.P(62, 36, 1.2), fov: 42 });
-    sendOut(z, notMedicB(plan.first));
+    sendOut(z, plan.first);
     if (west) yield* z.say('Medic', 'Stretchers first. One. Two. Keep moving.', { actor: z.cast('medicA') }); // NEW
     else yield* z.say('Survivor', 'Walkers out first. Go, go.', { actor: z.cast('walker1') }); // NEW
     yield 1.2;
-    sendOut(z, notMedicB(plan.second));
+    sendOut(z, plan.second);
     if (west) yield* z.say('Survivor', 'Walking wounded, with me. Stay close.', { actor: z.cast('walker1') }); // NEW
-    else yield* z.say('Survivor', 'Last stretcher’s mine. I’ve got it.', { actor: z.cast('walker3') }); // NEW
+    else yield* z.say('Survivor', 'Last stretcher’s mine. I’ve got it.', { actor: z.cast('walker2') }); // NEW
 
     // --- 2. the officer: one acknowledgement, before the barriers ignite -------------------------------------
     const fell = z.m('officerFell');
@@ -87,7 +86,7 @@ export function* quarantineScene(z: ZoneRuntime, west: boolean, fate: 'killed' |
       sendOut(z, [['medicB', 'O']]);
       yield 1.4;
     }
-    yield waitOr(z, () => throughDoor(z, ['medicA', 'medicB', 'helperW', 'walker1', 'walker2', 'walker3']), 6);
+    yield waitOr(z, () => throughDoor(z, ['medicA', 'medicB', 'walker1', 'walker2']), 6);
     // end of the clearing: everyone is out of the court and the entry is shut behind them
     survivorsGone(z);
     if (S.entry) {

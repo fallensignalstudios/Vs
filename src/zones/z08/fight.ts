@@ -73,7 +73,8 @@ export function setupE4(z: ZoneRuntime, stage: 'A' | 'B' | 'finish'): Encounter 
         {
           spawns: [
             elite,
-            { role: 'weaver', at: 'weaverIn', opts: { yaw: z.myaw('weaverIn'), via: 'breach', dormant: true, tags: ['e4'] } },
+            // the source: marked as an objective (tactical read, nav assistance)
+            { role: 'weaver', at: 'weaverIn', opts: { yaw: z.myaw('weaverIn'), via: 'breach', dormant: true, tags: ['e4', 'objective'] } },
             { role: 'linkbound', at: 'lbIn0', opts: { yaw: z.myaw('lbIn0'), via: 'breach', dormant: true, tags: ['e4'] } },
             { role: 'linkbound', at: 'lbIn1', opts: { yaw: z.myaw('lbIn1'), via: 'breach', dormant: true, tags: ['e4'] } },
           ],
@@ -125,6 +126,21 @@ export function wakeE4(z: ZoneRuntime): void {
 function ordinaryLeft(enc: Encounter): number {
   const alive = enc.alive.filter((a) => a !== S.elite).length;
   return alive + (enc.queued ?? 0) + (enc.total - enc.spawned);
+}
+
+/**
+ * Once no link can feed it again, the bodies still standing round it are what keeps it from standing alone:
+ * they become the objective (HUD line and markers) until they are down.
+ */
+export function* isolateA(z: ZoneRuntime): Routine {
+  yield () => S.stage !== 'A' || !S.weaver || !S.weaver.alive || (S.anchor?.disabled ?? false);
+  yield 2;
+  if (S.stage !== 'A' || !S.enc || ordinaryLeft(S.enc) === 0) return;
+  z.objective('Clear the bodies around it'); // NEW
+  while (S.stage === 'A' && S.enc) {
+    for (const a of S.enc.alive) if (a !== S.elite) a.tags.add('objective');
+    yield 0.5;
+  }
 }
 
 /** phase A is over: no link can feed it again and the organism stands alone */

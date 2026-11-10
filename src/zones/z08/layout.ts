@@ -289,13 +289,10 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('litterW1', 9, 39.4, 0, FACE.east);
   b.marker('litterW2', 10.6, 42.4, 0, FACE.east);
   b.marker('litterO', 5.2, 43.4, 0, FACE.east);
-  b.marker('helperW', 5.4, 37.8, 0, 60);
   b.marker('walker1', 64.6, 38.4, 0, FACE.south);
   b.marker('walker2', 67, 40.6, 0, 200);
-  b.marker('walker3', 68.2, 37.4, 0, 230);
   b.marker('shutterWheel', 59.4, 41.4, 0, 200);
   b.marker('walkerGate1', 61.2, 42.4, 0, 230);
-  b.marker('walkerGate2', 62.6, 41, 0, 250);
   b.marker('cacheW1', 13, 39.2, 0);
   b.marker('cacheW2', 11.4, 37.2, 0);
   b.marker('cacheW3', 5.4, 36.4, 0);

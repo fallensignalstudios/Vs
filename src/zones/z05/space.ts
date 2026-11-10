@@ -40,7 +40,7 @@ export function buildSpace(b: ZoneBuilder): void {
 /** the Ø72 disc with the Ø18 shaft opening, its rim, the keel under it, and the pylon ring */
 function buildPlatform(b: ZoneBuilder): void {
   b.disc({
-    x: CX, n: CN, r: R_PLAT, inner: R_SHAFT, inlay: 'radial', reflective: true, thickness: 0.8,
+    x: CX, n: CN, r: R_PLAT, inner: R_SHAFT, inlay: 'radial', reflective: true, thickness: 0.8, mat: 'blackStoneFloor',
     rim: { gapsDeg: [[-RIM_GAP, RIM_GAP], [90 - RIM_GAP, 90 + RIM_GAP], [180 - RIM_GAP, 180 + RIM_GAP], [270 - RIM_GAP, 270 + RIM_GAP]] },
   });
   // eight lit King-era pylons stand round the platform, off the bridge bearings
@@ -58,11 +58,11 @@ function buildPlatform(b: ZoneBuilder): void {
 /** the parapet round the shaft, the walkway on its west lip and the lift plate in its middle (the way below) */
 function buildShaft(b: ZoneBuilder): void {
   const gap = (Math.asin(1.7 / R_PARAPET) * 180) / Math.PI;
-  b.ringWall({ x: CX, n: CN, r: R_PARAPET, height: 1.1, thickness: 0.4, style: 'plain', gapsDeg: [[270 - gap, 270 + gap]], segments: 40 });
+  b.ringWall({ x: CX, n: CN, r: R_PARAPET, height: 1.1, thickness: 0.4, style: 'plain', mat: 'blackStone', gapsDeg: [[270 - gap, 270 + gap]], segments: 40 });
   const [wx0, wn] = at(-R_SHAFT - 0.3, 0);
   const [wx1] = at(-R_LIFT + 0.2, 0);
   b.bridge({ from: [wx0, wn], to: [wx1, wn], width: 3 });
-  b.disc({ x: CX, n: CN, r: R_LIFT, inlay: 'crownmark', thickness: 1.2, rim: { gapsDeg: [[250, 290]] } });
+  b.disc({ x: CX, n: CN, r: R_LIFT, inlay: 'crownmark', thickness: 1.2, mat: 'blackStoneFloor', rim: { gapsDeg: [[250, 290]] } });
   // nobody goes below: the walkway is closed to the player (the script never sends anyone onto it)
   const [gx, gn] = at(-R_PARAPET - 0.7, 0);
   b.blocker({ x: gx, n: gn, w: 0.6, d: 3.6, height: 2.2 });
@@ -93,8 +93,9 @@ function gate(b: ZoneBuilder, bearingDeg: number): ReturnType<ZoneBuilder['door'
   const tx = Math.cos(a);
   const tn = -Math.sin(a); // tangent (to the right, looking outward)
   const [cx, cn] = pol(r, bearingDeg);
-  const half = 8;
-  b.wall({ from: [cx - tx * half, cn - tn * half], to: [cx + tx * half, cn + tn * half], height: 10, style: 'panelled', doors: [{ at: half, width: 5, height: 5 }] });
+  const half = 5;
+  b.wall({ from: [cx - tx * half, cn - tn * half], to: [cx + tx * half, cn + tn * half], height: 7.5, style: 'ribbed', doors: [{ at: half, width: 5, height: 5 }] });
+  for (const s of [-1, 1]) b.column({ x: cx + tx * (half + 0.9) * s, n: cn + tn * (half + 0.9) * s, r: 0.6, height: 9.5, style: 'pylon', lit: true });
   const [bx, bn] = pol(r + 6.5, bearingDeg);
   for (const s of [-1, 1]) {
     const [sx, sn] = [cx + tx * 3.4 * s, cn + tn * 3.4 * s];
@@ -199,7 +200,8 @@ function buildRing(b: ZoneBuilder): void {
 /** a dozen lights at most: key (setEnv), the battle light, one shaft on the meeting ground, faction accents */
 function buildLight(b: ZoneBuilder): void {
   const p = (dx: number, dn: number, h: number) => ({ x: CX + dx, n: CN + dn, h });
-  b.spot({ ...p(-14, 0, 27), target: [CX - 14, CN, 0], angleDeg: 19, intensity: 3600, shaft: true, color: 0xe9eeff });
+  // a cool pool of ceiling light on the meeting ground (no visible cone: nothing up there could hold a lamp)
+  b.spot({ ...p(-14, -2, 44), target: [CX - 14, CN - 1, 0], angleDeg: 15, intensity: 9000, color: 0xdde6ff });
   b.point({ ...p(5.6, 30.6, 1.6), color: AMBER, intensity: 16, distance: 10 });
   b.point({ ...p(5.4, -29.6, 2.2), color: BLUE, intensity: 20, distance: 11 });
   // white-gold darkness below: the shaft is lit from far down
@@ -252,7 +254,7 @@ let ringMat: THREE.MeshStandardMaterial | null = null;
 
 /** the platform's underside: a stepped inverted bowl so the disc reads as structure hanging in the void */
 function keel(): THREE.Object3D {
-  keelMat ??= new THREE.MeshStandardMaterial({ color: 0xbdb6a4, roughness: 0.55, metalness: 0.35 });
+  keelMat ??= new THREE.MeshStandardMaterial({ color: 0x15161b, roughness: 0.3, metalness: 0.55 });
   ringMat ??= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(GOLD), emissiveIntensity: 2.2 });
   const g = new THREE.Group();
   g.name = 'z05-keel';

@@ -21,7 +21,7 @@
 import type { Beat, CineCtx, Routine, ZoneDef, ZoneRuntime } from '@/core/api';
 import { setDoor, sustainDrops, tutorialHint, walkTo } from './shared';
 import {
-  barksA, lyessaSupport, phaseADone, phaseAFailsafe, resonanceLoop, setupE4, teachA, updateFight, wakeE4,
+  barksA, isolateA, lyessaSupport, phaseADone, phaseAFailsafe, resonanceLoop, setupE4, teachA, updateFight, wakeE4,
 } from './z08/fight';
 import { finishScene, restoreOfficer, updateOfficer } from './z08/finish';
 import { build } from './z08/layout';
@@ -80,7 +80,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   // Tharne and Lyric hold at the staging: rear, protected, silent during E4
   z.npc('tharne', 'tharneStage', 'kneelTend', 'tharne');
   z.npc('lyric', 'lyricStage', 'sitInjured', 'lyric');
-  spawnSurvivors(z, { walkersOut: !west && stage !== 'A', gone: false });
+  spawnSurvivors(z, { walkersOut: !west && stage !== 'A' });
   // the east flank: East opens it in phase A, West at the handoff ("sooner" / later)
   const flank = stage !== 'A';
   setDoor(S.gateS, flank, flank ? 'open' : 'locked');
@@ -154,6 +154,7 @@ function* phaseA(z: ZoneRuntime): Routine {
   z.fork(lyessaSupport(z, z.cast('lyessa')), 'lyessa');
   z.fork(consequence(z, west), 'consequence');
   z.fork(phaseAFailsafe(z), 'failsafe');
+  z.fork(isolateA(z), 'isolate');
   yield z.until(phaseADone);
 }
 
