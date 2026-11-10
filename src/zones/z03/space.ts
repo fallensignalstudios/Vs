@@ -12,7 +12,7 @@ import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, FROST, IVORY } from '../shared';
 import {
   BAY_X0, D, DECK_H, DECK_N0, DECK_N1, DECK_X0, DECK_X1, EXIT_N, HATCH_HINGE_H, HATCH_LEN, HATCH_W, HOLO, LODGE_RIB_SPAN,
-  LODGE_RIB_X, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, TETHER_FROM, TETHER_TO, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
+  LODGE_RIB_X, HOLO_H, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, TETHER_FROM, TETHER_TO, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
   VAULT_RISE, W, WALL_H, WRECK_N, WRECK_REAR_X,
 } from './layout';
 import { S } from './state';
@@ -142,13 +142,15 @@ function buildBay(b: ZoneBuilder): void {
   tether.name = 'z03-tether';
   tether.position.copy(from);
   tether.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
-  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, len, 6), mats.get('refSteel'));
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len, 6), mats.get('refSteel'));
   cable.position.y = len / 2;
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, len, 5), mats.emissive(BLUE, 1.8));
+  core.position.set(0.03, len / 2, 0.03);
   const tipMat = mats.emissive(BLUE, 3);
   const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), tipMat);
   tip.position.y = len;
   const root = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.22, 8), mats.get('refNavy'));
-  tether.add(cable, tip, root);
+  tether.add(cable, core, tip, root);
   tether.scale.set(1, 0.001, 1);
   b.keep(b.add(tether));
   S.tether = tether;
@@ -241,19 +243,19 @@ function buildInstallation(b: ZoneBuilder): void {
   b.prop('refAmmoCase', { x: 44.1, n: 17.9, yawDeg: 20 });
   b.prop('cableBundle', { x: 41.2, n: 10.6, yawDeg: 210 });
   b.prop('cableBundle', { x: 38.6, n: 6.4, yawDeg: 240 });
-  b.prop('refLamp', { x: 40.4, n: 18.6, yawDeg: 200 });
   b.prop('ancientPylon', { x: 35.6, n: 20.2 });
 
+  b.prop('refCrate', { x: HOLO[0], n: HOLO[1], yawDeg: FACE.west, variant: 2, scale: 1.15 });
   const holo = b.game.props.hologram('sensorReconstruction');
-  holo.object.position.copy(b.P(HOLO[0], HOLO[1], 0));
+  holo.object.position.copy(b.P(HOLO[0], HOLO[1], HOLO_H));
   holo.object.rotation.y = b.yaw(FACE.west);
-  holo.params.visible = 0.35;
+  holo.params.visible = 0.5;
   holo.params.progress = 0;
   holo.setText('LOCAL SENSOR RECONSTRUCTION'); // NEW (display header)
   b.add(holo.object);
   b.onUpdate((dt, t) => holo.update(dt, t));
   S.holo = holo;
-  S.holoVisible = 0.35;
+  S.holoVisible = 0.5;
 }
 
 /** about a dozen lights: the key, two pale shafts, the installation's cold blue, a gold hint on the offered route */
@@ -261,7 +263,7 @@ function buildLight(b: ZoneBuilder): void {
   b.spot({ x: 15, n: 11.5, h: WALL_H + 3.2, target: [16, 12, 0], angleDeg: 22, intensity: 700, shaft: true, color: PALE });
   b.spot({ x: 29.5, n: 12, h: WALL_H + 3.2, target: [28.5, 11.5, 0], angleDeg: 22, intensity: 650, shaft: true, color: PALE });
   // the installation and the projector: Reformation light, cold
-  b.point({ x: 42, n: 13.2, h: 3.4, color: BLUE, intensity: 46, distance: 16 });
+  b.point({ x: 42, n: 13.2, h: 3.4, color: BLUE, intensity: 26, distance: 14 });
   b.point({ x: SOURCE_X - 0.6, n: SOURCE_N + 1.2, h: DECK_H + 2.6, color: BLUE, intensity: 14, distance: 9 });
   // the service ramp is an offered route: warm at its foot
   b.point({ x: RAMP_UP_X0 + 1.5, n: 5.2, h: 2.6, color: IVORY, intensity: 12, distance: 8 });
@@ -275,9 +277,9 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('tharneHatch', -1.9, WRECK_N + 0.4, 0, FACE.east);
   b.marker('lyricHatch', -0.9, WRECK_N + 0.6, 0, FACE.east);
   b.marker('lyricStep', 2.9, WRECK_N + 0.9, 0, FACE.east);
-  b.marker('tharneCatch', 2.4, WRECK_N + 0.2, 0, 60);
-  b.marker('lyricWall', 3.1, WRECK_N + 2.3, 0, 15);
-  b.marker('wallTouch', LODGE_RIB_X - 0.2, WRECK_N + LODGE_RIB_SPAN / 2 - 0.45, 1.45);
+  b.marker('tharneCatch', 2.75, WRECK_N + 0.3, 0, 14);
+  b.marker('lyricWall', 3.3, WRECK_N + 2.55, 0, 20);
+  b.marker('wallTouch', LODGE_RIB_X - 0.15, WRECK_N + LODGE_RIB_SPAN / 2 - 0.5, 1.38);
   b.marker('seleneStep', 4.4, WRECK_N - 0.9, 0, FACE.east);
   b.marker('start', 4.6, WRECK_N - 0.8, 0, FACE.east);
   b.marker('tharneStart', 3.4, WRECK_N + 0.6, 0, FACE.east);
@@ -300,7 +302,7 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('lyricT0', 33.8, 11.3, 0, FACE.east);
   b.marker('tharneTerm', 40.9, 12.6, 0, 50);
   b.marker('lyricTerm', 39.2, 16.9, 0, 100);
-  b.marker('holo', HOLO[0], HOLO[1], 0, FACE.west);
+  b.marker('holo', HOLO[0], HOLO[1], HOLO_H, FACE.west);
   b.marker('stir', 37.4, D - 0.5, 1.5);
   b.marker('exit', W - 1.9, EXIT_N, 0, FACE.east);
   b.marker('tharneExit', W - 4.2, EXIT_N + 1.4, 0, FACE.east);

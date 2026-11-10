@@ -87,4 +87,6 @@ export const PROGRESS_STEP = 3;
 /** the deployed terminal (Reformation console, reconstruction hologram) and the exit */
 export const TERMINAL: [number, number] = [42.6, 15.6];
 export const HOLO: [number, number] = [43.3, 12.7];
+/** the reconstruction stands on a crate, a sand-table at waist height */
+export const HOLO_H = 0.82;
 export const EXIT_N = 7;

@@ -111,10 +111,11 @@ export class EliteBrain extends Brain implements EliteController {
     const a = this.actor;
     if (!a || !a.alive || this.fractured) return;
     const s = Math.max(0.5, fin(seconds, 3));
-    this.arrestUntil = this.now + s;
+    // a second arrest (Selene's tether landing inside a longer scripted hold) extends, never shortens, the hold
+    this.arrestUntil = Math.max(this.arrested ? this.arrestUntil : 0, this.now + s);
     this.arrested = true;
     if (this.exposeLeft <= 0 && this.phase === 'B') this.openJoint(a);
-    this.exposeLeft = Math.max(this.exposeLeft, s + 1.5);
+    this.exposeLeft = Math.max(this.exposeLeft, this.arrestUntil - this.now + 1.5);
     this.cancelAttack(a);
     this.state = 'held';
     this.holding = true;
@@ -226,7 +227,14 @@ export class EliteBrain extends Brain implements EliteController {
     }
     a.regen = this.fractured ? 0 : phase === 'A' ? Math.max(1, fin(a.data.linkRegen as number, TUNING.enemies.elite.regen)) : E.selfRegen;
     // link armour while it is fed, knitting plates while it is isolated; the fracture ends both
-    a.damageTakenScale = this.fractured ? 1 : phase === 'A' ? E.armorLinked : E.armorIsolated;
+    a.damageTakenScale = this.fractured ? E.armorFractured : phase === 'A' ? E.armorLinked : E.armorIsolated;
+    // a Resonance hold seals the joint in frost: it is held open for the Thermal Fracture, not for free ×3 blows
+    // (the confirm is the strike that counts; ordinary hits meanwhile land at the plates' value)
+    const sealed = this.arrested || this.holding;
+    for (let i = 0; i < a.weakPoints.length; i++) {
+      const w = a.weakPoints[i];
+      if (w && w.id === 'joint') w.multiplier = sealed ? 1 : TUNING.enemies.elite.jointMultiplier;
+    }
     asElite(a.visual)?.setRegenerating(this.fractured ? 0 : phase === 'A' ? 1 : 0.2);
     this.regenLoop?.setPosition(a.pos);
     this.regenLoop?.setVolume(phase === 'A' ? 1 : 0.25, 0.4);

@@ -20,6 +20,8 @@ const PHASE_A_FLOOR = 0.6;
 const E4_CAP = 5;
 /** seconds of phase A after which stragglers are removed so the mission can never stall */
 const PHASE_A_LIMIT = 330;
+/** seconds of phase B before Selene asks for the first Resonance window */
+const RESONANCE_FIRST = 7;
 /** the Thermal Fracture confirm window (s, before the difficulty scale) */
 const FRACTURE_WINDOW = 6;
 /** label for the elite frame (SCRIPT_SOURCE system text: «BREACH ORGANISM») */
@@ -243,7 +245,8 @@ function onAnchor(z: ZoneRuntime, c: Companion): boolean {
 export function* resonanceLoop(z: ZoneRuntime): Routine {
   const game = z.game;
   const say = barker(z, 3);
-  let cooldown = z.time + 2.5;
+  // Tarrik meets the isolated organism first (heavy blows open the joint) while Selene takes the anchor
+  let cooldown = z.time + RESONANCE_FIRST;
   let tries = 0;
   while (!S.fractured && !S.finishDue && S.stage === 'B') {
     const selene = z.cast('selene');

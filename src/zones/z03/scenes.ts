@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
-import { damp } from '@/core/mathx';
+import { damp, yawTo } from '@/core/mathx';
 import { FROST, VIOLET, atPost, conversation, feet, waitOr, walkTo } from '../shared';
 import { HATCH_OPEN_DEG, TERMINAL, TETHER_FROM, TETHER_TO, WRECK_N, WRECK_REAR_X } from './layout';
 import { S } from './state';
@@ -51,8 +51,8 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     S.tetherTarget = 0;
 
     // (1) the dropship lodged among the ribs, seen from inside the corridor; frost on everything
-    c.cut({ pos: z.P(9.6, 4.6, 1.45), look: z.P(-0.6, 13.2, 3.6), fov: 54 });
-    c.moveAsync({ pos: z.P(8.4, 5.6, 1.7), look: z.P(-0.2, 13.4, 4.4), fov: 48 }, 6.5, 'inOut');
+    c.cut({ pos: z.P(-1.6, 3.4, 1.7), look: z.P(1.2, 13.0, 4.4), fov: 56 });
+    c.moveAsync({ pos: z.P(-0.8, 4.2, 1.9), look: z.P(1.4, 13.2, 4.9), fov: 50 }, 6.5, 'inOut');
     if (!z.skipping) game.audio.play('structuralGroan', { volume: 0.55 });
     yield 2.2;
     // the anchor line fires from the hull and snaps taut on the broken rib
@@ -83,7 +83,10 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     if (!z.skipping) game.audio.play('armorRattle', { pos: z.m('lyricStep'), volume: 0.6 });
     yield 0.4;
     tharne?.teleport(z.m('tharneCatch'), z.myaw('tharneCatch'));
+    tharne?.face(z.m('lyricStep'));
     lyric?.play('limp', { loop: true });
+    // held where they are while he holds her up (no separation push between the two bodies)
+    for (const s of [tharne, lyric]) if (s) s.actor.fixed = true;
     S.catching = true;
     const L = z.m('lyricStep');
     const T = z.m('tharneCatch');
@@ -91,26 +94,27 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     c.shot(both, { yawDeg: 118, distance: 2.6, height: 1.3, lookHeight: 1.2, fov: 36 });
     yield 1.4;
     c.shot(both, { yawDeg: 105, distance: 2.0, height: 1.5, lookHeight: 1.4, fov: 32 });
-    yield* z.say('Tharne', 'Talk to me.', { actor: tharne });
-    c.shot(L, { yawDeg: 95, distance: 1.45, height: 1.55, lookHeight: 1.45, fov: 30 });
-    yield* z.say('Lyric', 'I hate that sentence.', { actor: lyric });
-    c.twoShot(T, L, { side: 1, distance: 1.4, fov: 32 });
-    yield* z.say('Tharne', 'Talk anyway.', { actor: tharne });
+    yield* sayHeld(z, 'Tharne', 'Talk to me.', tharne);
+    c.shot(L, { yawDeg: 100, distance: 1.45, height: 1.55, lookHeight: 1.45, fov: 30 });
+    yield* sayHeld(z, 'Lyric', 'I hate that sentence.', lyric);
+    c.twoShot(T, L, { side: -1, distance: 1.3, fov: 32 });
+    yield* sayHeld(z, 'Tharne', 'Talk anyway.', tharne);
 
     // she straightens out of his hold and puts one trembling hand against the rib
     S.catching = false;
     holdOff(tharne, lyric);
     lyric?.stopAction();
+    for (const s of [tharne, lyric]) if (s) s.actor.fixed = false;
     lyric?.teleport(z.m('lyricWall'), z.myaw('lyricWall'));
     S.tremble = z.m('wallTouch');
-    c.shot(z.m('lyricWall'), { yawDeg: 140, distance: 2.1, height: 1.5, lookHeight: 1.35, fov: 34 });
+    c.shot(z.m('lyricWall'), { yawDeg: 125, distance: 2.0, height: 1.5, lookHeight: 1.35, fov: 36 });
     yield 0.5;
-    yield* z.say('Lyric', 'There are things inside this place.', { actor: lyric });
+    yield* sayHeld(z, 'Lyric', 'There are things inside this place.', lyric);
 
     // Selene comes down off the hatch; her staff separates at both ends into twin blades of blue-white energy
     game.player.teleport(z.m('seleneStep'), z.myaw('seleneStep'));
     const sel = z.m('seleneStep');
-    c.shot(sel, { yawDeg: 75, distance: 2.3, height: 1.45, lookHeight: 1.4, fov: 34 });
+    c.twoShot(sel, z.m('lyricWall'), { side: 1, distance: 1.7, fov: 36 });
     z.player.visual?.setLoadout({ melee: true });
     game.player.playScripted('raiseWeapon', { faceTo: L });
     z.player.visual?.setGlow(1.6);
@@ -120,7 +124,7 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     }
     yield 0.6;
     yield* z.say('Selene', 'What kind?', { actor: z.player });
-    c.shot(z.m('lyricWall'), { yawDeg: 160, distance: 1.7, height: 1.6, lookHeight: 1.5, fov: 32 });
+    c.shot(z.m('lyricWall'), { yawDeg: bearing(z.m('lyricWall'), sel) - 25, distance: 1.7, height: 1.6, lookHeight: 1.5, fov: 32 });
     yield* z.say('Lyric', 'The kind that know we came.', { actor: lyric });
     c.twoShot(T, sel, { side: -1, distance: 1.8, fov: 36 });
     yield* z.say('Tharne', 'Move.', { actor: tharne });
@@ -131,6 +135,7 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     S.tremble = null;
     S.catching = false;
     holdOff(tharne, lyric);
+    for (const s of [tharne, lyric]) if (s) s.actor.fixed = false;
     z.player.visual?.setGlow(1);
     placeAtStart(z, tharne, lyric);
     z.setFlag('z03Landed', true);
@@ -146,6 +151,23 @@ export function placeAtStart(z: ZoneRuntime, tharne: Companion | null, lyric: Co
     s.teleport(z.m(at), z.myaw(at));
     s.mode = 'follow';
   }
+}
+
+/** compass bearing (plan degrees: 0 north, 90 east) from a to b — for `c.shot` yawDeg toward a face */
+function bearing(a: THREE.Vector3, b: THREE.Vector3): number {
+  return (Math.atan2(b.x - a.x, -(b.z - a.z)) * 180) / Math.PI;
+}
+
+/**
+ * A line said without turning the speaker to the lead (the two of them face each other here); the mouth is driven
+ * directly for its length.
+ */
+function* sayHeld(z: ZoneRuntime, speaker: string, text: string, who: Companion | null): Routine {
+  const v = who?.actor.visual;
+  const hv = isHumanoidVisual(v) ? v : null;
+  hv?.setSpeaking(0.7);
+  yield* z.say(speaker, text);
+  hv?.setSpeaking(0);
 }
 
 /** release both figures' IK hands */
@@ -232,6 +254,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     const sel = z.m('terminal');
     const th = z.m('tharneTerm');
     const ly = z.m('lyricTerm');
+    const display = holo.clone().setY(1.2);
     game.player.playScripted('interact', { faceTo: z.P(TERMINAL[0], TERMINAL[1], 1) });
 
     // before she reads: the dark tissue behind the ice stirs
@@ -244,8 +267,10 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     lyric?.actor.visual?.lookAt(stir);
     lyric?.actor.visual?.setCorruption(LYRIC_MARKS.feel);
     if (!z.skipping) lyric?.actor.visual?.flash(VIOLET, 0.8, 0.35);
-    const onLyric = (): void => c.shot(ly, { yawDeg: 230, distance: 1.8, height: 1.6, lookHeight: 1.52, fov: 32 });
-    const onSelene = (): void => c.shot(sel, { yawDeg: 300, distance: 1.9, height: 1.6, lookHeight: 1.5, fov: 32 });
+    // she turns from the console to Lyric
+    game.player.teleport(sel, yawTo(sel.x, sel.z, ly.x, ly.z));
+    const onLyric = (): void => c.shot(ly, { yawDeg: bearing(ly, sel) - 28, distance: 1.8, height: 1.6, lookHeight: 1.52, fov: 32 });
+    const onSelene = (): void => c.shot(sel, { yawDeg: bearing(sel, ly) + 30, distance: 1.9, height: 1.6, lookHeight: 1.5, fov: 32 });
     onSelene();
     yield* z.say('Selene', 'What do you feel?', { actor: z.player });
     onLyric();
@@ -257,7 +282,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     onSelene();
     yield* z.say('Selene', 'Can they feel you?', { actor: z.player });
     // she takes too long to answer
-    c.shot(ly, { yawDeg: 200, distance: 1.4, height: 1.62, lookHeight: 1.55, fov: 28 });
+    c.shot(ly, { yawDeg: bearing(ly, sel) - 12, distance: 1.4, height: 1.62, lookHeight: 1.55, fov: 28 });
     yield 2.2;
     yield* z.say('Lyric', 'I think so.', { actor: lyric });
     S.stirTarget = 0.35;
@@ -267,8 +292,9 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     S.holoVisible = 1;
     S.holoProgress = 0.15;
     S.holo?.setText('LOCAL SENSOR RECONSTRUCTION'); // NEW (display header)
-    c.cut({ pos: z.P(38.6, 11.2, 1.75), look: holo.clone().setY(1.5), fov: 40 });
-    c.moveAsync({ pos: z.P(39.3, 11.6, 1.7), look: holo.clone().setY(1.45), fov: 36 }, 8, 'inOut');
+    game.player.teleport(sel, yawTo(sel.x, sel.z, display.x, display.z));
+    c.cut({ pos: z.P(40.2, 14.4, 2.25), look: display, fov: 42 });
+    c.moveAsync({ pos: z.P(40.7, 14.2, 2.1), look: display, fov: 38 }, 8, 'inOut');
     if (!z.skipping) game.audio.play('ambConsoleTick', { pos: holo });
     tharne?.face(holo);
     yield 1.2;
@@ -283,7 +309,8 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     // the deployment manifest, then the line she stops on
     S.holo?.setText('DEPLOYMENT MANIFEST'); // NEW (display header)
     ui.statusBoard(MANIFEST.slice(0, 2), { title: 'DEPLOYMENT MANIFEST' }); // NEW (title)
-    c.shot(sel, { yawDeg: 245, distance: 1.5, height: 1.62, lookHeight: 1.5, fov: 30 });
+    const toDisplay = bearing(sel, display);
+    c.shot(sel, { yawDeg: toDisplay + 205, distance: 1.5, height: 1.62, lookHeight: 1.5, fov: 30 });
     yield 1.6;
     ui.statusBoard(MANIFEST, { title: 'DEPLOYMENT MANIFEST' });
     yield 1.4;
@@ -298,7 +325,8 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     c.twoShot(ly, sel, { side: 1, distance: 1.7, fov: 34 });
     lyric?.face(sel);
     yield* z.say('Lyric', 'Do not let them put anything in those.', { actor: lyric });
-    onSelene();
+    const onSeleneComm = (): void => c.shot(sel, { yawDeg: toDisplay + 32, distance: 1.8, height: 1.6, lookHeight: 1.5, fov: 32 });
+    onSeleneComm();
     yield* z.say('Selene', 'You brought specimen-recovery equipment into an active containment failure.', { actor: z.player });
     yield* z.say('Sol', 'This is the first recoverable living material encountered in centuries.', { offscreen: true, channel: 'radio' });
     yield* z.say('Selene', 'Then leave it where it is.', { actor: z.player });
@@ -306,7 +334,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     yield* z.say('Selene', 'Keep the extraction units away from my team.', { actor: z.player });
     yield* z.say('Sol', 'That is not your authority.', { offscreen: true, channel: 'radio' });
     // her hand on Caerion II under her armor; the Crownmark warms beneath her hand; she closes the channel
-    c.shot(sel, { yawDeg: 270, distance: 1.25, height: 1.5, lookHeight: 1.35, fov: 30 });
+    c.shot(sel, { yawDeg: toDisplay + 18, distance: 1.3, height: 1.5, lookHeight: 1.35, fov: 30 });
     handToChest(z, true);
     if (!z.skipping) {
       game.vfx.flash(z.player.aimPoint(_w), 0xeaf4ff, 0.9, 0.6);
@@ -322,9 +350,12 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     c.twoShot(sel, th, { side: 1, distance: 1.8, fov: 34 });
     yield* z.say('Selene', 'Yes.', { actor: z.player });
     // a thin smile
-    c.shot(ly, { yawDeg: 215, distance: 1.6, height: 1.6, lookHeight: 1.52, fov: 30 });
+    c.shot(ly, { yawDeg: bearing(ly, sel) - 20, distance: 1.6, height: 1.6, lookHeight: 1.52, fov: 30 });
     yield* z.say('Lyric', 'She’s learning.', { actor: lyric });
-    c.shot(sel, { yawDeg: 280, distance: 2.2, height: 1.6, lookHeight: 1.5, fov: 36 });
+    // she turns for the door
+    const exit = z.m('exit');
+    game.player.teleport(sel, yawTo(sel.x, sel.z, exit.x, exit.z));
+    c.shot(sel, { yawDeg: bearing(sel, exit) + 25, distance: 2.2, height: 1.6, lookHeight: 1.5, fov: 36 });
     yield* z.say('Selene', 'We go.', { actor: z.player });
 
     // end state — identical watched or skipped

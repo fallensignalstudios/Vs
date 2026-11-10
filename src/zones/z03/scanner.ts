@@ -217,7 +217,8 @@ export function* scanPlay(z: ZoneRuntime): Routine {
   const game = z.game;
   const tharne = z.cast('tharne');
   setupScanner(z);
-  z.objective('Pass the scan planes', 'past'); // NEW
+  if (S.sourceDown) z.objective('Reach the sensor terminal', 'terminal'); // NEW
+  else z.objective('Pass the scan planes', 'past'); // NEW
   game.audio.setMusic('stealth', 2.5);
   tutorialHint(z, 'z03Sweep', 'A scan plane sees you only along a clear line from its source. Stand behind tall cover as one passes.', undefined, 9); // NEW
   let best = z.player.pos.x;
