@@ -13,6 +13,8 @@ import type { HeroProp, ZoneBuilder } from '@/core/api';
 import { FACE, GOLD, IVORY } from '../shared';
 import { C, DAIS_H, DAIS_R, FLOOR_R, LIFT, PAD, PAD_SUNK, S, STEP_H, STEP_R, type PadState } from './state';
 
+/** Selene's console (off the axis, so the Crownmark stands clear from the entry) */
+const CONSOLE = { x: C.x + 4.4, n: C.n - 7.3 } as const;
 /** entry walkway (south) */
 const WALK = { x0: C.x - 2.6, x1: C.x + 2.6, n0: -8 } as const;
 
@@ -75,11 +77,11 @@ function buildEntry(b: ZoneBuilder): void {
 function buildLift(b: ZoneBuilder): void {
   b.floor({ x: LIFT.x, n: LIFT.n - 0.6, w: 5, d: 5.4, mat: 'blackStoneFloor', inlay: 'none' });
   b.disc({ x: LIFT.x, n: LIFT.n, r: 1.7, h: 0.03, mat: 'whiteGoldFloor', inlay: 'radial', noSurface: true });
-  b.wall({ from: [LIFT.x - 2.5, LIFT.n - 3], to: [LIFT.x - 2.5, LIFT.n + 2.2], height: 5, mat: 'blackStone' });
-  b.wall({ from: [LIFT.x + 2.5, LIFT.n - 3], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 5, mat: 'blackStone' });
-  b.wall({ from: [LIFT.x - 2.5, LIFT.n + 2.2], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 5, mat: 'blackStone', style: 'panelled' });
-  b.ceiling({ x: LIFT.x, n: LIFT.n - 0.4, w: 5, d: 5.2, h: 5, style: 'flat', mat: 'blackStone' });
-  b.whitePoint({ x: LIFT.x, n: LIFT.n + 1.6, h: 6.2, intensity: 1.8 });
+  b.wall({ from: [LIFT.x - 2.5, LIFT.n - 3], to: [LIFT.x - 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone' });
+  b.wall({ from: [LIFT.x + 2.5, LIFT.n - 3], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone' });
+  b.wall({ from: [LIFT.x - 2.5, LIFT.n + 2.2], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone', style: 'panelled' });
+  b.ceiling({ x: LIFT.x, n: LIFT.n - 0.4, w: 5, d: 5.2, h: 6.5, style: 'flat', mat: 'blackStone' });
+  b.whitePoint({ x: LIFT.x, n: LIFT.n + 1.7, h: 4.6, intensity: 1.8 });
   b.column({ x: LIFT.x - 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', mat: 'blackStone', lit: true });
   b.column({ x: LIFT.x + 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', mat: 'blackStone', lit: true });
 }
@@ -120,21 +122,21 @@ function buildHeroProps(b: ZoneBuilder): void {
   placePad(b, S.padS, props.assentInterface('selene'), C.x + PAD.dx, C.n + PAD.dn, PAD.yawS);
   // the diagnostic display stands before the Crownmark; the forecast reads over Selene's console
   const diag = props.hologram('diagnostic');
-  diag.object.position.copy(b.P(C.x, C.n - 3.5, DAIS_H + 0.55));
-  diag.object.rotation.y = b.yaw(FACE.south);
-  diag.object.scale.setScalar(1.15);
+  diag.object.position.copy(b.P(CONSOLE.x, CONSOLE.n + 0.2, 1.25));
+  diag.object.rotation.y = b.yaw(200);
+  diag.object.scale.setScalar(1.05);
   diag.params.visible = 0;
   diag.params.progress = 0;
   b.add(diag.object);
   S.diag = diag;
   const fc = props.hologram('forecast');
-  fc.object.position.copy(b.P(C.x - 4.4, C.n - 7.4, 0.3));
-  fc.object.rotation.y = b.yaw(200);
+  fc.object.position.copy(b.P(C.x - 4.6, C.n - 7.2, 0.6));
+  fc.object.rotation.y = b.yaw(195);
   fc.params.visible = 0;
   fc.setText('02:11:43');
   b.add(fc.object);
   S.forecast = fc;
-  b.prop('ancientConsole', { x: C.x + 0.9, n: C.n - 6.6, h: STEP_H * 0, yawDeg: FACE.south });
+  b.prop('ancientConsole', { x: CONSOLE.x, n: CONSOLE.n, yawDeg: 200 });
   for (const p of [mark, rings, diag, fc, S.padT.prop, S.padS.prop]) if (p) b.onUpdate((dt, t) => p.update(dt, t));
   // the five Meridian lights, high over the dais in the order Ianis, Caerion II, Neon Veil, Cauldron, Aurelion
   const geo = new THREE.SphereGeometry(0.42, 18, 12);
@@ -183,7 +185,7 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('seleneArrive', C.x + 1.0, 2.6, 0, FACE.north);
   b.marker('daisFront', C.x, C.n - 8.4, 0, FACE.north);
   // diagnostic: Selene works the console; Tarrik paces the ring
-  b.marker('seleneConsole', C.x + 0.9, C.n - 7.5, 0, FACE.north);
+  b.marker('seleneConsole', CONSOLE.x - 0.45, CONSOLE.n - 1.0, 0, 20);
   b.marker('tarrikDais', C.x - 1.9, C.n - 8.2, 0, 20);
   b.marker('tarrikRing1', C.x - 10.5, C.n - 7.5, 0, 60);
   b.marker('tarrikRing2', C.x - 13, C.n + 1.5, 0, 110);

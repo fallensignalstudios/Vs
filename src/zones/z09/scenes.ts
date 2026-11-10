@@ -112,10 +112,10 @@ export function* overlookScene(z: ZoneRuntime): Routine {
     selene?.stopAction();
     walkTo(z, selene, 'seleneRail');
     game.player.teleport(z.m('tarrikRail').setZ(z.m('tarrikRail').z + 2.2), z.myaw('tarrikRail'));
-    // the reveal: over their shoulders, across the half disc and the glass rail, out to the arm and the Wound
-    const look = z.m('overlookLook');
-    c.cut({ pos: z.P(OVERLOOK.x - 1.2, OVERLOOK.n - 4.6, LOW + 1.75), look: look.clone().setY(look.y + 9), fov: 58 });
-    c.moveAsync({ pos: z.P(OVERLOOK.x - 0.4, OVERLOOK.n - 2.2, LOW + 1.85), look: look.clone().setY(look.y + 14), fov: 54 }, 7, 'inOut');
+    // the reveal: behind and to the right of the pair, the glass rail on the left, the arm running out under it to
+    // the Wound; the red remnant on the left, the hard white one on the right (the concept painting)
+    c.cut({ pos: z.P(OVERLOOK.x + 4.4, OVERLOOK.n - 3.4, LOW + 1.7), look: z.P(OVERLOOK.x - 9, OVERLOOK.n + 30, LOW + 8.5), fov: 58 });
+    c.moveAsync({ pos: z.P(OVERLOOK.x + 3.4, OVERLOOK.n - 2.0, LOW + 1.75), look: z.P(OVERLOOK.x - 8, OVERLOOK.n + 30, LOW + 9.5), fov: 56 }, 7, 'inOut');
     yield waitOr(z, () => z.skipping || atPost(z, selene, 'seleneRail'), 6);
     yield 1.2;
     // she looks back along the path; the line lands on her
@@ -210,9 +210,12 @@ export function* recognitionScene(z: ZoneRuntime, h: RecognitionHooks): Routine 
     }
     game.audio.setMusic('recognition', 2.5);
     yield 3.2;
-
+    // the board steps back for the exchange; they turn to each other
+    ui.statusBoard(null);
     const t = z.player.pos.clone();
     const s = selene ? selene.actor.pos.clone() : z.m('seleneBeside');
+    selene?.face(t);
+    game.player.playScripted('idle', { faceTo: s });
     c.twoShot(s, t, { side: 1, distance: 1.9, fov: 36 });
     yield* z.say('Selene', 'Contrary.', { actor: selene });
     c.twoShot(t, s, { side: -1, distance: 1.9, fov: 36 });
@@ -226,16 +229,19 @@ export function* recognitionScene(z: ZoneRuntime, h: RecognitionHooks): Routine 
     yield* z.say('Selene', 'He is contagious.', { actor: selene });
 
     // “Neon Veil rises from Tarrik’s armor. Caerion II lifts from Selene’s. Before either relic touches the door, it opens.”
-    ui.statusBoard(null);
     const mid = t.clone().lerp(s, 0.5);
-    c.cut({ pos: mid.clone().add(new THREE.Vector3(2.4, 1.15, -0.1)), look: mid.clone().setY(mid.y + 1.55), fov: 42 });
+    c.cut({ pos: mid.clone().add(new THREE.Vector3(0.2, 1.3, 2.3)), look: mid.clone().setY(mid.y + 1.6), fov: 44 });
     h.relics.target = 1;
     if (!z.skipping) game.audio.play('meridianAlign', { pos: mid, volume: 0.55 });
     yield 2.4;
+    selene?.face(z.m('doorFront'));
+    game.player.playScripted('idle', { faceTo: z.m('doorFront') });
     c.cut({ pos: z.P(THRESHOLD.x - 4.6, THRESHOLD.n + 0.2, LOW + 1.3), look: z.P(THRESHOLD.x + 4.6, THRESHOLD.n, LOW + 2.2), fov: 44 });
     h.openDoor();
     yield 2.6;
 
+    selene?.face(t);
+    game.player.playScripted('idle', { faceTo: s });
     c.twoShot(t, s, { side: -1, distance: 2.0, fov: 36 });
     yield* z.say('Tarrik', 'I assume that means we keep going.', { actor: z.player });
     c.twoShot(s, t, { side: 1, distance: 2.0, fov: 36 });
@@ -256,12 +262,14 @@ export function* recognitionScene(z: ZoneRuntime, h: RecognitionHooks): Routine 
     c.twoShot(t, s, { side: -1, distance: 2.0, fov: 36 });
     yield* z.say('Tarrik', 'Then I reconsider.', { actor: z.player });
     // “Selene steps forward, and Tarrik follows.” — she goes through first
+    selene?.face(null);
     c.shot(s, { yawDeg: 250, distance: 3.4, height: 1.5, lookHeight: 1.4, fov: 38 });
     walkTo(z, selene, 'seleneBeyond');
     yield 2.6;
     // end state — identical watched or skipped
     h.relics.target = 0;
     ui.statusBoard(null);
+    selene?.face(null);
     if (selene && z.skipping) selene.teleport(z.m('seleneBeyond'), z.myaw('seleneBeyond'));
   });
 }

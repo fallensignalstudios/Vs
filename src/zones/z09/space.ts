@@ -122,7 +122,7 @@ function buildApron(b: ZoneBuilder): void {
   b.disc({ x: OVERLOOK.x, n: OVERLOOK.n, r: OVERLOOK.r, h: LOW, mat: 'blackStoneFloor', inlay: 'crownmark', reflective: true });
   // south boundary: the ramp's right wall turns along the apron's south edge to the threshold hall
   const rEnd = add(P2_, B_RIGHT, CW / 2);
-  b.walls([rEnd, [rEnd[0] + 1.1, HALL_N0], [APRON_X1, HALL_N0]], { h: LOW, height: 9, style: 'ribbed', mat: 'blackStone' });
+  b.walls([rEnd, [rEnd[0] + 1.1, HALL_N0], [APRON_X1, HALL_N0]], { h: LOW, height: 9, style: 'ribbed' });
   // north: the glass rail — from the ramp's left wall, along the apron edge, round the half disc, to D
   const lEnd = add(P2_, B_RIGHT, -CW / 2);
   const rail: P2[] = [lEnd, [x0 + 0.1, HALL_N1], [OVERLOOK.x - OVERLOOK.r, HALL_N1]];
@@ -137,8 +137,10 @@ function buildApron(b: ZoneBuilder): void {
   b.channel(rail.slice(2, rail.length - 1).map((p) => [p[0] + (OVERLOOK.x - p[0]) * 0.06, p[1] + (OVERLOOK.n - p[1]) * 0.06] as P2), { h: LOW, width: 0.05, intensity: 2.2 });
   // the white-gold structure on the right: three immense ribs rising out of the south wall and leaning over the
   // walkway (the concept's buttresses) — tiny figures against them
+  // (a half rib's foot is its local west end: turned to face west, the foot stands south of the wall and the
+  // apex hangs over the middle of the walkway)
   for (const x of [29.5, 35.5, 41.5]) {
-    b.rib({ x, n: HALL_N0 - 0.2, h: LOW, span: 9, height: 26, depth: 1.6, yawDeg: FACE.north, style: 'half', lit: true, noCollider: true });
+    b.rib({ x, n: HALL_N0 + 6.5, h: LOW, span: 17, height: 30, depth: 1.8, yawDeg: FACE.west, style: 'half', lit: true, noCollider: true });
   }
   b.column({ x: x0 + 1.6, n: HALL_N0 + 0.6, h: LOW, r: 0.55, height: 12, style: 'pylon', mat: 'blackStone', lit: true });
 }
