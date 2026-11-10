@@ -289,26 +289,33 @@ describe('bad numbers never reach the scheduler', () => {
     run(ctx, engine, 2 * 4 * step, 1 / 60);
     const twoBeats = ctx.spans.length - mark;
     const before = ctx.spans.length;
-    ctx.currentTime += 0.8; // a zone build stalls the main thread
-    engine.update(0.8);
-    // the catch-up schedules one horizon (a beat or so) plus a re-voicing of the harmony — not the 0.8 s it missed
-    expect(ctx.spans.length - before).toBeLessThan(twoBeats + 40);
+    ctx.currentTime += 2.5; // far longer than the look-ahead: the scheduler is truly starved
+    engine.update(2.5);
+    // the catch-up schedules one horizon (two beats or so) plus a re-voicing of the harmony — not the 2.5 s it missed
+    expect(ctx.spans.length - before).toBeLessThan(twoBeats * 2 + 40);
     const resumed = ctx.currentTime;
     run(ctx, engine, 3, 1 / 60);
     expect(offGrid(resumed)).toBeLessThan(0.012);
     expect(ctx.problems).toEqual([]);
   });
 
-  it('a state change never lands before what the outgoing deck has already scheduled', () => {
+  it('schedules at least a second ahead, yet a state change still lands on the very next bar line', () => {
     const ctx = new FakeContext();
     const engine = engineOn(ctx);
     engine.setMusic('approachTarrik', 0.2);
     run(ctx, engine, 5.3, 1 / 60);
-    const frontier = engine.music.activeDeck!.frontier;
+    const outgoing = engine.music.activeDeck!;
+    expect(outgoing.frontier - ctx.currentTime).toBeGreaterThanOrEqual(1 - 0.05);
+    const bar = outgoing.barDur;
     engine.setMusic('combatTarrik', 2);
     const incoming = engine.music.activeDeck!;
-    expect(incoming.startAt).toBeGreaterThanOrEqual(frontier - 1e-3);
-    expect(incoming.startAt - ctx.currentTime).toBeLessThanOrEqual(2.6 + 1e-3);
+    // on the outgoing state's bar grid, and no further away than one bar (never waiting for the look-ahead)
+    const bars = (incoming.startAt - outgoing.startAt) / bar;
+    expect(Math.abs(bars - Math.round(bars))).toBeLessThan(1e-6);
+    expect(incoming.startAt).toBeGreaterThan(ctx.currentTime);
+    expect(incoming.startAt - ctx.currentTime).toBeLessThanOrEqual(Math.min(bar, 2.6) + 1e-3);
+    // the outgoing deck stops scheduling at that bar line
+    expect(outgoing.endAt).toBeCloseTo(incoming.startAt, 6);
   });
 });
 

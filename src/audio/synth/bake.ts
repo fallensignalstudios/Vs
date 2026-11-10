@@ -34,7 +34,7 @@ function offlineCtor(): OfflineCtor | null {
 export const canBake = (): boolean => offlineCtor() !== null;
 
 /** seconds of audio per offline context */
-const CHUNK_SECONDS = 20;
+const CHUNK_SECONDS = 12;
 /** silence between two sounds in a chunk */
 const GAP = 0.03;
 const SILENCE = 2e-5;
@@ -92,33 +92,46 @@ export async function bake(sampleRate: number, jobs: readonly BakeJob[]): Promis
   }
   const res = makeShared(scratch);
 
-  // pass 1: build each sound on a throwaway context to learn its length (same seed → same length)
-  const items: Item[] = [];
+  // every (job, variant) to render, in order
+  const todo: Array<{ job: BakeJob; seed: number }> = [];
   for (const job of jobs) {
     const variants = job.exact ? 1 : Math.max(1, job.variants);
-    for (let v = 0; v < variants; v++) {
-      const seed = seedOf(job, v);
-      try {
-        const k = new Kit(scratch, res, scratch.destination, 0, 1, mulberry32(seed), false);
-        job.build(k);
-        k.seal();
-        if (k.end > 0 && k.end < 12) items.push({ job, seed, seconds: k.end + 0.06 });
-      } catch {
-        /* a recipe that cannot be built is left to live synthesis (which reports it) */
-      }
-    }
+    for (let v = 0; v < variants; v++) todo.push({ job, seed: seedOf(job, v) });
   }
+  /** Build a sound on the throwaway context to learn its length (same seed → same length). */
+  const measure = (t: { job: BakeJob; seed: number }): Item | null => {
+    try {
+      const k = new Kit(scratch, res, scratch.destination, 0, 1, mulberry32(t.seed), false);
+      t.job.build(k);
+      k.seal();
+      return k.end > 0 && k.end < 12 ? { job: t.job, seed: t.seed, seconds: k.end + 0.06 } : null;
+    } catch {
+      return null; // a recipe that cannot be built is left to live synthesis (which reports it)
+    }
+  };
 
-  // pass 2: pack into chunks, render, slice
-  let i = 0;
-  while (i < items.length) {
+  // Pack into chunks, render, slice. Measuring happens chunk by chunk, so the main thread only ever builds
+  // one chunk's worth of nodes between two awaits — no long task when audio starts.
+  let next = 0;
+  let carried: Item | null = null;
+  while (next < todo.length || carried) {
     const chunk: Array<{ item: Item; at: number }> = [];
     let cursor = 0.01;
-    while (i < items.length && (chunk.length === 0 || cursor + items[i].seconds <= CHUNK_SECONDS)) {
-      chunk.push({ item: items[i], at: cursor });
-      cursor += items[i].seconds + GAP;
-      i++;
+    for (;;) {
+      const item: Item | null = carried ?? (next < todo.length ? measure(todo[next++]) : null);
+      carried = null;
+      if (!item) {
+        if (next >= todo.length) break;
+        continue;
+      }
+      if (chunk.length && cursor + item.seconds > CHUNK_SECONDS) {
+        carried = item;
+        break;
+      }
+      chunk.push({ item, at: cursor });
+      cursor += item.seconds + GAP;
     }
+    if (!chunk.length) break;
     try {
       const ctx = new Offline(2, Math.ceil(cursor * sampleRate), sampleRate);
       for (const { item, at } of chunk) {

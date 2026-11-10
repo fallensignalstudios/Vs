@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import type { Actor, HitInfo } from '@/core/api';
 import { DEG, forwardX, forwardZ } from '@/core/mathx';
@@ -186,17 +187,19 @@ describe('applyHit — weak points, flanks, scaling', () => {
     expect(w.actors.applyHit(a, hitFrom(src, a, { point: { x: 0, y: 1.2, z: 0.5 }, weakPointScale: 2.5 })).applied).toBe(25);
   });
 
-  it('ignores unexposed weak points unless forced or the target is frozen', () => {
+  it('ignores unexposed weak points unless forced; area hits can opt out', () => {
     const { w, a } = withWeakPoint(false);
     const src = { x: 0, z: 5 };
     const at = { x: 0, y: 1.2, z: 0.5 };
     expect(w.actors.applyHit(a, hitFrom(src, a, { point: at })).weakPoint).toBe(false);
+    expect(w.actors.weakPointPosition(a, new THREE.Vector3())).toBeNull();
     const forced = hitFrom(src, a, { weakPoint: true });
     expect(w.actors.applyHit(a, forced).applied).toBe(20);
-    w.actors.freeze(a, 2);
-    const r = w.actors.applyHit(a, hitFrom(src, a, { point: at }));
-    expect(r.weakPoint).toBe(true);
-    expect(r.applied).toBeCloseTo(10 * 2 * TUNING.hit.frozenDamageScale, 6);
+    (a.weakPoints[0] as { exposed: boolean }).exposed = true;
+    expect(w.actors.weakPointPosition(a, new THREE.Vector3())?.y).toBeCloseTo(1.2, 6);
+    expect(w.actors.applyHit(a, hitFrom(src, a, { point: at })).applied).toBe(20);
+    const blast = w.actors.applyHit(a, hitFrom(src, a, { point: at, ignoreWeakPoints: true }));
+    expect([blast.weakPoint, blast.applied]).toEqual([false, 10]);
   });
 
   it('flanks, link armour and poise resistance', () => {

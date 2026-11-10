@@ -60,7 +60,10 @@ export function wireEvents(game: Game, audio: WiredAudio): Array<() => void> {
   });
 
   ev.on('dialogue:line', ({ line }) => {
-    audio.speak(line.speaker, line.channel ?? 'voice');
+    // the recorded line when there is one (if the mission has just started it, this is the same utterance,
+    // not a second one); the comm tick otherwise
+    const voiced = audio.voice(line.speaker, line.text, { channel: line.channel });
+    if (!(voiced > 0)) audio.speak(line.speaker, line.channel ?? 'voice');
     const seconds = line.duration ?? clamp(1.2 + (line.text?.length ?? 0) * 0.055, 1.5, 9);
     audio.duck(DIALOGUE_DUCK, seconds);
   });

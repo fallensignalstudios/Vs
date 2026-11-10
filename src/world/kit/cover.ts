@@ -13,7 +13,7 @@ export const COVER_HIGH = 2.2;
 type CoverStyle = NonNullable<CoverOpts['style']>;
 
 function ancient(p: Part, w: number, d: number, H: number): void {
-  const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.inlay('goldChannel'));
+  const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
   wg.tbox(w, 0.2, d, 0.04, 0, 0, 0).tbox(w - 0.14, H - 0.4, d - 0.14, 0.03, 0, 0.2, 0).tbox(w, 0.2, d, 0.05, 0, H - 0.2, 0);
   trim.box(w - 0.08, 0.045, d - 0.08, 0, H - 0.27, 0).box(w - 0.08, 0.035, d - 0.08, 0, 0.26, 0);
   const rows = H > 1.6 ? 2 : 1, ph = (H - 0.75) / rows;
@@ -51,27 +51,44 @@ function dominion(p: Part, w: number, d: number, H: number): void {
   }
 }
 
-function reformation(p: Part, w: number, d: number, H: number): void {
+/** one row of Reformation barrier modules centred on z */
+function refRow(p: Part, w: number, H: number, pd: number, z: number): void {
   const navy = p.g('refNavy'), slate = p.g('refSlate'), steel = p.g('refSteel'), blue = p.g('refBlueGlow');
-  const mods = Math.max(1, Math.round(w / 1.1)), mw = w / mods, rows = H > 1.6 ? 2 : 1, ph = (H - 0.36) / rows, pd = Math.min(0.34, d * 0.4);
-  slate.tbox(w, 0.16, d * 0.82, 0.03, 0, 0, 0);
-  steel.box(w, 0.07, pd + 0.1, 0, H - 0.035, 0);
+  const mods = Math.max(1, Math.round(w / 1.1)), mw = w / mods, rows = H > 1.6 ? 2 : 1, ph = (H - 0.36) / rows;
+  steel.box(w, 0.07, pd + 0.1, 0, H - 0.035, z);
   for (let i = 0; i <= mods; i++) {
     const x = -w / 2 + mw * i;
-    steel.boxOn(0.09, H - 0.2, pd + 0.06, Math.max(-w / 2 + 0.045, Math.min(w / 2 - 0.045, x)), 0.16, 0);
+    steel.boxOn(0.09, H - 0.2, pd + 0.06, Math.max(-w / 2 + 0.045, Math.min(w / 2 - 0.045, x)), 0.16, z);
   }
   for (let i = 0; i < mods; i++) {
     const cx = -w / 2 + mw * (i + 0.5);
     for (let r = 0; r < rows; r++) {
       const cy = 0.22 + ph * (r + 0.5);
-      navy.cbox(mw - 0.14, ph - 0.08, pd, 0.035, cx, cy, 0);
+      navy.cbox(mw - 0.14, ph - 0.08, pd, 0.035, cx, cy, z);
       for (const s of [-1, 1]) {
-        slate.box(mw * 0.5, ph * 0.3, 0.02, cx - mw * 0.12, cy - ph * 0.12, s * (pd / 2 + 0.008));
-        blue.box(0.045, ph * 0.46, 0.02, cx + mw * 0.3, cy, s * (pd / 2 + 0.01));
-        steel.box(0.07, 0.05, 0.03, cx - mw * 0.36, cy + ph * 0.32, s * (pd / 2 + 0.01));
+        slate.box(mw * 0.5, ph * 0.3, 0.02, cx - mw * 0.12, cy - ph * 0.12, z + s * (pd / 2 + 0.008));
+        blue.box(0.045, ph * 0.46, 0.02, cx + mw * 0.3, cy, z + s * (pd / 2 + 0.01));
+        steel.box(0.07, 0.05, 0.03, cx - mw * 0.36, cy + ph * 0.32, z + s * (pd / 2 + 0.01));
       }
     }
   }
+}
+
+function reformation(p: Part, w: number, d: number, H: number): void {
+  const slate = p.g('refSlate'), steel = p.g('refSteel');
+  const pd = Math.min(0.34, d * 0.4);
+  slate.tbox(w, 0.16, d * (d > 1.3 ? 0.96 : 0.82), 0.03, 0, 0, 0);
+  if (d > 1.3) {
+    // deep footprint: a barrier row on each protected side, an equipment block braced between them
+    const z = d / 2 - pd / 2 - 0.06;
+    refRow(p, w, H, pd, -z);
+    refRow(p, w, H, pd, z);
+    p.g('refNavy').cboxOn(w - 0.5, H * 0.72, 2 * z - pd - 0.24, 0.05, 0, 0.16, 0);
+    slate.tbox(w - 0.9, 0.06, 2 * z - pd - 0.5, 0.02, 0, 0.16 + H * 0.72, 0);
+    for (const x of [-w / 2 + 0.3, 0, w / 2 - 0.3]) steel.box(0.07, 0.06, 2 * z, x, H - 0.03, 0);
+    return;
+  }
+  refRow(p, w, H, pd, 0);
   for (const s of [-1, 1]) {
     for (const e of [-1, 1]) slate.prismX([[0, 0], [s * (d / 2 + 0.2), 0], [s * (d / 2 + 0.12), 0.1], [0, 0.42]], 0.1, e * (w / 2 - 0.2));
   }
@@ -103,6 +120,9 @@ function plate(p: Part, w: number, d: number, H: number): void {
 }
 
 const STYLES: Record<CoverStyle, (p: Part, w: number, d: number, H: number) => void> = { ancient, dominion, reformation, debris, plate };
+
+/** the emitter of one cover family (props reuse the faction barricades) */
+export const coverStyle = (style: CoverStyle): ((p: Part, w: number, d: number, H: number) => void) => STYLES[style];
 
 export function buildCover(ctx: KitCtx, o: CoverOpts, kind: 'low' | 'high'): THREE.Object3D {
   const H = kind === 'low' ? COVER_LOW : COVER_HIGH;

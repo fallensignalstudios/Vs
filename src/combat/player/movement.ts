@@ -1,7 +1,9 @@
 /** Locomotion, facing and the dodge. Camera-relative, with acceleration curves and strafe-facing modes. */
 import * as THREE from 'three';
+import type { Vec3Like } from '@/core/api';
 import { forwardX, forwardZ, lerp, turnToward, wrapAngle, yawTo } from '@/core/mathx';
 import { TUNING } from '../tuning';
+import { live } from '../safe';
 import type { PlayerControllerImpl } from './controller';
 
 export type MoveMode = 'free' | 'aim' | 'guard' | 'charge' | 'none';
@@ -70,13 +72,46 @@ export class Movement {
     this.imag = mag;
   }
 
-  /** yaw the camera is looking along (falls back to the actor's facing with a stub camera) */
-  cameraYaw(): number {
+  /**
+   * Yaw the body squares up to in strafe modes. Aiming: along the aim ray, so the muzzle points where the
+   * reticle does. Guarding / charging: the follow orbit's yaw — the view itself is toed in toward the hero's
+   * side for composition, and a guard should face what is ahead of the hero, not ahead of the lens.
+   */
+  cameraYaw(aim: boolean): number {
     const a = this.p.actor;
+    const cam = this.p.game.camera;
+    if (!aim && typeof cam.yaw === 'number' && Number.isFinite(cam.yaw)) return cam.yaw;
     _o.set(0, 0, 0);
     _d.set(forwardX(a.yaw), 0, forwardZ(a.yaw));
-    this.p.game.camera.getAimRay(_o, _d);
+    cam.getAimRay(_o, _d);
     return Math.hypot(_d.x, _d.z) > 1e-4 ? yawTo(0, 0, _d.x, _d.z) : a.yaw;
+  }
+
+  /**
+   * Turn the follow orbit so the aim ray (screen centre) passes through `point`, correcting the parallax of the
+   * shoulder offset. Uses where the lens sits relative to the pivot right now; converges in 2–3 frames.
+   */
+  aimCameraAt(point: Vec3Like): void {
+    const cam = this.p.game.camera;
+    if (!live(cam) || cam.mode !== 'follow' || !point || !Number.isFinite(point.x + point.y + point.z)) return;
+    const a = this.p.actor;
+    _o.set(a.pos.x, a.pos.y, a.pos.z);
+    _d.set(0, 0, -1);
+    cam.getAimRay(_o, _d);
+    const fl = Math.hypot(_d.x, _d.z);
+    if (!(fl > 1e-4)) return;
+    const fx = _d.x / fl;
+    const fz = _d.z / fl;
+    // lens position in its own flattened frame (constant while the orbit turns)
+    const side = (_o.x - a.pos.x) * -fz + (_o.z - a.pos.z) * fx;
+    const back = (_o.x - a.pos.x) * fx + (_o.z - a.pos.z) * fz;
+    const dx = point.x - a.pos.x;
+    const dz = point.z - a.pos.z;
+    const len = Math.hypot(dx, dz);
+    if (len < Math.abs(side) + 0.05) return;
+    const off = Math.asin(Math.max(-1, Math.min(1, side / len)));
+    cam.yaw = Math.atan2(-dx, -dz) + off;
+    cam.pitch = Math.atan2(point.y - _o.y, Math.max(0.2, len * Math.cos(off) - back));
   }
 
   /** walk / run / sprint with acceleration; writes actor.desiredVel and turns the body */
@@ -117,9 +152,9 @@ export class Movement {
 
     // facing
     const speed = Math.hypot(this.vx, this.vz);
-    if (mode === 'aim') a.yaw = turnToward(a.yaw, this.cameraYaw(), M.strafeTurnRate * dt);
+    if (mode === 'aim') a.yaw = turnToward(a.yaw, this.cameraYaw(true), M.strafeTurnRate * dt);
     else if (lock && lock.alive && !this.sprinting) a.face(lock.pos, M.strafeTurnRate * dt);
-    else if (mode === 'guard' || mode === 'charge') a.yaw = turnToward(a.yaw, this.cameraYaw(), (mode === 'charge' ? 5 : M.strafeTurnRate) * dt);
+    else if (mode === 'guard' || mode === 'charge') a.yaw = turnToward(a.yaw, this.cameraYaw(false), (mode === 'charge' ? 5 : M.strafeTurnRate) * dt);
     else if (mag > 0.05 && speed > 0.2) a.yaw = turnToward(a.yaw, yawTo(0, 0, this.ix, this.iz), M.turnRate * dt);
   }
 

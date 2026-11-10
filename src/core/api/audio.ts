@@ -18,7 +18,8 @@
  *  - `game:phase` dead → heavy muffle until the phase leaves `dead`; title → loops cleared, muffle 0
  *  - `zone:loading` → clear() (all loops stop)
  *  - `zone:ready` → setMeridianResolved(mission.state.flags.meridianComplete)
- *  - `dialogue:line` → speak(line.speaker, line.channel) + duck() for the line's duration
+ *  - `dialogue:line` → voice(line.speaker, line.text) when the line has a recording, else speak(); + duck()
+ *    for the line's duration
  *  - `checkpoint:saved` → stinger('checkpoint');  `encounter:started` / `encounter:cleared` → the matching stinger
  *  - `link:severed` → stinger('sever') (Eclipse cadence turns irregular);  `link:created` → cadence re-locks
  *  - `player:protagonist` / `handoff` → encounter stingers take the current lead's instrumentation
@@ -54,6 +55,23 @@
  * `meridianComplete` (title, atrium, recognition, core, witness, consequence). duel / carrier / decision /
  * resonance / departure / credits set the two protagonist identities against each other. quarantine = one
  * held tone. observation = sparse warm keyboard.
+ *
+ * RECORDED SCORE (optional files in `public/audio/music/` + manifest.json; `src/audio/assets/mapping.ts` is
+ * the table). Callers change nothing: setMusic / setIntensity / stinger / duck behave as documented, and
+ * when a state has a recording that is loaded, it carries the state instead of the generative layers:
+ *   title, credits, departure → main_theme · combatTarrik → dominion_combat · approachSelene, stealth →
+ *   frozen_stealth · combatSelene → relay_combat · atrium, duel (its still opening) and carrier (its
+ *   emergency swell) → atrium_carrier · combatEclipse, elite, resonance (sunk under water) → eclipse_combat ·
+ *   recognition, core, witness, consequence, observation → core_witness (played a whole tone up, in D).
+ *   context, approachTarrik, breach, decision, quarantine stay generative.
+ * Tracks are fetched and decoded lazily (the generative score plays until one arrives, then they cross-fade)
+ * and loop seamlessly. setIntensity moves a recording's level and opens its low-pass. A missing file or
+ * manifest simply means the generative score, as before.
+ *
+ * VOICE-OVER (optional files in `public/audio/vo/<lineId>.mp3` + manifest.json, where
+ * `lineId = voLineId(speaker, text)` from `@/audio/assets/voiceId` — case, spacing and punctuation do not
+ * change an id). `voice()` plays a line's recording and returns its length, or returns 0 when the line has
+ * none; `preloadVoices()` at zone load makes sure the clips are decoded before they are needed.
  */
 import type { Vec3Like } from './common';
 
@@ -128,6 +146,14 @@ export interface LoopHandle {
   stop(fadeSeconds?: number): void;
 }
 
+/** Options for AudioSystem.voice. */
+export interface VoiceOpts {
+  /** where the speaker stands: the line pans gently toward it (never below 70 % level). Omit for comm lines. */
+  pos?: Vec3Like;
+  /** 'radio' / 'system' get a comm treatment (band-pass + light distortion); 'narration' is dry and centred */
+  channel?: 'voice' | 'radio' | 'system' | 'narration';
+}
+
 /** Options for AudioSystem.registerSample. */
 export interface AudioSampleOpts {
   /** linear gain relative to the level the id is authored at (default 1; the recording is loudness-matched first) */
@@ -169,7 +195,7 @@ export interface AudioSystem {
   /** musical stinger over the current state */
   stinger(kind: 'checkpoint' | 'encounterStart' | 'encounterClear' | 'sever' | 'resonance' | 'revelation' | 'choice' | 'death'): void;
 
-  /** short per-speaker comm tick when a subtitle line starts (no VO in this build) */
+  /** short per-speaker comm tick when a subtitle line starts — what a line without a recording gets (see voice()) */
   speak(speaker: string, channel?: 'voice' | 'radio' | 'system' | 'narration'): void;
   /**
    * temporarily lower music (by `amount`, 0..0.95 of its level — reverb included) and ambience (by 60 % of that)
@@ -231,6 +257,24 @@ export interface AudioSystem {
   unregisterSample(id: SfxId): void;
   /** Detach every listener, stop everything and close the AudioContext. The system stays silent afterwards. */
   dispose(): void;
+
+  // --- recorded voice-over (audio-assets) ---------------------------------------------------------
+  /**
+   * Speak the recording of this line, if one exists for `voLineId(speaker, text)`: it starts on the dialogue
+   * bus (SFX slider; never muffled) with the channel's treatment, replaces any line still playing, ducks the
+   * score and ambience for its length, and its duration in seconds is returned. Returns 0 — and does
+   * nothing — when the line has no recording, audio is locked/muted/unavailable, or the voice manifest has
+   * not loaded yet: the caller then falls back to `speak()` and a text-length duration.
+   * Calling it twice for the same line within 0.3 s is one utterance (the `dialogue:line` wiring relies on it).
+   */
+  voice(speaker: string, text: string, opts?: VoiceOpts): number;
+  /** Cut the line being spoken, fading over `fadeSeconds` (default 0.15). No-op when nothing is playing. */
+  stopVoice(fadeSeconds?: number): void;
+  /**
+   * Fetch and decode the recordings of these `[speaker, text]` lines ahead of time (zone load). Lines
+   * without a recording are skipped. Works before unlock(). The promise always resolves, never rejects.
+   */
+  preloadVoices(lines: ReadonlyArray<readonly [string, string]>): Promise<void>;
 }
 
 export interface AudioDebugInfo {
@@ -255,4 +299,8 @@ export interface AudioDebugInfo {
   prerendered: number;
   /** ids with a registered recording */
   samples: number;
+  /** recorded track carrying the current music state (null while the generative score plays) */
+  recordedTrack: string | null;
+  /** `voLineId` of the voice-over line being spoken, or null */
+  voiceLine: string | null;
 }

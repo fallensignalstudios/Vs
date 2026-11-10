@@ -8,8 +8,8 @@ export const MOVEMENT_SFX: RecipeTable = {
   footStone: sfx(-23, STEP, (k) => {
     // heel: dull knock on polished stone; sole: a short scuff
     thump(k, k.rr(100, 125), 68, 0.07, 0.5);
-    k.noise('pink', { a: 0.001, d: 0.05, g: 1 }, { lp: [2400, 600], q: 0.8 });
-    crack(k, 0.5, 0, 2400, 0.004);
+    k.noise('pink', { a: 0.001, d: 0.055, g: 1 }, { lp: [2400, 600], q: 0.8 });
+    crack(k, 0.22, 0, 2400, 0.006);
     k.noise('pink', { a: 0.01, d: 0.06, g: 0.4 }, { at: 0.03, bp: k.rr(1800, 2600), q: 1.5 });
   }),
   footMetal: sfx(-22, STEP, (k) => {

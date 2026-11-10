@@ -397,14 +397,14 @@ export class ActorManagerImpl implements ActorManager {
       let wp: WeakPoint | null = null;
       const wps = a.weakPoints;
       if (wps.length && a.visual) {
-        const open = a.frozen;
         for (let k = 0; k < wps.length; k++) {
           const w = wps[k] as WeakPoint;
-          if (!w.exposed && !open) continue;
+          if (!w.exposed) continue;
           a.visual.socket(w.socket).getWorldPosition(_v);
           const tw = rayVsSphere(ox, oy, oz, dx, dy, dz, _v.x, _v.y, _v.z, w.radius);
-          // the weak point wins when the ray reaches it no later than just past the body surface
-          if (tw >= 0 && (t < 0 || tw <= t + w.radius + a.radius)) {
+          // the weak point wins only where the ray meets it at the body's surface on the ray's own side:
+          // a rear vent cannot be shot through the chest
+          if (tw >= 0 && (t < 0 || tw <= t + w.radius)) {
             wp = w;
             t = t < 0 ? tw : Math.min(t, tw);
             break;
@@ -470,10 +470,9 @@ export class ActorManagerImpl implements ActorManager {
     const wps = target.weakPoints;
     const v = target.visual;
     if (!wps || !wps.length || !v || !point || !Number.isFinite(point.x + point.y + point.z)) return null;
-    const open = target.frozen;
     for (let k = 0; k < wps.length; k++) {
       const w = wps[k] as WeakPoint;
-      if (!w.exposed && !open) continue;
+      if (!w.exposed) continue;
       v.socket(w.socket).getWorldPosition(_v);
       const r = w.radius + slack;
       if (_v.distanceToSquared(point as THREE.Vector3) <= r * r) return w;
@@ -481,14 +480,13 @@ export class ActorManagerImpl implements ActorManager {
     return null;
   }
 
-  /** the first exposed weak point (any, while frozen), else null */
+  /** the first exposed weak point (or the exposed one called `id`), else null */
   exposedWeakPoint(target: Actor, id?: string): WeakPoint | null {
     const wps = target.weakPoints;
     if (!wps) return null;
-    const open = target.frozen;
     for (let k = 0; k < wps.length; k++) {
       const w = wps[k] as WeakPoint;
-      if ((w.exposed || open) && (id === undefined || w.id === id)) return w;
+      if (w.exposed && (id === undefined || w.id === id)) return w;
     }
     return null;
   }

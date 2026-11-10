@@ -12,12 +12,14 @@ import type {
 } from '@/core/api';
 import { STORY_FLAGS } from '@/core/api';
 import { reportError } from '@/core/events';
-import { clamp, DEG } from '@/core/mathx';
+import { clamp } from '@/core/mathx';
 import { isStub } from '@/core/stub';
-import { CineCtxImpl, pullIn, shotPose } from './cinematic';
+import { CineCtxImpl } from './cinematic';
 import { DialogueDirector } from './dialogue';
 import type { BuilderExtras } from './fallbackBuilder';
 import { guarded } from './guard';
+import { runHandoff } from './handoff';
+import type { HandoffOpts } from './handoff';
 import { Guidance } from './guidance';
 import { InteractionSet } from './interact';
 import { Pickups } from './pickups';
@@ -26,11 +28,6 @@ import { Pickups } from './pickups';
 export const SKIP_HOLD_SECONDS = 0.8;
 /** the skip hint is shown this long at the start of every skippable cinematic */
 const SKIP_HINT_INTRO = 3;
-
-const LEADS: Record<ProtagonistId, { name: string; faction: string }> = {
-  tarrik: { name: 'Tarrik', faction: 'Dominion' },
-  selene: { name: 'Selene', faction: 'Reformation' },
-};
 
 /** What the runtime needs from the mission system. */
 export interface RuntimeHost {
@@ -173,6 +170,11 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     const c = this.game.ai.spawnNpc(who, { pos, yaw, pose, name });
     this.castMap.set(name ?? who, c);
     return c;
+  }
+
+  /** register a body under a cast name (handoff: the outgoing lead becomes a companion) */
+  recast(name: string, c: Companion): void {
+    this.castMap.set(name, c);
   }
 
   cast(name: string): Companion | null {
@@ -329,55 +331,8 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     this.host.note(`cinematic "${c.id}" skipped at ${c.elapsed.toFixed(1)} s`);
   }
 
-  *handoff(to: ProtagonistId, opts?: { partnerMode?: CompanionMode; seconds?: number; line?: [SpeakerId, string] }): Routine {
-    const g = this.game;
-    const from = g.player.protagonist;
-    if (to !== 'tarrik' && to !== 'selene') {
-      this.warnOnce(`handoff:${String(to)}`, `handoff to unknown protagonist "${String(to)}" ignored`);
-      return;
-    }
-    if (from === to) {
-      this.log(`handoff to ${to} ignored — already the lead`);
-      return;
-    }
-    const total = clamp(opts?.seconds ?? 3.4, 1.2, 12);
-    const self = this;
-    yield* this.cinematic(
-      `handoff:${from}>${to}`,
-      function* (c): Routine {
-        const old = self.livePlayer();
-        const oldPos = old ? old.pos.clone() : new THREE.Vector3();
-        const oldYaw = old ? old.yaw : 0;
-        const partner = self.cast(to);
-        const partnerActor = partner && !isStub(partner) && !isStub(partner.actor) ? partner.actor : null;
-        const newPos = partnerActor ? partnerActor.pos.clone() : self.besideFor(oldPos, oldYaw);
-        const newYaw = partnerActor ? partnerActor.yaw : oldYaw;
-        if (!partnerActor) self.warnOnce(`handoff:nobody:${to}`, `handoff to ${to}: no companion body of that name in ${self.zone.id} — spawning beside the lead`);
-
-        // The swap rides on the cut: the same frame the camera cuts to the outgoing lead, both bodies change hands.
-        const onOld = pullIn(g, shotPose(oldPos, { yawDeg: -oldYaw / DEG + 28, distance: 3.1, height: 1.5, fov: 40 }));
-        c.cut(onOld);
-        if (partner) {
-          partner.remove();
-          self.uncast(partner);
-        }
-        g.player.setProtagonist(to, { pos: newPos, yaw: newYaw });
-        self.playerSpawned = true;
-        const fromWho: HumanoidArchetype = from === 'selene' ? 'selene' : 'tarrik';
-        const body = g.ai.spawnCompanion(fromWho, { pos: oldPos, yaw: oldYaw, mode: opts?.partnerMode ?? 'follow' });
-        self.castMap.set(fromWho, body);
-        g.events.emit('handoff', { from, to });
-
-        yield total * 0.16;
-        const onNew = pullIn(g, shotPose(newPos, { yawDeg: -newYaw / DEG - 24, distance: 2.7, height: 1.55, fov: 38 }));
-        yield* c.move(onNew, total * 0.5, 'inOutCubic');
-        if (!c.skipping) g.ui.zoneCard(`Now playing · ${LEADS[to].name}`, LEADS[to].faction);
-        if (opts?.line) yield* self.say(opts.line[0], opts.line[1], { actor: self.livePlayer() });
-        yield total * 0.34;
-        g.camera.snapBehind(newYaw);
-      },
-      { blendOut: 0.9 },
-    );
+  handoff(to: ProtagonistId, opts?: HandoffOpts): Routine {
+    return runHandoff(this, to, opts);
   }
 
   *choice(opts: ChoiceOpts): Routine<string> {
@@ -564,7 +519,8 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     const extras = this.builder as unknown as BuilderExtras;
     if (!isStub(this.builder) && typeof extras.update === 'function') {
       try {
-        extras.update(dt, this.time);
+        // the real kit also ticks itself and ignores a repeated timestamp — it must be the sim clock
+        extras.update(dt, g.time.now);
       } catch (err) {
         this.reportOnce('builder:update', err);
       }
@@ -624,19 +580,21 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
   // internals
   // ---------------------------------------------------------------------------------------------
 
-  private livePlayer(): Actor | null {
+  /** the controlled protagonist's actor, or null before one exists (never a stub) */
+  livePlayer(): Actor | null {
     const p = this.game.player;
     if (isStub(p)) return null;
     const a = p.actor;
     return a && !isStub(a) ? a : null;
   }
 
-  private uncast(c: Companion): void {
+  /** forget a cast member (its body was removed) */
+  uncast(c: Companion): void {
     for (const [k, v] of this.castMap) if (v === c) this.castMap.delete(k);
   }
 
   /** a standable spot about 1.6 m to the right of a body (new lead without a companion body) */
-  private besideFor(pos: THREE.Vector3, yaw: number): THREE.Vector3 {
+  besideFor(pos: THREE.Vector3, yaw: number): THREE.Vector3 {
     const x = pos.x + Math.cos(yaw) * 1.6;
     const z = pos.z - Math.sin(yaw) * 1.6;
     const spot = this.game.physics.nearestStandable(x, pos.y, z, 0.4, 3);
@@ -649,7 +607,7 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     this.game.ai.setCeasefire(this.ceasefires > 0);
   }
 
-  private warnOnce(key: string, msg: string): void {
+  warnOnce(key: string, msg: string): void {
     if (this.warned.has(key)) return;
     this.warned.add(key);
     console.warn(`[mission] ${msg}`);

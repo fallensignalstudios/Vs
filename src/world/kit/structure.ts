@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import type { ColliderHandle, DiscOpts, FloorOpts, MatId, RampOpts, RectOpts, SurfaceDesc } from '@/core/api';
 import { yawTo } from '@/core/mathx';
 import type { V2 } from './geo';
-import { KitCtx, Part } from './core';
+import { familyOf, KitCtx, Part, type Family } from './core';
 import { drawInlay, type InlayStyle } from './inlay';
 
 type Side = 'n' | 's' | 'e' | 'w';
@@ -62,9 +62,9 @@ export function buildDisc(ctx: KitCtx, o: DiscOpts): THREE.Object3D {
     for (const [a0, a1] of solidArcs(gaps)) {
       const A0 = (a0 * Math.PI) / 180, A1 = (a1 * Math.PI) / 180;
       const n = Math.max(1, Math.ceil(((A1 - A0) * r) / 2.4));
-      part.g('whiteGold').arcBand(r - 0.26, r, A0, A1, 0, rh - 0.08, n * 2);
+      part.g(familyOf(mat).frame).arcBand(r - 0.26, r, A0, A1, 0, rh - 0.08, n * 2);
       part.g('goldTrim').arcBand(r - 0.3, r + 0.04, A0, A1, rh - 0.08, rh, n * 2);
-      part.g(ctx.inlay('goldChannel')).arcBand(r - 0.3, r - 0.262, A0 + 0.01, A1 - 0.01, 0.16, 0.21, n * 2, { top: false, ends: false });
+      part.g(ctx.channel()).arcBand(r - 0.3, r - 0.262, A0 + 0.01, A1 - 0.01, 0.16, 0.21, n * 2, { top: false, ends: false });
       for (let i = 0; i < n; i++) {
         const am = A0 + ((A1 - A0) * (i + 0.5)) / n, chord = 2 * (r - 0.13) * Math.sin((A1 - A0) / n / 2);
         ctx.collider({
@@ -91,7 +91,7 @@ export function solidArcs(gaps: Array<[number, number]>): Array<[number, number]
 }
 
 /** Emit a rail run between two local points of `part` (visual + collider). */
-export function railRun(part: Part, ax: number, az: number, bx_: number, bz_: number, y: number, height: number, style: 'ancient' | 'glass'): void {
+export function railRun(part: Part, ax: number, az: number, bx_: number, bz_: number, y: number, height: number, style: 'ancient' | 'glass', fam: Family = familyOf(undefined)): void {
   const ctx = part.ctx, dx = bx_ - ax, dz = bz_ - az, len = Math.hypot(dx, dz);
   if (len < 0.05) return;
   const ry = Math.atan2(-dz, dx);
@@ -103,13 +103,15 @@ export function railRun(part: Part, ax: number, az: number, bx_: number, bz_: nu
     part.g('goldDark').boxOn(len, 0.1, 0.12, len / 2, 0, 0);
     for (let i = 0; i <= posts; i++) part.g('goldDark').boxOn(0.07, height - 0.05, 0.07, (len * i) / posts, 0, 0);
   } else {
-    part.g('whiteGold').boxOn(len, 0.16, 0.3, len / 2, 0, 0).boxOn(len, height - 0.3, 0.14, len / 2, 0.16, 0);
-    part.g('whiteGold').tbox(len, 0.1, 0.28, 0.03, len / 2, height - 0.1, 0);
+    const body = part.g(fam.frame);
+    body.boxOn(len, 0.16, 0.3, len / 2, 0, 0).boxOn(len, height - 0.3, 0.14, len / 2, 0.16, 0);
+    body.tbox(len, 0.1, 0.28, 0.03, len / 2, height - 0.1, 0);
     part.g('goldTrim').box(len, 0.04, 0.17, len / 2, height - 0.16, 0);
     for (let i = 0; i <= posts; i++) {
       const px = (len * i) / posts;
-      part.g('whiteGold').vbox(0.3, height + 0.06, 0.34, 0.04, px, 0, 0);
-      part.g('goldTrim').tbox(0.34, 0.07, 0.38, 0.03, px, height + 0.06, 0);
+      body.vbox(0.3, height + 0.04, 0.34, 0.04, px, 0, 0).tbox(0.36, 0.07, 0.4, 0.03, px, height + 0.06, 0);
+      part.g('goldTrim').boxOn(0.32, 0.02, 0.36, px, height + 0.04, 0);
+      if (fam.dark) for (const s of [-1, 1]) part.g(ctx.seam(true)).ribbon([[px, 0.22, s * 0.174], [px, height - 0.12, s * 0.174]], 0.05, [0, 0, s]);
     }
   }
   const low = height <= 1.1;
@@ -117,10 +119,10 @@ export function railRun(part: Part, ax: number, az: number, bx_: number, bz_: nu
   part.unframe();
 }
 
-export function buildRail(ctx: KitCtx, o: { from: [number, number]; to: [number, number]; h?: number; height?: number; style?: 'ancient' | 'glass' }): THREE.Object3D {
+export function buildRail(ctx: KitCtx, o: { from: [number, number]; to: [number, number]; h?: number; height?: number; style?: 'ancient' | 'glass'; mat?: MatId }): THREE.Object3D {
   const h = ctx.num(o.h, 0), a = ctx.P(o.from[0], o.from[1], h), b = ctx.P(o.to[0], o.to[1], h);
   const part = new Part(ctx, 'rail', a);
-  railRun(part, 0, 0, b.x - a.x, b.z - a.z, 0, ctx.num(o.height, 1.1, 0.3, 6), o.style === 'glass' ? 'glass' : 'ancient');
+  railRun(part, 0, 0, b.x - a.x, b.z - a.z, 0, ctx.num(o.height, 1.1, 0.3, 6), o.style === 'glass' ? 'glass' : 'ancient', familyOf(o.mat));
   return part.done();
 }
 
@@ -128,25 +130,26 @@ export function buildRamp(ctx: KitCtx, o: RampOpts): THREE.Object3D {
   const w = ctx.num(o.w, 4, 0.5), d = ctx.num(o.d, 10, 0.5), h0 = ctx.num(o.h0, 0), h1 = ctx.num(o.h1, 3);
   const base = Math.min(h0, h1), a = h0 - base, b = h1 - base;
   const part = new Part(ctx, 'ramp', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), base), ctx.yaw(ctx.num(o.yawDeg, 0)));
-  const hw = w / 2, hd = d / 2, top = o.mat ?? 'whiteGoldFloor';
+  const hw = w / 2, hd = d / 2, top = o.mat ?? 'whiteGoldFloor', fam = familyOf(top);
   // low end at +Z (local south), high end at −Z (local north)
   part.g(top).quad([-hw, a, hd], [hw, a, hd], [hw, b, -hd], [-hw, b, -hd]);
-  const body = part.g('whiteGoldPanel');
-  const side: V2[] = [[hd, 0], [hd, a], [-hd, b], [-hd, 0]].filter((p, i, arr) => i === 0 || p[1] !== arr[i - 1][1] || p[0] !== arr[i - 1][0]) as V2[];
+  const body = part.g(fam.panel);
+  const corners: V2[] = [[hd, 0], [hd, a], [-hd, b], [-hd, 0]];
+  const side = corners.filter((p, i, arr) => i === 0 || p[1] !== arr[i - 1][1] || p[0] !== arr[i - 1][0]);
   if (side.length >= 3) for (const s of [-1, 1]) body.prismX(side, 0.02, s * (hw - 0.01));
   if (b > 0.01) body.quad([hw, 0, -hd], [-hw, 0, -hd], [-hw, b, -hd], [hw, b, -hd]);
   if (a > 0.01) body.quad([-hw, 0, hd], [hw, 0, hd], [hw, a, hd], [-hw, a, hd]);
   // kerbs with a gold line and a guide light on the inside
   const slope = (y: number): V2[] => [[hd, a + y], [hd, a + y + 0.12], [-hd, b + y + 0.12], [-hd, b + y]];
   for (const s of [-1, 1]) {
-    part.g('whiteGold').prismX(slope(0), 0.16, s * (hw - 0.08));
+    part.g(fam.frame).prismX(slope(0), 0.16, s * (hw - 0.08));
     part.g(ctx.inlay('goldTrim')).ribbon([[s * (hw - 0.08), a + 0.126, hd], [s * (hw - 0.08), b + 0.126, -hd]], 0.05, [0, 1, 0]);
-    part.g(ctx.inlay('goldChannel')).ribbon([[s * (hw - 0.24), a + 0.008, hd - 0.15], [s * (hw - 0.24), b + 0.008, -hd + 0.15]], 0.05, [0, 1, 0]);
+    part.g(ctx.channel()).ribbon([[s * (hw - 0.24), a + 0.008, hd - 0.15], [s * (hw - 0.24), b + 0.008, -hd + 0.15]], 0.05, [0, 1, 0]);
   }
   const railH = 1.1;
   if (o.rails) {
     for (const s of [-1, 1]) {
-      part.g('whiteGold').prismX([[hd, a + 0.12], [hd, a + railH - 0.08], [-hd, b + railH - 0.08], [-hd, b + 0.12]], 0.14, s * (hw - 0.08));
+      part.g(fam.frame).prismX([[hd, a + 0.12], [hd, a + railH - 0.08], [-hd, b + railH - 0.08], [-hd, b + 0.12]], 0.14, s * (hw - 0.08));
       part.g('goldTrim').prismX([[hd, a + railH - 0.08], [hd, a + railH], [-hd, b + railH], [-hd, b + railH - 0.08]], 0.2, s * (hw - 0.08));
     }
   }
@@ -169,22 +172,21 @@ export function buildRamp(ctx: KitCtx, o: RampOpts): THREE.Object3D {
 export function buildDeck(ctx: KitCtx, o: RectOpts & DeckExtras): THREE.Object3D {
   const w = ctx.num(o.w, 8, 0.5), d = ctx.num(o.d, 8, 0.5), h = ctx.num(o.h, 3), th = ctx.num(o.thickness, 0.4, 0.1, 2);
   const base = Math.min(ctx.num(o.base, 0), h - th), drop = h - base;
-  const mat = o.mat ?? 'whiteGoldFloor', hw = w / 2, hd = d / 2;
+  const mat = o.mat ?? 'whiteGoldFloor', hw = w / 2, hd = d / 2, fam = familyOf(mat);
   const part = new Part(ctx, 'deck', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h), ctx.yaw(ctx.num(o.yawDeg, 0)));
   part.g(mat).tbox(w, th, d, 0.02, 0, -th, 0);
   // fascia band, gold line, warm under-lip strip
   const fy = -th - 0.12, fh = th + 0.08;
   for (const s of [-1, 1]) {
-    part.g('whiteGold').box(w + 0.12, fh, 0.08, 0, fy + fh / 2, s * (hd + 0.02)).box(0.08, fh, d + 0.12, s * (hw + 0.02), fy + fh / 2, 0);
+    part.g(fam.frame).box(w + 0.12, fh, 0.08, 0, fy + fh / 2, s * (hd + 0.02)).box(0.08, fh, d + 0.12, s * (hw + 0.02), fy + fh / 2, 0);
     part.g('goldTrim').box(w + 0.16, 0.045, 0.1, 0, -0.14, s * (hd + 0.02)).box(0.1, 0.045, d + 0.16, s * (hw + 0.02), -0.14, 0);
     if (!o.solidBelow) {
-      part.g('whiteLight').quad([-hw + 0.3, fy - 0.004, s * (hd - 0.22)], [hw - 0.3, fy - 0.004, s * (hd - 0.22)], [hw - 0.3, fy - 0.004, s * (hd - 0.1)], [-hw + 0.3, fy - 0.004, s * (hd - 0.1)]);
-      part.g('whiteLight').quad([hw - 0.3, fy - 0.004, s * (hd - 0.1)], [hw - 0.3, fy - 0.004, s * (hd - 0.22)], [-hw + 0.3, fy - 0.004, s * (hd - 0.22)], [-hw + 0.3, fy - 0.004, s * (hd - 0.1)]);
+      part.g(ctx.seam(fam.dark)).quadFacing([-hw + 0.3, fy - 0.004, s * (hd - 0.22)], [hw - 0.3, fy - 0.004, s * (hd - 0.22)], [hw - 0.3, fy - 0.004, s * (hd - 0.1)], [-hw + 0.3, fy - 0.004, s * (hd - 0.1)], [0, -1, 0]);
     }
   }
   if (o.solidBelow) {
-    part.g('whiteGoldPanel').box(w - 0.04, drop - th, d - 0.04, 0, -th - (drop - th) / 2, 0, true);
-    part.g('whiteGold').boxOn(w + 0.1, 0.3, d + 0.1, 0, -drop, 0);
+    part.g(fam.panel).box(w - 0.04, drop - th, d - 0.04, 0, -th - (drop - th) / 2, 0, true);
+    part.g(fam.frame).boxOn(w + 0.1, 0.3, d + 0.1, 0, -drop, 0);
     part.g('goldTrim').boxOn(w + 0.12, 0.035, d + 0.12, 0, -drop + 0.3, 0);
     ctx.collider(part.pose.box(0, -drop / 2, 0, hw, drop / 2, hd, { tag: 'deck-block' }));
   } else {
@@ -195,8 +197,8 @@ export function buildDeck(ctx: KitCtx, o: RectOpts & DeckExtras): THREE.Object3D
       for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
         if (i > 0 && i < nx - 1 && j > 0 && j < nz - 1) continue;
         const px = nx === 1 ? 0 : -hw + 0.8 + ((w - 1.6) * i) / (nx - 1), pz = nz === 1 ? 0 : -hd + 0.8 + ((d - 1.6) * j) / (nz - 1);
-        part.g('whiteGold').vbox(0.62, sh - 0.4, 0.62, 0.08, px, -drop, pz).taperOn(0.62, 0.62, 1.05, 1.05, 0.4, px, -th - 0.4, pz, true);
-        part.g('whiteGold').tbox(0.9, 0.28, 0.9, 0.06, px, -drop, pz);
+        part.g(fam.frame).vbox(0.62, sh - 0.4, 0.62, 0.08, px, -drop, pz).taperOn(0.62, 0.62, 1.05, 1.05, 0.4, px, -th - 0.4, pz, true);
+        part.g(fam.frame).tbox(0.9, 0.28, 0.9, 0.06, px, -drop, pz);
         part.g('goldTrim').boxOn(0.66, 0.05, 0.66, px, -th - 0.48, pz);
         ctx.collider(part.pose.cyl(px, -th - sh / 2, pz, 0.42, sh / 2, { tag: 'support' }));
       }
@@ -213,8 +215,8 @@ export function buildDeck(ctx: KitCtx, o: RectOpts & DeckExtras): THREE.Object3D
     if (along - t > 0.3) runs.push([t, along]);
     for (const [r0, r1] of runs) {
       // distances run from the west end (n / s sides) or the south end (e / w sides)
-      if (side === 'n' || side === 's') { const z = side === 'n' ? -hd + 0.17 : hd - 0.17; railRun(part, -hw + r0, z, -hw + r1, z, 0, 1.1, 'ancient'); }
-      else { const x = side === 'e' ? hw - 0.17 : -hw + 0.17; railRun(part, x, hd - r0, x, hd - r1, 0, 1.1, 'ancient'); }
+      if (side === 'n' || side === 's') { const z = side === 'n' ? -hd + 0.17 : hd - 0.17; railRun(part, -hw + r0, z, -hw + r1, z, 0, 1.1, 'ancient', fam); }
+      else { const x = side === 'e' ? hw - 0.17 : -hw + 0.17; railRun(part, x, hd - r0, x, hd - r1, 0, 1.1, 'ancient', fam); }
     }
   }
   ctx.surface({ shape: { kind: 'rect', hx: hw, hz: hd }, x: part.pose.x, z: part.pose.z, yaw: part.pose.yaw, y: h, material: surfaceKind(mat), tag: 'deck' });
@@ -227,22 +229,22 @@ export function buildBridge(ctx: KitCtx, o: { from: [number, number]; to: [numbe
   const part = new Part(ctx, 'bridge', a, yaw);
   const spans: Array<[number, number, boolean, boolean]> = o.broken === 'far' ? [[0, L * 0.62, false, true]]
     : o.broken === 'mid' ? [[0, L * 0.4, false, true], [L * 0.6, L, true, false]] : [[0, L, false, false]];
-  const hw = width / 2;
+  const hw = width / 2, fam = familyOf(mat);
   for (const [s0, s1, jagStart, jagEnd] of spans) {
     const len = s1 - s0, zc = -(s0 + s1) / 2;
     part.g(mat).tbox(width, 0.35, len, 0.02, 0, -0.35, zc);
     for (const s of [-1, 1]) {
-      part.g('whiteGold').box(0.34, 0.75, len, s * (hw - 0.17), -0.72, zc);
+      part.g(fam.frame).box(0.34, 0.75, len, s * (hw - 0.17), -0.72, zc);
       part.g('goldTrim').box(0.05, 0.05, len, s * (hw + 0.005), -0.2, zc);
-      part.g(ctx.inlay('goldChannel')).ribbon([[s * (hw - 0.5), 0.006, -s0 - 0.1], [s * (hw - 0.5), 0.006, -s1 + 0.1]], 0.05);
-      railRun(part, s * (hw - 0.17), -s0, s * (hw - 0.17), -s1, 0, 1.1, 'ancient');
+      part.g(ctx.channel()).ribbon([[s * (hw - 0.5), 0.006, -s0 - 0.1], [s * (hw - 0.5), 0.006, -s1 + 0.1]], 0.05);
+      railRun(part, s * (hw - 0.17), -s0, s * (hw - 0.17), -s1, 0, 1.1, 'ancient', fam);
     }
-    for (let z = s0 + 1.5; z < s1 - 0.5; z += 3) part.g('whiteGold').box(width - 0.7, 0.4, 0.3, 0, -0.55, -z);
+    for (let z = s0 + 1.5; z < s1 - 0.5; z += 3) part.g(fam.frame).box(width - 0.7, 0.4, 0.3, 0, -0.55, -z);
     for (const [jag, z] of [[jagStart, s0], [jagEnd, s1]] as const) {
       if (!jag) continue;
       for (let i = 0; i < 6; i++) {
         const cw = 0.4 + ctx.rand() * 0.8;
-        part.g(i % 2 ? 'rubble' : 'whiteGold').chunk(cw, 0.2 + ctx.rand() * 0.3, 0.5 + ctx.rand() * 1.1, 0.5, ctx.rand, -hw + 0.4 + (width - 0.8) * ctx.rand(), -0.2, -z);
+        part.g(i % 2 ? 'rubble' : fam.frame).chunk(cw, 0.2 + ctx.rand() * 0.3, 0.5 + ctx.rand() * 1.1, 0.5, ctx.rand, -hw + 0.4 + (width - 0.8) * ctx.rand(), -0.2, -z);
       }
     }
     ctx.surface({ shape: { kind: 'rect', hx: hw, hz: len / 2 }, x: part.pose.wx(0, zc), z: part.pose.wz(0, zc), yaw, y: h, material: surfaceKind(mat), tag: 'bridge' });

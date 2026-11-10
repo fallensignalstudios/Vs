@@ -64,6 +64,10 @@ export interface DeckShared {
 
 /** a layer that throws this many times is switched off (and reported once) rather than retried forever */
 const LAYER_STRIKES = 3;
+/** indices in `outs` of the struck buses (drums, drum room): cut on the boundary instead of faded */
+const STRUCK_OUTS = [1, 3];
+/** the scheduler always runs at least this far ahead: two beats, and never less than a second */
+const MIN_HORIZON = 1.0;
 
 export class Deck {
   /** when this deck stops scheduling new notes (set by fadeOut: the bar line it is leaving on) */
@@ -78,6 +82,7 @@ export class Deck {
   private readonly lastGain: number[];
   private readonly stamps: number[];
   private readonly strikes: number[];
+  private readonly lfos = new Map<number, OscillatorNode>();
   private nextT: number;
   private stepIdx = 0;
   private lastBarT: number;
@@ -115,6 +120,19 @@ export class Deck {
     this.env = {
       ac, res, samples, rnd: mulberry32(seed), tonic: def.tonic, stepDur, barDur: stepDur * this.stepsPerBar,
       intensity: this.intensityNow(), irregular: shared.irregular, externalCadenceAt: shared.externalCadenceAt,
+      lfo: (rate, depth, target) => {
+        let o = this.lfos.get(rate);
+        if (!o) {
+          o = ac.createOscillator();
+          o.frequency.value = rate;
+          o.start(Math.max(startAt, ac.currentTime));
+          this.lfos.set(rate, o);
+        }
+        const d = ac.createGain();
+        d.gain.value = depth;
+        o.connect(d);
+        d.connect(target);
+      },
     };
     this.layers = def.layers.map((l) => makeLayer(l, this.env, { tonal, drums, wet, room }, startAt));
     this.lastGain = this.layers.map(() => -1);
@@ -144,29 +162,30 @@ export class Deck {
     return this.nextT;
   }
 
-  /** The next bar line at or after `now`. */
+  /** The next bar line at or after `now` (the scheduler may already be past it: bar lines are a fixed grid). */
   nextBar(now: number): number {
-    if (now <= this.startAt) return this.startAt;
-    let t = this.lastBarT;
-    while (t < now) t += this.env.barDur;
-    return t;
+    return this.nextOnGrid(now, this.env.barDur);
   }
 
   /** The next beat at or after `now`. */
   nextBeat(now: number): number {
+    return this.nextOnGrid(now, this.beatDur);
+  }
+
+  private nextOnGrid(now: number, period: number): number {
     if (now <= this.startAt) return this.startAt;
-    const beat = this.beatDur;
-    let t = this.lastBarT;
-    while (t < now) t += beat;
-    return t;
+    // lastBarT is a bar line (and so a beat); walk the grid from it in either direction
+    const n = Math.ceil((now - this.lastBarT) / period - 1e-9);
+    return this.lastBarT + n * period;
   }
 
   /**
-   * Leave on the boundary `at`: rhythm stops there (two tempi never overlap), while whatever is already
-   * sounding — pads, bells, drum tails — fades over `seconds` underneath the incoming state.
+   * Leave on the boundary `at`. Everything struck is cut there within a few milliseconds — including strokes
+   * this deck had already scheduled beyond the boundary, so two tempi never overlap however far ahead the
+   * scheduler runs — while the sustained layers and the hall fade over `seconds` under the incoming state.
    */
   fadeOut(now: number, at: number, seconds: number): void {
-    for (const f of this.faders) f.fade(now, at, seconds, 0);
+    this.faders.forEach((f, i) => f.fade(now, at, STRUCK_OUTS.includes(i) ? Math.min(seconds, 0.06) : seconds, 0));
     this.endAt = Math.max(now, at);
     this.disposeAt = this.endAt + seconds + 0.3;
   }
@@ -202,8 +221,9 @@ export class Deck {
   }
 
   /**
-   * Schedule every step that starts within the horizon: `lookahead` seconds, and never less than one beat —
-   * a zone build or a shader compile that stalls the main thread for most of a second leaves no hole.
+   * Schedule every step that starts within the horizon: `lookahead` seconds, and never less than two beats
+   * or one second — a zone build or a shader compile that stalls the main thread for most of a second
+   * leaves no hole in the rhythm.
    */
   schedule(now: number, lookahead: number): void {
     if (this.disposed) return;
@@ -224,7 +244,7 @@ export class Deck {
     }
     const chords = resolved && this.def.resolved ? this.def.resolved : this.def.chords;
     const spb = this.stepsPerBar;
-    const end = Math.min(now + Math.max(lookahead, this.beatDur), this.endAt);
+    const end = Math.min(now + Math.max(lookahead, this.beatDur * 2, MIN_HORIZON), this.endAt);
     while (this.nextT < end) {
       const t = this.nextT;
       const idx = this.stepIdx;
@@ -285,21 +305,27 @@ export class Deck {
     this.disposed = true;
     const now = this.ac.currentTime;
     for (const l of this.layers) l.dispose(now + 0.02);
+    for (const o of this.lfos.values()) {
+      try {
+        o.stop(now + 0.02);
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.lfos.clear();
     for (const g of this.outs) g.disconnect();
   }
 }
 
 /**
- * The musical boundary a state change should land on: the next bar line the outgoing deck has not already
- * scheduled past (next beat for very short fades), never making the player wait long for a response.
+ * The musical boundary a state change should land on: the next bar line (next beat for very short fades),
+ * never making the player wait long for a response.
  */
 export function boundaryFor(deck: Deck | null, now: number, fadeSeconds: number): number {
   if (!deck) return now + 0.03;
-  // notes up to the frontier are already in the graph: leaving before it would overlap two tempi
-  const from = Math.max(now + 0.02, deck.frontier - 1e-4);
   const quick = fadeSeconds < 0.35;
-  const b = quick ? deck.nextBeat(from) : deck.nextBar(from);
-  if (b - now <= (quick ? 0.9 : 2.6)) return b;
-  const beat = deck.nextBeat(from);
-  return clamp(beat, now + 0.03, now + 1.4);
+  const b = quick ? deck.nextBeat(now + 0.02) : deck.nextBar(now + 0.02);
+  if (b - now <= (quick ? 0.6 : 2.6)) return b;
+  const beat = deck.nextBeat(now + 0.02);
+  return clamp(beat, now + 0.03, now + 1.0);
 }

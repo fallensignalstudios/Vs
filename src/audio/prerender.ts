@@ -95,6 +95,11 @@ export interface Prerendered {
 
 const cache = new Map<number, Promise<Prerendered>>();
 
+/** Drop the pre-render for a sample rate that turned out not to be the device's (frees its buffers). */
+export function forgetPrerender(sampleRate: number): void {
+  cache.delete(sampleRate);
+}
+
 /**
  * Pre-render everything for a sample rate (once; later calls share the same promise). Ensemble loops are
  * written straight into `waves` (the per-rate shared bank). Never rejects.

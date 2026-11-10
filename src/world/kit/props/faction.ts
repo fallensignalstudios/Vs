@@ -212,10 +212,11 @@ export const FACTION_PROPS: PropTable = {
       navy.box(1.0, 0.5, 0.02, 0, 0.45, -0.285);
       steel.prismX([[-0.34, 0.86], [0.3, 0.86], [0.3, 1.0], [-0.34, 0.9]], 1.24, 0);
       // slanted keyboard deck + upright display
-      p.g('refBlueGlow').push().move(0, 0.955, -0.02).rotX(-0.155).box(0.9, 0.012, 0.36, 0, 0, 0).pop();
+      p.g('refBlueGlow').push().move(0, 0.955, -0.02).rotX(-0.155).box(0.5, 0.012, 0.2, -0.16, 0, 0).pop();
+      p.g('refNavy').push().move(0, 0.953, -0.02).rotX(-0.155).box(0.94, 0.012, 0.4, 0, 0, 0).pop();
       steel.boxOn(0.05, 0.62, 0.05, 0, 1.0, 0.24);
       navy.cbox(1.0, 0.56, 0.05, 0.02, 0, 1.72, 0.24);
-      p.g('hologram').box(0.9, 0.46, 0.012, 0, 1.72, 0.208);
+      p.g(p.ctx.emissive(PALETTE.refBlue, 1.5)).box(0.9, 0.46, 0.012, 0, 1.72, 0.208);
       for (const s of [-1, 1]) steel.tube([[s * 0.62, 0.3, -0.2], [s * 0.68, 0.5, -0.2], [s * 0.68, 0.7, -0.2], [s * 0.62, 0.84, -0.2]], 0.018, 5);
       p.g('rubber').tube([[0.4, 0.1, 0.28], [0.6, 0.03, 0.6], [0.5, 0.03, 1.2]], 0.02, 5);
     },
@@ -257,7 +258,7 @@ export const FACTION_PROPS: PropTable = {
       p.g('whiteGold').push().move(0, 1.45, 0).rotZ(0.5).rotY(0.6).chunk(0.5, 0.95, 0.4, 0.5, r).pop();
       p.g('goldTrim').push().move(0.02, 1.45, 0).rotZ(0.5).rotY(0.6).box(0.06, 0.8, 0.42, 0.12, 0, 0).pop();
       p.g(p.ctx.emissive(PALETTE.goldLight, 4)).push().move(0, 1.45, 0).rotZ(0.5).rotY(0.6).box(0.03, 0.5, 0.43, -0.1, 0.05, 0).pop();
-      p.g('hologram').band(0.72, 0.5, 0.72, 2.4, 20, 0, 0);
+      p.g(p.ctx.variant('hologram', { opacity: 0.16 })).band(0.72, 0.5, 0.72, 2.4, 20, 0, 0);
       for (const s of [-1, 1]) p.g('rubber').tube([[s * 1.6, 0.15, 1.3], [s * 1.9, 0.04, 1.9], [s * 1.5, 0.04, 2.6]], 0.04, 5, true);
     },
     colliders: () => [{ box: [3.6, 2.9, 3.0] }],

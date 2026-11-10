@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import type { MatId, RectOpts, WallOpts } from '@/core/api';
-import { KitCtx, Part } from './core';
+import { familyOf, KitCtx, Part } from './core';
 import { solidArcs } from './structure';
 
 type Style = NonNullable<WallOpts['style']>;
@@ -39,7 +39,8 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
   }
   if (L + o.ext1 - x > 0.02) spans.push([x, L + o.ext1]);
 
-  const body = part.g(o.mat), wg = part.g('whiteGold'), trim = part.g('goldTrim');
+  const fam = familyOf(o.mat);
+  const body = part.g(o.mat), wg = part.g(fam.frame), trim = part.g('goldTrim');
   const cornice = H >= 3;
   for (const [a, b] of spans) {
     const len = b - a, cx = (a + b) / 2;
@@ -60,6 +61,14 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
       if (cornice) {
         wg.box(len, 0.26, t + 0.18, cx, H - 0.13, 0);
         trim.box(len, 0.04, t + 0.2, cx, H - 0.3, 0);
+      }
+      if (fam.dark) {
+        // black stone reads through light: a gold channel outlines the wall where it meets floor and cornice
+        for (const s of [-1, 1]) {
+          const z = s * (t / 2 + 0.004), up: [number, number, number] = [0, 0, s];
+          part.g(ctx.seam(true)).ribbon([[a + 0.05, 0.62, z], [b - 0.05, 0.62, z]], 0.045, up);
+          if (cornice) part.g(ctx.seam(true)).ribbon([[a + 0.05, H - 0.42, z], [b - 0.05, H - 0.42, z]], 0.045, up);
+        }
       }
     }
     if (!o.noCollider) ctx.collider(pose.box(cx, H / 2, 0, len / 2, H / 2, t / 2, { blocksSight: !glass, tag: glass ? 'glass' : 'wall' }));
@@ -94,7 +103,7 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
       if (ph > 2.4) {
         for (const s of [-1, 1]) {
           const z = s * (t / 2 + 0.232), up: [number, number, number] = [0, 0, s];
-          part.g(ctx.inlay('whiteLight')).ribbon([[px, 0.86, z], [px, ph - 0.75, z]], 0.075, up);
+          part.g(ctx.seam(fam.dark)).ribbon([[px, 0.86, z], [px, ph - 0.75, z]], 0.07, up);
           trim.ribbon([[px - 0.085, 0.8, z], [px - 0.085, ph - 0.7, z]], 0.028, up).ribbon([[px + 0.085, 0.8, z], [px + 0.085, ph - 0.7, z]], 0.028, up);
         }
       }
@@ -119,7 +128,7 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
         for (const dx of [-0.11, 0.11]) trim.cyl(0.042, 0.042, top - 0.44, 6, px + dx, 0.44, z);
         for (let y = 1.1; y < top - 0.3; y += 1.9) part.g('goldDark').box(0.4, 0.09, 0.11, px, y, z);
         part.g('goldDark').cbox(0.36, 0.5, 0.15, 0.03, px, 1.55, z + s * 0.02);
-        part.g(ctx.inlay('whiteLight')).ribbon([[px, 1.95, s * (t / 2 + 0.012)], [px, top - 0.35, s * (t / 2 + 0.012)]], 0.06, [0, 0, s]);
+        part.g(ctx.seam(fam.dark)).ribbon([[px, 1.95, s * (t / 2 + 0.012)], [px, top - 0.35, s * (t / 2 + 0.012)]], 0.06, [0, 0, s]);
         part.g('whiteLight').box(0.1, 0.05, 0.02, px, 1.62, z + s * 0.1);
       }
     }
@@ -203,7 +212,7 @@ export function buildCeiling(ctx: KitCtx, o: RectOpts & { style?: 'vault' | 'fla
   const part = new Part(ctx, 'ceiling', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h), ctx.yaw(ctx.num(o.yawDeg, 0)) + (turn ? Math.PI / 2 : 0));
   const mat = o.mat ?? 'whiteGoldPanel', hw = w / 2, hd = d / 2;
   const style = o.style ?? 'flat';
-  const wg = part.g('whiteGold'), trim = part.g('goldTrim'), light = part.g('whiteLight');
+  const wg = part.g(familyOf(o.mat).frame), trim = part.g('goldTrim'), light = part.g('whiteLight');
   const bays = Math.max(1, Math.round(d / 6));
   if (style === 'vault') {
     const rise = w * 0.24, n = 14, th = 0.35;

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import type { MatId, RibOpts } from '@/core/api';
 import type { SweepFrame, V2, V3 } from './geo';
 import { bx, bz } from './geo';
-import { KitCtx, Part, type PartTemplate } from './core';
+import { familyOf, KitCtx, Part, type PartTemplate } from './core';
 
 type RibStyle = NonNullable<RibOpts['style']>;
 
@@ -45,44 +45,62 @@ interface RibDims { span: number; height: number; depth: number; leg: number }
 
 function emitRib(part: Part, d: RibDims, style: RibStyle, lit: boolean, mat: MatId): void {
   const ctx = part.ctx, a = d.span / 2, b = d.height, T = d.leg, D = d.depth;
-  const body = part.g(mat), trim = part.g('goldTrim');
+  const body = part.g(mat), trim = part.g('goldTrim'), dark = familyOf(mat).dark;
   const prof = ribProfile(T, D);
   const trimProf = (s: number): V2[] => [[T * 0.12 - 0.04, s * (D / 2)], [T * 0.12 + 0.04, s * (D / 2)], [T * 0.12 + 0.04, s * (D / 2 + 0.03)], [T * 0.12 - 0.04, s * (D / 2 + 0.03)]];
-  const seam: V2[] = [[-T / 2 - 0.025, -0.075], [-T / 2 - 0.025, 0.075], [-T / 2 + 0.01, 0.075], [-T / 2 + 0.01, -0.075]];
-  const N = 30;
-  const run = (s0: number, s1: number, n: number, capEnd: boolean, jag = false): SweepFrame[] => {
-    const fr = archFrames(a, b, s0, s1, n, 0.52);
-    if (jag) {
-      // fractured end: the last frames shear and pinch irregularly
-      for (let i = 1; i <= 2; i++) {
-        const f = fr[fr.length - i], k = i === 1 ? 0.35 : 0.8;
-        f.su = (f.su ?? 1) * (k + ctx.rand() * 0.2); f.sv = (f.sv ?? 1) * (k + ctx.rand() * 0.25);
-        f.p = [f.p[0] + (ctx.rand() - 0.5) * 0.3, f.p[1] + (ctx.rand() - 0.5) * 0.3, (ctx.rand() - 0.5) * 0.4];
-      }
+  // the light seam stands 4 cm proud of the inner keel and is swept on the SAME frames as the body, so it can
+  // never sink into the faceted arch
+  const seam: V2[] = [[-T / 2 - 0.04, -0.055], [-T / 2 - 0.04, 0.055], [-T / 2 + 0.01, 0.055], [-T / 2 + 0.01, -0.055]];
+  const N = 32;
+  const all = archFrames(a, b, 0, 1, N, 0.52);
+  const jagged = (fr: SweepFrame[]): SweepFrame[] => {
+    // fractured end: the last frames shear and pinch irregularly
+    for (let i = 1; i <= 2; i++) {
+      const f = fr[fr.length - i], k = i === 1 ? 0.35 : 0.8;
+      f.su = (f.su ?? 1) * (k + ctx.rand() * 0.2); f.sv = (f.sv ?? 1) * (k + ctx.rand() * 0.25);
+      f.p = [f.p[0] + (ctx.rand() - 0.5) * 0.3, f.p[1] + (ctx.rand() - 0.5) * 0.3, (ctx.rand() - 0.5) * 0.4];
     }
+    return fr;
+  };
+  // collars: every fourth segment is a slightly heavier band with a gold edge — the rib reads as built from
+  // segments, which gives the eye a unit to measure its size by
+  const collar = prof.map((q): V2 => [q[0] > 0 ? q[0] + 0.07 : q[0] * 1.02, q[1] * 1.09]);
+  const collarEdge: V2[] = [[T / 2 + 0.07, -D * 0.545], [T / 2 + 0.1, -D * 0.545], [T / 2 + 0.1, D * 0.545], [T / 2 + 0.07, D * 0.545]];
+  const run = (fr: SweepFrame[], capEnd: boolean): void => {
     body.sweep(prof, fr, false, capEnd);
     for (const s of [-1, 1]) trim.sweep(trimProf(s), fr, false, false);
-    return fr;
+    for (let i = 3; i + 2 < fr.length; i += 4) {
+      const a0 = fr[i], a1 = fr[i + 1];
+      // a quarter-segment band centred on the joint between two segments
+      const mix = (t: number): SweepFrame => ({
+        p: [a0.p[0] + (a1.p[0] - a0.p[0]) * t, a0.p[1] + (a1.p[1] - a0.p[1]) * t, a0.p[2] + (a1.p[2] - a0.p[2]) * t],
+        u: a0.u, v: a0.v, su: (a0.su ?? 1) + ((a1.su ?? 1) - (a0.su ?? 1)) * t, sv: (a0.sv ?? 1) + ((a1.sv ?? 1) - (a0.sv ?? 1)) * t,
+      });
+      const band = [mix(0.3), mix(0.7)];
+      body.sweep(collar, band, true, true);
+      trim.sweep(collarEdge, band, true, true);
+    }
   };
   const foot = (x: number): void => {
     part.g(mat).cboxOn(T * 1.5, 0.62, D * 1.22, 0.09, x, 0, 0);
     trim.boxOn(T * 1.53, 0.05, D * 1.25, x, 0.66, 0);
     part.g('goldDark').boxOn(T * 1.2, 0.2, D * 1.05, x, 0.71, 0);
   };
-  const seamRun = (s0: number, s1: number, n: number): void => {
-    if (lit) part.g('whiteLight').sweep(seam, archFrames(a, b, s0, s1, n, 0.52), true, true);
+  const seamRun = (i0: number, i1: number): void => {
+    if (lit && i1 - i0 >= 1) part.g(ctx.seam(dark)).sweep(seam, all.slice(i0, i1 + 1), true, true);
   };
 
   if (style === 'half') {
-    run(0, 0.5, N / 2, true);
+    run(all.slice(0, N / 2 + 1), true);
     foot(-a);
-    seamRun(0.07, 0.48, N / 2);
+    seamRun(2, N / 2 - 1);
   } else if (style === 'broken') {
-    const cut = 0.56 + ctx.rand() * 0.1;
-    const fr = run(0, cut, Math.round(N * cut), true, true);
-    run(1, 0.9, 4, true, true);
+    const cut = Math.round(N * (0.56 + ctx.rand() * 0.1));
+    const fr = jagged(all.slice(0, cut + 1).map((f) => ({ ...f })));
+    run(fr, true);
+    run(jagged(all.slice(N - 3).reverse().map((f) => ({ ...f }))), true);
     foot(-a); foot(a);
-    seamRun(0.07, cut - 0.1, Math.round(N * cut));
+    seamRun(2, cut - 3);
     // rubble under the break
     const end = fr[fr.length - 1].p;
     for (let i = 0; i < 9; i++) {
@@ -91,13 +109,13 @@ function emitRib(part: Part, d: RibDims, style: RibStyle, lit: boolean, mat: Mat
         .chunk(sz * 1.6, Math.min(0.4, sz * 0.6), sz, 0.45, ctx.rand).pop();
     }
   } else {
-    run(0, 1, N, false);
+    run(all, false);
     foot(-a); foot(a);
-    seamRun(0.07, 0.93, N);
+    seamRun(2, N - 2);
     if (style === 'frozen') {
       // rime shell over the crown and icicles under it
       const shell = prof.map((q): V2 => [q[0] * 1.07 + 0.02, q[1] * 1.08]);
-      part.g('frostRime').sweep(shell, archFrames(a, b, 0.24, 0.76, 14, 0.52), true, true);
+      part.g('frostRime').sweep(shell, all.slice(Math.round(N * 0.24), Math.round(N * 0.76) + 1), true, true);
       for (let i = 0; i < 16; i++) {
         const s = 0.26 + ctx.rand() * 0.48, p = archPoint(s, a, b), len = 0.5 + ctx.rand() * Math.min(2.4, b * 0.16);
         const k = 1 - 0.48 * Math.pow(Math.sin(Math.PI * s), 1.4);
@@ -157,7 +175,7 @@ export function buildColumn(ctx: KitCtx, o: { x: number; n: number; h?: number; 
   const mat = o.mat ?? 'whiteGold', dark = mat === 'blackStone' || mat === 'blackStoneFloor';
   const part = new Part(ctx, 'column', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0)));
   const body = part.g(mat), trim = part.g('goldTrim');
-  const glow = dark ? ctx.inlay('goldChannel') : ctx.inlay('whiteLight');
+  const glow = ctx.seam(dark);
   if (style === 'pylon') {
     const w = r * 2;
     body.tbox(w * 1.35, 0.45, w * 1.35, 0.08, 0, 0, 0).taperOn(w, w, w * 0.74, w * 0.74, H - 0.75, 0, 0.45, 0, true);

@@ -24,7 +24,8 @@ interface FrameDims { W: number; H: number; jw: number; hh: number; fd: number; 
 function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
   const { W, H, jw, hh, fd } = f, ctx = p.ctx;
   const service = style === 'service';
-  const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
+  // the gold-inlaid threshold belongs to the lower terminal: black stone instead of white-gold
+  const wg = p.g(style === 'threshold' ? 'blackStone' : 'whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
   for (const s of [-1, 1]) {
     const jx = s * (W / 2 + jw / 2);
     wg.cboxOn(jw, H + hh, fd, 0.05, jx, 0, 0);
@@ -38,7 +39,7 @@ function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
   dk.box(W, 0.04, fd - 0.24, 0, H - 0.015, 0);
   // threshold plate with channel lines across the passage
   dk.boxOn(W, 0.018, fd, 0, 0, 0);
-  for (const z of [-fd * 0.28, fd * 0.28]) p.g(ctx.inlay('goldChannel')).ribbon([[-W / 2 + 0.1, 0.024, z], [W / 2 - 0.1, 0.024, z]], 0.05);
+  for (const z of [-fd * 0.28, fd * 0.28]) p.g(ctx.channel()).ribbon([[-W / 2 + 0.1, 0.024, z], [W / 2 - 0.1, 0.024, z]], 0.05);
   if (style === 'ancient' || style === 'threshold') {
     trim.push().move(0, H + hh + 0.04, 0).rotZ(Math.PI / 4).cbox(0.46, 0.46, fd + 0.16, 0.05).pop();
     dk.push().move(0, H + hh + 0.04, 0).rotZ(Math.PI / 4).box(0.22, 0.22, fd + 0.2).pop();
@@ -49,9 +50,9 @@ function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
       const px = s * (W / 2 + jw + 0.75);
       wg.tbox(1.1, 0.4, 1.1, 0.06, px, 0, 0).taperOn(0.8, 0.8, 0.55, 0.55, H + 1.2, px, 0.4, 0, true);
       trim.taperOn(0.6, 0.6, 0.2, 0.2, 0.3, px, H + 1.6, 0);
-      for (const z of [-1, 1]) p.g(ctx.inlay('goldChannel')).ribbon([[px, 0.9, z * 0.36], [px, H + 1.2, z * 0.3]], 0.06, [0, 0.02, z]);
+      for (const z of [-1, 1]) p.g(ctx.seam(true)).ribbon([[px, 0.9, z * 0.354], [px, H + 1.2, z * 0.293]], 0.06, [0, 0.02, z]);
     }
-    const ch = p.g(ctx.inlay('goldChannel')), tr = p.g(ctx.inlay('goldTrim'));
+    const ch = p.g(ctx.channel()), tr = p.g(ctx.inlay('goldTrim'));
     for (const z of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
         const k = fd / 2 + 0.35 + i * 0.5, hwk = W / 2 + 0.3 - i * 0.35;
@@ -87,7 +88,7 @@ function emitLeaf(p: Part, style: DoorStyle, side: number, lw: number, H: number
   }
   if (style === 'threshold') {
     p.g('goldDark').cbox(lw, H, lt, 0.03, 0, H / 2, 0);
-    p.g('whiteGold').box(lw - 0.3, 0.18, lt + 0.04, 0, 0.3, 0).box(lw - 0.3, 0.18, lt + 0.04, 0, H - 0.3, 0);
+    p.g('goldTrim').box(lw - 0.3, 0.05, lt + 0.03, 0, 0.3, 0).box(lw - 0.3, 0.05, lt + 0.03, 0, H - 0.3, 0);
     for (const k of [-0.25, 0, 0.25]) p.g('goldChannel').box(0.05, H - 0.9, lt + 0.012, lw * k, H / 2, 0);
     return;
   }
@@ -256,7 +257,7 @@ class Barrier implements BarrierHandle {
       fx.g('whiteLight').box(0.03, H - 0.5, 0.1, px + inward * 0.205, H / 2 + 0.3, 0);
     }
     fx.g('goldDark').boxOn(L - 0.4, 0.05, 0.34, L / 2, 0, 0);
-    fx.g(ctx.inlay('whiteLight')).ribbon([[0.3, 0.056, 0], [L - 0.3, 0.056, 0]], 0.07);
+    fx.g(ctx.seam()).ribbon([[0.3, 0.056, 0], [L - 0.3, 0.056, 0]], 0.07);
     fx.done(this.object);
 
     // the light wall itself (dynamic: its material is animated)

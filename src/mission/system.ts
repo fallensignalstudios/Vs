@@ -25,6 +25,8 @@ type FadeColor = 'black' | 'white' | 'gold';
 const BEAT_LOG_MAX = 512;
 const JOURNAL_MAX = 300;
 const FADE_IN_SECONDS = 0.9;
+/** longest real-time wait for the game loop to draw the loading screen before a build starts */
+const BREATHE_MS = 120;
 /** models every zone may show: both leads and the companions that travel with them */
 const COMMON_CAST: readonly Archetype[] = ['tarrik', 'selene', 'lyessa', 'tharne', 'lyric'];
 const NO_INTERACTABLES: readonly Interactable[] = Object.freeze([]);
@@ -278,11 +280,12 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
     const title = `${def.id} · ${def.title}`;
     const progress = (p: number) => ui.showLoading(true, { title, subtitle: def.subtitle, art: def.art, progress: p });
 
+    const frameAtStart = game.time.frame;
     ui.fade(1, 0, fade);
     events.emit('zone:loading', { zone: def.id });
     progress(0.05);
     // let the frame with the loading screen out, and let the routine that asked for the exit finish its tick
-    await this.breathe();
+    await this.breathe(2);
 
     this.unload();
     progress(0.15);
@@ -349,6 +352,9 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
     progress(1);
     events.emit('zone:ready', { zone: def.id });
     this.note(`zone ${def.id} ready at beat "${beat.id}" (${reason})`);
+    // Headless / manual stepping: no frame ran while loading, and a loading screen that was never updated
+    // cannot fade out again (it would keep covering the HUD) — give it one animation step first.
+    if (game.time.frame === frameAtStart) ui.update(1 / 30);
     ui.showLoading(false);
     ui.fade(0, FADE_IN_SECONDS);
     if (index === 0) rt.titleCard();
@@ -395,6 +401,7 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
   /** Never leave the player behind an opaque fade or a loading screen. */
   private reveal(): void {
     const ui = this.game.ui;
+    ui.update(1 / 30);
     ui.showLoading(false);
     ui.fade(0, 0.4);
   }
@@ -487,9 +494,18 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
     this.state.stats = keep;
   }
 
-  /** One macrotask: the browser paints the loading screen and pending script ticks unwind. */
-  private breathe(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
+  /**
+   * Yield to the event loop so the routine that asked for the load finishes its tick, and — in a live session —
+   * so `frames` game frames can draw the fade and the loading screen before a long synchronous build. Bounded
+   * in real time; headless (`manual`) runs yield once and move on. Loading is outside simulated time.
+   */
+  private async breathe(frames = 1): Promise<void> {
+    const time = this.game.time;
+    const start = time.frame;
+    const deadline = Date.now() + (this.game.flags.manual ? 0 : BREATHE_MS);
+    do {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    } while (time.frame - start < frames && Date.now() < deadline);
   }
 
   private guardStep(name: string, fn: () => void): void {

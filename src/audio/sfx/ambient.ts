@@ -15,8 +15,9 @@ export const AMBIENT_SFX: RecipeTable = {
     if (k.rnd() < 0.4) struck(k, 'bar', k.rr(1200, 3000), 0.06, 0.5, { at: k.rr(0.08, 0.22) });
   }),
   ambEmberPop: sfx(-24, { ...AMB, bake: 3 }, (k) => {
-    k.noise('crackle', { a: 0.002, d: k.rr(0.08, 0.3), g: 1 }, { hp: 1800 });
-    if (k.rnd() < 0.5) thump(k, 180, 90, 0.04, 0.4);
+    k.noise('crackle', { a: 0.002, d: k.rr(0.08, 0.3), g: 0.7 }, { hp: 1800 });
+    k.noise('pink', { a: 0.002, d: 0.06, g: 0.4 }, { bp: k.rr(900, 1500), q: 1 }); // the puff of the pop itself
+    thump(k, 180, 90, 0.04, k.rnd() < 0.5 ? 0.45 : 0.15);
   }),
   ambDust: sfx(-27, { ...AMB, ref: 5 }, (k) => {
     k.noise('pink', { a: 0.3, h: k.rr(0.2, 0.8), d: 0.8, g: 1 }, { hp: [5000, 2600] });
@@ -70,14 +71,18 @@ export const AMBIENT_SFX: RecipeTable = {
     wrong(k, 277.2, { a: 0.3, h: 0.6, d: 0.5, g: 0.1 }, { rate: 3.2 });
   }),
   ambRelayClick: sfx(-27, { ...AMB, gap: 0.3, vary: 150, bake: 3 }, (k) => {
-    crack(k, 1, 0, 1800, 0.006);
-    struck(k, 'bar', k.rr(500, 800), 0.05, 0.5);
-    if (k.rnd() < 0.6) crack(k, 0.7, k.rr(0.05, 0.12), 2200, 0.005);
+    crack(k, 0.45, 0, 1800, 0.008);
+    struck(k, 'bar', k.rr(500, 800), 0.09, 0.9);
+    k.noise('pink', { a: 0.001, d: 0.03, g: 0.4 }, { bp: 1500, q: 1.5 });
+    if (k.rnd() < 0.6) crack(k, 0.3, k.rr(0.05, 0.12), 2200, 0.006);
   }),
   ambZapFar: sfx(-27, { ...AMB, ref: 6 }, (k) => {
+    // the buzz carries it; the crackle is a few sparks on top (alone it is all needle and no sound)
     const body = k.filter('bandpass', 2400, 0.9);
-    k.osc('sawtooth', [k.rr(80, 110), 70], { a: 0.003, d: k.rr(0.1, 0.35), g: 0.6 }, { to: body, hp: 800 });
-    k.noise('crackle', { a: 0.003, d: 0.3, g: 1 }, { hp: 2500 });
+    const d = k.rr(0.1, 0.35);
+    k.osc('sawtooth', [k.rr(80, 110), 70], { a: 0.003, d, g: 1 }, { to: body, hp: 800 });
+    k.noise('white', { a: 0.004, d: d * 0.8, g: 0.3 }, { bp: 3200, q: 1.2 });
+    k.noise('crackle', { a: 0.003, d: 0.3, g: 0.4 }, { hp: 2500 });
   }),
   ambChain: sfx(-26, { ...AMB, vary: 300 }, (k) => {
     const n = 2 + Math.floor(k.rnd() * 4);
@@ -94,8 +99,8 @@ export const AMBIENT_SFX: RecipeTable = {
     const n = k.rnd() < 0.35 ? 3 : 1;
     for (let i = 0; i < n; i++) {
       const at = i * 0.085;
-      crack(k, 0.8, at, 3500, 0.003);
-      struck(k, 'bar', 2900, 0.03, 0.4, { at, exact: true });
+      crack(k, 0.4, at, 3500, 0.005);
+      struck(k, 'bar', 2900, 0.04, 0.5, { at, exact: true });
       k.osc('sine', 880, { a: 0.002, d: 0.12, g: 0.12 }, { at });
     }
   }),

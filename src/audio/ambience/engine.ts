@@ -31,6 +31,22 @@ class BedDeck {
     this.fader = new Fader(this.out.gain, 0);
     const k = (this.kit = new Kit(ac, res, this.out, start, 1, rnd, true));
     const hold = { a: 0.5, h: Infinity, d: 0.5 };
+    // One oscillator per LFO rate, shared by every layer that moves at it (a bed whose layers all breathe at
+    // 0.17 Hz needs one LFO, not seven); each use gets its own depth.
+    const lfos = new Map<number, OscillatorNode>();
+    const lfo = (rate: number, depth: number, target: AudioParam): void => {
+      let o = lfos.get(rate);
+      if (!o) {
+        const g0 = ac.createGain();
+        g0.gain.value = 0; // a parking connection: `Kit.lfo` wants a first target
+        o = k.lfo(rate, 0, g0.gain);
+        lfos.set(rate, o);
+      }
+      const d = ac.createGain();
+      d.gain.value = depth;
+      o.connect(d);
+      d.connect(target);
+    };
 
     for (const b of def.beds) {
       // equal-loudness-ish trim per colour so `g` reads as "how present", not "how much energy"
@@ -41,10 +57,11 @@ class BedDeck {
         const level = k.gain(g, k.pan(side * 0.75));
         if (b.am) {
           level.gain.value = g * (1 - b.am[1] * 0.5);
-          k.lfo(b.am[0] * (1 + side * 0.07), g * b.am[1] * 0.5, level.gain);
+          lfo(b.am[0], g * b.am[1] * 0.5, level.gain);
         }
         const f = k.filter(b.type, b.f, b.q ?? 0.707, { to: level });
-        if (b.fm) k.lfo(b.fm[0] * (1 - side * 0.09), b.fm[1], f.frequency);
+        // the two sides sweep in opposite directions: the image moves without a second oscillator
+        if (b.fm) lfo(b.fm[0], b.fm[1] * (side < 0 ? -1 : 1), f.frequency);
         k.noise(b.color, { ...hold, g: 1 }, { to: f, rate: b.rate });
       }
     }
@@ -54,7 +71,7 @@ class BedDeck {
       const level = k.gain(g);
       if (t.am) {
         level.gain.value = g * (1 - t.am[1] * 0.5);
-        k.lfo(t.am[0], g * t.am[1] * 0.5, level.gain);
+        lfo(t.am[0], g * t.am[1] * 0.5, level.gain);
       }
       const dst: AudioNode = t.lp ? k.filter('lowpass', t.lp, 0.7, { to: level }) : level;
       if (t.beat) {

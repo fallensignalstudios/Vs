@@ -4,7 +4,7 @@
  * the sandbox can render the exact same graph through an OfflineAudioContext for measurement.
  */
 import { clamp, clamp01, mulberry32 } from '@/core/mathx';
-import type { AmbienceId, LoopHandle, MusicState, SfxOpts, Vec3Like } from '@/core/api';
+import type { AmbienceId, LoopHandle, MusicState, SfxOpts, Vec3Like, VoiceOpts } from '@/core/api';
 import { makeShared, type Shared } from './synth/shared';
 import { SampleBank, type SampleOpts } from './synth/samples';
 import { Mixer, type Volumes } from './mixer';
@@ -15,6 +15,9 @@ import { MusicEngine, type StingerKind } from './music/engine';
 import { AmbienceEngine } from './ambience/engine';
 import { prerender } from './prerender';
 import { speakCue, type SpeakChannel } from './speak';
+import type { AssetLibrary } from './assets/library';
+import { RecordedScore } from './assets/score';
+import { VoicePlayer } from './assets/voice';
 
 export interface EngineOpts {
   /** seed for all non-gameplay variation (deterministic offline renders) */
@@ -25,6 +28,8 @@ export interface EngineOpts {
   norm?: Partial<NormTables>;
   /** false = never use pre-rendered buffers on this engine (A/B measurement of the live recipes) */
   samples?: boolean;
+  /** recorded score and voice-over clips; without it the engine is purely procedural */
+  assets?: AssetLibrary | null;
 }
 
 /** Normalisation gains per id — see calibration.ts. */
@@ -47,6 +52,10 @@ export class AudioEngine {
   readonly voices: Voices;
   readonly music: MusicEngine;
   readonly ambience: AmbienceEngine;
+  /** recorded score on top of (or instead of) the generative engine, per music state */
+  readonly score: RecordedScore;
+  /** voice-over lines */
+  readonly vo: VoicePlayer;
   /** pre-rendered and registered buffers that stand in for recipes */
   readonly samples = new SampleBank();
   private readonly rnd: () => number;
@@ -65,6 +74,8 @@ export class AudioEngine {
     this.voices = new Voices(ac, this.mixer, this.res, this.rnd, SFX, opts.norm?.sfx ?? SFX_NORM, this.samples);
     this.music = new MusicEngine(ac, this.res, this.mixer, seed ^ 0x51ed, opts.norm?.music ?? MUSIC_NORM, this.samples);
     this.ambience = new AmbienceEngine(ac, this.res, this.mixer, this.voices, seed ^ 0x2c1b, opts.norm?.amb ?? AMB_NORM);
+    this.score = new RecordedScore(ac, this.mixer, this.music, opts.assets ?? null);
+    this.vo = new VoicePlayer(ac, this.mixer, opts.assets ?? null);
   }
 
   /**
@@ -114,7 +125,7 @@ export class AudioEngine {
   }
 
   setMusic(state: MusicState, fadeSeconds?: number): void {
-    this.music.setState(state, fadeSeconds);
+    this.score.setState(state, fadeSeconds);
   }
 
   setAmbience(id: AmbienceId, fadeSeconds?: number): void {
@@ -135,6 +146,15 @@ export class AudioEngine {
     this.voices.play(cue.id, { pitch: cue.pitch });
   }
 
+  /** Speak a recorded line if there is one: its length in seconds, else 0 (see AudioSystem.voice). */
+  voice(speaker: string, text: string, opts?: VoiceOpts): number {
+    return this.vo.say(speaker, text, opts);
+  }
+
+  stopVoice(fadeSeconds?: number): void {
+    this.vo.stop(fadeSeconds);
+  }
+
   duck(amount: number, seconds: number): void {
     this.mixer.duck(amount, seconds);
   }
@@ -150,6 +170,7 @@ export class AudioEngine {
 
   setListener(pos: Vec3Like, forward: Vec3Like): void {
     this.voices.setListener(pos, forward);
+    this.vo.setListener(pos, forward);
   }
 
   setVolumes(v: Volumes, fade?: number): void {
@@ -183,6 +204,8 @@ export class AudioEngine {
     const ahead = this.lookahead;
     this.part('voices', () => this.voices.update(ahead));
     this.part('music', () => this.music.update(dt, ahead));
+    this.part('score', () => this.score.update(dt, ahead));
+    this.part('voice', () => this.vo.update());
     this.part('ambience', () => this.ambience.update());
     this.part('mixer', () => this.mixer.update(dt));
   }
@@ -194,6 +217,8 @@ export class AudioEngine {
 
   /** Release the heavy native resources of a context that is being discarded. The engine is dead afterwards. */
   dispose(): void {
+    this.score.dispose();
+    this.vo.dispose();
     this.mixer.dispose();
   }
 }

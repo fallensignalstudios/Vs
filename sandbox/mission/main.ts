@@ -54,6 +54,28 @@ async function boot(): Promise<void> {
     }
     if (flags.autoplay) game.debug.autoplay.start({ skipCinematics: true, god: true });
   }
+  // helpers for tools/shot.cjs --eval
+  const w = window as unknown as Record<string, unknown>;
+  /** step the sim (no rendering) until `pred()` is true; returns sim seconds stepped, or -1 on timeout */
+  w.__stepUntil = (pred: () => boolean, maxSeconds = 60, dt = 1 / 30): number => {
+    let t = 0;
+    while (t < maxSeconds) {
+      if (pred()) return Math.round(t * 100) / 100;
+      game.tick(dt, false);
+      t += dt;
+    }
+    return -1;
+  };
+  /** step `seconds`, sampling the bot status every `every` seconds */
+  w.__trace = (seconds: number, every = 1): string[] => {
+    const out: string[] = [];
+    for (let t = 0; t < seconds; t += every) {
+      game.debug.step(every, 1 / 30);
+      const s = game.debug.snapshot();
+      out.push(`${s.time.toFixed(1)} ${s.beat} | ${s.bot} | hostiles ${s.hostiles.map((h) => `${h.archetype}:${Math.round(h.hp)}`).join(',')}`);
+    }
+    return out;
+  };
   game.debug.ready = true;
 
   if (!flags.manual) {

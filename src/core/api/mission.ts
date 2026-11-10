@@ -119,6 +119,11 @@ export interface SayOpts {
   actor?: Actor | Companion | null;
 }
 
+/**
+ * A world interaction. The prompt shows while the player stands within `radius` (default 2.2 m, same level) and
+ * roughly faces the point (waived inside 0.9 m); the nearest such interaction has the focus. While the player's
+ * input is disabled (cinematic, choice) or a menu is open, nothing is offered.
+ */
 export interface InteractOpts {
   id: string;
   /** marker name or world position */
@@ -217,9 +222,16 @@ export interface ZoneRuntime {
   cast(name: string): Companion | null;
 
   // --- dialogue ---
-  /** blocking subtitle line */
+  /**
+   * blocking subtitle line. Voice-over plays when the audio system has a clip for (speaker, text); a line that
+   * has been up for 1 s can be advanced with `confirm` (or a tap of `skip` inside a cinematic). While a
+   * cinematic is being skipped the line is not shown at all.
+   */
   say(speaker: SpeakerId, text: string, opts?: SayOpts): Routine;
-  /** non-blocking line during play (queued; never overlaps another line) */
+  /**
+   * non-blocking line during play (queued; never overlaps another line). At most three wait behind the line on
+   * screen (further ones are dropped), and one that has waited more than 6 s is dropped as stale.
+   */
   bark(speaker: SpeakerId, text: string, opts?: SayOpts): void;
   /** blocking sequence of lines */
   talk(lines: Array<[SpeakerId, string] | [SpeakerId, string, SayOpts]>): Routine;
@@ -242,6 +254,14 @@ export interface ZoneRuntime {
   /**
    * Run a cinematic: disables player input, letterboxes, hides HUD, gives the camera to `body`, restores
    * everything afterwards. Skippable by default (fast-forward semantics).
+   *
+   * Details (mission): the lead is invulnerable and hostiles hold fire for the length of the scene; the input
+   * context is 'cinematic'. Holding `skip` for 0.8 s (hint shown for the first 3 s and while held), F4 or
+   * `mission.skipCinematic()` fast-forwards the rest: every time wait in `body` collapses, `say` lines are not
+   * shown, camera moves finish — predicate waits (`z.until`) still wait, so do not wait on movement inside a
+   * skippable scene without checking `c.skipping`. A short tap of `skip` advances the current line instead.
+   * The body runs as its own routine; an exception in it is reported and ends the scene cleanly. A cinematic
+   * started inside another one (e.g. `z.handoff` in a scene) joins the outer scene.
    */
   cinematic(id: string, body: (c: CineCtx) => Routine, opts?: {
     skippable?: boolean; keepHud?: boolean; blendOut?: number;
@@ -254,6 +274,11 @@ export interface ZoneRuntime {
    * Authored protagonist handoff: the player recognises the new lead before movement resumes.
    * Camera glides from the old lead to the new one, kit/HUD swap, old lead becomes a companion (mode) and
    * the previous companion body for `to` is consumed.
+   *
+   * Details (mission): the incoming lead's body is looked up with `z.cast(to)` (spawn it earlier with
+   * `z.companion('selene' | 'tarrik', …)`); without one the new lead appears beside the old one. `seconds`
+   * (default 3.4) is the scene length without `line`; `line` is spoken by the new lead over the closing shot.
+   * The outgoing lead is afterwards `z.cast(<its id>)`. No-op when `to` already leads.
    */
   handoff(to: ProtagonistId, opts?: { partnerMode?: CompanionMode; seconds?: number; line?: [SpeakerId, string] }): Routine;
   /**
@@ -262,7 +287,10 @@ export interface ZoneRuntime {
    * once without showing the panel or emitting `choice:made` a second time.
    */
   choice(opts: ChoiceOpts): Routine<string>;
-  /** commit the ONE variable consequence exactly once (no-op if already committed) */
+  /**
+   * commit the ONE variable consequence exactly once and save it at once (re-saves the current checkpoint id
+   * at the current beat). Later calls are no-ops; a different value also warns.
+   */
   commitRescuePriority(p: Exclude<RescuePriority, 'pending'>): void;
   /** fixed story state transitions */
   story(flag: StoryFlag, value?: boolean): void;
@@ -270,14 +298,20 @@ export interface ZoneRuntime {
   setFlag(key: string, value: boolean | number | string): void;
   /** mark an optional pocket complete */
   optionalDone(id: 'O1' | 'O2' | 'O3' | 'O4'): void;
-  /** save a checkpoint now (beats with `checkpoint` do this automatically) */
+  /**
+   * save a checkpoint now (beats with `checkpoint` do this automatically). The snapshot resumes at the CURRENT
+   * beat through its `enter` — give that beat an `enter`, or the nearest earlier beat that has one is used.
+   */
   checkpoint(id: CheckpointId): void;
   /** zone title card */
   titleCard(): void;
   /** fade helpers (blocking) */
   fadeOut(seconds?: number, color?: 'black' | 'white' | 'gold'): Routine;
   fadeIn(seconds?: number): Routine;
-  /** leave the zone: fade, unload, load `to` at its first beat. Never returns. */
+  /**
+   * leave the zone: fade, unload, load `to` at its first beat. Never returns — except when `to` is not a
+   * registered zone: that warns and returns at once with the screen still visible.
+   */
   exit(to: ZoneId, opts?: { fade?: 'white' | 'black' | 'gold'; seconds?: number }): Routine;
   /** finish the mission (Z12): CP9 + completion screen */
   completeMission(): Routine;

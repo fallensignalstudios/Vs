@@ -23,6 +23,11 @@ const ROOM_SEED: Record<RoomName, number> = { small: 4127, hall: 9173, vast: 231
 // context and every offline render.
 const cache = new Map<number, Shared>();
 
+/** Drop the shared resources of a sample rate nothing uses any more. */
+export function forgetShared(sampleRate: number): void {
+  cache.delete(sampleRate);
+}
+
 export function makeShared(ac: BaseAudioContext): Shared {
   const sr = ac.sampleRate;
   const hit = cache.get(sr);

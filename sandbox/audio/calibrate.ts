@@ -5,7 +5,8 @@
  *  SFX / stingers  loudness (loudest 100 ms, K-weighted) → `db − 9`, with the true peak held under its
  *                  ceiling (see sfx/recipe.ts) — whichever asks for less gain wins
  *  music           RMS at the reference intensity → `db`; adaptive states are also rendered flat out and
- *                  held to `db + 2.5` RMS and a −5 dBFS peak
+ *                  held to `db + 2.5` RMS and a −5 dBFS peak (nothing but level sets this: the score has
+ *                  no limiter of its own to lean on)
  *  ambience        bed RMS → `db`
  *
  * Starts from the existing tables, so `&only=music` after a score tweak converges in a pass or two and leaves

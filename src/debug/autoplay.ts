@@ -9,6 +9,7 @@
  */
 import * as THREE from 'three';
 import type { Actor, Game, Interactable, Vec3Like } from '@/core/api';
+import { angleDelta } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 
 export interface BotOptions {
@@ -30,6 +31,8 @@ const BLACKLIST_SECONDS = 15;
 /** in range of an interaction this long without completing it → complete() it and record that */
 const FORCE_INTERACT_SECONDS = 8;
 const RANGED_MAX = 24;
+/** the aim ray must be within this of the target (radians, ≈ 0.6°) before the bot fires */
+const AIM_TOLERANCE = 0.01;
 
 const d2 = (a: Vec3Like, b: Vec3Like): number => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -51,6 +54,8 @@ export class AutoplayBot {
   private pathAge = Infinity;
   private readonly pathGoal = new THREE.Vector3();
   private best = Infinity;
+  /** remaining distance at the last `progress` bump (one bump per metre gained) */
+  private progressMark = Infinity;
   private stall = 0;
   private stuckStage = 0;
   private nudge = 0;
@@ -70,9 +75,12 @@ export class AutoplayBot {
   private interactId = '';
   private lastProgress = 0;
   private deathHandled = false;
+  private lastNow = 0;
 
   private readonly a = new THREE.Vector3();
   private readonly b = new THREE.Vector3();
+  private readonly o = new THREE.Vector3();
+  private readonly d = new THREE.Vector3();
   private readonly dir = { x: 0, z: 0 };
 
   constructor(private readonly game: Game) {}
@@ -85,6 +93,7 @@ export class AutoplayBot {
     this.teleports = 0;
     this.forced.length = 0;
     this.resetGoal('');
+    this.lastNow = g.time.now;
     g.player.godMode = this.opts.god;
     g.input.virtual.active = true;
     this.say(`autoplay started (choice ${this.opts.choice}, skip ${this.opts.skipCinematics}, god ${this.opts.god})`);
@@ -100,12 +109,19 @@ export class AutoplayBot {
     this.say('autoplay stopped');
   }
 
-  /** Called once per frame BEFORE game.tick (so virtual presses land on this frame's input update). */
-  update(dt: number): void {
+  /**
+   * Called once per frame BEFORE game.tick (so virtual presses land on this frame's input update).
+   * All of the bot's timers run on SIM time elapsed since its previous update: a slow real frame (software
+   * rendering) or hit-stop must not look like "six seconds without progress".
+   */
+  update(_frameDt: number): void {
     if (!this.running) return;
     const g = this.game;
     const { mission, player, input } = g;
     const v = input.virtual;
+    const now = g.time.now;
+    const dt = Math.max(0, Math.min(0.25, now - this.lastNow));
+    this.lastNow = now;
     v.active = true;
     if (mission.loading === true || g.paused) return this.rest('loading');
     if (g.phase === 'dead') return this.onDeath();
@@ -154,7 +170,11 @@ export class AutoplayBot {
       else this.status = `walking to the objective (${d2(actor.pos, marker).toFixed(0)} m)`;
       return;
     }
-    this.rest('idle — no hostiles, no required interaction, no objective marker');
+    this.rest(
+      this.blacklist.size > 0
+        ? 'idle — the remaining hostiles were set aside (no damage landed), no required interaction, no objective marker'
+        : 'idle — no hostiles, no required interaction, no objective marker',
+    );
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -231,9 +251,9 @@ export class AutoplayBot {
     const grounded = !t.flying && Math.abs(t.pos.y - actor.pos.y) < 1.3;
     const melee = grounded || !hasAmmo;
     const label = `${t.name || t.archetype} #${t.id}`;
-    camera.aimAt(aim);
 
     if (melee) {
+      camera.aimAt(aim);
       v.hold('aim', false);
       const reach = 1.5 + t.radius;
       if (dist > reach) {
@@ -268,12 +288,37 @@ export class AutoplayBot {
     v.hold('sprint', false);
     v.hold('aim', true);
     this.resetStall();
-    if (this.attackTimer <= 0) {
+    const aligned = this.steerAim(aim);
+    if (aligned && this.attackTimer <= 0) {
       this.attackTimer = 0.5;
       v.press('attack');
     }
     this.useAbilities();
     this.status = `firing on ${label} (hp ${Math.round(t.hp)}, ${dist.toFixed(0)} m)`;
+  }
+
+  /**
+   * Turn the view with look input (as a player would) until the aim ray through the screen centre passes
+   * through `point`. Closed loop on the real aim ray, so shoulder offset and aim framing are accounted for.
+   */
+  private steerAim(point: Vec3Like): boolean {
+    const { camera, input } = this.game;
+    const o = this.o;
+    const d = this.d;
+    camera.getAimRay(o, d);
+    const tx = point.x - o.x;
+    const ty = point.y - o.y;
+    const tz = point.z - o.z;
+    const flat = Math.hypot(tx, tz);
+    if (flat < 1e-3 || !Number.isFinite(d.x)) return false;
+    const dyaw = angleDelta(Math.atan2(-d.x, -d.z), Math.atan2(-tx, -tz));
+    const dpitch = Math.atan2(ty, flat) - Math.asin(Math.max(-1, Math.min(1, d.y)));
+    if (Math.abs(dyaw) > 0.6) {
+      camera.aimAt(point);
+      return false;
+    }
+    input.virtual.addLook(dyaw * 0.7, dpitch * 0.7);
+    return Math.abs(dyaw) < AIM_TOLERANCE && Math.abs(dpitch) < AIM_TOLERANCE;
   }
 
   private useAbilities(): void {
@@ -399,8 +444,11 @@ export class AutoplayBot {
     }
 
     // progress / stuck bookkeeping on the remaining path length
+    if (remaining < this.progressMark - 1) {
+      this.progressMark = remaining;
+      this.progress++;
+    }
     if (remaining < this.best - 0.3) {
-      if (remaining < this.best - 1) this.progress++;
       this.best = remaining;
       this.stall = 0;
       this.stuckStage = 0;
@@ -455,6 +503,7 @@ export class AutoplayBot {
     g.player.teleport(to);
     this.path = null;
     this.best = Infinity;
+    this.progressMark = Infinity;
   }
 
   private resetGoal(key: string): void {
@@ -462,6 +511,7 @@ export class AutoplayBot {
     this.path = null;
     this.pathAge = Infinity;
     this.best = Infinity;
+    this.progressMark = Infinity;
     this.stall = 0;
     this.stuckStage = 0;
     this.nudge = 0;

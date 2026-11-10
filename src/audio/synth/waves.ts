@@ -149,6 +149,7 @@ export async function bakeWaves(sampleRate: number, keys: Iterable<string>, bank
       lp2.Q.value = 0;
       lp1.connect(lp2);
       lp2.connect(ctx.destination);
+      let voice = 0;
       for (const v of def) {
         const want = baseHz * v.ratio * Math.pow(2, v.cents / 1200);
         // snap to a whole number of cycles in the loop
@@ -167,7 +168,10 @@ export async function bakeWaves(sampleRate: number, keys: Iterable<string>, bank
           gain.connect(pan);
           pan.connect(lp1);
         }
-        o.start(0);
+        // Every partial repeats exactly in the loop, so voices that all began at phase zero would line their
+        // edges up at the same instant on every pass — a spike once per loop. Start each a different
+        // (irrational) fraction of its own period late and they never coincide exactly.
+        o.start(((0.137 + 0.618034 * ++voice) % 1) / hz);
       }
       const rendered = await ctx.startRendering();
       const buffer = ctx.createBuffer(2, n, sampleRate);

@@ -3,15 +3,14 @@
  * The feature modules (movement, melee, guard, ranged, abilities, lock-on, pickups) hang off this class.
  * Contract: src/core/api/combat.ts. Numbers: ../tuning.ts.
  */
-import * as THREE from 'three';
 import type {
   Actor, ActorController, ActorManager, ActionInfo, CameraFollowTarget, CharacterVisual, ContextAction, Game, HitInfo,
-  HitResult, PhysicsWorld, PickupKind, PlayerAction, PlayerController, PlayerHudState, ProtagonistId, Vec3Like, ButtonAction,
+  HitResult, PhysicsWorld, PlayerAction, PlayerController, PlayerHudState, ProtagonistId, Vec3Like, ButtonAction,
 } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
 import { clamp } from '@/core/mathx';
 import { ActorImpl } from '../actor';
-import { TUNING, windowScale, type EchoRule, type ProtagonistKit } from '../tuning';
+import { TUNING, type ProtagonistKit } from '../tuning';
 import { fin, live, warnOnce } from '../safe';
 import { Movement } from './movement';
 import { Melee } from './melee';
@@ -19,23 +18,21 @@ import { Guard } from './guard';
 import { Ranged } from './ranged';
 import { Abilities } from './abilities';
 import { LockOn } from './lockon';
-import { pickupsOf, type PickupHost } from './pickups';
+import { pickupsOf, playerPickupHost } from './pickups';
+import { ContextActions } from './context';
+import { EchoBank } from './echo';
 
 type Buffered = 'light' | 'heavy' | 'dodge' | 'ability1' | 'ability2' | 'guard';
 
-const ECHO_RULES: ReadonlySet<string> = new Set<EchoRule>([
-  'blocked', 'counter', 'poiseBreak', 'heavyHit', 'kill', 'weakPoint', 'flank', 'sever', 'deflect', 'device', 'hit',
-]);
 const DEFAULT_HEIGHT: Record<ProtagonistId, number> = { tarrik: 1.9, selene: 1.68 };
-const _v = new THREE.Vector3();
+
 
 interface Saved {
-  echo: number;
   ammo: number;
   reserve: number;
 }
 
-export class PlayerControllerImpl implements PlayerController, PickupHost {
+export class PlayerControllerImpl implements PlayerController {
   enabled = true;
   godMode = false;
   threat = 0;
@@ -66,14 +63,9 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
   private bufAt = 0;
   private bufHeld = false;
 
-  // context action
-  private ctx: ContextAction | null = null;
-  private ctxShown: ContextAction | null = null;
-  private ctxLeft = 0;
-  private ctxAge = 0;
-
+  private readonly context: ContextActions;
+  private readonly echoBank: EchoBank;
   private heartbeat = 0;
-  private echoFullPlayed = false;
 
   private readonly brain: ActorController;
   private readonly hud: PlayerHudState;
@@ -88,9 +80,11 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     this._actor = new ActorImpl(0, { archetype: 'none', team: 'player', pos: { x: 0, y: 0, z: 0 }, hp: 1, targetable: false }, game.time ?? { now: 0 });
     this._actor.alive = false;
     this.saved = {
-      tarrik: { echo: 0, ammo: TUNING.kits.tarrik.ranged.mag, reserve: TUNING.kits.tarrik.ranged.reserve },
-      selene: { echo: 0, ammo: TUNING.kits.selene.ranged.mag, reserve: TUNING.kits.selene.ranged.reserve },
+      tarrik: { ammo: TUNING.kits.tarrik.ranged.mag, reserve: TUNING.kits.tarrik.ranged.reserve },
+      selene: { ammo: TUNING.kits.selene.ranged.mag, reserve: TUNING.kits.selene.ranged.reserve },
     };
+    this.context = new ContextActions(game);
+    this.echoBank = new EchoBank(this);
     const self = this;
     this.follow = {
       pos: this._actor.pos,
@@ -120,7 +114,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
       meleeName: this.kit.meleeName, rangedName: this.kit.ranged.name,
       abilities: this.abilities.states, aiming: false, guarding: false, lockTarget: null, context: null, threat: 0,
     };
-    pickupsOf(game).bind(this);
+    pickupsOf(game).bind(playerPickupHost(this));
     const ev = game.events;
     ev.on('actor:died', (e) => {
       if (this.spawned && e.killer === this._actor && e.actor !== this._actor) this.addEcho(0, 'kill');
@@ -170,10 +164,14 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     return TUNING.echo.max;
   }
   get echo(): number {
-    return this.saved[this._protagonist].echo;
+    return this.echoBank.value;
   }
   set echo(v: number) {
-    this.setEcho(fin(v, 0), 'set');
+    this.echoBank.set(fin(v, 0), 'set');
+  }
+  /** a protagonist is in the world */
+  get isSpawned(): boolean {
+    return this.spawned;
   }
   get lockTarget(): Actor | null {
     return this.lock.target;
@@ -182,7 +180,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     this.lock.set(live(t) && t.alive ? t : null);
   }
   get contextAction(): ContextAction | null {
-    return this.ctx;
+    return this.context.action;
   }
 
   /** strict input reads: a stub input system returns truthy junk */
@@ -359,34 +357,13 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
 
   // ---- Echo / health / ammo ---------------------------------------------------------------------------------
 
-  private setEcho(value: number, reason: string): void {
-    const s = this.saved[this._protagonist];
-    const v = clamp(value, 0, TUNING.echo.max);
-    const delta = v - s.echo;
-    if (delta === 0) return;
-    s.echo = v;
-    this.game.events.emit('player:echo', { value: v, delta, reason });
-    if (delta > 0 && this.spawned) {
-      const a = this._actor;
-      if (v >= TUNING.echo.max && !this.echoFullPlayed) {
-        this.echoFullPlayed = true;
-        this.game.audio.play('echoFull');
-      } else if (delta >= 4) this.game.audio.play('echoGain', { volume: clamp(delta / 20, 0.4, 1) });
-      if (delta >= 10) this.game.vfx.spawn('echoGain', a.aimPoint(_v), { color: this.kit.color });
-    }
-    if (v < TUNING.echo.max) this.echoFullPlayed = false;
-  }
-
   addEcho(amount: number, reason: string): void {
-    let add = fin(amount, 0);
-    if (ECHO_RULES.has(reason)) add = this.kit.echo[reason as EchoRule] ?? 0;
-    if (add === 0) return;
-    this.setEcho(this.echo + add, String(reason));
+    this.echoBank.add(amount, reason);
   }
 
   /** pay for an ability */
   spendEcho(cost: number, reason: string): void {
-    this.setEcho(this.echo - Math.max(0, cost), reason);
+    this.echoBank.set(this.echo - Math.max(0, cost), reason);
   }
 
   heal(amount: number): void {
@@ -406,7 +383,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     a.hp = a.maxHp;
     a.poise = a.maxPoise;
     this.ranged.setAmmo(this.kit.ranged.mag, this.kit.ranged.reserve);
-    if (opts && typeof opts.echo === 'number') this.setEcho(opts.echo, 'checkpoint');
+    if (opts && typeof opts.echo === 'number') this.echoBank.set(opts.echo, 'checkpoint');
     this.threat = 0;
     this.state = 'free';
     this.visual?.setLoadout({ melee: true, ranged: false });
@@ -416,77 +393,14 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     this.ranged.setAmmo(mag, reserve);
   }
 
-  // ---- pickups (PickupHost) -----------------------------------------------------------------------------------
-
-  wants(kind: PickupKind): boolean {
-    const a = this._actor;
-    if (kind === 'sustain') return a.hp < a.maxHp;
-    if (kind === 'ammo') return this.ranged.ammo < this.kit.ranged.mag || this.ranged.reserve < this.kit.ranged.reserve;
-    return this.echo < TUNING.echo.max;
-  }
-
-  collect(kind: PickupKind): void {
-    const a = this._actor;
-    const game = this.game;
-    if (kind === 'sustain') {
-      this.heal(TUNING.pickups.sustain);
-      game.vfx.spawn('healBurst', a.pos);
-      game.audio.play('healPickup', { pos: a.pos });
-    } else if (kind === 'ammo') {
-      this.ranged.setAmmo(this.kit.ranged.mag, this.kit.ranged.reserve);
-      game.audio.play('ammoPickup', { pos: a.pos });
-    } else {
-      this.addEcho(TUNING.pickups.echo, 'pickup');
-    }
-    game.events.emit('player:pickup', { kind });
-  }
-
-  feet(): Vec3Like | null {
-    return this.spawned && this._actor.alive ? this._actor.pos : null;
-  }
-
   // ---- context action -----------------------------------------------------------------------------------------
 
   setContextAction(action: ContextAction | null): void {
-    if (action && (typeof action.onConfirm !== 'function' || !action.button)) {
-      warnOnce('ctx', 'setContextAction() needs a button and onConfirm — ignored');
-      return;
-    }
-    this.ctx = action;
-    this.ctxAge = 0;
-    if (!action) {
-      this.ctxShown = null;
-      return;
-    }
-    const w = fin(action.window, Infinity);
-    this.ctxLeft = action.window === Infinity ? Infinity : Math.max(0.05, w) * windowScale(this.game.settings.get('difficulty'));
-    // the HUD draws its timer ring from `window`: show the widened value
-    this.ctxShown = this.ctxLeft === action.window ? action : { ...action, window: this.ctxLeft };
+    this.context.set(action);
   }
 
-  private tickContext(dt: number): void {
-    const c = this.ctx;
-    if (!c) return;
-    this.ctxAge += dt;
-    const auto = c.autoConfirmable === true && this.game.settings.get('autoPrompts') === true && this.ctxAge >= Math.min(0.45, this.ctxLeft * 0.5);
-    if (auto || this.game.input.take(c.button) === true) {
-      this.ctx = this.ctxShown = null;
-      try {
-        c.onConfirm();
-      } catch (err) {
-        warnOnce(`ctx:${c.id}`, `context action "${c.id}" onConfirm threw: ${String(err)}`);
-      }
-      return;
-    }
-    this.ctxLeft -= dt;
-    if (this.ctxLeft <= 0) {
-      this.ctx = this.ctxShown = null;
-      try {
-        c.onExpire?.();
-      } catch (err) {
-        warnOnce(`ctx:${c.id}`, `context action "${c.id}" onExpire threw: ${String(err)}`);
-      }
-    }
+  aimAt(point: Vec3Like): void {
+    this.move.aimCameraAt(point);
   }
 
   playScripted(action: string, opts?: { faceTo?: Vec3Like }): number {
@@ -529,7 +443,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     this.ranged.setAim(false);
     this.lock.reset();
     this.bufKind = null;
-    this.ctx = this.ctxShown = null;
+    this.context.set(null);
     this.state = 'dead';
     const game = this.game;
     game.audio.play('playerDeath');
@@ -571,7 +485,13 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     }
     let used = false;
     if (kind === 'dodge') used = this.startDodge();
-    else if (kind === 'light') used = this.ranged.aiming ? this.ranged.tryFire() : this.guard.tryCounter() || this.melee.startLight();
+    else if (kind === 'light') {
+      if (this.ranged.aiming) {
+        used = this.ranged.tryFire();
+        // a shot asked for while the weapon cycles is kept until it can fire
+        if (!used) this.bufAt = this.now;
+      } else used = this.guard.tryCounter() || this.melee.startLight();
+    }
     else if (kind === 'heavy') used = this.melee.startHeavy();
     else if (kind === 'ability1') used = this.abilities.activate(0);
     else if (kind === 'ability2') used = this.abilities.activate(1);
@@ -607,7 +527,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     pickupsOf(game).update(dt);
     if (!this.spawned) return;
     const a = this._actor;
-    this.tickContext(dt);
+    this.context.tick(dt);
     this.abilities.tick(dt);
     if (!a.alive) {
       this.state = 'dead';
@@ -703,7 +623,7 @@ export class PlayerControllerImpl implements PlayerController, PickupHost {
     h.aiming = this.ranged.aiming;
     h.guarding = a.guarding;
     h.lockTarget = this.lock.target;
-    h.context = this.ctxShown ?? this.guard.hudPrompt;
+    h.context = this.context.shown ?? this.guard.hudPrompt;
     h.threat = clamp(fin(this.threat, 0), 0, 1);
     return h;
   }

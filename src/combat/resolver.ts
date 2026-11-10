@@ -75,8 +75,10 @@ export function applyHitImpl(m: ActorManagerImpl, target: ActorImpl, hit: HitInf
 
   // ---- weak point / flank / state scaling ---------------------------------------------------------------
   if (!res.blocked) {
-    const wp = hit.weakPoint ? m.exposedWeakPoint(target) ?? target.weakPoints[0] ?? null : m.weakPointAt(target, hit.point);
-    if (hit.weakPoint || wp) {
+    const wp = hit.ignoreWeakPoints
+      ? null
+      : hit.weakPoint ? m.exposedWeakPoint(target) ?? target.weakPoints[0] ?? null : m.weakPointAt(target, hit.point);
+    if (!hit.ignoreWeakPoints && (hit.weakPoint || wp)) {
       res.weakPoint = true;
       hit.weakPoint = true;
       damage *= Math.max(wp ? fin(wp.multiplier, 1) : TUNING.hit.defaultWeakPoint, fin(hit.weakPointScale));

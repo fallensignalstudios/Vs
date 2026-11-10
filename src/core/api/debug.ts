@@ -113,7 +113,10 @@ export interface DebugApi {
   }): Promise<RunToResult>;
 
   // --- ADDED (mission/debug) ---
-  /** show / hide the F1 development overlay (on by default with `?debug=1`) */
+  /**
+   * show / hide the F1 development overlay. With `?debug=1` it starts visible in a live session and hidden under
+   * `?manual=1` (headless captures stay clean); the F-keys are bound in both cases.
+   */
   overlay(visible: boolean): void;
   /** ids of the registered zones in mission order */
   zones(): string[];

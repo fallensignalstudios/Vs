@@ -189,7 +189,7 @@ export class Abilities {
       const hit: HitInfo = {
         attacker: a, damage: S.damage, poise: S.poise, kind: 'ability', element: 'cinder',
         dir: l > 1e-3 ? { x: dx / l, y: 0, z: dz / l } : { x: forwardX(a.yaw), y: 0, z: forwardZ(a.yaw) },
-        point: _b.clone(), heavy: true, unblockable: true, knockback: S.knockback, tag: 'cinderSlam',
+        point: _b.clone(), heavy: true, unblockable: true, ignoreWeakPoints: true, knockback: S.knockback, tag: 'cinderSlam',
       };
       p.onDealt(t, hit, p.actors.applyHit(t, hit));
     }
@@ -366,7 +366,7 @@ export class Abilities {
       const hit: HitInfo = {
         attacker: a, damage: S.damage * fall, poise: S.poise * fall, kind: 'explosion', element: 'cinder',
         dir: l > 1e-3 ? { x: dx / l, y: 0, z: dz / l } : { x: 0, y: 1, z: 0 },
-        point: _b.clone(), heavy: true, unblockable: true, knockback: S.knockback * fall, tag: 'cinderSticky',
+        point: _b.clone(), heavy: true, unblockable: true, ignoreWeakPoints: true, knockback: S.knockback * fall, tag: 'cinderSticky',
       };
       p.onDealt(t, hit, p.actors.applyHit(t, hit));
     }
@@ -398,7 +398,7 @@ export class Abilities {
       if (t.frozen) continue;
       const hit: HitInfo = {
         attacker: a, damage: 0, poise: 0, kind: 'ability', element: 'frost', dir: { x: 0, y: 0, z: 0 },
-        point: t.aimPoint(_b).clone(), freeze: Math.max(0.6, f.left), unblockable: true, tag: 'stasis',
+        point: t.aimPoint(_b).clone(), freeze: Math.max(0.6, f.left), unblockable: true, ignoreWeakPoints: true, tag: 'stasis',
       };
       p.actors.applyHit(t, hit);
     }
@@ -531,7 +531,7 @@ export class Abilities {
     const l = Math.hypot(dx, dz) || 1;
     const hit: HitInfo = {
       attacker: a, damage: D.damage * mult, poise: D.poise, kind: 'ability', element: 'frost',
-      dir: { x: dx / l, y: 0, z: dz / l }, point: t.aimPoint(_b).clone(), heavy: true, knockback: 2.5, tag: 'dispatch',
+      dir: { x: dx / l, y: 0, z: dz / l }, point: t.aimPoint(_b).clone(), heavy: true, ignoreWeakPoints: true, knockback: 2.5, tag: 'dispatch',
     };
     p.onDealt(t, hit, p.actors.applyHit(t, hit));
   }

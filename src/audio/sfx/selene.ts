@@ -32,7 +32,7 @@ export const SELENE_SFX: RecipeTable = {
   }),
   axiomShot: sfx(-7, { gap: 0.1, max: 2, prio: 2, send: 0.5, ref: 6, vary: 25, tail: 0.5, bake: 2 }, (k) => {
     // precision weapon: tight snap, a clean pitched discharge and a cold resonant tail. No bark.
-    crack(k, 1, 0, 2600, 0.007);
+    crack(k, 0.6, 0, 2600, 0.009);
     thump(k, 190, 64, 0.08, 0.85);
     k.osc('sine', [1500, 290, 0.045], { a: 0.001, d: 0.07, g: 0.6 });
     k.noise('white', { a: 0.001, d: 0.03, g: 0.6 }, { bp: 4600, q: 1.3 });

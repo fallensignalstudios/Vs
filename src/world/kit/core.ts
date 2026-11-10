@@ -43,6 +43,14 @@ const DEFAULT_QUALITY: QualityProfile = {
   reflections: true, volumetrics: true, particleScale: 1, maxShadowLights: 2, anisotropy: 8, textureSize: 1024,
 };
 
+/** Which substrate a piece belongs to: upper white-gold halls or the lower black-stone terminal. */
+export interface Family { frame: MatId; panel: MatId; dark: boolean }
+export function familyOf(mat: MatId | undefined): Family {
+  return mat === 'blackStone' || mat === 'blackStoneFloor'
+    ? { frame: 'blackStone', panel: 'blackStone', dark: true }
+    : { frame: 'whiteGold', panel: 'whiteGoldPanel', dark: false };
+}
+
 export interface PartOpts {
   /** object-space materials + never merged (things that move) */
   local?: boolean;
@@ -176,6 +184,25 @@ export class KitCtx {
     return m;
   }
 
+  /** cached per-builder variation of a library material (dimmer seams, recoloured glows) — world-space mapped */
+  variant(id: MatId, overrides: Record<string, unknown>): THREE.Material {
+    const key = `v:${id}:${JSON.stringify(overrides)}`;
+    let m = this.inlays.get(key);
+    if (!m) {
+      m = this.clone<THREE.Material>(id, overrides);
+      m.name = `kit-glow:${id}`;
+      this.inlays.set(key, m);
+    }
+    return m;
+  }
+
+  /** the emissive gold channel as laid into floors: dimmer than a raw strip so long runs do not flood the bloom */
+  channel(): THREE.Material { return this.inlay('goldChannel', { emissiveIntensity: 1.9 }); }
+  /** architectural light seam (rib seams, pilaster strips): a calmer white-gold than a light panel */
+  seam(dark = false): THREE.Material {
+    return dark ? this.inlay('goldChannel', { emissiveIntensity: 2.2 }) : this.inlay('whiteLight', { emissiveIntensity: 2.3 });
+  }
+
   /** build-once cache (prop templates, shared textures) */
   cached<T>(key: string, make: () => T): T {
     if (!this.templates.has(key)) this.templates.set(key, make());
@@ -185,7 +212,7 @@ export class KitCtx {
   castsShadow(ref: MatRef, m: THREE.Material): boolean {
     if (typeof ref === 'string' && NO_CAST.has(ref)) return false;
     if (m.transparent) return false;
-    if (m.name.startsWith('emissive:') || m.name.startsWith('kit-inlay:')) return false;
+    if (m.name.startsWith('emissive:') || m.name.startsWith('kit-inlay:') || m.name.startsWith('kit-glow:')) return false;
     return true;
   }
 
@@ -291,6 +318,7 @@ export class Part {
       this.group.add(mesh);
     }
     this.slots.clear();
+    if (!this.opts.local) this.group.userData.kitPart = true;
     if (parent) parent.add(this.group);
     return this.group;
   }
@@ -299,7 +327,12 @@ export class Part {
   template(): PartTemplate {
     this.unframe();
     const out: PartTemplate = [];
-    for (const s of this.slots.values()) if (!s.geo.empty) out.push({ mat: s.mat, geometry: this.ctx.own(s.geo.toGeometry()), cast: s.cast });
+    for (const s of this.slots.values()) {
+      if (s.geo.empty) continue;
+      const geometry = this.ctx.own(s.geo.toGeometry());
+      geometry.userData.kitTemplate = true;
+      out.push({ mat: s.mat, geometry, cast: s.cast });
+    }
     this.slots.clear();
     return out;
   }

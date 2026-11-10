@@ -100,11 +100,11 @@ export function makeCurve(name: CurveName, n = 2049): Float32Array<ArrayBuffer> 
         y = x >= 0 ? Math.tanh(2.4 * x) : Math.tanh(1.2 * x) * 0.85;
         break;
       case 'drum': {
-        // drum-bus saturation: clean below −17 dBFS, then leaning into a −8 dBFS shoulder — stick clicks and
+        // drum-bus saturation: clean below −18 dBFS, then leaning into a −9.5 dBFS shoulder — stick clicks and
         // coincident strokes on a downbeat are rounded off instead of standing 18 dB proud of the ensemble
         const a = Math.abs(x);
-        const knee = 0.14;
-        const top = 0.4;
+        const knee = 0.12;
+        const top = 0.33;
         y = Math.sign(x) * (a <= knee ? a : knee + (top - knee) * Math.tanh((a - knee) / (top - knee)));
         break;
       }

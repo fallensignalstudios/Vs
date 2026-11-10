@@ -12,7 +12,7 @@ import { createFigureMaterial, type FigureUniforms } from './material';
 import { Animator } from './anim/animator';
 import { hasClip, resolveClip, resolveStance } from './anim/moveset';
 import type { StanceSet } from './anim/locomotion';
-import type { SolveOpts } from './anim/solver';
+import type { BodySolver, SolveOpts } from './anim/solver';
 import { ClothSim, type ClothCapsule } from './cloth';
 import { releaseFigure, retainFigure, type FigureDef } from './figure';
 import { Equipment } from './equip';
@@ -40,6 +40,17 @@ export interface VisualOpts {
   seed: number;
   /** squad variation on shared geometry: per-instance height and tint from the seed */
   vary: boolean;
+}
+
+/** See HumanoidVisualImpl.retargetAccess() (added for src/chars/glb). */
+export interface HumanoidRetargetAccess {
+  /** child of `root` holding the skeleton; carries the figure's uniform scale */
+  readonly model: THREE.Group;
+  readonly rig: RigInstance;
+  /** model-space joint positions / rotations of the last update (`wp` / `wq`, indexed like the rig spec) */
+  readonly solver: BodySolver;
+  readonly equip: Equipment;
+  readonly fig: FigureDef;
 }
 
 export class HumanoidVisualImpl implements HumanoidVisual {
@@ -342,6 +353,17 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
   teleported(): void {
     this.first = true;
+  }
+
+  // ---- retarget access (added for src/chars/glb — read-only views, behaviour unchanged) ------------------
+
+  /**
+   * What a mesh driven by this figure's animation needs: the model group (uniform scale), the live skeleton, the
+   * solver's model-space pose, the equipment state and the figure definition. Used by the generated-mesh
+   * wrapper in src/chars/glb; nothing in the humanoid module calls it.
+   */
+  retargetAccess(): HumanoidRetargetAccess {
+    return { model: this.model, rig: this.rig, solver: this.animator.solver, equip: this.equip, fig: this.fig };
   }
 
   // ---- update -------------------------------------------------------------------------------------------

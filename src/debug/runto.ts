@@ -74,8 +74,12 @@ export async function runTo(game: Game, bot: AutoplayBot, opts: RunToOptions = {
     if (!mission.currentZone && !mission.loading) await mission.newGame();
     await waitForLoad(game);
     simStart = time.now;
+    // a beat that had already begun before the run is part of the trail (its event fired earlier)
     const cur = mission.currentZone;
-    if (cur && result.beats.length === 0 && mission.currentBeat) result.beats.push({ zone: cur.id, beat: mission.currentBeat, t: 0 });
+    const last = mission.beatLog[mission.beatLog.length - 1];
+    if (cur && result.beats.length === 0 && last && last.zone === cur.id && last.beat === mission.currentBeat) {
+      result.beats.push({ zone: cur.id, beat: last.beat, t: 0 });
+    }
 
     bot.start({ choice: opts.choice, skipCinematics: opts.skipCinematics !== false, god: true });
 

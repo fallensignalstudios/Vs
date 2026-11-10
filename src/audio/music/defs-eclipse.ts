@@ -29,13 +29,13 @@ export const ECLIPSE_MUSIC: Record<'breach' | 'combatEclipse' | 'elite' | 'decis
 
   /** E3: Tarrik's drums against the cadence. */
   combatEclipse: {
-    family: 'eclipse', bpm: 100, beats: 4, tonic: CS, db: -19,
+    family: 'eclipse', bpm: 100, beats: 4, tonic: CS, db: -21,
     chords: [ch(0, 'b2', 2), ch(6, 'tri', 1), ch(1, '5', 1), ch(0, 'b2', 2), ch(8, 'm', 1), ch(7, 'tri', 1)],
     layers: [
       { kind: 'sub', g: 0.32, follow: true },
       { kind: 'cadence', pattern: CADENCE, g: 0.5, room: 0.3, wet: 0.15 },
-      { kind: 'pad', voice: 'wrong', low: 49, n: 3, g: 0.24, bright: [1250, 3000], wet: 0.4 },
-      { kind: 'strings', low: 37, n: 2, gate: ['X..x..x.X..x..x.', 'X.xxX.xxX.xxX.xx'], g: [0.46, 0.66], bright: [1400, 4600], wet: 0.2 },
+      { kind: 'pad', voice: 'wrong', low: 49, n: 3, g: 0.32, bright: [1250, 3000], wet: 0.4 },
+      { kind: 'strings', low: 37, n: 2, gate: ['X..x..x.X..x..x.', 'X.xxX.xxX.xxX.xx'], g: [0.6, 0.84], bright: [1400, 4600], wet: 0.2 },
       { kind: 'perc', inst: 'taiko', tiers: ['X.......x.......', 'X..x....X.x.....', 'X..x..x.X.x.x.xx'], tune: 73.4, g: [0.28, 0.48], human: 0.008, room: 0.3 },
       { kind: 'perc', inst: 'odaiko', tiers: ['X...............', 'X.........X.....'], tune: 49, g: 0.32, human: 0.008, room: 0.3, wet: 0.1 },
       // a tick that is too even to be played by anyone: no humanisation, no accents
@@ -50,23 +50,25 @@ export const ECLIPSE_MUSIC: Record<'breach' | 'combatEclipse' | 'elite' | 'decis
 
   /** E4: the elite. 3+3+2 accents, low brass clusters, both protagonists' percussion; Selene's glass joins late. */
   elite: {
-    family: 'eclipse', bpm: 108, beats: 4, tonic: CS, db: -18,
+    family: 'eclipse', bpm: 108, beats: 4, tonic: CS, db: -20,
     chords: [ch(0, 'b2', 2), ch(6, 'tri', 2), ch(1, '5', 2), ch(0, 'dim', 2)],
     layers: [
       { kind: 'sub', g: 0.34, follow: true },
       { kind: 'cadence', pattern: CADENCE, g: 0.44, room: 0.3, wet: 0.15 },
-      { kind: 'perc', inst: 'taiko', tiers: ['X..X..X.X..X..X.', 'X.oX.oX.X.oX.oXo'], tune: 73.4, g: [0.34, 0.52], human: 0.008, room: 0.3 },
-      { kind: 'perc', inst: 'odaiko', tiers: ['X.......X.......'], tune: 49, g: 0.34, human: 0.008, room: 0.3, wet: 0.1 },
-      { kind: 'perc', inst: 'boom', tiers: ['X...............'], mask: 'x.', g: 0.26, room: 0.2, wet: 0.25 },
+      { kind: 'perc', inst: 'taiko', tiers: ['X..X..X.X..X..X.', 'X.oX.oX.X.oX.oXo'], tune: 73.4, g: [0.3, 0.46], human: 0.008, room: 0.3 },
+      { kind: 'perc', inst: 'odaiko', tiers: ['X.......X.......'], tune: 49, g: 0.26, human: 0.008, room: 0.3, wet: 0.1 },
+      { kind: 'perc', inst: 'boom', tiers: ['X...............'], mask: 'x.', g: 0.2, room: 0.2, wet: 0.25 },
       { kind: 'perc', inst: 'anvil', tiers: ['....X.......X...', '....X..x....X..x'], g: [0.16, 0.44], room: 0.3, wet: 0.1 },
-      { kind: 'perc', inst: 'shime', tiers: ['x...x...x...x...', 'x.oxx.oxx.oxx.ox'], g: [0.2, 0.56], human: 0.004, room: 0.2 },
-      { kind: 'perc', inst: 'hat', tiers: ['..x...x...x...x.', 'x.x.x.x.x.x.x.x.'], g: [0.11, 0.34], room: 0.1 },
+      { kind: 'perc', inst: 'shime', tiers: ['x...x...x...x...', 'x.oxx.oxx.oxx.ox'], g: [0.26, 0.7], human: 0.004, room: 0.2 },
+      { kind: 'perc', inst: 'hat', tiers: ['..x...x...x...x.', 'x.x.x.x.x.x.x.x.'], g: [0.16, 0.46], room: 0.1 },
       { kind: 'perc', inst: 'rim', tiers: ['................', '..x...x...x...x.'], g: [0, 0.4], th: [0.5, 1], room: 0.15 },
-      { kind: 'brass', every: 2, bars: 2, low: 37, g: [0.26, 0.46], wet: 0.35 },
+      { kind: 'brass', every: 2, bars: 2, low: 37, g: [0.34, 0.58], wet: 0.35 },
       { kind: 'brass', every: 1, bars: 1, low: 37, stab: true, pattern: 'X..X..X.........', g: [0.26, 0.52], room: 0.2, wet: 0.15 },
-      { kind: 'strings', low: 37, n: 2, gate: ['X..X..X.X..X..X.'], legato: false, g: [0.46, 0.64], bright: [1600, 5000], wet: 0.2 },
+      { kind: 'strings', low: 37, n: 2, gate: ['X..X..X.X..X..X.'], legato: false, g: [0.64, 0.9], bright: [1800, 6000], wet: 0.2 },
       { kind: 'pulse', voice: 'glass', tiers: ['................', 'x..x..x.x..x..x.'], notes: [0, 2, 1, 3], low: 73, g: [0, 0.34], th: [0.5, 1], room: 0.1, wet: 0.3 },
-      { kind: 'pad', voice: 'wrong', low: 49, n: 2, g: 0.14, wet: 0.4 },
+      { kind: 'pad', voice: 'wrong', low: 49, n: 2, g: 0.22, wet: 0.4 },
+      // the wrong chord two octaves up: the top of the texture, where corruption cannot pass for warmth
+      { kind: 'pad', voice: 'wrong', low: 73, n: 2, g: [0.14, 0.46], bright: [3400, 7500], wet: 0.4 },
     ],
   },
 

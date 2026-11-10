@@ -6,7 +6,7 @@
  * `db` is the output peak, in dBFS at the reference settings, of an ordinary sound of that loudness — one
  * with a 9 dB crest. Calibration matches LOUDNESS (the loudest 100 ms, K-weighted) to `db − 9`, so a 5 ms
  * click and a 2 s roar authored at the same `db` are equally loud rather than equally tall: the click's
- * peak ends up above `db` (never more than 8 dB, never above −3 dBFS) and a pure tone's below it.
+ * peak ends up above `db` (never more than 8 dB, never above −5 dBFS) and a pure tone's below it.
  */
 import type { Kit } from '../synth/kit';
 
@@ -62,7 +62,7 @@ export const CREST_DB = 9;
 /** a calibrated cue's true peak never exceeds its `db` by more than this … */
 export const PEAK_OVER_DB = 8;
 /** … nor this absolute ceiling (dBFS): nothing is authored into the limiter */
-export const PEAK_CEILING_DB = -3;
+export const PEAK_CEILING_DB = -5;
 
 /** Loudness target (dB, K-weighted loudest 100 ms) for an authored `db`. */
 export const loudnessTarget = (db: number): number => db - CREST_DB;

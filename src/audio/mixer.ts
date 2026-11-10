@@ -45,14 +45,16 @@ const REVERB_RETURN = 0.5;
 /**
  * A freshly created DynamicsCompressorNode starts fully attenuated and takes its whole release time (~150 ms
  * here) to open — the click that unlocks audio would be swallowed. Each compressor is therefore given a
- * near-zero release for its first 40 ms (it opens in a few milliseconds instead), and for those milliseconds
- * the dynamics are bypassed altogether (the soft ceiling still protects the output). From `PRIME_SECONDS` on
- * the chain behaves exactly as it will for the rest of the session.
+ * near-zero release for its first 40 ms (it opens within a few milliseconds), and for the first 20 ms, while
+ * it is still opening, the dynamics are bypassed altogether (the soft ceiling still protects the output).
+ * From 30 ms on the chain behaves exactly as it will for the rest of the session.
  */
-export const PRIME_SECONDS = 0.045;
 const PRIME_RELEASE = 0.04;
+const PRIME_BYPASS = 0.02;
 /** how far impacts push the score down (dB) — they read without having to be louder */
-const SIDECHAIN_DB = 2.5;
+const SIDECHAIN_DB = 3;
+/** drive into the drum bus's soft clipper (dB) */
+const DRUM_DRIVE_DB = 8;
 
 export interface CompParams {
   threshold: number;
@@ -66,12 +68,13 @@ export interface CompParams {
 
 /**
  * Dynamics stages. `music` only levels the tonal score (pads, strings, swells) and is slow enough to let
- * note attacks through — percussion never passes it. Then the master glue compressor into a fast limiter.
+ * note attacks through — percussion never passes it, and nothing else compresses the score. Then the master
+ * glue compressor into a fast limiter.
  */
 export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
   music: { threshold: -17, knee: 8, ratio: 2, attack: 0.025, release: 0.25, makeupDb: 3.9 },
   glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
-  limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
+  limiter: { threshold: -4, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 2.1 },
 };
 
 /** How much of each world space a place is made of: `[small, hall, vast]` (any scale; normalised here). */
@@ -111,6 +114,7 @@ export class Mixer {
   get musicReduction(): number {
     return this.musicComp.reduction ?? 0;
   }
+
 
   private readonly ambDuck: GainNode;
   private readonly musicDuck: GainNode;
@@ -165,7 +169,7 @@ export class Mixer {
       setQ(f, 0.707);
       return f;
     };
-    /** `from` → dynamics (`chainIn` … `chainOut`) → `to`, bypassed while the compressors settle. */
+    /** `from` → dynamics (`chainIn` … `chainOut`) → `to`, bypassed for the first milliseconds of the graph's life. */
     const primed = (from: AudioNode, chainIn: AudioNode, chainOut: AudioNode, to: AudioNode): void => {
       const bypass = g(1);
       const dyn = g(0);
@@ -174,10 +178,10 @@ export class Mixer {
       from.connect(chainIn);
       chainOut.connect(dyn);
       dyn.connect(to);
-      bypass.gain.setValueAtTime(1, t0 + PRIME_SECONDS);
-      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_SECONDS + 0.012);
-      dyn.gain.setValueAtTime(0, t0 + PRIME_SECONDS);
-      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_SECONDS + 0.012);
+      bypass.gain.setValueAtTime(1, t0 + PRIME_BYPASS);
+      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_BYPASS + 0.01);
+      dyn.gain.setValueAtTime(0, t0 + PRIME_BYPASS);
+      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_BYPASS + 0.01);
     };
 
     /**
@@ -300,13 +304,25 @@ export class Mixer {
     const presence = ac.createBiquadFilter();
     presence.type = 'highshelf';
     presence.frequency.value = 2200;
-    presence.gain.value = 6.5;
+    presence.gain.value = 5;
     this.musicComp = comp(DYNAMICS.music);
     const musicTrim = g(dB(-DYNAMICS.music.makeupDb));
     this.music.connect(lowShelf);
     lowShelf.connect(presence);
+    // Phase rotation: a stack of detuned saws is a train of spikes — 15 dB of crest that buys no loudness and
+    // eats the headroom the drums need. Four all-pass stages smear each edge over a few milliseconds; the
+    // spectrum (and so the sound) is untouched, the peaks come down.
+    let rotated: AudioNode = presence;
+    for (const hz of [170, 430, 1100, 2800]) {
+      const ap = ac.createBiquadFilter();
+      ap.type = 'allpass';
+      ap.frequency.value = hz;
+      ap.Q.value = 0.6;
+      rotated.connect(ap);
+      rotated = ap;
+    }
     this.musicComp.connect(musicTrim);
-    primed(presence, this.musicComp, musicTrim, musicPre);
+    primed(rotated, this.musicComp, musicTrim, musicPre);
     this.musicDirect.connect(musicPre);
     // drum bus: sticks and metal forward, the boom held back a little, then the shoulder
     const drumLow = ac.createBiquadFilter();
@@ -320,10 +336,18 @@ export class Mixer {
     const drumClip = ac.createWaveShaper();
     drumClip.curve = res.curves.drum;
     drumClip.oversample = '2x';
+    // the tonal path is one compressor look-ahead (6 ms) late: hold the drums back by the same
+    const drumAlign = ac.createDelay(0.05);
+    drumAlign.delayTime.value = 0.006;
+    // The strokes are driven well into the shoulder: a hit keeps its body and loses its needle. That is what
+    // lets the ensemble sit at its level without every downbeat standing 15 dB above it.
+    const drumDrive = g(dB(DRUM_DRIVE_DB));
     this.musicDrums.connect(drumLow);
     drumLow.connect(drumAir);
-    drumAir.connect(drumClip);
-    drumClip.connect(musicPre);
+    drumAir.connect(drumDrive);
+    drumDrive.connect(drumClip);
+    drumClip.connect(drumAlign);
+    drumAlign.connect(musicPre);
 
     this.scoreSend = g();
     const stage = conv(res.rooms.stage);
@@ -478,7 +502,7 @@ export class Mixer {
   }
 
   /**
-   * Sidechain: follow the SFX bus level and lean the score back by up to 2.5 dB under impacts, recovering in
+   * Sidechain: follow the SFX bus level and lean the score back by up to 3 dB under impacts, recovering in
    * a quarter of a second. Called once per update(); costs one 1024-sample read.
    */
   update(dt: number): void {

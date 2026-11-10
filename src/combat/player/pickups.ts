@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { Game, PickupHandle, PickupKind, Vec3Like, VfxHandle } from '@/core/api';
 import { TUNING } from '../tuning';
 import { fin, live, warnOnce } from '../safe';
+import type { PlayerControllerImpl } from './controller';
 
 interface Pickup extends PickupHandle {
   kind: PickupKind;
@@ -22,13 +23,42 @@ interface Pickup extends PickupHandle {
 const COLORS: Record<PickupKind, number> = { sustain: 0xffe2a8, ammo: 0xffa033, echo: 0xff6a1a };
 
 export interface PickupHost {
-  readonly game: Game;
   /** is a pickup of this kind useful right now? */
   wants(kind: PickupKind): boolean;
   /** apply it */
   collect(kind: PickupKind): void;
   /** feet of the living protagonist, or null */
   feet(): Vec3Like | null;
+  /** element colour of the current protagonist (Echo motes) */
+  color(): number;
+}
+
+/** what a pickup means for the protagonist */
+export function playerPickupHost(p: PlayerControllerImpl): PickupHost {
+  return {
+    wants(kind) {
+      const a = p.actor;
+      const r = p.kit.ranged;
+      if (kind === 'sustain') return a.hp < a.maxHp;
+      if (kind === 'ammo') return p.ranged.ammo < r.mag || p.ranged.reserve < r.reserve;
+      return p.echo < TUNING.echo.max;
+    },
+    collect(kind) {
+      const a = p.actor;
+      const game = p.game;
+      if (kind === 'sustain') {
+        p.heal(TUNING.pickups.sustain);
+        game.vfx.spawn('healBurst', a.pos);
+        game.audio.play('healPickup', { pos: a.pos });
+      } else if (kind === 'ammo') {
+        p.ranged.setAmmo(p.kit.ranged.mag, p.kit.ranged.reserve);
+        game.audio.play('ammoPickup', { pos: a.pos });
+      } else p.addEcho(TUNING.pickups.echo, 'pickup');
+      game.events.emit('player:pickup', { kind });
+    },
+    feet: () => (p.isSpawned && p.actor.alive ? p.actor.pos : null),
+    color: () => p.kit.color,
+  };
 }
 
 export class PickupRegistry {
@@ -59,7 +89,7 @@ export class PickupRegistry {
     const k: PickupKind = kind === 'sustain' || kind === 'ammo' || kind === 'echo' ? kind : 'sustain';
     if (k !== kind) warnOnce(`pickup:${String(kind)}`, `unknown pickup kind "${String(kind)}" — using sustain`);
     const game = this.game;
-    const color = k === 'echo' && this.host ? this.host.game.player.protagonist === 'selene' ? 0xcfeeff : 0xff6a1a : COLORS[k];
+    const color = k === 'echo' && this.host ? this.host.color() : COLORS[k];
     this.coreGeo ??= new THREE.OctahedronGeometry(0.13, 0);
     this.ringGeo ??= new THREE.TorusGeometry(0.24, 0.012, 6, 28);
     const group = new THREE.Group();

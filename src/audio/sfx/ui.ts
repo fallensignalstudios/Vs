@@ -91,8 +91,8 @@ export const FEEDBACK_SFX: RecipeTable = {
     k.noise('brown', { a: 0.3, d: 1.6, g: 0.5 }, { lp: [900, 120, 1.6] });
   }),
   hitConfirm: sfx(-20, { gap: 0.05, max: 2, prio: 1, send: 0.05, tail: 0.1, bake: 2 }, (k) => {
-    k.noise('white', { a: 0.0006, d: 0.016, g: 1 }, { bp: 2600, q: 2.5 });
-    k.osc('sine', [1500, 1100], { a: 0.001, d: 0.03, g: 0.5 });
+    k.noise('white', { a: 0.0008, d: 0.026, g: 0.9 }, { bp: 2600, q: 2.5 });
+    k.osc('sine', [1500, 1100], { a: 0.001, d: 0.045, g: 0.7 });
   }),
   weakPointHit: sfx(-12, { gap: 0.06, max: 2, prio: 2, send: 0.3, tail: 0.4, bake: 2 }, (k) => {
     crack(k, 0.7, 0, 3000, 0.008);

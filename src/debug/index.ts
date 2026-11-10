@@ -63,7 +63,8 @@ class DebugApiImpl implements DebugApi {
     };
 
     if (game.flags.debug) {
-      this.overlayView.show(true);
+      // headless captures (`manual`) start with a clean frame; F1 / overlay(true) brings the readout up
+      this.overlayView.show(!game.flags.manual);
       this.overlayView.bindKeys();
     }
   }

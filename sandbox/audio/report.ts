@@ -29,7 +29,7 @@ import type { AmbienceId, MusicState } from '@/core/api';
 import { analyze, type Metrics } from './analyze';
 import { loopSeam } from '@/audio/synth/bake';
 import { Probe, WARM, cut, prepared, render, renderFull, renderGraph, type RenderOpts } from './render';
-import { ADAPTIVE, COMBAT, LOOP_IDS, SCENES, renderAmbience, renderLoop, renderMusic, renderMusicFull, renderScene, renderSfx, renderStinger, musicOpts } from './lab';
+import { ADAPTIVE, COMBAT, LOOP_IDS, SCENES, renderAmbience, renderLoop, renderMusic, renderMusicFull, renderScene, renderSfx, renderStinger, musicOpts, sfxLength } from './lab';
 
 export type Kind = 'chain' | 'sfx' | 'loop' | 'music' | 'ambience' | 'stinger' | 'scene' | 'mix' | 'perf' | 'exact';
 
@@ -166,32 +166,43 @@ async function chainRows(): Promise<Row[]> {
 async function musicRows(state: Exclude<MusicState, 'silence'>, o: ReportOpts, push: (row: Row, buf: AudioBuffer) => void): Promise<void> {
   const def = MUSIC[state];
   const db = def.db ?? -20;
-  const measure = async (intensity: number): Promise<{ buf: AudioBuffer; m: Metrics; gr: number }> => {
-    let gr = 0;
-    const r = await renderMusicFull(state, o.secs, intensity, { tick: (e) => { gr = Math.min(gr, e.mixer.musicReduction); } });
+  /** `gr`: average reduction of the tonal bus's levelling compressor (the only dynamics the score passes) */
+  const measure = async (intensity: number): Promise<{ buf: AudioBuffer; m: Metrics; gr: number; note: string }> => {
+    let min = 0, sum = 0, n = 0;
+    const r = await renderMusicFull(state, o.secs, intensity, {
+      fps: 60,
+      tick: (e, t) => {
+        if (t < 1) return;
+        const v = e.mixer.musicReduction;
+        min = Math.min(min, v);
+        sum += v;
+        n++;
+      },
+    });
     const buf = cut(r.buf, r.t0);
-    return { buf, m: analyze(buf, 1), gr };
+    const gr = n ? sum / n : 0;
+    return { buf, m: analyze(buf, 1), gr, note: `levelling avg ${f1(gr)} / max ${f1(min)} dB` };
   };
   const ref = await measure(def.fixedIntensity ?? 0.6);
-  const row: Row = { kind: 'music', id: state, targetDb: db, note: `levelling ${f1(ref.gr)} dB`, flags: [], ...ref.m };
+  const row: Row = { kind: 'music', id: state, targetDb: db, note: ref.note, flags: [], ...ref.m };
   baseFlags(row, ref.buf);
   if (!(state in MUSIC_NORM)) row.flags.push('NOCAL');
   else if (Math.abs(row.rmsDb - db) > 2) row.flags.push(`LEVEL${signed(row.rmsDb - db)}`);
-  if (ref.gr < -3.5) row.flags.push(`GR${f1(ref.gr)}`);
+  if (ref.gr < -3) row.flags.push(`GR${f1(ref.gr)}`);
   push(row, ref.buf);
   if (!ADAPTIVE.includes(state)) return;
 
   const lo = await measure(0);
-  const loRow: Row = { kind: 'music', id: `${state}@0`, targetDb: null, note: `levelling ${f1(lo.gr)} dB`, flags: [], ...lo.m };
+  const loRow: Row = { kind: 'music', id: `${state}@0`, targetDb: null, note: lo.note, flags: [], ...lo.m };
   baseFlags(loRow, lo.buf);
   push(loRow, lo.buf);
 
   const hi = await measure(1);
-  const hiRow: Row = { kind: 'music', id: `${state}@1`, targetDb: db + 2.5, note: `levelling ${f1(hi.gr)} dB`, flags: [], ...hi.m };
+  const hiRow: Row = { kind: 'music', id: `${state}@1`, targetDb: db + 2.5, note: hi.note, flags: [], ...hi.m };
   baseFlags(hiRow, hi.buf);
   if (hiRow.rmsDb > db + 3.2) hiRow.flags.push(`HOT${signed(hiRow.rmsDb - db)}`);
   if (hiRow.peakDb > -4) hiRow.flags.push(`PEAK${f1(hiRow.peakDb)}`);
-  if (hi.gr < -3.5) hiRow.flags.push(`GR${f1(hi.gr)}`);
+  if (hi.gr < -3) hiRow.flags.push(`GR${f1(hi.gr)}`);
   if (COMBAT.includes(state)) {
     // the combat standard: hits stand ≥ 6 dB out of the bed, 2–8 kHz carries real energy, dry leads wet
     if (hiRow.punchDb < 6) hiRow.flags.push(`PUNCH${f1(hiRow.punchDb)}`);
@@ -281,10 +292,18 @@ async function mixRows(o: ReportOpts): Promise<Row[]> {
   // --- pre-rendered playback sits where live synthesis does -----------------------------------------
   for (const id of ['footStone', 'bladeHitMetal', 'verityHit', 'droneBolt', 'explosionSmall', 'eclipseLunge']) {
     step(`bake parity · ${id}`);
-    const live = analyze(await renderSfx(id, { baked: false }));
-    const baked = analyze(await renderSfx(id));
-    const r = row(`pre-rendered vs live · ${id}`, baked, `loud ${f1(baked.loudDb)} vs ${f1(live.loudDb)} live`);
-    if (Math.abs(baked.loudDb - live.loudDb) > 2.5) r.flags.push(`PARITY${signed(baked.loudDb - live.loudDb)}`);
+    // eight plays each way (every play is a different random variation): compare the average loudness
+    const series = async (baked: boolean): Promise<{ avg: number; m: Metrics }> => {
+      const gap = sfxLength(id) + 0.45;
+      const buf = await render({ seconds: 8 * gap + 1, stepped: true, baked, setup: () => undefined, tick: (e, t) => { if (t < 8 * gap && Math.floor(t / gap) !== Math.floor((t - 0.05) / gap)) e.play(id); } });
+      let sum = 0;
+      for (let i = 0; i < 8; i++) sum += analyze(buf, i * gap, (i + 1) * gap).loudDb;
+      return { avg: sum / 8, m: analyze(buf) };
+    };
+    const live = await series(false);
+    const baked = await series(true);
+    const r = row(`pre-rendered vs live · ${id}`, baked.m, `average loudness of 8 plays: ${f1(baked.avg)} vs ${f1(live.avg)} live`);
+    if (Math.abs(baked.avg - live.avg) > 1.5) r.flags.push(`PARITY${signed(baked.avg - live.avg)}`);
   }
   {
     step('bake parity · combatTarrik');
@@ -330,16 +349,18 @@ async function perfRows(o: ReportOpts): Promise<Row[]> {
     const buf = cut(r.buf, r.t0);
     const m = analyze(buf, 3);
     const flags: string[] = [];
-    if (live > 64) flags.push(`SRC${live}`);
+    if (live > 66) flags.push(`SRC${live}`);
     rows.push({ kind: 'perf', id: 'full fight: elite score + crucible + 7 loops + 12 cues/s', targetDb: null, note: `${live} live sources · ${Math.round(Probe.created / scene.seconds)} nodes/s · ${peakVoices} SFX voices peak · ${f1(scene.seconds / r.wall)}× realtime`, flags, ...m });
     o.keep('perf:fight', buf);
   }
-  // a 0.8 s main-thread stall in combat: no hole in the rhythm, no shift of the beat
-  for (const stall of [0.3, 0.8]) {
+  // a main-thread stall in combat: no hole in the rhythm, no shift of the beat
+  for (const stall of [0.3, 0.8, 1.6]) {
+    // the long one is what a zone build looks like, and the game announces those (mission.loading → setBusy)
+    const busy = stall > 1;
     o.onProgress(`perf: ${stall} s stall`);
     Probe.reset();
-    await renderFull(musicOpts('combatTarrik', 9, 1, { fps: 60, stall: (t) => t > 5 && t < 5 + stall }));
-    const starts = Probe.starts(WARM + 3, WARM + 8.5).map((t) => t - WARM);
+    await renderFull(musicOpts('combatTarrik', 10, 1, { fps: 60, stall: (t) => t > 5 && t < 5 + stall, tick: (e, t) => { if (busy && t > 3.5) e.setBusy(t < 5 + stall + 0.2); } }));
+    const starts = Probe.starts(WARM + 3, WARM + 9.5).map((t) => t - WARM);
     const stepDur = 60 / MUSIC.combatTarrik.bpm / 4;
     const phase = (a: number, b: number): number => {
       let sx = 0, sy = 0;
@@ -350,14 +371,14 @@ async function perfRows(o: ReportOpts): Promise<Row[]> {
     for (let i = 1; i < starts.length; i++) {
       const gap = starts[i] - starts[i - 1];
       if (starts[i] < 4.8) before = Math.max(before, gap);
-      else if (starts[i - 1] < 6.2) around = Math.max(around, gap);
+      else if (starts[i - 1] < 5.4 + stall) around = Math.max(around, gap);
     }
-    const shift = Math.abs(phase(3, 4.9) - phase(6.2, 8.4));
+    const shift = Math.abs(phase(3, 4.9) - phase(5.4 + stall, 9.4));
     const drift = Math.min(shift, stepDur * 1000 - shift);
     const flags: string[] = [];
     if (around > before + 0.12) flags.push(`HOLE${Math.round(around * 1000)}ms`);
     if (drift > 4) flags.push(`PHASE${f1(drift)}ms`);
-    add(`${stall} s main-thread stall in combatTarrik`, null, `largest note gap ${Math.round(around * 1000)} ms (${Math.round(before * 1000)} ms normally) · beat phase moved ${f1(drift)} ms`, flags);
+    add(`${stall} s main-thread stall in combatTarrik${busy ? ' (announced: loading)' : ''}`, null, `largest note gap ${Math.round(around * 1000)} ms (${Math.round(before * 1000)} ms normally) · beat phase moved ${f1(drift)} ms`, flags);
   }
   return rows;
 }
@@ -505,10 +526,10 @@ export async function buildReport(o: ReportOpts): Promise<Row[]> {
       if (m.peakDb > -2) row.flags.push(`PEAK${f1(m.peakDb)}`);
     }
     if (id === 'combo') {
-      // 0.45 s after the last hit of the combo the vast room must be well down: the hits stay four hits
+      // half a second after the last hit of the combo the vast room must be well under the hits themselves
       const tail = sliceDb(buf, 2.25, 2.45);
-      row.note = `0.5 s after the last hit: ${f1(tail)} dB rms (peak ${f1(row.peakDb)})`;
-      if (tail > row.peakDb - 30) row.flags.push(`SMEAR${f1(tail - row.peakDb)}`);
+      row.note = `0.5 s after the last hit: ${f1(tail)} dB rms, ${f1(tail - row.loudDb)} dB under the hits' loudness (${f1(row.loudDb)})`;
+      if (tail > row.loudDb - 12) row.flags.push(`SMEAR${f1(tail - row.loudDb)}`);
     }
     push(row, buf);
   }

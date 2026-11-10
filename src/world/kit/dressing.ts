@@ -20,7 +20,7 @@ export function buildChannel(ctx: KitCtx, points: Array<[number, number]>, o: Ch
   if (o.color !== undefined) over.emissive = o.color;
   if (o.intensity !== undefined) over.emissiveIntensity = ctx.num(o.intensity, 3, 0, 40);
   if (o.pulse === false) over.pulse = 0;
-  const mat = ctx.inlay('goldChannel', Object.keys(over).length ? over : undefined);
+  const mat = Object.keys(over).length ? ctx.inlay('goldChannel', over) : ctx.channel();
   const path = pts.map((p): V3 => [p[0], h + (o.vertical ? 0 : 0.007), -p[1]]);
   if (o.vertical) {
     // a strip standing on edge at height h (drawn on a wall): normal = across the run
@@ -68,9 +68,9 @@ function flareTexture(): THREE.DataTexture {
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const u = (x + 0.5) / S * 2 - 1, v = (y + 0.5) / S * 2 - 1, r = Math.hypot(u, v);
-      const halo = Math.pow(Math.max(0, 1 - r), 3) * 0.55;
-      const core = Math.exp(-r * r * 90);
-      const streak = Math.exp(-v * v * 900) * Math.pow(Math.max(0, 1 - Math.abs(u)), 2) * 0.8 + Math.exp(-u * u * 900) * Math.pow(Math.max(0, 1 - Math.abs(v)), 2) * 0.35;
+      const halo = Math.pow(Math.max(0, 1 - r), 5) * 0.4;
+      const core = Math.exp(-r * r * 260);
+      const streak = Math.exp(-v * v * 2400) * Math.pow(Math.max(0, 1 - Math.abs(u)), 3) * 0.9 + Math.exp(-u * u * 2400) * Math.pow(Math.max(0, 1 - Math.abs(v)), 3) * 0.45;
       const a = Math.min(1, halo + core + streak);
       const i = (y * S + x) * 4;
       data[i] = data[i + 1] = data[i + 2] = 255;
@@ -100,16 +100,16 @@ export function buildWhitePoint(ctx: KitCtx, o: { x: number; n: number; h: numbe
   const tex = ctx.cached('flare', () => ctx.own(flareTexture()));
   const mat = ctx.own(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(3.2 * k, 3.1 * k, 2.8 * k), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true }));
   const flare = new THREE.Sprite(mat);
-  flare.scale.setScalar(2.6);
+  flare.scale.setScalar(2.2);
   flare.layers.set(RENDER_LAYERS.noReflect);
   group.add(flare);
-  const light = new THREE.PointLight(0xfff4e0, 34 * k, 30, 2);
+  const light = new THREE.PointLight(0xfff4e0, 12 * k, 24, 2);
   group.add(light);
   ctx.lights.push(light);
   ctx.updaters.push((_dt, time) => {
     const s = 1 + 0.06 * Math.sin(time * 1.7 + pos.x) + 0.03 * Math.sin(time * 4.3 + pos.z);
-    flare.scale.setScalar(2.6 * s);
-    light.intensity = 34 * k * (0.94 + 0.06 * s);
+    flare.scale.setScalar(2.2 * s);
+    light.intensity = 12 * k * (0.94 + 0.06 * s);
   });
   return group;
 }
@@ -159,7 +159,7 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
     if (!used.includes(g)) { g.push(); if (o.onWall) g.rotX(-Math.PI / 2); used.push(g); }
     return g;
   };
-  const tissue = G(part.g('eclipseTissue')), vein = G(part.g(ctx.inlay('eclipseVein', { emissiveIntensity: 3.5 * Math.max(0.2, k) })));
+  const tissue = G(part.g('eclipseTissue')), vein = G(part.g(ctx.inlay('eclipseVein', { emissiveIntensity: 2.4 * Math.max(0.2, k) })));
   // tissue mat: an irregular low mound stretched along the flow direction (local −Z)
   const lobes = 22, rim: V3[] = [];
   for (let i = 0; i < lobes; i++) {
@@ -178,7 +178,7 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
     tissue.ball(s, 8, Math.sin(a) * rr, s * 0.35, -Math.cos(a) * rr, s * 0.6);
   }
   // veins creep outward, most of them along the flow direction, branching as they go
-  const veins = 6 + Math.round(R * 1.5);
+  const veins = 5 + Math.round(R);
   for (let i = 0; i < veins; i++) {
     let a = i < veins * 0.6 ? (rnd() - 0.5) * 1.3 : rnd() * Math.PI * 2;
     let x = 0, z = 0;
@@ -189,14 +189,14 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
       path.push([x, 0.016, z]);
       if (s > 1 && rnd() < 0.3) {
         const ba = a + (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5), bl = reach * 0.25;
-        vein.ribbon([[x, 0.016, z], [x + Math.sin(ba) * bl * 0.5, 0.016, z - Math.cos(ba) * bl * 0.5], [x + Math.sin(ba + 0.4) * bl, 0.016, z - Math.cos(ba + 0.4) * bl]], 0.04);
+        vein.ribbon([[x, 0.016, z], [x + Math.sin(ba) * bl * 0.5, 0.016, z - Math.cos(ba) * bl * 0.5], [x + Math.sin(ba + 0.4) * bl, 0.016, z - Math.cos(ba + 0.4) * bl]], 0.03);
       }
     }
-    vein.ribbon(path, 0.045 + rnd() * 0.03);
+    vein.ribbon(path, 0.035 + rnd() * 0.02);
   }
   for (const g of used) g.pop();
   const group = part.done();
-  const light = new THREE.PointLight(PALETTE.eclipseViolet, 7 * k, Math.max(5, R * 3.2), 2);
+  const light = new THREE.PointLight(PALETTE.eclipseViolet, 5 * k, Math.max(5, R * 3), 2);
   light.position.set(0, o.onWall ? 0 : 0.7, o.onWall ? -0.5 : 0);
   group.add(light);
   ctx.lights.push(light);

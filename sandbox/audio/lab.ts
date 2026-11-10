@@ -42,8 +42,13 @@ export const renderLoop = (id: string, extra: Extra = {}, seconds = 4.5): Promis
   });
 };
 
+/**
+ * A score state on its own. This drives the GENERATIVE engine directly (`engine.music`), so what is measured
+ * and calibrated is the state's own definition at its own `db` — not the recorded-score plan layered over
+ * it (src/audio/assets), which may trim or replace it in the game.
+ */
 export const musicOpts = (state: MusicState, seconds: number, intensity: number, extra: Partial<RenderOpts> = {}): RenderOpts => ({
-  seconds, stepped: true, setup: (e) => { e.setIntensity(intensity, true); e.setMusic(state, 0.1); }, ...extra,
+  seconds, stepped: true, setup: (e) => { e.setIntensity(intensity, true); e.music.setState(state, 0.1); }, ...extra,
 });
 
 export const renderMusic = (state: MusicState, seconds: number, intensity: number, extra: Partial<RenderOpts> = {}): Promise<AudioBuffer> =>

@@ -9,18 +9,25 @@
 import { clamp01 } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import type {
-  AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like,
+  AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like, VoiceOpts,
 } from '@/core/api';
 import { AudioEngine } from './engine';
+import { forgetPrerender, prerender } from './prerender';
+import { forgetShared, makeShared } from './synth/shared';
 import { MAX_LOOP_SLOTS, NULL_LOOP } from './voices';
 import type { Volumes } from './mixer';
 import type { StingerKind } from './music/engine';
 import { MUSIC } from './music/defs';
 import { AMBIENCE } from './ambience/defs';
 import { wireEvents } from './wiring';
+import { AssetLibrary } from './assets/library';
+import { scorePlan } from './assets/mapping';
+import { preloadLines } from './assets/voice';
 
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
 
+/** the device sample rate the boot-time preparation bets on (nearly every desktop output runs at it) */
+const PREWARM_RATE = 48000;
 /** gestures that can unlock audio (which of them counts as a user activation differs between browsers) */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown', 'click'] as const;
 
@@ -76,6 +83,15 @@ class DeferredLoop implements LoopHandle {
   }
 }
 
+/** Site base the assets are served under ('/' in dev, './' beside index.html in the build). */
+function baseUrl(): string {
+  try {
+    return (import.meta.env?.BASE_URL as string | undefined) ?? '/';
+  } catch {
+    return '/';
+  }
+}
+
 function contextCtor(): Ctor | null {
   const g = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
   return g.AudioContext ?? g.webkitAudioContext ?? null;
@@ -96,6 +112,12 @@ class AudioSystemImpl implements AudioSystem {
   private gestureOff: (() => void) | null = null;
   /** frames after unlock() during which a still-resuming context may be scheduled on */
   private graceFrames = 0;
+  /** sample rate the boot-time preparation was done for (0 = none) */
+  private prewarmed = 0;
+  /** recorded score + voice-over clips (null: muted, or no WebAudio to play them with) */
+  private readonly library: AssetLibrary | null;
+  /** lends its decoder to the library until the real context exists */
+  private offline: BaseAudioContext | null = null;
 
   // requested state (applied on unlock, and reported by the getters while there is no engine)
   private wantMusic: MusicState = 'silence';
@@ -111,6 +133,12 @@ class AudioSystemImpl implements AudioSystem {
   private readonly lfwd = { x: 0, y: 0, z: -1 };
 
   constructor(private readonly game: Game) {
+    this.library = game.flags.mute || !contextCtor() ? null : new AssetLibrary({ baseUrl: baseUrl(), decoder: () => this.decoder() });
+    // (not in manual/headless mode: nothing is fetched there until something actually asks for a sound)
+    if (this.library && !game.flags.manual) {
+      void this.library.loadMusic();
+      void this.library.loadVoices();
+    }
     this.cleanup.push(...wireEvents(game, this));
     // Browsers only allow audio after a gesture: the first key or pointer press anywhere unlocks, so the title
     // screen already has its music by the time a menu button is chosen. Not every such event is a user
@@ -127,6 +155,8 @@ class AudioSystemImpl implements AudioSystem {
         this.gestureOff = null;
       };
     }
+    // (not in manual/headless mode: there the page is stepped by a test and nothing will be listened to)
+    if (!game.flags.mute && !game.flags.manual) this.prewarm();
     const doc = (globalThis as unknown as { document?: Document }).document;
     if (doc && typeof doc.addEventListener === 'function') {
       const onVisibility = (): void => {
@@ -138,6 +168,42 @@ class AudioSystemImpl implements AudioSystem {
       doc.addEventListener('visibilitychange', onVisibility);
       this.cleanup.push(() => doc.removeEventListener('visibilitychange', onVisibility));
     }
+  }
+
+  /**
+   * Everything that can be prepared without an AudioContext is prepared while the game boots: the noise
+   * buffers and room impulses, and the pre-render of frequent sounds (OfflineAudioContext needs no user
+   * gesture). It is done for the most common device rate; if the device turns out to run at another rate
+   * the work is simply repeated at unlock, as it would have been anyway. With this, the first click after
+   * loading builds a mixer and nothing else — and what it plays is already pre-rendered.
+   */
+  private prewarm(): void {
+    type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
+    const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
+    const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
+    if (!Offline || !contextCtor()) return;
+    try {
+      const shared = makeShared(new Offline(1, 1, PREWARM_RATE));
+      this.prewarmed = PREWARM_RATE;
+      void prerender(PREWARM_RATE, shared.waves);
+    } catch {
+      /* no offline rendering at that rate here: everything happens at unlock instead */
+    }
+  }
+
+  /** A context the asset library can decode with: the live one, or — before the first gesture — an offline one. */
+  private decoder(): BaseAudioContext | null {
+    if (this.ctx) return this.ctx;
+    if (this.offline || this.failed || this.disposed) return this.offline;
+    type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
+    const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
+    const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
+    try {
+      this.offline = Offline ? new Offline(2, 1, PREWARM_RATE) : null;
+    } catch {
+      this.offline = null;
+    }
+    return this.offline;
   }
 
   /**
@@ -190,7 +256,14 @@ class AudioSystemImpl implements AudioSystem {
     try {
       this.graceFrames = 20;
       this.ctx = new AC({ latencyHint: 'interactive' });
-      this.engine = new AudioEngine(this.ctx, { seed: (this.game.flags.seed ?? 1) ^ 0x5a17 });
+      if (this.prewarmed && this.prewarmed !== this.ctx.sampleRate) {
+        // the device runs at another rate: the boot-time buffers are of no use to it
+        forgetPrerender(this.prewarmed);
+        forgetShared(this.prewarmed);
+      }
+      this.prewarmed = 0;
+      this.engine = new AudioEngine(this.ctx, { seed: (this.game.flags.seed ?? 1) ^ 0x5a17, assets: this.library });
+      this.offline = null;
       if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
     } catch (err) {
       console.warn('[audio] could not start WebAudio — continuing silent:', err);
@@ -243,6 +316,11 @@ class AudioSystemImpl implements AudioSystem {
       s = 'silence';
     }
     this.wantMusic = s;
+    // before audio is unlocked: have the state's recording decoded by the time it is (the title theme)
+    if (!this.engine && this.library && !this.game.flags.manual) {
+      const track = scorePlan(s).track;
+      if (track) void this.library.requestTrack(track);
+    }
     this.run('setMusic', (e) => e.setMusic(s, fadeSeconds));
   }
 
@@ -281,6 +359,23 @@ class AudioSystemImpl implements AudioSystem {
 
   speak(speaker: string, channel: 'voice' | 'radio' | 'system' | 'narration' = 'voice'): void {
     this.run('speak', (e) => e.speak(speaker, channel), true);
+  }
+
+  voice(speaker: string, text: string, opts?: VoiceOpts): number {
+    let seconds = 0;
+    this.run('voice', (e) => {
+      seconds = e.voice(String(speaker ?? ''), String(text ?? ''), opts);
+    }, true);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  }
+
+  stopVoice(fadeSeconds?: number): void {
+    this.run('stopVoice', (e) => e.stopVoice(fadeSeconds));
+  }
+
+  preloadVoices(lines: ReadonlyArray<readonly [string, string]>): Promise<void> {
+    if (!this.library || this.disposed) return Promise.resolve();
+    return preloadLines(this.library, lines);
   }
 
   duck(amount: number, seconds: number): void {
@@ -424,6 +519,8 @@ class AudioSystemImpl implements AudioSystem {
       cadenceIrregular: e ? e.music.irregular : (this.wantIrregular ?? 0),
       prerendered: e ? e.samples.bakedCount : 0,
       samples: e ? e.samples.registeredCount : this.pendingSamples.length,
+      recordedTrack: e ? e.score.track : null,
+      voiceLine: e ? e.vo.speaking : null,
     };
   }
 }

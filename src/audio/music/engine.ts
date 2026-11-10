@@ -19,6 +19,21 @@ import type { Family, MusicDef } from './types';
 
 export type { StingerKind } from './stingers';
 
+/**
+ * What plays in place of a state's own definition while something else carries the state — a recorded
+ * track (assets/score.ts), or the same definition at a trimmed level.
+ */
+export interface Cover {
+  /** identity: asking for the cover that is already on changes nothing */
+  key: string;
+  /** the definition that plays instead (usually a few layers of the state's own); null = nothing */
+  def: MusicDef | null;
+  /** key centre of what is heard (MIDI, bass register): stingers are played in it */
+  tonic?: number;
+  /** gain trim on the generative deck, dB */
+  trimDb?: number;
+}
+
 /** Bed gain used until a state has a measured normalisation. */
 const UNCALIBRATED = 0.22;
 const DEFAULT_DB = -20;
@@ -28,6 +43,9 @@ const FALL = 0.3;
 
 export class MusicEngine {
   private current: MusicState = 'silence';
+  /** definition of the current state (its identity even while a cover plays instead of it) */
+  private stateDef: MusicDef | null = null;
+  private cover: Cover | null = null;
   private deck: Deck | null = null;
   private readonly fading: Deck[] = [];
   private readonly shared: DeckShared = { intensity: 0, irregular: 0, resolved: false, externalCadenceAt: -Infinity };
@@ -88,7 +106,7 @@ export class MusicEngine {
   }
 
   private family(): Family {
-    return this.deck?.def.family ?? 'neutral';
+    return this.stateDef?.family ?? 'neutral';
   }
 
   /** Instrumentation for a stinger: the bed's own identity, or the current protagonist's over a shared bed. */
@@ -102,11 +120,18 @@ export class MusicEngine {
     this.lead = lead;
   }
 
-  /** Change state on the next bar line (next beat for very short fades). */
-  setState(state: MusicState, fadeSeconds = 2): void {
-    if (state === this.current) return;
-    const def = this.def(state);
+  /**
+   * Change state on the next bar line (next beat for very short fades). With a `cover`, that plays instead
+   * of the state's own definition — the state, its family and its stingers stay what they are. Calling
+   * again with the same state and another cover swaps what plays, on the same kind of boundary.
+   * Returns the context time the change lands on.
+   */
+  setState(state: MusicState, fadeSeconds = 2, cover: Cover | null = null): number {
     const now = this.ac.currentTime;
+    const same = state === this.current;
+    if (same && (cover?.key ?? '') === (this.cover?.key ?? '')) return now;
+    const stateDef = this.def(state);
+    const def = stateDef && cover ? cover.def : stateDef;
     const fade = clamp(Number.isFinite(fadeSeconds) ? fadeSeconds : 2, 0.05, 30);
     const at = boundaryFor(this.deck, now, fade);
     const wasEclipse = this.family() === 'eclipse';
@@ -121,13 +146,17 @@ export class MusicEngine {
       }
       this.deck = null;
     }
-    this.current = def ? state : 'silence';
-    if (!def) return;
+    this.current = stateDef ? state : 'silence';
+    this.stateDef = stateDef;
+    this.cover = stateDef ? cover : null;
+    if (!stateDef) return at;
 
     // a fresh entrance into Eclipse territory starts with the cadence locked
-    if (def.family === 'eclipse' && !wasEclipse) this.shared.irregular = 0;
-    const gain = (this.norm[state] ?? UNCALIBRATED) * dbToGain(def.db ?? DEFAULT_DB);
+    if (!same && stateDef.family === 'eclipse' && !wasEclipse) this.shared.irregular = 0;
+    if (!def) return at;
+    const gain = (this.norm[state] ?? UNCALIBRATED) * dbToGain((stateDef.db ?? DEFAULT_DB) + (cover?.trimDb ?? 0));
     this.deck = new Deck(this.ac, this.res, this.mixer, this.samples, def, gain, at, (this.seed + 7919 * ++this.serial) >>> 0, this.shared, state);
+    return at;
   }
 
   /** Target intensity 0..1; the audible value slews toward it. */
@@ -186,7 +215,7 @@ export class MusicEngine {
     out.connect(this.stingerBus);
     const k = new Kit(this.ac, this.res, out, now + 0.01, 1, this.rnd, false);
     const family = kind === 'encounterStart' || kind === 'encounterClear' ? this.stingerFamily() : this.family();
-    playStinger(kind, k, this.deck?.def.tonic ?? 38, family, (inst, at, vel, tune) => strike(this.samples, this.rnd, inst, k, at, vel, tune));
+    playStinger(kind, k, this.cover?.tonic ?? this.stateDef?.tonic ?? 38, family, (inst, at, vel, tune) => strike(this.samples, this.rnd, inst, k, at, vel, tune));
     k.seal();
     this.stingers.push({ out, end: now + k.end + 0.3 });
   }

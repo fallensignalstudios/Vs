@@ -11,11 +11,11 @@ import type { PropTable } from './types';
 
 /** Lectern-style console head: a slanted slab with a lit reading surface, front edge at −Z. */
 function lectern(p: Part, w: number, x = 0, y = 0.95, z = 0, ry = 0): void {
-  const wg = p.g('whiteGold').at(x, y, z, ry), trim = p.g('goldTrim').at(x, y, z, ry), lit = p.g('whiteLight').at(x, y, z, ry);
+  const wg = p.g('whiteGold').at(x, y, z, ry), trim = p.g('goldTrim').at(x, y, z, ry), lit = p.g(p.ctx.seam()).at(x, y, z, ry);
   wg.prismX([[-0.36, 0], [0.3, 0], [0.3, 0.3], [-0.36, 0.1]], w, 0);
-  trim.prismX([[-0.375, 0.07], [-0.36, 0.1], [0.3, 0.3], [0.315, 0.3], [0.315, 0.27], [-0.375, 0.04]], w + 0.04, 0, false);
+  trim.prismX([[-0.375, 0.07], [-0.36, 0.1], [0.3, 0.3], [0.315, 0.3], [0.315, 0.27], [-0.375, 0.04]], w + 0.04, 0);
   const tilt = Math.atan2(0.2, 0.66);
-  lit.push().move(0, 0.203, -0.03).rotX(tilt).box(w - 0.16, 0.012, 0.5, 0, 0, 0).pop();
+  lit.push().move(0, 0.203, -0.03).rotX(-tilt).box(w - 0.22, 0.012, 0.42, 0, 0, 0).pop();
   wg.pop(); trim.pop(); lit.pop();
 }
 
@@ -25,7 +25,7 @@ export const ANCIENT_PROPS: PropTable = {
       const wg = p.g('whiteGold'), trim = p.g('goldTrim');
       wg.tbox(0.95, 0.18, 0.72, 0.04).taperOn(0.62, 0.46, 0.42, 0.32, 0.77, 0, 0.18, 0.02, true);
       trim.box(0.66, 0.035, 0.5, 0, 0.2, 0.02).box(0.46, 0.035, 0.36, 0, 0.92, 0.02);
-      for (const s of [-1, 1]) p.g(p.ctx.inlay('goldChannel')).ribbon([[s * 0.292, 0.3, 0.02], [s * 0.222, 0.86, 0.02]], 0.05, [s, 0.12, 0]);
+      for (const s of [-1, 1]) p.g(p.ctx.channel()).ribbon([[s * 0.292, 0.3, 0.02], [s * 0.222, 0.86, 0.02]], 0.05, [s, 0.12, 0]);
       lectern(p, 0.92);
     },
     colliders: () => [{ box: [0.95, 1.25, 0.72], sight: false }],
@@ -35,7 +35,7 @@ export const ANCIENT_PROPS: PropTable = {
     build(p) {
       p.g('whiteGold').lathe([[0.72, 0], [0.72, 0.14], [0.6, 0.2], [0.5, 0.28], [0.44, 0.86], [0.56, 0.94], [0.56, 1.04], [0, 1.04]], 16);
       p.g('goldTrim').band(0.515, 0.26, 0.5, 0.32, 16).band(0.575, 0.93, 0.575, 0.97, 16);
-      p.g(p.ctx.inlay('goldChannel')).cap(0.36, 0.42, 1.046, 20);
+      p.g(p.ctx.channel()).cap(0.36, 0.42, 1.046, 20);
       p.g(p.ctx.inlay('goldDark')).cap(0, 0.3, 1.045, 16);
     },
     colliders: () => [{ cyl: [0.6, 1.04], sight: false }],
@@ -49,7 +49,7 @@ export const ANCIENT_PROPS: PropTable = {
       for (let i = 0; i < 4; i++) {
         const a = (i * Math.PI) / 2;
         p.g('goldTrim').boxOn(0.03, 0.34, 0.03, Math.sin(a + Math.PI / 4) * 0.215, 2.04, -Math.cos(a + Math.PI / 4) * 0.215);
-        p.g(p.ctx.inlay('goldChannel')).ribbon([[bx(a) * 0.235, 0.5, bz(a) * 0.235], [bx(a) * 0.178, 1.9, bz(a) * 0.178]], 0.045, [bx(a), 0.04, bz(a)]);
+        p.g(p.ctx.channel()).ribbon([[bx(a) * 0.235, 0.5, bz(a) * 0.235], [bx(a) * 0.178, 1.9, bz(a) * 0.178]], 0.045, [bx(a), 0.04, bz(a)]);
       }
     },
     colliders: () => [{ box: [0.6, 2.5, 0.6], sight: false }],
@@ -74,7 +74,7 @@ export const ANCIENT_PROPS: PropTable = {
         const a = (i * Math.PI) / 2;
         trim.push().rotY(-a).move(0, 0.38, -0.4).rotX(-Math.PI / 2).cyl(0.09, 0.09, 0.26, 8, 0, 0, 0).cyl(0.12, 0.12, 0.05, 8, 0, 0.2, 0).pop();
       }
-      const ch = p.g(p.ctx.inlay('goldChannel'));
+      const ch = p.g(p.ctx.channel());
       ch.ribbon([[-0.3, 0.666, 0], [0.3, 0.666, 0]], 0.05).ribbon([[0, 0.666, -0.3], [0, 0.666, 0.3]], 0.05);
       trim.boxOn(0.84, 0.035, 0.84, 0, 0.14, 0);
     },
@@ -84,12 +84,12 @@ export const ANCIENT_PROPS: PropTable = {
   // ---- story pieces -----------------------------------------------------------------------------------
   fireControlStation: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.inlay('goldChannel'));
+      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
       // dais with an inlaid border
       wg.tbox(3.2, 0.16, 2.2, 0.04);
       ch.ribbon([[-1.4, 0.167, -0.9], [1.4, 0.167, -0.9], [1.4, 0.167, 0.9], [-1.4, 0.167, 0.9]], 0.05, [0, 1, 0], true);
       // three-part console: centre desk and two wings turned toward the operator (who stands at +Z, facing −Z)
-      for (const [x, ry, w] of [[0, 0, 1.2], [-1.05, -0.45, 0.95], [1.05, 0.45, 0.95]] as const) {
+      for (const [x, ry, w] of [[0, 0, 1.2], [-1.05, 0.45, 0.95], [1.05, -0.45, 0.95]] as const) {
         const z = x === 0 ? -0.5 : -0.3;
         wg.push().move(x, 0.16, z).rotY(ry).taperOn(w * 0.8, 0.5, w * 0.7, 0.36, 0.8, 0, 0, 0, true).pop();
         trim.push().move(x, 0.16, z).rotY(ry).box(w * 0.72, 0.035, 0.38, 0, 0.78, 0).pop();
@@ -121,13 +121,14 @@ export const ANCIENT_PROPS: PropTable = {
       const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
       wg.tbox(2.3, 0.2, 0.7, 0.04).cboxOn(2.1, 2.0, 0.4, 0.05, 0, 0.2, 0.05);
       trim.box(2.14, 0.04, 0.44, 0, 0.3, 0.05).box(2.14, 0.04, 0.44, 0, 2.1, 0.05);
-      p.g(p.ctx.inlay('goldChannel')).ribbon([[0, 0.5, -0.153], [0, 2.0, -0.153]], 0.05, [0, 0, -1]);
-      // two bays, one per choice. Shape carries the meaning: horizontal bars (stretchers) | upright bars (walkers)
+      p.g(p.ctx.channel()).ribbon([[0, 0.5, -0.153], [0, 2.0, -0.153]], 0.05, [0, 0, -1]);
+      // two bays, one per choice. Shape carries the meaning: horizontal bars (stretchers, the +X bay — west when the
+      // panel faces south) | upright bars (walkers, the −X bay)
       for (const s of [-1, 1]) {
         const cx = s * 0.55;
         dk.box(0.86, 1.3, 0.04, cx, 1.2, -0.155);
         for (let i = 0; i < 3; i++) {
-          if (s < 0) trim.box(0.5, 0.05, 0.03, cx, 1.58 + i * 0.13, -0.185);
+          if (s > 0) trim.box(0.5, 0.05, 0.03, cx, 1.58 + i * 0.13, -0.185);
           else trim.box(0.05, 0.36, 0.03, cx - 0.16 + i * 0.16, 1.7, -0.185);
         }
         p.g('whiteLight').box(0.7, 0.05, 0.02, cx, 1.98, -0.16);
@@ -143,7 +144,7 @@ export const ANCIENT_PROPS: PropTable = {
   },
   controlRing: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), ch = p.g(p.ctx.inlay('goldChannel'));
+      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), ch = p.g(p.ctx.channel());
       const A0 = (30 * Math.PI) / 180, A1 = (330 * Math.PI) / 180; // open toward the south (+Z) so one can step in
       const south = Math.PI;
       const a0 = south + A0, a1 = south + A1;

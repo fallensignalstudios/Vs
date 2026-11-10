@@ -41,6 +41,11 @@ export interface HitInfo {
    */
   weakPointScale?: number;
   /**
+   * ADDED. The hit never counts as a weak-point hit, wherever `point` lies (area effects, strikes that carry
+   * their own bonus rule such as Dispatch).
+   */
+  ignoreWeakPoints?: boolean;
+  /**
    * ADDED. Skip the resolver's default presentation (impact VFX / SFX, hit-stop, shake, hit reaction) because the
    * caller stages its own (Thermal Fracture, scripted beats). State changes and events still happen.
    */
@@ -174,8 +179,9 @@ export interface Actor {
   /** convenience */
   readonly staggered: boolean;
   readonly frozen: boolean;
-  /** chest/aim point in world space */
+  /** chest/aim point in world space (the body centre for flying actors) */
   aimPoint(out: THREE.Vector3): THREE.Vector3;
+  /** planar (XZ) distance between positions — heights are ignored */
   distanceTo(other: Actor | Vec3Like): number;
   /** face toward a world point, optionally limited by turn rate (rad/s * dt) */
   face(target: Vec3Like, maxTurn?: number): void;
@@ -281,8 +287,8 @@ export interface ActorRayHit {
  *  - `applyHit` ORDER: dead / untargetable / invulnerable / protectedNpc / i-frames → `immune`; guard (frontal
  *    `guardArc`, not `unblockable`): perfect → no damage and a melee attacker is staggered, else blocked (hp
  *    damage × `guardChip`, poise × 0.6, guard break at 0 poise) unless `heavy` and `guardStopsHeavy === false`;
- *    weak point (forced, or `point` inside an exposed weak-point sphere — every weak point counts as exposed
- *    while the target is frozen); flank; frozen ×1.5; `damageTakenScale` / `poiseTakenScale`; difficulty when
+ *    weak point (forced, or `point` inside an exposed weak-point sphere; not with `ignoreWeakPoints`); flank
+ *    (`flankMultiplier`); frozen ×1.5; `damageTakenScale` / `poiseTakenScale`; difficulty when
  *    the target is the player; hp, poise → stagger, freeze, knockback, death. Then presentation (flash, hit
  *    reaction, impact VFX / SFX by material, hit-stop and shake when the player is involved) and `actor:hit`.
  *    The controller's `onHit` is called for every hit that was not `immune`.
@@ -291,8 +297,10 @@ export interface ActorManager {
   readonly all: readonly Actor[];
   spawn(desc: ActorDesc): Actor;
   /**
-   * remove immediately, or after a dissolve. `keepVisual` (ADDED): take the visual's root out of the scene but do
-   * not dispose it — the caller keeps the figure for reuse.
+   * remove immediately, or after a dissolve (the actor stops being alive / targetable at once and is removed
+   * when the dissolve ends). No `actor:died` is emitted either way — use kill() for a death.
+   * `keepVisual` (ADDED): take the visual's root out of the scene but do not dispose it — the caller keeps the
+   * figure for reuse.
    */
   despawn(actor: Actor, opts?: { dissolve?: boolean; seconds?: number; keepVisual?: boolean }): void;
   /** kill through the normal death path (events, dissolve) */
@@ -334,8 +342,8 @@ export interface ActorManager {
   /** ADDED. true when `dir` (the hit's travel direction) strikes `target` from behind (> 100° off its facing). */
   isFlank(target: Actor, dir: Vec3Like): boolean;
   /**
-   * ADDED. World position of an actor's exposed weak point (the first exposed one, or `id`), or null. Weak points
-   * also count as exposed while the actor is frozen. `out` is filled and returned.
+   * ADDED. World position of an actor's exposed weak point (the first exposed one, or the exposed one called
+   * `id`), or null when none is exposed. `out` is filled and returned.
    */
   weakPointPosition(actor: Actor, out: THREE.Vector3, id?: string): THREE.Vector3 | null;
   /** ADDED. Is team `a` hostile to team `b` (the matrix `areHostile` reads)? */
@@ -390,8 +398,33 @@ export interface ContextAction {
   onExpire?(): void;
 }
 
+/**
+ * The protagonist. NOTES FOR AI / ZONE AUTHORS (implementation: src/combat/player/*, numbers: TUNING):
+ *  - HITTING THE PLAYER: always through `actors.applyHit(game.player.actor, hit)` with a real `attacker`, a unit
+ *    `dir` (the way the blow / bolt travels) and `kind`. That is what makes the kit work:
+ *      · Tarrik holds guard: frontal 120° blocks hp damage (poise ×0.6; guard break at 0). A guard PRESS within
+ *        0.22 s (× difficulty window) before a hit is a perfect guard — a melee attacker is staggered 1.6 s and a
+ *        0.6 s counter window opens (attack = guaranteed 42 dmg / 90 poise riposte, unblockable).
+ *      · Selene taps guard: a 0.5 s deflect stance over 150°. Every `kind: 'ranged'` hit in it is returned to
+ *        `hit.attacker` as a ranged hit for 2× its damage (so give projectiles travel time and one applyHit per
+ *        bolt); melee is parried only inside the timed window; `heavy` hits go straight through the stance.
+ *      · Dodge: 0.30 s of i-frames (`immune`). Unblockable attacks (`unblockable: true`) must be dodged.
+ *    Telegraph against these windows: the player needs ≥ 0.45 s of warning to answer.
+ *  - WHAT THE PLAYER MAY ATTACK: living targetable actors that are hostile to team 'player', plus any actor
+ *    tagged 'device' or 'objective' whatever its team. Never `protectedNpc`, never team 'player'.
+ *    Melee and shots are stopped by solids (`physics.lineOfFire`); blades and Axiom shots test
+ *    `ai.links.hitTest` and call `ai.links.sever(link, player.actor)`.
+ *  - ECHO is paid by the brief's rules only (see addEcho). The controller pays hits, kills (`actor:died` with
+ *    killer = the player's actor), blocks, counters, deflects and `device:disabled` (by = the player's actor)
+ *    itself; the link system pays severs with `addEcho(0, 'sever')`.
+ *  - `enabled = false` stops input but not the body: an action in progress finishes, scripted clips play
+ *    (`playScripted`), context actions still confirm, and the actor can still be hit — make it `invulnerable`
+ *    or call a ceasefire for cinematics.
+ *  - Each protagonist keeps their own Echo and ammunition across handoffs; figures are cached, so switching
+ *    back and forth builds nothing.
+ */
 export interface PlayerController {
-  /** The current protagonist's actor (always exists after setProtagonist). */
+  /** The current protagonist's actor (always exists after setProtagonist; a dead placeholder before it). */
   readonly actor: Actor;
   readonly protagonist: ProtagonistId;
   /** Spawn/switch the controlled protagonist at a position. Applies the authored kit. */
@@ -451,6 +484,13 @@ export interface PlayerController {
   readonly scanning: boolean;
   /** ADDED. true while movement is locked by setMovementLocked(true). */
   readonly movementLocked: boolean;
+  /**
+   * ADDED. Bot / script helper: turn the follow camera so that the AIM RAY (screen centre) passes through a
+   * world point. `camera.aimAt()` turns the orbit toward the point as seen from the protagonist, which leaves
+   * the reticle off target by the shoulder offset; this corrects that parallax. It converges within two or
+   * three frames — call it every tick while lining up a shot or a throw. No-op while not in follow mode.
+   */
+  aimAt(point: Vec3Like): void;
 }
 
 /** ADDED. See PlayerController.action. */

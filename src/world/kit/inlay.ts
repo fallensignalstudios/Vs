@@ -12,7 +12,7 @@ export type InlayStyle = NonNullable<FloorOpts['inlay']> | 'border';
 
 /** height of inlay ribbons above the surface they lie on */
 const LIFT = 0.006;
-const CHANNEL_W = 0.055;
+const CHANNEL_W = 0.05;
 const TRIM_W = 0.045;
 
 function ring(r: number, seg: number, y: number): V3[] {
@@ -31,7 +31,7 @@ function cutRect(hw: number, hd: number, cut: number, y: number): V3[] {
 }
 
 function radial(part: Part, R: number, y: number, crown: boolean): void {
-  const ch = part.g(part.ctx.inlay('goldChannel')), tr = part.g(part.ctx.inlay('goldTrim'));
+  const ch = part.g(part.ctx.channel()), tr = part.g(part.ctx.inlay('goldTrim'));
   const seg = Math.max(32, Math.min(96, Math.round(R * 6)));
   if (crown) {
     // Crownmark: three rings, a five-pointed star, five depressions between the rings.
@@ -88,7 +88,7 @@ export function drawInlay(part: Part, style: InlayStyle, hw: number, hd: number,
   if (radius !== null) {
     if (style === 'border' || style === 'channels' || style === 'grid') {
       part.g(ctx.inlay('goldTrim')).ribbon(ring(Math.max(0.3, radius - 0.4), Math.max(32, Math.round(radius * 6)), y), TRIM_W, [0, 1, 0], true);
-      if (style !== 'border') part.g(ctx.inlay('goldChannel')).ribbon(ring(radius * 0.6, Math.max(24, Math.round(radius * 4)), y), CHANNEL_W, [0, 1, 0], true);
+      if (style !== 'border') part.g(ctx.channel()).ribbon(ring(radius * 0.6, Math.max(24, Math.round(radius * 4)), y), CHANNEL_W, [0, 1, 0], true);
       return;
     }
     radial(part, Math.max(0.5, radius - 0.5), y, style === 'crownmark');
@@ -106,11 +106,11 @@ export function drawInlay(part: Part, style: InlayStyle, hw: number, hd: number,
     const step = 4, dk = part.g(ctx.inlay('goldDark'));
     for (let x = step / 2; x < hw - inset - 0.2; x += step) for (const s of [-1, 1]) dk.ribbon([[s * x, y, -hd + inset], [s * x, y, hd - inset]], 0.04);
     for (let z = step / 2; z < hd - inset - 0.2; z += step) for (const s of [-1, 1]) dk.ribbon([[-hw + inset, y, s * z], [hw - inset, y, s * z]], 0.04);
-    part.g(ctx.inlay('goldChannel')).ribbon(cutRect(hw - inset - 0.5, hd - inset - 0.5, 0.5, y), CHANNEL_W, [0, 1, 0], true);
+    part.g(ctx.channel()).ribbon(cutRect(hw - inset - 0.5, hd - inset - 0.5, 0.5, y), CHANNEL_W, [0, 1, 0], true);
     return;
   }
   // 'channels': mirrored angular lanes along the long axis, with short spurs ending in nodes
-  const ch = part.g(ctx.inlay('goldChannel'));
+  const ch = part.g(ctx.channel());
   const alongX = hw > hd, hl = alongX ? hw : hd, hs = alongX ? hd : hw;
   const swap = (p: V3): V3 => (alongX ? [p[2], p[1], p[0]] : p);
   const lanes = Math.max(1, Math.min(3, Math.round(hs / 4)));

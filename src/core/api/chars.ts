@@ -177,9 +177,23 @@ export interface CharacterCreateOpts {
 }
 
 export interface CharacterFactory {
+  /**
+   * Humanoid archetypes that have a generated body in public/models (the five leads, soldiers, Enforcer,
+   * Linkbound, survivors) return it, animated by the procedural moveset: same actions, timings, events and
+   * sockets as the procedural figure (see HumanoidVisual). When the model files are not loaded yet the visual
+   * starts as the procedural figure and switches by itself on a later update(); when they cannot be loaded it
+   * stays procedural. `height` follows the body that is drawn. Call preload() while a zone loads to avoid the
+   * switch being seen.
+   */
   create(archetype: Archetype, opts?: CharacterCreateOpts): CharacterVisual;
   /** Pre-build geometry/material caches for a list of archetypes during loading. */
   warm(archetypes: Archetype[]): void;
+  /**
+   * Fetch the generated bodies and props (public/models, see its manifest.json) these archetypes use, so the
+   * next create() returns them at once. Always resolves — a missing file is logged once and that archetype
+   * keeps its procedural figure. Safe to call repeatedly; already-loaded models cost nothing.
+   */
+  preload(archetypes: Archetype[]): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------------------------

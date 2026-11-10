@@ -182,7 +182,8 @@ export function pulseNote(voice: PulseVoice, k: Kit, at: number, f: number, vel:
       const d = Math.max(0.35, len * 2.5);
       const dst = k.pan(pan);
       k.ens('glassy', f, { a: 0.003, d, g: vel * 0.6 }, { at, to: dst });
-      k.osc('sine', f * 2.32, { a: 0.003, d: d * 0.5, g: vel * 0.15 }, { at, to: dst });
+      // the inharmonic partial rings on the accents only: an ostinato does not need it on every 16th
+      if (vel > 0.85) k.osc('sine', f * 2.32, { a: 0.003, d: d * 0.5, g: vel * 0.15 }, { at, to: dst });
     }
   }
 }

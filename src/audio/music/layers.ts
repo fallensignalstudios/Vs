@@ -30,6 +30,11 @@ export interface DeckEnv {
   irregular: number;
   /** context time of the last cadence beat supplied by gameplay (AudioSystem.cadenceTick); −∞ if never */
   externalCadenceAt: number;
+  /**
+   * Slow modulation shared by the whole deck: one oscillator per rate, however many layers drift at it
+   * (each use has its own depth). Lives and dies with the deck.
+   */
+  lfo(rate: number, depth: number, target: AudioParam): void;
 }
 
 /** The four places a layer can send to (all faded together by the deck). */
@@ -73,9 +78,12 @@ export function rootAndPartner(tonic: number, c: Chord, low: number): [number, n
   return [mtof(r), mtof(partner)];
 }
 
-/** Whether a layer is struck (→ uncompressed drum bus) or sustained (→ tonal bus). */
+/**
+ * Whether a layer is struck (→ drum bus: uncompressed, driven into a soft clipper) or sustained (→ tonal bus).
+ * A bass ostinato is pitched low-frequency sustain, not a stroke: saturating it would only add mud.
+ */
 export const isStruck = (def: Layer): boolean =>
-  def.kind === 'perc' || def.kind === 'pulse' || def.kind === 'cadence' || (def.kind === 'brass' && !!def.pattern);
+  def.kind === 'perc' || (def.kind === 'pulse' && def.voice !== 'bass') || def.kind === 'cadence' || (def.kind === 'brass' && !!def.pattern);
 
 /**
  * A chord's worth of sustained notes shares one gain, so that when the harmony is re-voiced early (the
@@ -125,7 +133,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
       lp.connect(level);
       const k = kit(lp, true);
       const swell = k.gain(0.85, lp);
-      k.lfo(0.07, 0.15, swell.gain, { at: start });
+      env.lfo(0.083, 0.15, swell.gain);
       const f0 = subHz(env.tonic);
       // levels are deliberately modest: a drone that dominates the meter leaves no room for the score
       const o1 = k.osc('sine', f0, { a: 1.6, h: Infinity, d: 1, g: 0.2 }, { at: start, to: swell });
@@ -151,7 +159,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
       filt.frequency.value = lerp(bright[0], bright[1], env.intensity);
       filt.connect(level);
       const ks = kit(filt, true);
-      if (def.voice !== 'air') ks.lfo(0.083, bright[0] * 0.22, filt.frequency, { at: start });
+      if (def.voice !== 'air') env.lfo(0.083, bright[0] * 0.22, filt.frequency);
       // the choir sings through a slowly shifting vowel
       const input: AudioNode = def.voice === 'choir' ? ks.bank([560, 1020, 2350], 3.2, { to: filt, gains: [1, 0.55, 0.22], g: 2.2 }) : filt;
       const k = kit(input);
@@ -187,7 +195,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
       gate.connect(depth);
       depth.connect(level);
       const ks = kit(filt, true);
-      ks.lfo(0.11, bright[0] * 0.25, filt.frequency, { at: start });
+      env.lfo(0.11, bright[0] * 0.25, filt.frequency);
       const k = kit(filt);
       // the bow's bite lands after the filter (it is noise from the string's surface, not its pitch)
       const bite = kit(level);
@@ -208,7 +216,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
           pat = tier > 0 ? gates[tier - 1] : null;
           const d = pat ? 1 : 0;
           depth.gain.setTargetAtTime(d * 1.5, t, 0.08);
-          sustain.gain.setTargetAtTime(1 - d * 0.8, t, 0.08);
+          sustain.gain.setTargetAtTime(1 - d * 0.65, t, 0.08);
           filt.frequency.setTargetAtTime(lerp(bright[0], bright[1], env.intensity), t, 0.5);
         },
         step: (step, t) => {
@@ -217,7 +225,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
           if (v <= 0) return;
           gate.gain.setTargetAtTime(v, t, 0.005);
           gate.gain.setTargetAtTime(0.04, t + 0.035, env.stepDur * 0.6);
-          strike(env.samples, rnd, 'bow', bite, t, v * 0.14);
+          strike(env.samples, rnd, 'bow', bite, t, v * 0.04);
         },
         dispose: (at) => ks.stopAll(at),
       };

@@ -30,7 +30,7 @@ export const TARRIK_SFX: RecipeTable = {
     k.noise('crackle', { a: 0.004, d: 0.08, g: 0.5 }, { at: 0.01, bp: 1100, q: 1, rate: 0.5 });
   }),
   bladeHitMetal: sfx(-7, { gap: 0.06, max: 3, prio: 2, send: 0.4, tail: 0.3, bake: 3 }, (k) => {
-    crack(k, 1, 0, 2400, 0.01);
+    crack(k, 0.55, 0, 2400, 0.012);
     thump(k, 125, 60, 0.12, 0.8);
     struck(k, 'bar', k.rr(480, 560), 0.55, 0.55);
     struck(k, 'blade', k.rr(1250, 1500), 0.3, 0.3);
@@ -85,7 +85,7 @@ export const TARRIK_SFX: RecipeTable = {
   }),
   cinderlineShot: sfx(-6, { gap: 0.12, max: 2, prio: 2, send: 0.45, ref: 6, tail: 0.5, bake: 2 }, (k) => {
     // heavy sidearm: a bark with a chest thump, then heat hissing off the barrel
-    crack(k, 1, 0, 1100, 0.014);
+    crack(k, 0.6, 0, 1100, 0.016);
     thump(k, 180, 62, 0.13, 0.6);
     k.osc('square', [230, 82, 0.06], { a: 0.001, d: 0.09, g: 0.6 }, { to: k.shaper('hard', 2.5), lp: 2800 });
     k.noise('white', { a: 0.001, d: 0.1, g: 1.5 }, { bp: [2400, 800], q: 0.8 });
