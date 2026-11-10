@@ -137,7 +137,7 @@ export interface CeilingOpts extends RectOpts {
    * evenly to the length.
    */
   bayPhase?: number;
-  /** vaultClosed: brightness of the seam haze (default 1.8; above 1 it blooms) */
+  /** vaultClosed: brightness of the seam haze (default 3.2; above 1 it blooms) */
   glow?: number;
   /** vaultClosed: haze / light-sheet colour (default 0xffe6bf, warm white) */
   hazeColor?: number;

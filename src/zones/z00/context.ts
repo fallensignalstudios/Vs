@@ -27,13 +27,15 @@ const VOICE: SayOpts = { offscreen: true, channel: 'radio' };
 /** sky state the context ends on — and the landing starts in (also applied by the landing's `enter`) */
 export const LANDING_SKY = { battle: 0.38, wound: 0.3 } as const;
 
-/** where the camera looks along the Wound's bearing, `up` metres above the horizon line per 100 m out */
-function woundLook(z: ZoneRuntime, from: THREE.Vector3, up: number): THREE.Vector3 {
+/**
+ * A look target from `from` toward the Wound's bearing turned `azDeg` east (clockwise from above) and raised to
+ * `elevDeg` above the horizon — shots are composed around the Wound, which sits ~21° up in the north.
+ */
+function skyLook(z: ZoneRuntime, from: THREE.Vector3, azDeg: number, elevDeg: number): THREE.Vector3 {
   const d = z.game.sky.woundDir;
-  const flat = new THREE.Vector3(d.x, 0, d.z);
-  if (flat.lengthSq() < 1e-4) flat.set(0, 0, -1);
-  flat.normalize();
-  return from.clone().addScaledVector(flat, 100).add(new THREE.Vector3(0, up + d.y * 100, 0));
+  const base = Math.atan2(d.x, -d.z) + THREE.MathUtils.degToRad(azDeg);
+  const el = THREE.MathUtils.degToRad(elevDeg);
+  return from.clone().add(new THREE.Vector3(Math.sin(base) * Math.cos(el), Math.sin(el), -Math.cos(base) * Math.cos(el)).multiplyScalar(100));
 }
 
 /**
@@ -59,7 +61,7 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
 
     const steps: Step[] = [
       {
-        text: 'Aurelion does not look like a battlefield.\nIt looks like the aftermath of an argument between gods.',
+        text: 'Aurelion does not look like a battlefield. It looks like the aftermath of an argument between gods.',
         hold: 8.6,
         begin: () => ui.fade(0, 4.2),
       },
@@ -68,10 +70,10 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         text: 'REMOTE ANCHORS: 4 / 4 RELEASE-READY\nTERMINAL ANCHOR: SEALED\nPRIMARY CONTAINMENT: CLOSED\nBOUNDARY PRESSURE: RISING',
         hold: 6.2,
         begin: () => {
-          // S2 — at the rubble edge, up at the sky: red remnant, the Wound, the white remnant
-          const p = z.P(rib[0] - 0.5, rib[1] - 3.4, 1.3);
-          c.cut({ pos: p, look: woundLook(z, p, 4), fov: 54 });
-          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0.4, 0.3, -0.6)), look: woundLook(z, p, 1), fov: 50 }, 11, 'inOut');
+          // S2 — at the rubble edge, up at the sky: red remnant left, white remnant right, the Wound low between
+          const p = z.P(rib[0], rib[1] - 1.7, 1.0);
+          c.cut({ pos: p, look: skyLook(z, p, 0, 31), fov: 52 });
+          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0, 0.35, 0)), look: skyLook(z, p, 0, 29), fov: 48 }, 11, 'inOut');
         },
       },
       { text: 'Four lights. One dark.', hold: 4.2 },
@@ -83,8 +85,9 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         at: 1.4,
         lines: [['Caelus', 'Then arrive first.']],
         begin: () => {
-          c.cut({ pos: z.P(wreck[0] - 12, wreck[1] - 11, 3.4), look: z.P(wreck[0] - 1, wreck[1], 3.4), fov: 42 });
-          c.moveAsync({ pos: z.P(wreck[0] - 9.5, wreck[1] - 13, 2.8), look: z.P(wreck[0] + 1, wreck[1], 3.2), fov: 40 }, 16, 'inOut');
+          // S3 — the Dominion wreck from above its tail: the hull still burning in amber
+          c.cut({ pos: z.P(wreck[0] + 13, wreck[1] - 12, 7.2), look: z.P(wreck[0] - 1, wreck[1], 1.2), fov: 42 });
+          c.moveAsync({ pos: z.P(wreck[0] + 10, wreck[1] - 14, 6.2), look: z.P(wreck[0] - 2, wreck[1] + 1, 1.4), fov: 40 }, 16, 'inOut');
         },
       },
       {
@@ -110,11 +113,11 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
           ['Tharne', 'Seven-point-three kilometers at Mapping Group Three.'],
         ],
         begin: () => {
-          // S4 — low at the breach, the fleets' fire across the sky beyond the fractured rib
+          // S4 — from the shelter's side of the breach, up past the fractured rib at the fleets' fire
           sky.setBattleIntensity(0.85);
-          const p = z.P(rib[0] + 4, rib[1] - 2.6, 0.9);
-          c.cut({ pos: p, look: woundLook(z, p, 12).add(new THREE.Vector3(22, 0, 0)), fov: 56 });
-          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(-1.4, 0.2, 0)), look: woundLook(z, p, 10).add(new THREE.Vector3(8, 0, 0)), fov: 52 }, 18, 'inOut');
+          const p = z.P(rib[0] - 1.5, rib[1] - 1.9, 1.0);
+          c.cut({ pos: p, look: skyLook(z, p, 30, 25), fov: 54 });
+          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0.5, 0.25, 0)), look: skyLook(z, p, 24, 24), fov: 50 }, 18, 'inOut');
         },
       },
       {
@@ -131,10 +134,10 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         begin: () => {
           sky.setBattleIntensity(0.06);
           sky.setWoundActivity(0.95);
-          const p0 = z.P(rib[0], rib[1] - 13, 2.0);
-          const p1 = z.P(rib[0], rib[1] - 7.5, 2.5);
-          c.cut({ pos: p0, look: woundLook(z, p0, 0), fov: 44 });
-          c.moveAsync({ pos: p1, look: woundLook(z, p1, 0), fov: 36 }, 14, 'inOut');
+          // the long lens on the Wound, in the upper third, the nave's arches around it
+          const p0 = z.P(rib[0], rib[1] - 2.2, 1.1);
+          c.cut({ pos: p0, look: skyLook(z, p0, 0, 13), fov: 31 });
+          c.moveAsync({ pos: p0.clone().add(new THREE.Vector3(0, 0.15, -0.9)), look: skyLook(z, p0, 0, 14.5), fov: 23 }, 14, 'inOut');
         },
       },
       {

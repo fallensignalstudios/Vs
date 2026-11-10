@@ -202,7 +202,7 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('lyessaStart', 2.4, 1.9, 0, FACE.east);
   b.marker('varo', 5.2, 1.0, 0, FACE.north);
   b.marker('lyessaKneel', 4.35, 1.45, 0, FACE.east);
-  b.marker('tarrikStand', 6.35, 2.05, 0, 245);
+  b.marker('tarrikStand', 5.95, 1.65, 0, 235);
   b.marker('tarrikKneel', 6.0, 1.4, 0, FACE.west);
   b.marker('limb', 4.6, 0.62, 0, 20);
   b.marker('soldierA', 7.6, 3.9, 0, 230);
@@ -280,8 +280,11 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
 
 /** `stabilize`: the Varo scene (./z02/varo.ts) */
 function* stabilize(z: ZoneRuntime): Routine {
+  yield; // the loader shows the zone card after the first tick: the scene opens on the gauntlet instead
+  z.game.ui.zoneCard('');
   yield* varoScene(z);
   S.carry = true;
+  z.titleCard();
 }
 
 /** `bend`: walk the L. The partition, Cross on the comm (non-blocking), the optional casualty log. */

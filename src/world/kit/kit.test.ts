@@ -295,6 +295,46 @@ describe('ZoneBuilder content', () => {
     expect(merged.children.every((m) => !m.matrixAutoUpdate)).toBe(true);
   });
 
+  it("ceiling 'vaultClosed' encloses the hall: closed shell, haze seams, ribs on the requested stations, few draw calls", () => {
+    const { b, root } = builder();
+    b.setEnv({ sky: 'crashRib', look: {}, key: { dirFrom: [30, -16, 34] } });
+    b.floor({ x: 28, n: 13, w: 56, d: 26 });
+    b.ceiling({ x: 28, n: 13, w: 56, d: 26, h: 10, style: 'vaultClosed', rise: 6.6, bay: 8, bayPhase: 4 });
+    const named = (n: string): THREE.Mesh => root.getObjectByName(n) as THREE.Mesh;
+    const haze = named('vault-haze'), spill = named('vault-spill'), sheets = named('vault-light-sheets');
+    expect(haze && spill && sheets).toBeTruthy();
+    for (const m of [haze, spill, sheets]) {
+      const pos = m.geometry.getAttribute('position');
+      expect(pos.count).toBeGreaterThan(0);
+      for (let i = 0; i < pos.array.length; i++) expect(Number.isFinite(pos.array[i])).toBe(true);
+    }
+    // 7 interior bays + 2 half bays (ribs at x = 4, 12 … 52), three seams in each
+    root.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(haze);
+    expect(box.min.y).toBeGreaterThan(10);
+    expect(box.max.y).toBeGreaterThan(16.6);
+    expect(box.max.y).toBeLessThan(17.6);
+    expect(haze.geometry.getAttribute('position').count / 6).toBe(8 * 3 * 10 + 2);
+    b.finalize();
+    // the shell neither casts shadows (the key light stands for the light from the seams) nor shows the sky
+    let shells = 0, shellCasts = false, draws = 0;
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      draws++;
+      if (!/kit-glow:whiteGold\b/.test((m.material as THREE.Material).name)) return;
+      shells++;
+      if (m.castShadow) shellCasts = true;
+    });
+    expect(shells).toBeGreaterThan(0);
+    expect(shellCasts).toBe(false);
+    expect(draws).toBeLessThan(14);
+    // degenerate input never throws
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(() => b.ceiling({ x: 0, n: 0, w: Number.NaN, d: 0, style: 'vaultClosed', rise: -3, bay: Number.NaN, bayPhase: Number.POSITIVE_INFINITY })).not.toThrow();
+    warn.mockRestore();
+  });
+
   it('keep() leaves a piece live, reflective floors register, update() ignores repeated timestamps', () => {
     const f = fakeGame();
     const registered: Array<{ mesh: THREE.Mesh; y: number }> = [];

@@ -5,6 +5,7 @@ import { SettingsStoreImpl } from '@/core/settings';
 import { nullObject } from '@/core/stub';
 import { FakeElement, installFakeDom } from './fake-dom';
 import { createUiSystem } from './index';
+import { keycap, setKeycap } from './theme';
 
 interface Rig {
   game: Game;
@@ -85,6 +86,19 @@ describe('UiSystem construction', () => {
     r.step(0.5);
     expect(r.ui.modalOpen).toBe(false);
     expect(errors()).toEqual([]);
+  });
+});
+
+describe('keycap', () => {
+  it('sets single letters in the title face (is-letter) so Q / O / I never read as 0 / 1; digits and words are not', () => {
+    installFakeDom();
+    const el = keycap('Q') as unknown as FakeElement;
+    expect(el.classList.contains('is-letter')).toBe(true);
+    for (const [text, letter, wide] of [['0', false, false], ['1', false, false], ['LMB', false, true], ['E', true, false], ['Ж', true, false], ['□', false, false]] as const) {
+      setKeycap(el as unknown as HTMLElement, text);
+      expect(el.classList.contains('is-letter'), text).toBe(letter);
+      expect(el.classList.contains('is-wide'), text).toBe(wide);
+    }
   });
 });
 

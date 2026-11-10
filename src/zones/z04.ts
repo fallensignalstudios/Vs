@@ -18,8 +18,9 @@
  */
 import * as THREE from 'three';
 import type { Actor, Beat, CamPose, CineCtx, Companion, Routine, ZoneDef, ZoneRuntime } from '@/core/api';
+import { yawTo } from '@/core/mathx';
 import {
-  atPost, conversation, encounterMusic, feet, setDoor, standardExit, waitOr, walkTo,
+  atPost, encounterMusic, feet, setDoor, standardExit, waitOr, walkTo, type ConvLine,
 } from './shared';
 import {
   armReceivers, detected, e2Barks, e2Done, e2Objective, e2Sustain, notice, quietDevices, restoreAfterE2, setupE2,
@@ -93,6 +94,23 @@ function crossfireShot(z: ZoneRuntime): { from: CamPose; to: CamPose } {
   return { from: { pos: at(3.4, 1.6, 0.9), look, fov: 40 }, to: { pos: at(2.6, 1.2, 0.7), look, fov: 34 } };
 }
 
+/** both drones in one frame, from beside the entry cover: the lens widens with their spread */
+function dronePair(z: ZoneRuntime, drones: readonly Actor[]): CamPose {
+  const pos = z.P(33.4, 4.4, 1.55);
+  const mid = drones.length ? centre(drones) : z.P(29, 19, 0);
+  let spread = 0;
+  for (const a of drones) {
+    for (const b of drones) {
+      const da = Math.atan2(a.pos.x - pos.x, a.pos.z - pos.z);
+      const db = Math.atan2(b.pos.x - pos.x, b.pos.z - pos.z);
+      spread = Math.max(spread, Math.abs(Math.atan2(Math.sin(da - db), Math.cos(da - db))));
+    }
+  }
+  // vertical fov for a ~2.2:1 letterboxed frame with a margin either side
+  const fov = Math.min(64, Math.max(26, (spread * 180) / Math.PI / 1.6 + 14));
+  return { pos, look: mid.setY(mid.y + 0.2), fov };
+}
+
 // =====================================================================================================================
 // Beats
 // =====================================================================================================================
@@ -123,8 +141,7 @@ function* overlook(z: ZoneRuntime): Routine {
     if (alerted) {
       // Z03 gave them away: the two drones break off and turn on the entry together
       const drones = enc.alive.filter((a) => String(a.archetype) === 'contamDrone');
-      const mid = drones.length ? centre(drones) : z.P(29, 19, 0);
-      c.cut({ pos: z.P(33.6, 4.2, 1.6), look: mid.setY(2.0), fov: 30 });
+      c.cut(dronePair(z, drones));
       yield 0.6;
       game.ai.setCeasefire(true);
       startTurn(drones, z.player.pos, 0.7);
@@ -220,13 +237,17 @@ function* o2Scene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(36.6, 33.6, DECK_EYE + 0.4), look: holo.clone().setY(holo.y + 1.2), fov: 46 });
     c.moveAsync({ pos: z.P(37.3, 33.9, DECK_EYE + 0.2), look: holo.clone().setY(holo.y + 1.1), fov: 40 }, 6, 'inOut');
     yield waitOr(z, () => z.skipping || atPost(z, tharne, 'tharneO2', 1.0), 5);
+    // still on his way up (he was not following her): place him while the camera is on the replay
+    if (tharne && !atPost(z, tharne, 'tharneO2', 1.5)) tharne.teleport(z.m('tharneO2'), z.myaw('tharneO2'));
     tharne?.face(holo);
-    yield* conversation(z, c, [
+    if (tharne) z.player.yaw = yawTo(z.player.pos.x, z.player.pos.z, tharne.actor.pos.x, tharne.actor.pos.z);
+    tharne?.face(z.player.pos);
+    yield* exchange(z, c, tharne, [
       ['Tharne', 'Local sensor record. Their line, then the drones.'], // NEW
       ['Tharne', 'The drones crossed their perimeter first.'], // NEW
-    ], { Selene: z.player, Tharne: tharne });
+    ]);
     S.holoProgress = 0.8;
-    yield* conversation(z, c, [
+    yield* exchange(z, c, tharne, [
       ['Selene', 'Automated response to a boundary incursion.'], // RELOCATED (ch24, her answer to Sol)
       ['Tharne', 'Then the drones returned fire. No command traffic on either side.'], // NEW
       ['Tharne', 'We are racing them to secure the terminal site.'], // RELOCATED (ch23)
@@ -234,7 +255,7 @@ function* o2Scene(z: ZoneRuntime): Routine {
       ['Lyric', 'Then what exactly are we doing?', { channel: 'radio' }],
       ['Selene', 'Keeping anyone from touching it.'],
       ['Lyric', 'Good.', { channel: 'radio' }], // SPEAKER? (untagged in the book; follows “Lyric smiles faintly.”)
-    ], { Selene: z.player, Tharne: tharne });
+    ]);
     yield 0.8;
     // end state — identical watched or skipped
     S.holoProgress = 1;
@@ -243,6 +264,27 @@ function* o2Scene(z: ZoneRuntime): Routine {
     if (tharne) tharne.mode = 'follow';
     z.optionalDone('O2');
   });
+}
+
+/**
+ * Lines on the pocket, framed for its 4 m depth: each speaker over the other's shoulder along the pocket (the
+ * replay and the north wall between them); Lyric on the comm holds on Selene. Text passes through untouched.
+ */
+function* exchange(z: ZoneRuntime, c: CineCtx, tharne: Companion | null, lines: ConvLine[]): Routine {
+  let framed = '';
+  for (const [speaker, text, opts] of lines) {
+    const radio = opts?.channel === 'radio';
+    const subject = speaker === 'Tharne' && tharne ? 'Tharne' : 'Selene';
+    if (subject !== framed) {
+      framed = subject;
+      const sel = feet(z, z.player);
+      const th = tharne ? feet(z, tharne) : sel;
+      if (subject === 'Tharne') c.twoShot(th, sel, { side: -1, distance: 1.5, fov: 36 });
+      else c.twoShot(sel, th, { side: -1, distance: 1.5, fov: 36 });
+    }
+    const actor = radio ? null : speaker === 'Tharne' ? tharne : z.player;
+    yield* z.say(speaker, text, { ...opts, actor });
+  }
 }
 
 /** camera eye height on the deck */

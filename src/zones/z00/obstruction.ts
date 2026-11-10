@@ -111,13 +111,13 @@ export function buildArm(b: ZoneBuilder, x: number, n: number, gap: number, h: n
   const arm = new THREE.Group();
   arm.name = 'z00-arm';
   arm.position.copy(O.pivot);
-  const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.9, 18), mats.get('goldDark'));
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.0, 18), mats.get('goldDark'));
   housing.rotation.x = Math.PI / 2;
   arm.add(housing);
   const swing = new THREE.Group();
   arm.add(swing);
   // outer sleeve (fixed length) and the telescoping boom inside it
-  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 0.3), mats.get('whiteGold'));
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.2, 0.34), mats.get('goldDark'));
   sleeve.position.y = -0.6;
   swing.add(sleeve);
   const boom = new THREE.Group();
@@ -127,7 +127,7 @@ export function buildArm(b: ZoneBuilder, x: number, n: number, gap: number, h: n
   boom.add(rod);
   const head = new THREE.Group();
   boom.add(head);
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, gap - 0.1), mats.get('whiteGold'));
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.42, gap - 0.1), mats.get('goldDark'));
   head.add(bar);
   for (const s of [-1, 1]) {
     const claw = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), mats.get('goldDark'));
@@ -161,19 +161,20 @@ export function buildPlate(b: ZoneBuilder, x: number, n: number, width: number):
   O.plateYaw = b.yaw(90);
   g.position.copy(b.P(x - 0.25, n, 0));
   g.rotation.y = b.yaw(90);
-  const leaf = mats.get('whiteGold');
-  const frame = mats.get('goldDark');
+  // dark leaves against the lit doorway: the jam reads as a silhouette with a bright torn seam
+  const leaf = mats.get('goldDark');
+  const frame = mats.get('whiteGold');
   // lower leaf: stands nearly upright, bowed outward
-  const low = new THREE.Mesh(new THREE.BoxGeometry(width + 0.3, 1.5, 0.14), leaf);
-  low.position.set(0, 0.75, -0.18);
-  low.rotation.x = 0.12;
-  low.rotation.z = 0.04;
+  const low = new THREE.Mesh(new THREE.BoxGeometry(width + 0.3, 1.7, 0.16), leaf);
+  low.position.set(0, 0.85, -0.18);
+  low.rotation.x = 0.1;
+  low.rotation.z = 0.09;
   g.add(low);
   // upper leaf: folded back toward the room at the buckle line
-  const up = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 1.15, 0.14), leaf);
-  up.position.set(0.08, 2.0, -0.42);
-  up.rotation.x = 0.42;
-  up.rotation.z = -0.07;
+  const up = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 1.0, 0.16), leaf);
+  up.position.set(0.1, 2.15, -0.05);
+  up.rotation.x = -0.5;
+  up.rotation.z = -0.12;
   g.add(up);
   // stiffening ribs on the leaves and a torn corner
   for (const yy of [0.35, 1.15]) {
@@ -182,11 +183,13 @@ export function buildPlate(b: ZoneBuilder, x: number, n: number, width: number):
     g.add(r);
   }
   const rib2 = new THREE.Mesh(new THREE.BoxGeometry(width + 0.1, 0.12, 0.2), frame);
-  rib2.position.set(0.08, 2.3, -0.56);
-  rib2.rotation.x = 0.42;
+  rib2.position.set(0.1, 2.35, 0.08);
+  rib2.rotation.x = -0.5;
   g.add(rib2);
-  const seam = new THREE.Mesh(new THREE.BoxGeometry(width * 0.7, 0.03, 0.02), mats.emissive(0xffd9a0, 3));
-  seam.position.set(-0.1, 1.5, -0.3);
+  // the torn fold between the leaves, lit from the vestibule behind
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(width * 0.85, 0.035, 0.04), mats.emissive(0xffd9a0, 3.4));
+  seam.position.set(0.02, 1.72, -0.16);
+  seam.rotation.z = 0.06;
   g.add(seam);
   b.add(g);
   b.keep(g);

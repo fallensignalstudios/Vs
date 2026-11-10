@@ -5,8 +5,9 @@
  *
  * THE LEAD STARTS UNSEEN (unless Z03 detected her): her body is untargetable, so the two groups fight each other
  * while she works the room. She is noticed when the scan head S sweeps her, when she strikes anything in the
- * encounter (a shot at a receiver included — a close-interaction disable is silent), or when she comes within a
- * few metres. A Z03 detection (`z.flag('z03Detected')`) skips the window: the drones hold forward posts toward
+ * encounter (a shot at a receiver included — a close-interaction disable is silent), when she comes within a few
+ * metres, or when the relay network's own scanning finds her (NETWORK_FINDS seconds into the fight, restarted by
+ * each receiver taken down — so the two groups cannot simply wear each other out while she waits). A Z03 detection (`z.flag('z03Detected')`) skips the window: the drones hold forward posts toward
  * the entry, turn on her together in the overlook, and S sweeps faster.
  *
  * Release: both receivers disabled (shot, or by hand — no ammunition needed) AND the encounter cleared (a downed

@@ -69,7 +69,7 @@ interface Seam { t0: number; t1: number; z0: number; z1: number; crown: boolean 
 export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: number, d: number, springH: number): void {
   const hw = w / 2, hd = d / 2;
   const R = ctx.num(o.rise, Math.max(2, w * 0.24), 0.5, w);
-  const glow = ctx.num(o.glow, 1.8, 0, 20);
+  const glow = ctx.num(o.glow, 3.2, 0, 20);
   const hazeColor = ctx.num(o.hazeColor, 0xffe6bf);
   const fam = familyOf(o.mat);
   // the shell is lit from below by the hall itself: a faint warm bounce keeps it ivory rather than grey
@@ -198,16 +198,21 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
 
   // ---- spill: the haze lights the shell around each seam (additive, fades out ~1 m from the opening) ----------
   const sp = new HazeWriter(hazeColor);
-  const SPILL = 1.1, FADE = 0.5, k0 = 0.16, inner = -0.015;
+  const SPILL = 1.2, FADE = 0.5, k0 = 0.11, inner = -0.015;
+  /** quadratic falloff across the spill band (no visible outer edge) */
+  const fall = (u: number): number => k0 * (1 - u) * (1 - u);
   for (const s of seams) {
     const tm = (s.t0 + s.t1) / 2, a = base(tm - 0.01), b = base(tm + 0.01);
     const dt = SPILL / (Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.02 || 1);
     const ta = Math.max(0, s.t0 - dt), tb = Math.min(Math.PI, s.t1 + dt);
     for (const [e, f] of [[s.t0, ta], [s.t1, tb]] as const) {
       const n0 = inward(e), z0 = s.z0 - FADE, z1 = s.z1 + FADE;
-      sp.quad(at(e, inner, s.z0), at(f, inner, s.z0), at(f, inner, s.z1), at(e, inner, s.z1), n0, [k0, 0, 0, k0]);
-      sp.quad(at(e, inner, z0), at(f, inner, z0), at(f, inner, s.z0), at(e, inner, s.z0), n0, [0, 0, 0, k0]);
-      sp.quad(at(e, inner, s.z1), at(f, inner, s.z1), at(f, inner, z1), at(e, inner, z1), n0, [k0, 0, 0, 0]);
+      for (let i = 0; i < 3; i++) {
+        const ea = e + ((f - e) * i) / 3, eb = e + ((f - e) * (i + 1)) / 3, ka = fall(i / 3), kb = fall((i + 1) / 3);
+        sp.quad(at(ea, inner, s.z0), at(eb, inner, s.z0), at(eb, inner, s.z1), at(ea, inner, s.z1), n0, [ka, kb, kb, ka]);
+        sp.quad(at(ea, inner, z0), at(eb, inner, z0), at(eb, inner, s.z0), at(ea, inner, s.z0), n0, [0, 0, kb, ka]);
+        sp.quad(at(ea, inner, s.z1), at(eb, inner, s.z1), at(eb, inner, z1), at(ea, inner, z1), n0, [ka, kb, 0, 0]);
+      }
     }
     for (const [z, zf] of [[s.z0, s.z0 - FADE], [s.z1, s.z1 + FADE]] as const) {
       sp.quad(at(s.t0, inner, z), at(s.t1, inner, z), at(s.t1, inner, zf), at(s.t0, inner, zf), inward(tm), [k0, k0, 0, 0]);

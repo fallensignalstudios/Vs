@@ -52,7 +52,7 @@ const ARM_PIVOT_H = 4.35;
 const EXIT_N = GAP_N;
 const VEST_X1 = W + 5.5;
 /** the wreck on the crash apron, and the apex line of the fractured rib the shots look through */
-const WRECK: [number, number] = [15, 46];
+const WRECK: [number, number] = [24, 44];
 const RIB: [number, number] = [14, 21.2];
 
 /** speaker label for the squad until Z02 names one of them */
@@ -85,9 +85,10 @@ function build(b: ZoneBuilder): void {
   resetObstruction();
   b.game.sky.setHeading(0);
   b.setEnv({
-    sky: 'crashRib', look: LOOKS.crash, ambience: 'crash', music: 'context',
+    // a touch darker than the stock crash look: the shelter is lit by its amber lamp, not by the sky
+    sky: 'crashRib', look: { ...LOOKS.crash, exposure: 0.86 }, ambience: 'crash', music: 'context',
     // the white remnant, high in the north-east, falls through the breach; the vault keeps the pocket in shade
-    key: { dirFrom: [16, 26, 30], intensity: 2.6, color: 0xffeedd },
+    key: { dirFrom: [16, 26, 30], intensity: 2.0, color: 0xffeedd },
   });
   buildShell(b);
   buildBreach(b);
@@ -207,9 +208,10 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: WRECK[0] - 3, n: WRECK[1] - 5, h: 2.5, color: CINDER, intensity: 140, distance: 34, flicker: 0.35 });
   b.point({ x: WRECK[0] + 5, n: WRECK[1] + 2, h: 4, color: AMBER, intensity: 90, distance: 30, flicker: 0.3 });
   // a cool bounce off the breach so the squad separates from the shaded wall
-  b.point({ x: 12, n: 16.5, h: 6, color: 0xc8d8ec, intensity: 26, distance: 18 });
+  b.point({ x: 12, n: 16.5, h: 6, color: 0xc8d8ec, intensity: 12, distance: 16 });
   // the passing ship's light: sweeps the next chamber once (intensity driven by the landing scene)
-  const sweep = b.spot({ x: VEST_X1 + 9, n: EXIT_N - 6, h: 13, target: [VEST_X1 + 8, EXIT_N, 0], angleDeg: 34, intensity: 0, color: BLUE, shaft: true });
+  // (it streams back through the vestibule and the doorway, over the jammed plate, into the room)
+  const sweep = b.spot({ x: VEST_X1 + 9, n: EXIT_N, h: 6.5, target: [W - 3, EXIT_N, 0], angleDeg: 20, intensity: 0, color: BLUE, shaft: true });
   S.sweep = sweep;
 }
 
@@ -320,7 +322,7 @@ function update(z: ZoneRuntime, dt: number): void {
   S.shipT = z.skipping ? 1 : Math.min(1, S.shipT + dt / 7.5);
   const t = S.shipT;
   // west → east across the fracture, descending a little toward the terminal's heart
-  ship.position.set(-90 + 220 * t, 44 - 12 * t, -(82 - 6 * t));
+  ship.position.set(-70 + 170 * t, 27 - 7 * t, -(43 - 5 * t));
   ship.rotation.z = Math.sin(t * Math.PI) * 0.06;
   ship.visible = t < 1;
   // its hull crosses the key light: a shadow passes over the shelter; its lights wash the next chamber once
@@ -328,8 +330,8 @@ function update(z: ZoneRuntime, dt: number): void {
   if (S.key) S.key.intensity = S.keyBase * (1 - 0.7 * over);
   if (S.sweep) {
     const reveal = Math.exp(-Math.pow((t - 0.62) / 0.1, 2));
-    S.sweep.intensity = 2600 * reveal;
-    S.sweep.position.set(VEST_X1 + 2 + 16 * t, 13, -(EXIT_N - 6));
+    S.sweep.intensity = 1800 * reveal;
+    S.sweep.position.set(VEST_X1 + 9, 6.5, -(EXIT_N - 4 + 8 * t));
   }
   if (t >= 1) {
     S.shipActive = false;
@@ -378,9 +380,10 @@ function* opening(z: ZoneRuntime, lyessa: Companion | null, wounded: Companion |
     // the passing shadow: the Reformation dropship crosses the fracture; Lyessa raises her rifle at it
     S.shipT = 0;
     S.shipActive = true;
-    if (!z.skipping) game.audio.play('engineSpool', { pos: z.P(14, 60, 30), volume: 0.8 });
-    c.cut({ pos: z.P(9.4, 9.6, 1.5), look: z.P(16, 60, 34), fov: 50 });
-    c.moveAsync({ pos: z.P(9.0, 9.2, 1.4), look: z.P(30, 60, 30), fov: 50 }, 3.4, 'inOut');
+    if (!z.skipping) game.audio.play('engineSpool', { pos: z.P(14, 40, 24), volume: 0.8 });
+    // from the rubble edge, panning with it as it crosses the nave beyond the fracture
+    c.cut({ pos: z.P(13.2, 18.6, 1.2), look: z.P(-14, 46, 27), fov: 52 });
+    c.moveAsync({ pos: z.P(13.4, 18.8, 1.25), look: z.P(30, 44, 24), fov: 50 }, 3.4, 'inOut');
     lyessa?.stopAction();
     if (lyessa) {
       lyessa.holdAt(z.m('lyessaAim'), z.myaw('lyessaAim'));
@@ -389,7 +392,7 @@ function* opening(z: ZoneRuntime, lyessa: Companion | null, wounded: Companion |
     }
     yield 3.3;
     // its lights wash the next chamber through the doorway, once
-    c.cut({ pos: z.P(10.2, 6.4, 1.7), look: z.P(W + 6, EXIT_N, 2.6), fov: 30 });
+    c.cut({ pos: z.P(9.6, EXIT_N + 0.2, 1.65), look: z.P(W + 6, EXIT_N, 2.3), fov: 28 });
     yield 2.3;
     const t = z.player.pos;
     const l = lyessa ? lyessa.actor.pos : z.m('lyessaAim');

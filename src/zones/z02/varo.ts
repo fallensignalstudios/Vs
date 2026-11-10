@@ -77,9 +77,10 @@ export function* varoScene(z: ZoneRuntime): Routine {
     const hand = new THREE.Vector3();
     const handPos = (): THREE.Vector3 => (malik?.actor.visual ? malik.actor.visual.socket('handL').getWorldPosition(hand) : hand.copy(varo).setY(0.5));
     handPos();
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(0.34, 0.24, -0.4)), look: hand.clone(), fov: 30 });
-    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(0.26, 0.2, -0.32)), look: hand.clone(), fov: 26 }, 3.4, 'inOut');
-    c.dof(0.5, 0.7);
+    // in front of him and to his left, low: the hand in his lap, his body behind it
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.3, 0.2, -0.42)), look: hand.clone(), fov: 30 });
+    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(-0.22, 0.16, -0.32)), look: hand.clone(), fov: 26 }, 3.4, 'inOut');
+    c.dof(0.42, 0.7);
     if (!z.skipping) {
       game.events.emit('caption', { text: 'A soldier screams', kind: 'alert', pos: varo }); // NEW
       game.audio.play('eclipseBreath', { pos: varo, volume: 0.6 });
@@ -112,11 +113,12 @@ export function* varoScene(z: ZoneRuntime): Routine {
     // the look — not a request for an order but a demand that he own the choice
     const lp = at(z, lyessa, 'lyessaKneel');
     lyessa?.face(z.player.pos);
+    lyessa?.actor.visual?.lookAt(z.player.pos.clone().setY(1.65));
     c.shot(lp, { yawDeg: 62, distance: 1.75, height: 1.18, lookHeight: 1.05, fov: 34 });
     yield 2.4;
     // and under it, the tissue moves another centimeter beneath his skin
     handPos();
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(0.22, 0.2, -0.3)), look: hand.clone().add(new THREE.Vector3(0, 0.04, 0)), fov: 24 });
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.2, 0.16, -0.3)), look: hand.clone().add(new THREE.Vector3(0, 0.03, 0)), fov: 24 });
     setInfectionGrowth(0.95);
     yield 1.9;
     c.shot(tp, { yawDeg: 280, distance: 1.6, height: 1.5, lookHeight: 1.65, fov: 34 });
@@ -146,6 +148,7 @@ export function* varoScene(z: ZoneRuntime): Routine {
     setConsumed(1);
     yield 1.4;
     lyessa?.face(varo);
+    lyessa?.actor.visual?.lookAt(null);
 
     // “Name.” — at his level, holding his eyes
     const tk = z.m('tarrikKneel');
@@ -163,11 +166,14 @@ export function* varoScene(z: ZoneRuntime): Routine {
     tShot();
     yield* z.say('Tarrik', 'Stay with us, Malik.', { actor: z.player });
     // he stares at what is consuming the arm on the floor
+    // the reverse: low beyond the black mass, his head bowed over it
     const limb = z.m('limb');
-    malik?.face(limb);
-    c.cut({ pos: varo.clone().add(new THREE.Vector3(0.42, 1.12, 0.32)), look: limb.clone().setY(0.06), fov: 34 });
+    malik?.actor.visual?.lookAt(limb);
+    c.cut({ pos: limb.clone().add(new THREE.Vector3(-0.75, 0.32, -0.62)), look: varo.clone().setY(0.62), fov: 38 });
+    c.dof(0.95, 0.6);
     yield* z.say(VARO, 'Was I…', { actor: malik });
-    malik?.face(tk);
+    c.dof(null);
+    malik?.actor.visual?.lookAt(null);
     c.shot(tk, { yawDeg: 228, distance: 1.45, height: 1.08, lookHeight: 1.12, fov: 34 });
     yield* z.say('Tarrik', 'I don’t know. But you’re still here.', { actor: z.player });
 
