@@ -7,15 +7,13 @@ import { buildHead } from '../parts/head';
 import { DOM_PAL, REF_PAL, backpack, cuirass, gorget, onRing, pauldron, strap, type Pal } from '../parts/armor';
 import { armArmor, legArmor, waist } from '../parts/armor-limbs';
 import { cinderline, holster, rifle, sealedCase, shockBaton, towerShield } from '../parts/weapons';
-import { circlet, headBandage, helmet, limbWraps, skirt, torsoWrap } from '../parts/gear';
+import { circlet, fatigues, headBandage, helmet, limbWraps, skirt, torsoWrap } from '../parts/gear';
 import { clothPanel } from '../cloth';
 import { RIFLE_MOVES, GENERIC } from '../clips/generic';
 import { ENFORCER_MOVES } from '../clips/enforcer';
-import { hipWrap } from './heroes';
 
 const pick = <T>(rng: () => number, arr: readonly T[]): T => arr[Math.min(arr.length - 1, Math.floor(rng() * arr.length))];
 const SKINS = [0xb98a66, 0xa9764e, 0x8a5a3c, 0xc79c7e, 0x6e4630] as const;
-const HAIRS = [0x1a120d, 0x2a1c12, 0x3a2a1c, 0x0f0d0c, 0x5a4a3a] as const;
 
 // ---------------------------------------------------------------------------------------------------------
 export const enforcer: ArchetypeDef = {
@@ -111,6 +109,7 @@ export const malik: ArchetypeDef = {
     waist(b, rig, pal, { faction: 'dom', heft: 0.5, tassets: 'none', pouches: [140], buckle: 'round' });
     legArmor(b, rig, -1, pal, { faction: 'dom', heft: 0.5, sabaton: false });
     legArmor(b, rig, 1, pal, { faction: 'dom', heft: 0.5, sabaton: false, cuisse: false, splint: true });
+    fatigues(b, rig, { cloth: { color: 0x2a2526 }, strap: pal.leather, harness: false, kneePatches: false });
     // dressings: left arm wrapped, torso bound over the plate with a blood mark
     b.skin(rig.si('uArm', -1));
     const A = armSecs(rig, -1);
@@ -198,6 +197,5 @@ export const cross: ArchetypeDef = {
     draft.moveset = GENERIC;
     draft.rim = { color: 0xffc890, amount: 0.22 };
     draft.girth = 1.25;
-    void hipWrap;
   },
 };

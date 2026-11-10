@@ -339,7 +339,7 @@ function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): vo
     return [t, bt];
   };
   const wall = (idx: number[], inward: number[]): void => {
-    let prevT = -1, prevB = -1, prevI = -1;
+    let prevT = -1, prevB = -1;
     for (let i = 0; i < idx.length; i++) {
       const [t, bt] = wallPair(idx[i]);
       if (prevT >= 0) {
@@ -347,9 +347,8 @@ function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): vo
         const a = idx[i - 1], q = inward[i - 1];
         prim.quadDir(prevT, t, bt, prevB, P[a * 3] - P[q * 3], P[a * 3 + 1] - P[q * 3 + 1], P[a * 3 + 2] - P[q * 3 + 2]);
       }
-      prevT = t; prevB = bt; prevI = i;
+      prevT = t; prevB = bt;
     }
-    void prevI;
   };
   const row = (vi: number): number[] => { const r: number[] = []; for (let ui = 0; ui < nu; ui++) r.push(G[vi * nu + ui]); if (wrap) r.push(G[vi * nu]); return r; };
   const colm = (ui: number): number[] => { const r: number[] = []; for (let vi = 0; vi < nv; vi++) r.push(G[vi * nu + ui]); return r; };

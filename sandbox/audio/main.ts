@@ -4,6 +4,7 @@
  *   /sandbox/audio/?report=1         offline-render everything and publish window.__audioReport
  *        &only=sfx,loop,music,ambience,stinger,scene,chain   &ids=a,b   &secs=8   &intensity=0.6   &sweep=1
  *   /sandbox/audio/?calibrate=1      measure normalisation → window.__calibration (see write-calibration.mjs)
+ *        &only=sfx,music,stinger,ambience   &ids=a,b   &passes=4      (starts from the existing tables)
  *   /sandbox/audio/?detail=music:combatTarrik[&secs=12]      one large spectrogram
  * The page sets window.__ready when the requested work is finished.
  */
@@ -347,6 +348,8 @@ async function calibrate(): Promise<{ sfx: Record<string, number>; music: Record
   const log: string[] = [];
   const secs = Number(q.get('secs') ?? 8);
   const only = (q.get('only') ?? 'sfx,music,stinger,ambience').split(',');
+  const ids = q.get('ids')?.split(',') ?? null;
+  const want = (id: string): boolean => !ids || ids.includes(id);
   for (const id of Object.keys(SFX)) sfx[id] = SFX_NORM[id] ?? 1;
   for (const s of Object.keys(MUSIC)) music[s] = MUSIC_NORM[s] ?? 0.22;
   for (const kind of STINGER_KINDS) music[`stinger:${kind}`] = MUSIC_NORM[`stinger:${kind}`] ?? 0.2;
@@ -358,7 +361,7 @@ async function calibrate(): Promise<{ sfx: Record<string, number>; music: Record
     let worstId = '';
     const track = (id: string, errDb: number): void => { if (Math.abs(errDb) > Math.abs(worst)) { worst = errDb; worstId = id; } };
     const norm = { sfx, music, amb };
-    if (only.includes('sfx')) for (const id of Object.keys(SFX)) {
+    if (only.includes('sfx')) for (const id of Object.keys(SFX).filter(want)) {
       stat.textContent = `calibrating pass ${pass}/${PASSES}: sfx ${id}`;
       const m = analyze(await renderSfx(id, norm, 0.5));
       if (m.peak <= 1e-5) { log.push(`! ${id} silent`); continue; }
@@ -366,7 +369,7 @@ async function calibrate(): Promise<{ sfx: Record<string, number>; music: Record
       track(id, 20 * Math.log10(k));
       sfx[id] *= step(k);
     }
-    if (only.includes('music')) for (const s of Object.keys(MUSIC) as Exclude<MusicState, 'silence'>[]) {
+    if (only.includes('music')) for (const s of (Object.keys(MUSIC) as Exclude<MusicState, 'silence'>[]).filter(want)) {
       stat.textContent = `calibrating pass ${pass}/${PASSES}: music ${s}`;
       const def = MUSIC[s];
       const m = analyze(await renderMusic(s, secs, def.fixedIntensity ?? 0.6, norm), 1);
@@ -375,7 +378,7 @@ async function calibrate(): Promise<{ sfx: Record<string, number>; music: Record
       track(`music:${s}`, 20 * Math.log10(k));
       music[s] *= step(k);
     }
-    if (only.includes('stinger')) for (const kind of STINGER_KINDS) {
+    if (only.includes('stinger')) for (const kind of STINGER_KINDS.filter(want)) {
       stat.textContent = `calibrating pass ${pass}/${PASSES}: stinger ${kind}`;
       const m = analyze(await renderStinger(kind, norm));
       if (m.peak <= 1e-5) { log.push(`! stinger ${kind} silent`); continue; }
@@ -383,7 +386,7 @@ async function calibrate(): Promise<{ sfx: Record<string, number>; music: Record
       track(`stinger:${kind}`, 20 * Math.log10(k));
       music[`stinger:${kind}`] *= step(k);
     }
-    if (only.includes('ambience')) for (const a of Object.keys(AMBIENCE) as Exclude<AmbienceId, 'none'>[]) {
+    if (only.includes('ambience')) for (const a of (Object.keys(AMBIENCE) as Exclude<AmbienceId, 'none'>[]).filter(want)) {
       stat.textContent = `calibrating pass ${pass}/${PASSES}: ambience ${a}`;
       const m = analyze(await renderAmbience(a, secs, norm), 1);
       if (m.rms <= 1e-6) { log.push(`! ambience ${a} silent`); continue; }

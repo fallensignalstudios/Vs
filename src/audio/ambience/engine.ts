@@ -15,7 +15,7 @@ import { AMBIENCE, type AmbDef } from './defs';
 
 const UNCALIBRATED = 12;
 /** Brown noise carries far more energy per unit gain than a band of pink: trim it so the rumble sits under. */
-const COLOR_TRIM = { brown: 0.14, pink: 1, white: 0.8, crackle: 1 } as const;
+const COLOR_TRIM = { brown: 0.18, pink: 1, white: 0.8, crackle: 1 } as const;
 const TONE_TRIM = 0.12;
 
 class BedDeck {

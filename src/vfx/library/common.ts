@@ -92,6 +92,15 @@ export function flame(o: Over = {}): ParticleDef {
   };
 }
 
+/** Licking flame tongues: upright wisps that stretch upward and vanish — the high-frequency detail on a fireball. */
+export function tongues(o: Over = {}): ParticleDef {
+  return {
+    layer: 'add', sprite: ['wisp0', 'wisp1'], life: [0.22, 0.42], size: [0.25, 0.55, 0.7], aspect: 1.7, sizeMid: 0.4,
+    color: [[C.heat, 3.2 * FLAME_GAIN], [C.cinder, 3.4 * FLAME_GAIN], [C.cinderDeep, 0.4 * FLAME_GAIN]], colorMid: 0.3, alpha: 0.9,
+    fadeIn: 0.15, fadeOut: 0.4, gravity: -5, drag: 2.5, rot: [-0.5, 0.5], spin: [-0.6, 0.6], facing: 'upright', ...o,
+  };
+}
+
 /** Lit, soft-edged smoke that billows, rises and thins out. `glow` > 0 lights it from within at birth. */
 export function smoke(color: number = C.smoke, o: Over = {}): ParticleDef {
   return {
@@ -166,5 +175,3 @@ export function darkMotes(o: Over = {}): ParticleDef {
     color: [[0x120a1e, 1], [0x08050d, 1]], alpha: 0.95, fadeIn: 0.02, fadeOut: 0.6, gravity: 4, drag: 1.4, spin: 5, tint: 0, ...o,
   };
 }
-
-export const key = (hex: number, intensity: number): ColorKey => [hex, intensity];

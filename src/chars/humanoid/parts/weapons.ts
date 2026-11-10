@@ -175,7 +175,6 @@ export function holster(b: MeshBuilder, rig: RigView, pal: Pal, side: number): v
 
 /** Cinderline — Tarrik's heavy sidearm. */
 export function cinderline(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
-  const k = rig.prop.bulk;
   atBone(b, rig, 'gun', () => {
     // grip
     b.surf({ ...pal.leather, ...W });
@@ -200,7 +199,6 @@ export function cinderline(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
     b.surf({ ...pal.dark, metal: 0.8, ...W });
     tube(b, [[0, 0.02, -0.02], [0, -0.022, -0.03], [0, -0.03, -0.065], [0, 0.0, -0.085]], 0.005, { seg: 5 });
   });
-  void k;
   return {
     bone: 'gun', held: inHand(rig, 'R', [-90, 0, 0]),
     sheath: { parent: 'thighR', pos: [0.1 * rig.prop.bulk + 0.004, -0.135, 0.01], axes: HOLSTER_AXES },

@@ -491,10 +491,4 @@ export class GroundMarks {
     this.decalBatch.commit(0);
     this.markBatch.commit(0);
   }
-
-  dispose(): void {
-    this.decalBatch.mesh.geometry.dispose();
-    this.markBatch.mesh.geometry.dispose();
-    this.mat.dispose();
-  }
 }

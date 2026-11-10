@@ -1,7 +1,7 @@
 /** The two protagonists: Tarrik (Dominion) and Selene (Reformation). */
 import type { ArchetypeDef, BuildCtx } from '../figure';
 import { PART, ZONE, type Surf } from '../geo/builder';
-import { box, loft, tube, torus, type V3 } from '../geo/prims';
+import { box, tube, torus, type V3 } from '../geo/prims';
 import { buildBody, secAt, torsoSecs } from '../parts/body';
 import { buildHead } from '../parts/head';
 import { DOM_PAL, REF_PAL, backpack, cuirass, gorget, onRing, pauldron, strap, type Pal } from '../parts/armor';
@@ -77,7 +77,6 @@ export const tarrik: ArchetypeDef = {
       at: hipWrap(ctx, 296, 118, (u) => 0.5 + 0.2 * Math.sin(Math.PI * Math.min(1, u * 1.25)) - 0.12 * u, 0.2, 0.05),
       surf: { ...pal.cloth, zone: ZONE.back }, lining: { color: 0x2a0c0e }, trim: { color: 0x8a6a36, rough: 0.55, metal: 0.5 }, trimWidth: 0.022,
     }));
-    void loft; void tube; void torus; void PART;
 
     draft.loadout = { melee: true, ranged: false, shield: false, prop: 'none' };
     draft.moveset = TARRIK_MOVES;
@@ -151,7 +150,6 @@ export const selene: ArchetypeDef = {
     b.skin(chest).surf({ ...pal.cloth, color: 0x18243a, zone: ZONE.back });
     b.scope(() => { b.at(0, 1.5, 0.085, 24, 0, 0); b.scale(1.25, 0.8, 1); torus(b, 0.07, 0.03, { seg: 14, tubeSeg: 7, arc: [70, 290] }); });
 
-    void loft; void backpack;
     draft.loadout = { melee: true, ranged: false, shield: false, prop: 'none' };
     draft.moveset = SELENE_MOVES;
     draft.rim = { color: 0xa9d2ff, amount: 0.3 };

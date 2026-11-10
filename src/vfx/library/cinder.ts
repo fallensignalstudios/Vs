@@ -1,6 +1,6 @@
 /** Cinder (Tarrik) — orange-white heat, weight, embers that rise and cool. */
 import type { EffectDef } from '../defs';
-import { C, PI, chips, dust, embers, flame, flashGlow, ringPop, smoke, sparks, star } from './common';
+import { C, PI, chips, dust, embers, flame, flashGlow, ringPop, smoke, sparks, star, tongues } from './common';
 
 export const CINDER: Record<string, EffectDef> = {
   /** Cinder hit accent: white-hot core, short flame lick, embers that outlive the flash */
@@ -8,7 +8,9 @@ export const CINDER: Record<string, EffectDef> = {
     emitters: [
       { p: star(C.cinderHot, 12, 1.0, 0.1), burst: 1 },
       { p: flashGlow(C.cinder, 5, 1.6, 0.18), burst: 1 },
-      { p: flame({ life: [0.18, 0.38], size: [0.16, 0.42, 0.6] }), burst: [9, 11], shape: 'sphere', radius: 0.1, vel: 'cone', cone: 0.6, speed: [1.5, 7] },
+      { p: flame({ life: [0.2, 0.4], size: [0.2, 0.5, 0.7] }), burst: [11, 13], shape: 'sphere', radius: 0.1, vel: 'cone', cone: 0.6, speed: [1.5, 7.5] },
+      { p: tongues({ size: [0.18, 0.4, 0.5] }), burst: [5, 6], shape: 'sphere', radius: 0.18, vel: 'cone', cone: 0.8, speed: [0.5, 3] },
+      { p: ringPop(C.cinder, 4, 0.12, 1.1, 0.2), burst: 1 },
       { p: sparks(C.cinder), burst: [16, 20], vel: 'cone', cone: 1.3, speed: [3, 11] },
       { p: embers(), burst: [10, 14], shape: 'sphere', radius: 0.2, vel: 'cone', cone: 1.4, speed: [0.5, 2.6] },
       { p: smoke(C.smokeWarm, { life: [0.8, 1.4], size: [0.25, 0.7, 1.0], alpha: 0.26, glow: 1.6 }), burst: 2, at: 0.05, vel: 'cone', cone: 0.6, speed: [0.3, 0.8] },
@@ -28,6 +30,7 @@ export const CINDER: Record<string, EffectDef> = {
       { p: flame({ life: [0.3, 0.55], size: [0.35, 0.8, 1.05], gravity: -1.2, drag: 3.2, floorFade: true }), burst: [30, 36], shape: 'ring', radius: 0.5, vel: 'ring', speed: [7, 12.5], up: [0.2, 1.2], offset: [0, 0.2, 0] },
       // centre jet
       { p: flame({ life: [0.25, 0.5], size: [0.4, 0.9, 1.1], gravity: -4 }), burst: 8, shape: 'disc', radius: 0.4, vel: 'cone', cone: 0.35, speed: [3, 7.5], offset: [0, 0.2, 0] },
+      { p: tongues({ life: [0.3, 0.55], size: [0.3, 0.7, 0.9], floorFade: true }), burst: [14, 16], shape: 'disc', radius: 2.6, height: 0.6, vel: 'ring', speed: [1, 4], up: [0.5, 2], offset: [0, 0.25, 0], at: 0.05 },
       // low spark fan + a few high flyers
       { p: sparks(C.cinder, { life: [0.35, 0.9] }), burst: [42, 50], shape: 'ring', radius: 0.4, vel: 'ring', speed: [5, 13], up: [0.8, 4.5], offset: [0, 0.1, 0] },
       { p: sparks(C.cinderHot, { life: [0.5, 1.1] }), burst: 14, vel: 'cone', cone: 0.7, speed: [5, 10], offset: [0, 0.1, 0] },
@@ -88,6 +91,7 @@ export const CINDER: Record<string, EffectDef> = {
       { p: flashGlow(C.cinderHot, 9, 3.0, 0.18), burst: 1 },
       { p: star(C.heat, 12, 1.8, 0.1), burst: 1 },
       { p: flame({ life: [0.28, 0.55], size: [0.45, 1.05, 1.4], drag: 4.5 }), burst: [14, 17], shape: 'sphere', radius: 0.2, vel: 'radial', speed: [2.5, 7] },
+      { p: tongues({ size: [0.3, 0.7, 0.9] }), burst: [8, 10], at: 0.04, shape: 'sphere', radius: 0.5, vel: 'radial', speed: [0.5, 3] },
       { p: sparks(C.cinder, { life: [0.4, 1.0] }), burst: [38, 46], vel: 'cone', cone: PI, speed: [5, 16] },
       { p: embers({ life: [1.0, 2.2] }), burst: [20, 26], shape: 'sphere', radius: 0.5, vel: 'radial', speed: [0.6, 3.2] },
       { p: smoke(C.smoke, { life: [1.4, 2.4], size: [0.5, 1.3, 1.9], alpha: 0.36, glow: 2.4 }), burst: [6, 8], at: 0.06, shape: 'sphere', radius: 0.4, vel: 'radial', speed: [0.5, 1.6] },

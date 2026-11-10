@@ -518,8 +518,4 @@ export class ParticleCore {
       buf[o + 15] = d.floorFade ? this.slotFloor[slot] : NO_FLOOR;
     }
   }
-
-  dispose(): void {
-    for (const l of this.layers) { l.geo.dispose(); l.mat.dispose(); }
-  }
 }

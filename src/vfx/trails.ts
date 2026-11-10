@@ -238,9 +238,4 @@ export class TrailRenderer {
     this.geo.setDrawRange(0, 0);
     this.mesh.visible = false;
   }
-
-  dispose(): void {
-    this.geo.dispose();
-    this.mat.dispose();
-  }
 }

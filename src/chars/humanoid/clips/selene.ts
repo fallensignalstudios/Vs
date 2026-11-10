@@ -25,7 +25,7 @@ const S_WALK: PoseSpec = {
 
 /** Running: the staff-length weapon trails level beside the hip. */
 const S_RUN: PoseSpec = {
-  armR: { p: [0.29, -0.31, -0.02], blade: [0.04, -0.14, 0.99], edge: [1, 0, 0], pole: [0.7, -0.4, -0.6] },
+  armR: { p: [0.3, -0.28, 0.0], blade: [-0.2, -0.45, 0.87], edge: [1, 0, 0.2], pole: [0.7, -0.4, -0.6] },
 };
 
 const S_GUN: PoseSpec = {

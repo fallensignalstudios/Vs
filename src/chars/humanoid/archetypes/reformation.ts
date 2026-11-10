@@ -1,13 +1,13 @@
 /** Reformation figures: Tharne, Lyric, line soldier, marine, medic, Sol. */
 import type { ArchetypeDef } from '../figure';
 import { PART, ZONE, type Surf } from '../geo/builder';
-import { box, tube, type V3 } from '../geo/prims';
+import { box } from '../geo/prims';
 import { armSecs, buildBody, secAt, torsoSecs, torsoSkin } from '../parts/body';
 import { buildHead } from '../parts/head';
-import { REF_PAL, backpack, cuirass, gorget, onRing, pauldron, strap, type Pal } from '../parts/armor';
+import { REF_PAL, backpack, cuirass, gorget, onRing, pauldron, type Pal } from '../parts/armor';
 import { armArmor, legArmor, waist } from '../parts/armor-limbs';
 import { axiom, holster, rifle, sealedCase } from '../parts/weapons';
-import { helmet, hood, limbWraps, mantle, skirt, torsoWrap, visorBand } from '../parts/gear';
+import { fatigues, helmet, hood, limbWraps, mantle, skirt, torsoWrap, visorBand } from '../parts/gear';
 import { RIFLE_MOVES, GENERIC } from '../clips/generic';
 
 const pick = <T>(rng: () => number, arr: readonly T[]): T => arr[Math.min(arr.length - 1, Math.floor(rng() * arr.length))];
@@ -39,13 +39,11 @@ export const tharne: ArchetypeDef = {
     onRing(b, secAt(T, 1.3, 0.036), -30, 0.012, () => box(b, 0.085, 0.07, 0.03, { bevel: 0.008 }));
     b.surf({ ...pal.glow, zone: ZONE.chest, glow: 2 });
     onRing(b, secAt(T, 1.32, 0.036), -30, 0.03, () => box(b, 0.04, 0.008, 0.004, { bevel: 0.001, edge: 0 }));
-    strap(b, [[-0.16, 1.47, -0.05], [-0.14, 1.36, -0.12], [-0.12, 1.2, -0.11]] as V3[], 0.014, { ...pal.leather, zone: ZONE.chest }, chest);
-    strap(b, [[0.16, 1.47, -0.05], [0.14, 1.36, -0.12], [0.12, 1.2, -0.11]] as V3[], 0.014, { ...pal.leather, zone: ZONE.chest }, chest);
+    fatigues(b, rig, { cloth: { color: 0x27303c }, strap: pal.leather, trim: pal.trim });
     draft.items.case = sealedCase(b, rig, pal);
     draft.loadout = { melee: false, ranged: false, shield: false, prop: 'none' };
     draft.moveset = GENERIC;
     draft.rim = { color: 0xa9d2ff, amount: 0.24 };
-    void tube;
   },
 };
 
@@ -68,6 +66,7 @@ export const lyric: ArchetypeDef = {
     waist(b, rig, pal, { faction: 'ref', heft: 0.1, tassets: 'none', pouches: [140, -140], buckle: 'plate' });
     for (const s of [-1, 1]) legArmor(b, rig, s, pal, { faction: 'ref', heft: 0.15, cuisse: false, sabaton: false });
     skirt(b, rig, { arc: [30, 330], top: 1.03, bottom: 0.8, flare: 0.12, out: 0.022, surf: { color: 0x34404e, zone: ZONE.leg }, follow: 0.55, rows: 3 });
+    fatigues(b, rig, { cloth: { color: 0x2c3642 }, strap: pal.leather, harness: false });
     // wrist monitor: the one honest violet on her, a reading rather than an ornament
     const A = armSecs(rig, -1);
     const wy = rig.p('handL')[1];
@@ -82,7 +81,6 @@ export const lyric: ArchetypeDef = {
     draft.loadout = { melee: false, ranged: false, shield: false, prop: 'case' };
     draft.moveset = GENERIC;
     draft.rim = { color: 0xa9d2ff, amount: 0.26 };
-    void limbWraps; void strap;
   },
 };
 
@@ -147,6 +145,7 @@ export const medic: ArchetypeDef = {
     b.skin(rig.i('uArmL'));
     limbWraps(b, A, [rig.p('uArmL')[1] - 0.13], { color: 0xd8dde2, zone: ZONE.arm }, 0.05, 0.01);
     waist(b, rig, pal, { faction: 'ref', heft: 0.15, tassets: 'none', pouches: [-150, -110, 110, 150, 62, -62], buckle: 'plate' });
+    fatigues(b, rig, { cloth: { color: 0x36414e }, strap: { color: 0xb8c0c6 }, trim: pal.trim });
     for (const s of [-1, 1]) legArmor(b, rig, s, pal, { faction: 'ref', heft: 0.15, cuisse: false, sabaton: false });
     draft.items.case = sealedCase(b, rig, pal);
     draft.loadout = { melee: false, ranged: false, shield: false, prop: 'none' };

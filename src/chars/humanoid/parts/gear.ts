@@ -241,6 +241,57 @@ export function limbWraps(b: MeshBuilder, secs: Sec[], ys: number[], surf: Surf,
   for (const y of ys) loft(b, [secAt(secs, y + width / 2, out), secAt(secs, y - width / 2, out)], { seg: 10, thick: 0.006 });
 }
 
+export interface FatigueOpts { cloth: Surf; strap: Surf; trim?: Surf; pockets?: boolean; harness?: boolean; kneePatches?: boolean }
+
+/**
+ * Field-clothing detail for lightly armoured figures: cargo pockets, knee patches, a load-bearing harness,
+ * sleeve cuffs and a shirt collar — the breakup that keeps a bodysuit from reading as a mannequin.
+ */
+export function fatigues(b: MeshBuilder, rig: RigView, o: FatigueOpts): void {
+  const k = rig.prop.bulk;
+  const cloth: Surf = { part: PART.cloth, rough: 0.88, ...o.cloth };
+  for (const side of [-1, 1]) {
+    const th = rig.sp('thigh', side), kn = rig.sp('shin', side);
+    if (o.pockets !== false) {
+      b.skin(rig.si('thigh', side)).surf({ ...cloth, zone: ZONE.leg });
+      b.scope(() => { b.at(th[0] + side * 0.086 * k, th[1] - 0.2, 0.0, 0, 0, side * -3); box(b, 0.03, 0.13, 0.11, { bevel: 0.012 }); });
+      b.surf({ ...cloth, color: dim(cloth.color, 0.8), zone: ZONE.leg });
+      b.scope(() => { b.at(th[0] + side * 0.09 * k, th[1] - 0.15, 0.0, 0, 0, side * -3); box(b, 0.03, 0.04, 0.118, { bevel: 0.01 }); });
+    }
+    if (o.kneePatches !== false) {
+      b.skin(rig.si('shin', side)).surf({ ...cloth, color: dim(cloth.color, 0.7), zone: ZONE.leg });
+      b.scope(() => { b.translate(kn[0], kn[1] - 0.1, kn[2] - 0.052 * k); box(b, 0.085 * k, 0.11, 0.02, { bevel: 0.008 }); });
+    }
+    // sleeve cuff
+    const w = rig.sp('hand', side);
+    b.skin(rig.si('fArm', side)).surf({ ...cloth, color: dim(cloth.color, 0.8), zone: ZONE.arm });
+    b.scope(() => { b.translate(w[0], w[1] + 0.045, w[2]); loft(b, [{ y: -0.022, rx: 0.036 * k, rz: 0.04 * k }, { y: 0.022, rx: 0.038 * k, rz: 0.042 * k }], { seg: 10, thick: 0.008 }); });
+  }
+  if (o.harness !== false) {
+    // Y-harness: two front straps to a chest ring, one down the spine, clipped to the belt
+    const chest = rig.i('chest');
+    const T = torsoSecs(rig);
+    const strapS: Surf = { part: PART.leather, rough: 0.6, zone: ZONE.chest, ...o.strap };
+    b.skin(chest).surf(strapS);
+    for (const sx of [-1, 1]) {
+      const pts: V3[] = [];
+      for (const [y, a] of [[1.2, 26], [1.3, 24], [1.4, 30], [1.47, 52], [1.485, 110], [1.44, 150], [1.34, 170]] as const) {
+        const s0 = secAt(T, y, 0.016);
+        const t = (sx * a * Math.PI) / 180, c = Math.cos(t);
+        const rz = c >= 0 ? s0.rz : s0.rzb ?? s0.rz;
+        pts.push([s0.rx * Math.sin(t) * (y > 1.46 ? 0.8 : 1), y, (s0.cz ?? 0) - rz * c]);
+      }
+      tube(b, pts, 0.015, { seg: 6, flat: 0.3 });
+    }
+    const sb = secAt(T, 1.3, 0.018), sc = secAt(T, 1.15, 0.018);
+    tube(b, [[0, 1.34, sb.rzb ?? sb.rz], [0, 1.25, (sb.rzb ?? sb.rz) + 0.002], [0, 1.12, sc.rzb ?? sc.rz]], 0.015, { seg: 6, flat: 0.3 });
+    if (o.trim) {
+      b.surf({ zone: ZONE.chest, ...o.trim });
+      for (const sx of [-1, 1]) { const s0 = secAt(T, 1.36, 0.02); const t = (sx * 26 * Math.PI) / 180; b.scope(() => { b.at(s0.rx * Math.sin(t), 1.36, -s0.rz * Math.cos(t) - 0.004, 0, -sx * 26, 0); box(b, 0.03, 0.022, 0.012, { bevel: 0.004 }); }); }
+    }
+  }
+}
+
 /** Corrupted growth: dark tissue cords with a violet core thread. */
 export function tissueCord(b: MeshBuilder, pts: V3[], r: number): void {
   b.surf({ color: 0x120a1c, rough: 0.4, metal: 0.2, part: PART.suit });

@@ -71,7 +71,9 @@ const physics = withStubs<PhysicsWorld>('physics', {
 } as Partial<PhysicsWorld>);
 const game = miniGame(h, { physics });
 if (q.has('reduce')) game.settings.set('reduceFlash', true);
+const bootT0 = performance.now();
 const vfx: VfxSystem = createVfxSystem(game);
+const bootMs = performance.now() - bootT0;
 h.onUpdate((dt) => vfx.update(dt));
 
 // optional depth pre-pass feeding soft particles
@@ -377,7 +379,7 @@ Object.assign(window as unknown as Record<string, unknown>, {
   __swing: (t: number) => { swingT = t; poseArm(t); },
   __ambient: ambient, __decals: decals, __scan: scan,
   __clear: () => { vfx.clear(); clearLabels(); arm.visible = false; swingT = -1; pillar.visible = cap.visible = true; },
-  __stats: stats, __bench: bench,
+  __stats: stats, __bench: bench, __bootMs: bootMs,
 });
 
 h.ready();

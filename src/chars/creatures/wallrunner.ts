@@ -345,8 +345,8 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
           const landK = impact(st, LAND, 0.16, 15) * w;
           const settle = k([LAND, 1, LAND + 0.12, 0.6, 1.3, 0]);
           const tremble = noise1(st * 40) * crouch * 0.006;
-          move(hips, tremble, -0.2 * crouch + arc - 0.16 * settle - 0.05 * landK, 0.16 * crouch - 0.1 * air);
-          move(chest, 0, -0.14 * crouch - 0.12 * settle, 0.05 * crouch - 0.16 * air);
+          move(hips, tremble, -0.1 * crouch + arc - 0.1 * settle - 0.04 * landK, 0.16 * crouch - 0.1 * air);
+          move(chest, 0, -0.07 * crouch - 0.05 * settle, 0.05 * crouch - 0.16 * air);
           rot(hips, 0.22 * crouch + air * (0.45 - fl * 1.0) - 0.1 * settle, 0, 0);
           rot(spine, -0.2 * crouch + air * 0.12, 0, 0);
           rot(neck, 0.25 * crouch - air * 0.2, 0, 0);

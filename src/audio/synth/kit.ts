@@ -53,6 +53,14 @@ export interface SrcOpts {
 const MIN = 1e-4;
 
 /**
+ * Loudness make-up for noise sources, so an envelope gain means roughly the same thing on a noise layer as on
+ * an oscillator. Peak-normalised noise has far less RMS than a sine (pink ≈ −12 dB), and a band-pass throws
+ * most of what is left away — without this, every impact recipe ends up as a thump with a whisper on top.
+ */
+const NOISE_MAKEUP: Readonly<Record<NoiseColor, number>> = { white: 1.2, pink: 2.6, brown: 2.0, crackle: 2.2 };
+const bandMakeup = (q: number): number => clamp(1.3 * Math.sqrt(q), 1, 4);
+
+/**
  * Set a biquad's resonance from a conventional (linear) Q. WebAudio takes Q in decibels for low-/high-pass
  * filters — a plain `Q = 0.707` there is a +0.7 dB resonance, not Butterworth, and inside a feedback loop
  * that difference is enough to make a comb run away. Everything in this subsystem speaks linear Q.
@@ -232,7 +240,8 @@ export class Kit {
     const g = this.ac.createGain();
     this.inline(src, t0, Number.isFinite(len) ? len : 1, o?.fixed ? 1 : this.pitch, o).connect(g);
     g.connect(this.dest(o));
-    const stop = this.applyEnv(g.gain, t0, env);
+    const makeup = NOISE_MAKEUP[color] * (o?.bp !== undefined ? bandMakeup(o.q ?? 1) : 1);
+    const stop = this.applyEnv(g.gain, t0, { ...env, g: (env.g ?? 1) * makeup });
     src.start(t0, this.rnd() * Math.max(0.01, buf.duration - 0.05));
     this.finish(src, stop);
     return src;

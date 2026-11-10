@@ -214,8 +214,8 @@ export const ECLIPSE_SFX: RecipeTable = {
   }),
   // Eclipse cadence clock (AudioSystem.cadenceTick): the regular one is stamped out, the irregular one stumbles
   cadenceTick: sfx(-18, { ...ECLIPSE, gap: 0.08, max: 3, prio: 1 }, (k) => {
-    k.noise('white', { a: 0.001, d: 0.035, g: 1.6 }, { bp: 1400, q: 6 });
-    k.osc('sine', 207.65, { a: 0.002, d: 0.09, g: 0.4 }, { fixed: true });
+    k.noise('white', { a: 0.001, d: 0.035, g: 0.6 }, { bp: 1400, q: 6 });
+    k.osc('sine', 207.65, { a: 0.002, d: 0.09, g: 0.5 }, { fixed: true });
     breath(k, { a: 0.004, d: 0.07, g: 0.6 }, 0.2);
   }),
   cadenceTickOff: sfx(-21, { gap: 0.08, max: 3, prio: 1, send: 0.45, vary: 260 }, (k) => {

@@ -85,10 +85,10 @@ export function hit(inst: PercInst, k: Kit, at: number, vel: number, tune = 0): 
 export function cadenceHit(k: Kit, at: number, vel: number, wobble: number): void {
   const p = wobble > 0 ? 1 + k.jit(0.18 * wobble) : 1;
   const d = wobble > 0 ? k.rr(0.6, 1.5) : 1;
-  k.noise('white', { a: 0.001, d: 0.035 * d, g: vel * 0.7 }, { at, bp: 1400 * p, q: 6 });
+  k.noise('white', { a: 0.001, d: 0.035 * d, g: vel * 0.3 }, { at, bp: 1400 * p, q: 6 });
   k.osc('sine', 207.65 * p, { a: 0.002, d: 0.11 * d, g: vel * 0.6 }, { at });
   k.osc('sine', 220 * p, { a: 0.002, d: 0.11 * d, g: vel * 0.45 }, { at }); // the semitone rub
-  k.noise('pink', { a: 0.004, d: 0.08 * d, g: vel * 0.3 }, { at, bp: 620, q: 5 });
+  k.noise('pink', { a: 0.004, d: 0.08 * d, g: vel * 0.1 }, { at, bp: 620, q: 5 });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -180,8 +180,8 @@ export function padNote(voice: PadVoice, k: Kit, at: number, f: number, dur: num
       return;
     }
     case 'air':
-      k.noise('pink', { ...e, g: vel * 2.2 }, { at, bp: f * 2, q: 30, pan });
-      k.noise('pink', { ...e, g: vel * 1.1 }, { at, bp: f * 3, q: 34, pan: -pan });
+      k.noise('pink', { ...e, g: vel * 0.22 }, { at, bp: f * 2, q: 30, pan });
+      k.noise('pink', { ...e, g: vel * 0.11 }, { at, bp: f * 3, q: 34, pan: -pan });
       return;
     case 'wrong':
       // an exact quarter-tone pair: it never beats the same way twice against the chord

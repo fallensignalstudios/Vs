@@ -171,9 +171,4 @@ export class ScanPlanes {
     for (const p of this.planes) if (!p.removed) p.remove();
     this.planes.length = 0;
   }
-
-  dispose(): void {
-    this.clear();
-    this.geo.dispose();
-  }
 }

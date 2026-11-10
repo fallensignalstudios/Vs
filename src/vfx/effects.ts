@@ -40,7 +40,6 @@ interface CompiledEmitter {
 }
 
 interface CompiledEffect {
-  readonly id: string;
   readonly emitters: readonly CompiledEmitter[];
   readonly events: readonly FxEvent[];
   readonly sustain: number | undefined;
@@ -59,7 +58,6 @@ const _m = new THREE.Matrix4();
 class FxInstance implements VfxHandle, FxContext {
   alive = true;
   age = 0;
-  prevAge = 0;
   duration = Infinity;
   stopped = false;
   readonly state = new Float32Array(4);
@@ -131,7 +129,7 @@ export class EffectRuntime {
     });
     const events = [...(def.events ?? [])].sort((a, b) => a.at - b.at);
     for (const ev of events) endTime = Math.max(endTime, ev.at);
-    this.registry.set(id, { id, emitters, events, sustain: def.sustain, endTime, upright: def.upright ?? false, update: def.update });
+    this.registry.set(id, { emitters, events, sustain: def.sustain, endTime, upright: def.upright ?? false, update: def.update });
   }
 
   has(id: string): boolean {
@@ -159,7 +157,7 @@ export class EffectRuntime {
     const fx = new FxInstance(def, this);
     fx.pos.set(pos.x, pos.y, pos.z);
     fx.scale = opts?.scale !== undefined && opts.scale > 0 && Number.isFinite(opts.scale) ? opts.scale : 1;
-    fx.tint = opts?.color;
+    fx.tint = opts?.color !== undefined && Number.isFinite(opts.color) ? opts.color : undefined;
     fx.attach = opts?.attachTo ?? null;
     fx.rot[0] = fx.rot[4] = fx.rot[8] = 1;
     const d = opts?.dir;
@@ -229,7 +227,6 @@ export class EffectRuntime {
       }
     }
     P.moveSlot(fx.slot, fx.pos.x, fx.pos.y, fx.pos.z);
-    fx.prevAge = fx.age;
     fx.age += dt;
     const age = fx.age;
     if (!fx.stopped && age >= fx.duration) fx.stop();

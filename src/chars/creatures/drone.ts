@@ -71,9 +71,9 @@ function buildDrone(contam: boolean): RigTemplate {
   b.add('eye', P.refSteel, band(0.098, 0.034, 0.05, 16, 0.009), T(0, 0.005, -0.275, -HALF_PI, 0, 0));
   b.add('eye', P.refNavy, band(0.125, 0.022, 0.03, 8, 0.007), T(0, 0.005, -0.262, -HALF_PI, 0, 0));
   b.add('eye', P.glass, sphere(0.084, 2), T(0, 0.005, -0.272, 0, 0, 0, [1, 1, 0.52]), { crease: 180 });
-  const iris = contam ? tint(P.violetEye, { e: 2.8 }) : tint(P.refGlow, { e: 3 });
+  const iris = contam ? tint(P.violetEye, { e: 2.4 }) : tint(P.refGlow, { e: 1.9 });
   b.add('eye', iris, torus(0.05, 0.0075, 20, 6), T(0, 0.005, -0.306, -HALF_PI, 0, 0), { group: G.eye, crease: 180 });
-  b.add('eye', tint(iris, { e: 5 }), sphere(0.017, 1), T(0, 0.005, -0.316), { group: G.eye, crease: 180 });
+  b.add('eye', tint(iris, { e: contam ? 3.4 : 2.7 }), sphere(0.017, 1), T(0, 0.005, -0.316), { group: G.eye, crease: 180 });
   b.addPair('eye', 'eye', P.refGlowSoft, box(0.03, 0.006, 0.006, 0.002), T(0.105, 0.075, -0.292), { group: G.lights });
   // --- under-slung muzzle on a gimbal
   b.add('gun', P.refSteel, box(0.06, 0.055, 0.06, 0.012), T(0, -0.148, -0.08));

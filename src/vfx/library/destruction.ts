@@ -1,6 +1,6 @@
 /** Destruction — explosions, broken devices, falling debris, the Z07 cage release. */
 import type { EffectDef } from '../defs';
-import { C, PI, chips, dust, embers, flame, flashGlow, grit, motes, ringPop, smoke, sparks, star } from './common';
+import { C, PI, chips, dust, embers, flame, flashGlow, grit, motes, ringPop, smoke, sparks, star, tongues } from './common';
 
 export const DESTRUCTION: Record<string, EffectDef> = {
   explosionSmall: {
@@ -9,6 +9,7 @@ export const DESTRUCTION: Record<string, EffectDef> = {
       { p: star(C.heat, 13, 1.9, 0.09), burst: 1 },
       { p: flame({ life: [0.25, 0.5], size: [0.3, 0.7, 1.0], drag: 4.5 }), burst: [18, 22], shape: 'sphere', radius: 0.25, vel: 'radial', speed: [1.5, 6.5] },
       { p: flame({ life: [0.14, 0.24], size: [0.3, 0.6, 0.7], drag: 6, color: [[C.heat, 3], [C.cinderHot, 2.4], [C.cinder, 0.4]], fadeIn: 0.1 }), burst: 6, shape: 'sphere', radius: 0.1, vel: 'radial', speed: [0.5, 2.5] },
+      { p: tongues({ size: [0.3, 0.65, 0.85] }), burst: [8, 10], at: 0.04, shape: 'sphere', radius: 0.45, vel: 'radial', speed: [0.5, 3] },
       { p: sparks(C.cinderHot, { life: [0.35, 0.9] }), burst: [28, 34], vel: 'cone', cone: PI, speed: [4, 14] },
       { p: smoke(C.smoke, { life: [1.2, 2.0], size: [0.45, 1.2, 1.7], alpha: 0.34, glow: 2.2 }), burst: [5, 6], at: 0.05, shape: 'sphere', radius: 0.35, vel: 'radial', speed: [0.5, 1.5] },
       { p: chips(C.stoneDark), burst: [7, 9], vel: 'cone', cone: 1.2, speed: [3, 8] },
@@ -28,6 +29,7 @@ export const DESTRUCTION: Record<string, EffectDef> = {
       { p: star(C.white, 11, 2.4, 0.1), burst: 1, offset: [0, 0.5, 0] },
       { p: flame({ life: [0.3, 0.6], size: [0.7, 1.6, 2.1], drag: 4 }), burst: [18, 22], shape: 'sphere', radius: 0.4, vel: 'radial', speed: [3.5, 9.5], offset: [0, 0.5, 0] },
       { p: flame({ life: [0.5, 0.9], size: [0.8, 1.8, 2.4], gravity: -4.5, drag: 2.2 }), burst: [9, 11], at: 0.08, shape: 'sphere', radius: 0.6, vel: 'cone', cone: 0.5, speed: [2, 5], offset: [0, 0.6, 0] },
+      { p: tongues({ life: [0.35, 0.65], size: [0.5, 1.1, 1.4] }), burst: [14, 16], at: 0.06, shape: 'sphere', radius: 0.9, vel: 'radial', speed: [1, 4.5], offset: [0, 0.6, 0] },
       { p: sparks(C.cinderHot, { life: [0.5, 1.3], size: [0.04, 0.03, 0.01] }), burst: [60, 70], vel: 'cone', cone: 1.9, speed: [6, 22], offset: [0, 0.3, 0] },
       { p: smoke(C.soot, { life: [2.2, 3.6], size: [0.8, 2.1, 3.2], alpha: 0.46, glow: 2.6, gravity: -0.9 }), burst: [12, 14], at: 0.1, shape: 'sphere', radius: 0.8, vel: 'cone', cone: 0.9, speed: [0.8, 2.6], offset: [0, 0.6, 0] },
       { p: dust(C.smokeWarm, { life: [1.0, 1.8], size: [0.6, 1.6, 2.4], alpha: 0.3 }), burst: [10, 12], shape: 'ring', radius: 1.0, vel: 'ring', speed: [4, 7.5], up: [0.1, 0.5], offset: [0, 0.2, 0] },

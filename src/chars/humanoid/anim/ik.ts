@@ -97,7 +97,6 @@ export function solveTwoBone(
   outB.copy(_qc).multiply(rest.qbRestInv);
   if (outEnd) outEnd.copy(_end);
   if (outMid) outMid.copy(_mid);
-  void _qr;
   return reach;
 }
 

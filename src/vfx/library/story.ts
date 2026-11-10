@@ -3,7 +3,7 @@
  * Ancient gold light = recognition; white = resolution; frost holds, cinder releases.
  */
 import type { EffectDef, ParticleDef } from '../defs';
-import { C, PI, chips, dust, embers, flame, flashGlow, grit, motes, ringPop, shards, smoke, sparks, star } from './common';
+import { C, PI, chips, dust, embers, flame, flashGlow, grit, motes, ringPop, shards, smoke, sparks, star, tongues } from './common';
 
 const glyphs = (o: Partial<ParticleDef> = {}): ParticleDef => ({
   layer: 'add', sprite: ['glyph0', 'glyph1', 'glyph2', 'glyph3'], life: [1.0, 1.6], size: [0.1, 0.13, 0.1], sizeRand: [0.8, 1.2],
@@ -42,6 +42,7 @@ export const STORY: Record<string, EffectDef> = {
       { p: { layer: 'add', sprite: 'flare', life: 0.16, size: [2, 5, 6], sizeRand: 1, aspect: 0.4, color: [[C.white, 4.5], [C.cinderHot, 2]], fadeIn: 0.02, fadeOut: 0.3, rot: 0, tint: 0 }, burst: 1, at: T_STRIKE },
       { p: sparks(C.cinder, { life: [0.45, 1.2], size: [0.04, 0.03, 0.01], stretch: 0.05 }), burst: [80, 92], at: T_STRIKE, vel: 'cone', cone: PI, speed: [7, 24] },
       { p: flame({ life: [0.3, 0.6], size: [0.6, 1.4, 1.9], drag: 4.5 }), burst: [18, 22], at: T_STRIKE, shape: 'sphere', radius: 0.3, vel: 'radial', speed: [3, 9] },
+      { p: tongues({ life: [0.3, 0.6], size: [0.45, 1.0, 1.3] }), burst: [14, 16], at: T_STRIKE + 0.04, shape: 'sphere', radius: 0.8, vel: 'radial', speed: [1, 5] },
       // --- the shell leaves as glass
       { p: shards(C.frost, { life: [1.2, 2.0], gravity: 9.5, drag: 0.5, bounce: 0.42, spin: 8, size: [0.26, 0.26, 0.18], color: [[C.heat, 3.2], [C.frost, 1.8], [C.frost, 1.0]] }), burst: [44, 50], at: T_STRIKE + 0.02, shape: 'shell', radius: 0.8, vel: 'radial', speed: [5, 15], up: [0, 3] },
       { p: shards(C.frostDeep, { life: [0.7, 1.3], gravity: 9.5, drag: 0.8, bounce: 0.3, spin: 13, size: [0.08, 0.08, 0.05] }), burst: [26, 30], at: T_STRIKE + 0.02, shape: 'shell', radius: 0.8, vel: 'radial', speed: [6, 18] },

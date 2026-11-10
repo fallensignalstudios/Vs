@@ -338,11 +338,4 @@ export class ShapeRenderer {
     }
     this.live.length = 0;
   }
-
-  dispose(): void {
-    const seen = new Set<THREE.BufferGeometry>();
-    for (const g of Object.values(this.geos)) if (!seen.has(g)) { seen.add(g); g.dispose(); }
-    for (const list of Object.values(this.pool)) for (const s of list) (s.mesh.material as THREE.Material).dispose();
-    for (const s of this.live) (s.mesh.material as THREE.Material).dispose();
-  }
 }

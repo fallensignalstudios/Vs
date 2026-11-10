@@ -1,12 +1,12 @@
 /** Survivors, the Linkbound, and the King-era Witness. */
 import type { ArchetypeDef } from '../figure';
 import { PART, ZONE, type Surf } from '../geo/builder';
-import { ball, box, loft, torus, tube, type Sec, type V3 } from '../geo/prims';
-import { armSecs, buildBody, buildHand, legSecs, secAt, torsoSecs, torsoSkin, armSkin } from '../parts/body';
+import { box, loft, torus, tube, type Sec, type V3 } from '../geo/prims';
+import { armSecs, buildBody, secAt, torsoSecs, torsoSkin, armSkin } from '../parts/body';
 import { buildHead, skullSecs } from '../parts/head';
 import { DOM_PAL, REF_PAL, cuirass, gorget, pauldron, strap, wrap, type Pal } from '../parts/armor';
 import { armArmor, legArmor, waist } from '../parts/armor-limbs';
-import { helmet, hood, mantle, skirt, tissueCord, torsoWrap } from '../parts/gear';
+import { hood, mantle, skirt, tissueCord, torsoWrap } from '../parts/gear';
 import { GENERIC } from '../clips/generic';
 import { LINKBOUND_MOVES } from '../clips/linkbound';
 import { WITNESS_MOVES } from '../clips/witness';
@@ -54,7 +54,6 @@ export const survivor: ArchetypeDef = {
     draft.moveset = GENERIC;
     draft.rim = { color: 0xc9d4e6, amount: 0.2 };
     draft.breath = 1.2;
-    void armSecs; void legSecs; void armSkin; void buildHand; void ball; void tube;
   },
 };
 
@@ -119,7 +118,6 @@ export const linkbound: ArchetypeDef = {
     draft.headBias = [10, 0, domSide * 22];
     draft.rim = { color: 0xb58cff, amount: 0.3 };
     draft.breath = 1.6;
-    void helmet; void torus;
   },
 };
 
@@ -170,6 +168,5 @@ export const kingWitness: ArchetypeDef = {
     draft.luminous = 0.55;
     draft.rim = { color: 0xffe2a8, amount: 0.6 };
     draft.breath = 0.4;
-    void ball; void cuirass; void gorget; void pauldron; void armArmor; void legArmor; void waist; void helmet; void buildHead; void buildHand;
   },
 };

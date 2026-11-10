@@ -11,7 +11,7 @@ import { GENERIC } from './generic';
 export const T_READY: PoseSpec = {
   hips: [0, -0.05, 0], hipsR: [3, -20, 0],
   spine: [5, -4, 0], chest: [3, -6, 0], neck: [-2, 12, 0], head: [-4, 16, 0],
-  armR: { p: [0.07, -0.31, 0.3], blade: [-0.42, -0.4, 0.8], edge: [0.1, -0.9, -0.4], pole: [0.7, -0.5, -0.5] },
+  armR: { p: [0.07, -0.31, 0.3], blade: [-0.1, -0.42, 0.9], edge: [0.1, -0.9, -0.4], pole: [0.7, -0.5, -0.5] },
   armL: { sh: [20, 10, 0], el: 60 },
   grip: 1,
   legL: { p: [-0.11, 0, 0.2], yaw: 2, pitch: 0, air: false },
@@ -26,7 +26,7 @@ const T_WALK: PoseSpec = {
 
 /** Running: the blade rides the right shoulder, left arm pumps. */
 const T_RUN: PoseSpec = {
-  armR: { p: [0.2, 0.0, 0.17], blade: [0.14, 0.7, -0.7], edge: [0, 0.7, 0.7], pole: [0.5, -0.85, -0.1] },
+  armR: { p: [0.2, 0.0, 0.17], blade: [0.2, 0.74, -0.64], edge: [1, -0.2, 0], pole: [0.5, -0.85, -0.1] },
   armL: { sh: [2, 8, 0], el: 20, fk: true },
   grip: 0,
 };

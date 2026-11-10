@@ -163,8 +163,6 @@ export type FxEvent =
 export interface FxContext {
   /** seconds since spawn */
   readonly age: number;
-  /** age on the previous update (so hooks can detect threshold crossings) */
-  readonly prevAge: number;
   /** total sustain duration (Infinity when open-ended) */
   readonly duration: number;
   readonly stopped: boolean;
@@ -196,9 +194,4 @@ export interface EffectDef {
 /** Sample a Range with a 0..1 random number. */
 export function sample(r: Range, u: number): number {
   return typeof r === 'number' ? r : r[0] + (r[1] - r[0]) * u;
-}
-
-/** Upper bound of a Range. */
-export function rangeMax(r: Range): number {
-  return typeof r === 'number' ? r : Math.max(r[0], r[1]);
 }

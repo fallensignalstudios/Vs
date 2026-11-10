@@ -113,7 +113,7 @@ export function breath(k: Kit, env: Env, open = 0.5, o?: SrcOpts): void {
   const f1 = 320 + 420 * open;
   const f2 = 850 + 400 * open;
   const f3 = 2300 + 500 * open;
-  const b = k.bank([f1, f2, f3], 7, { to: o?.to, gains: [1, 0.6, 0.25], g: 3.2, fixed: true });
+  const b = k.bank([f1, f2, f3], 7, { to: o?.to, gains: [1, 0.6, 0.25], g: 1.4, fixed: true });
   k.noise('pink', env, { at: o?.at, to: b, pan: o?.pan });
 }
 
