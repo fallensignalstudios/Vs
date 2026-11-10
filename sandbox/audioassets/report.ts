@@ -10,7 +10,11 @@
  *                           long as the other fades out (equal power)
  *   peak                    output peak of the render (dBFS) — CLIP at ≥ −0.3
  *   GAP                     no 50 ms of the seam is more than 6 dB under the quietest 50 ms around it
- *   BUMP                    the seam is not more than 4 dB over the louder side
+ *   XFADE                   the level of the cross-fade is what the file predicts: the power of its tail and
+ *                           of its head under the two fade curves, computed from the decoded samples (the
+ *                           same comparison on the 3 s before the seam removes the mix chain from it).
+ *                           More than +2 dB = tail and head are the same sustained sound and add in phase
+ *                           (wants an equal-gain fade); less than −2 dB = a hole.
  *   CLICK                   the largest sample-to-sample step in the seam is not out of scale with the rest
  * Voice: the test clip through each channel's chain — level, peak, where its energy sits.
  */
@@ -32,6 +36,7 @@ export const TEST_LINE: readonly [string, string] = ['_test_', 'Audio assets che
 
 const db = (v: number): number => (v > 1e-9 ? 20 * Math.log10(v) : -180);
 const r1 = (v: number): number => Math.round(v * 10) / 10;
+const r3 = (v: number): number => Math.round(v * 1000) / 1000;
 
 export interface TrackRow {
   track: TrackName;
@@ -56,6 +61,8 @@ export interface TrackRow {
   afterDb: number;
   /** quietest 50 ms inside the seam minus the quietest 50 ms around it (dB) */
   gapDb: number;
+  /** level of the cross-fade as rendered minus what the file's tail and head predict (dB; 0 = ideal) */
+  seamErrorDb: number;
   /** largest sample step inside the seam ÷ largest outside */
   clickRatio: number;
   flags: string[];
@@ -131,6 +138,21 @@ function channelRms(buf: AudioBuffer, channel: number, from: number, to: number)
   return Math.sqrt(p / Math.max(1, s1 - s0));
 }
 
+/** Mean power of `seconds` of a buffer from `at`, each sample weighted by `w(0..1 through the stretch)`². */
+function weightedPower(buf: AudioBuffer, at: number, seconds: number, w: (x: number) => number): number {
+  const s0 = Math.max(0, Math.round(at * buf.sampleRate));
+  const n = Math.max(1, Math.min(buf.length - s0, Math.round(seconds * buf.sampleRate)));
+  let p = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < n; i++) {
+      const v = d[s0 + i] * w(i / n);
+      p += v * v;
+    }
+  }
+  return p / (n * buf.numberOfChannels);
+}
+
 const mean = (a: number[]): number => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / Math.max(1, a.length));
 
 function maxStep(buf: AudioBuffer, from: number, to: number): number {
@@ -167,7 +189,7 @@ export async function buildAssetReport(o: ReportOpts = {}): Promise<AssetReport>
     if (!meta || !buffer) {
       tracks.push({
         track: u.track, region: u.region, state: u.state, states: u.states, decoded: false, manifestSeconds: meta?.seconds ?? 0, decodedSeconds: 0, channels: 0, sampleRate: 0,
-        loop: { from: 0, to: 0, xfade: 0, rate: 1, periodHeard: 0, bars: 0 }, schedule: [], seamAt: 0, fadeHeard: 0, peakDb: -180, beforeDb: -180, seamDb: -180, afterDb: -180, gapDb: 0, clickRatio: 0,
+        loop: { from: 0, to: 0, xfade: 0, rate: 1, periodHeard: 0, bars: 0 }, schedule: [], seamAt: 0, fadeHeard: 0, peakDb: -180, beforeDb: -180, seamDb: -180, afterDb: -180, gapDb: 0, seamErrorDb: 0, clickRatio: 0,
         flags: [meta ? 'UNDECODED' : 'MISSING'],
       });
       continue;
@@ -199,19 +221,24 @@ export async function buildAssetReport(o: ReportOpts = {}): Promise<AssetReport>
     const around = Math.min(...before, ...after);
     const gapDb = db(Math.min(...seam)) - db(around);
     const peak = analyze(out, 0.5).peak;
+    // what an equal-power fade of this tail into this head must measure, against what was rendered
+    const gain = planGain(u.plan, loop, 1);
+    const expectSeam = Math.sqrt(weightedPower(buffer, loop.to, loop.xfade, (x) => Math.cos((x * Math.PI) / 2)) + weightedPower(buffer, loop.from, loop.xfade, (x) => Math.sin((x * Math.PI) / 2))) * gain;
+    const expectBefore = Math.sqrt(weightedPower(buffer, loop.to - 3 * loop.rate, 3 * loop.rate, () => 1)) * gain;
+    const seamErrorDb = db(mean(windows(out, SEAM, SEAM + fade))) - db(expectSeam) - (db(mean(windows(out, SEAM - 3, SEAM))) - db(expectBefore));
     const clickRatio = maxStep(out, SEAM - pad, SEAM + fade + pad) / Math.max(1e-9, maxStep(out, 0.5, SEAM - pad), maxStep(out, SEAM + fade + pad, SECONDS));
     if (db(peak) >= -0.3) flags.push('CLIP');
     if (gapDb < -6) flags.push('GAP');
-    if (db(mean(seam)) > Math.max(db(mean(before)), db(mean(after))) + 4) flags.push('BUMP');
+    if (Math.abs(seamErrorDb) > 2) flags.push('XFADE');
     if (clickRatio > 2) flags.push('CLICK');
     if (!(db(mean(before)) > -70) || !(db(mean(after)) > -70)) flags.push('SILENT');
     o.keep?.(`${u.track}:${u.region}`, out, SEAM, fade);
     tracks.push({
       track: u.track, region: u.region, state: u.state, states: u.states, decoded: true, manifestSeconds: meta.seconds, decodedSeconds: Math.round(buffer.duration * 1000) / 1000,
       channels: buffer.numberOfChannels, sampleRate: buffer.sampleRate,
-      loop: { from: r1(loop.from * 100) / 100, to: r1(loop.to * 100) / 100, xfade: loop.xfade, rate: Math.round(loop.rate * 1e4) / 1e4, periodHeard: Math.round(loopPeriod(loop) * 1000) / 1000, bars: Math.round(bars * 1000) / 1000 },
+      loop: { from: r3(loop.from), to: r3(loop.to), xfade: loop.xfade, rate: Math.round(loop.rate * 1e4) / 1e4, periodHeard: Math.round(loopPeriod(loop) * 1000) / 1000, bars: Math.round(bars * 1000) / 1000 },
       schedule, seamAt: SEAM, fadeHeard: Math.round(fade * 1000) / 1000, peakDb: r1(db(peak)), beforeDb: r1(db(mean(before))), seamDb: r1(db(mean(seam))), afterDb: r1(db(mean(after))),
-      gapDb: r1(gapDb), clickRatio: Math.round(clickRatio * 100) / 100, flags,
+      gapDb: r1(gapDb), seamErrorDb: r1(seamErrorDb), clickRatio: Math.round(clickRatio * 100) / 100, flags,
     });
   }
 

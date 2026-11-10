@@ -26,11 +26,12 @@
   input[type=range] { width:150px; accent-color: var(--gold); }
   output { color:var(--ink); min-width:30px; display:inline-block; font-variant-numeric: tabular-nums; }
   table { border-collapse:collapse; width:100%; font-variant-numeric: tabular-nums; }
-  th, td { text-align:right; padding:2px 7px; border-bottom:1px solid #141a23; white-space:nowrap; }
+  th, td { text-align:right; padding:2px 5px; border-bottom:1px solid #141a23; white-space:nowrap; }
   th { color:var(--dim); font-weight:500; font-size:10px; letter-spacing:.08em; }
   td:first-child, th:first-child { text-align:left; }
   td.id { color:#f0e6cf; text-align:left; }
   td.l { text-align:left; color:var(--dim); }
+  td.wrap { white-space:normal; max-width:190px; font-size:11px; line-height:1.25; }
   td.flags { color:var(--bad); text-align:left; }
   tr.flag td.id { color:var(--bad); }
   canvas.sg { display:block; image-rendering:pixelated; border:1px solid #141a23; }

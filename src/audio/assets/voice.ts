@@ -31,8 +31,11 @@ const MAX_LATE = 0.6;
 const SAME_LINE = 0.3;
 const MAX_PAN = 0.45;
 const MIN_LEVEL = 0.7;
-/** level of each channel's chain relative to the dry voice, set so the treated line reads as loud (measured) */
-const CHANNEL_TRIM: Readonly<Record<VoiceChannel, number>> = { voice: 1, radio: 1.25, system: 1.1, narration: 1 };
+/**
+ * Trim of each channel's chain, set by measurement (sandbox/audioassets report) so that all four read
+ * equally loud: the panner costs 3 dB at centre, the band-limited chains lose their lows and gain clip.
+ */
+const CHANNEL_TRIM: Readonly<Record<VoiceChannel, number>> = { voice: 1.41, radio: 1.3, system: 1.15, narration: 1 };
 const CHANNELS: readonly VoiceChannel[] = ['voice', 'radio', 'system', 'narration'];
 
 interface Line {

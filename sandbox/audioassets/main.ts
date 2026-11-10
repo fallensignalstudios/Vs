@@ -169,8 +169,8 @@ function showReport(r: AssetReport, buffers: Map<string, { buf: AudioBuffer; sea
   section('Loop seams (12 s through the mix chain; gold band = the 2 s cross-fade) and the voice chains', summary, tiles);
 
   const t = el('table');
-  t.innerHTML = `<tr><th>recording</th><th>states</th><th>file s</th><th>decoded s</th><th>loop from → to</th><th>rate</th><th>period</th><th>bars</th><th>next pass at</th><th>peak dBFS</th><th>before / seam / after dB</th><th>gap dB</th><th>click ×</th><th>flags</th></tr>${
-    r.tracks.map((x) => `<tr class="${x.flags.length ? 'flag' : ''}"><td class="id">${x.track}${x.region === 'whole' ? '' : ` [${x.region}]`}</td><td class="l">${x.states.join(', ')}</td><td>${x.manifestSeconds}</td><td>${x.decodedSeconds}</td><td>${x.loop.from} → ${x.loop.to}</td><td>${x.loop.rate}</td><td>${x.loop.periodHeard}</td><td>${x.loop.bars}</td><td>${x.schedule[1] ? `${x.schedule[1].startAt.toFixed(3)} = ${x.schedule[0].handoverAt.toFixed(3)}` : '—'}</td><td>${x.peakDb}</td><td>${x.beforeDb} / ${x.seamDb} / ${x.afterDb}</td><td>${x.gapDb}</td><td>${x.clickRatio}</td><td class="flags">${x.flags.join(' ')}</td></tr>`).join('')}`;
+  t.innerHTML = `<tr><th>recording</th><th>states</th><th>file / decoded s</th><th>loop</th><th>rate</th><th>period</th><th>bars</th><th>next pass</th><th>peak</th><th>before / seam / after dB</th><th>gap</th><th>x-fade err</th><th>click ×</th><th>flags</th></tr>${
+    r.tracks.map((x) => `<tr class="${x.flags.length ? 'flag' : ''}"><td class="id">${x.track}${x.region === 'whole' ? '' : ` [${x.region}]`}</td><td class="l wrap">${x.states.join(', ')}</td><td>${x.manifestSeconds} / ${x.decodedSeconds}</td><td>${x.loop.from} → ${x.loop.to}</td><td>${x.loop.rate}</td><td>${x.loop.periodHeard}</td><td>${x.loop.bars}</td><td>${x.schedule[1] ? `${x.schedule[1].startAt.toFixed(2)} = ${x.schedule[0].handoverAt.toFixed(2)}` : '—'}</td><td>${x.peakDb}</td><td>${x.beforeDb} / ${x.seamDb} / ${x.afterDb}</td><td>${x.gapDb}</td><td>${x.seamErrorDb}</td><td>${x.clickRatio}</td><td class="flags">${x.flags.join(' ')}</td></tr>`).join('')}`;
   section('Recordings', t);
 
   const v = el('table');
