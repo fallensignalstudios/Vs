@@ -21,6 +21,7 @@ const SKIN = [0xc59a7c, 0xb98a66, 0xa9764e, 0x8a5a3c, 0xd4ad92, 0x6e4630] as con
 const STYLES = ['crop', 'tied', 'bob', 'buzz', 'bun', 'tail'] as const;
 
 export const survivor: ArchetypeDef = {
+  seedBuckets: 6,
   proportions: (rng) => {
     const fem = rng() > 0.5 ? 0.9 : 0;
     return { height: (fem ? 1.6 : 1.68) + rng() * 0.16, shoulder: (fem ? 0.164 : 0.178) + rng() * 0.012, hip: 0.094, bulk: 0.86 + rng() * 0.16, fem };
@@ -66,6 +67,7 @@ function dust(hex: number, k: number): number {
 
 // ---------------------------------------------------------------------------------------------------------
 export const linkbound: ArchetypeDef = {
+  seedBuckets: 4,
   proportions: (rng) => ({ height: 1.74 + rng() * 0.1, shoulder: 0.186, hip: 0.096, bulk: 0.98 + rng() * 0.06, fem: 0 }),
   build(ctx) {
     const { b, rig, draft, rng } = ctx;

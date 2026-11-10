@@ -199,8 +199,8 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     _p.set((r() - 0.5) * 20, (r() - 0.3) * 26, (r() - 0.5) * 20).add(clipPoint);
     _t.copy(forward).multiplyScalar(6 + r() * 22);
     _t.x += (r() - 0.5) * 14; _t.y += (r() - 0.6) * 10; _t.z += (r() - 0.5) * 14;
-    _c.setRGB(0.62, 0.58, 0.52).multiplyScalar(0.20 + r() * 0.16);
-    emit(slot, 0, _p, _t, 10 + r() * 7, 22 + r() * 22, 22 + r() * 22, _c, 0.06, 0.45, 2.6, 0.5, delay);
+    _c.setRGB(0.62, 0.58, 0.52).multiplyScalar(0.035 + r() * 0.035);
+    emit(slot, 0, _p, _t, 10 + r() * 7, 20 + r() * 20, 20 + r() * 20, _c, 0.06, 0.45, 2.6, 0.6, delay);
   };
 
   /** the played clip: needle sheared, flash, sparks, masonry, dust */
@@ -218,9 +218,9 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     const r = fxRand;
     for (let i = 0; i < N_FLASH; i++) {
       _p.set((r() - 0.5) * 12, 8 + r() * 14, (r() - 0.5) * 12).add(clipPoint);
-      _c.setRGB(1, 0.80, 0.52).multiplyScalar(soft ? 2.4 : 10);
-      const s = (i === 0 ? 84 : 36 + r() * 30) * (soft ? 0.8 : 1);
-      emit(i, 0, _p, _t.set(0, 0, 0), soft ? 1.6 : 0.55 + r() * 0.3, s, s, _c, 0, 0, 0.4, soft ? 0.25 : 0, 0);
+      _c.setRGB(1, 0.80, 0.52).multiplyScalar(soft ? 2.2 : 7);
+      const s = (i === 0 ? 46 : 16 + r() * 18) * (soft ? 0.8 : 1);
+      emit(i, 0, _p, _t.set(0, 0, 0), soft ? 1.6 : 0.5 + r() * 0.3, s, s, _c, 0, 0, 0.4, soft ? 0.25 : 0, 0);
     }
     for (let i = 0; i < 26; i++) dust(r, r() * 0.4);
     for (let i = 0; i < 230; i++) spark(r, 62, 58);

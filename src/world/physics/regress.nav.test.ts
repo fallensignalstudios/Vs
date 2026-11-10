@@ -222,6 +222,64 @@ describe('nav follows the world without rebuild() (review: stale nav)', () => {
     expect(w.nav.nodeCount).toBeGreaterThan(900);
   });
 
+  it('warm() front-loads the per-node fit of a big agent without changing any answer', () => {
+    const cold = world(), warm = world();
+    const fc = buildZ08(cold), fw = buildZ08(warm);
+    cold.nav.rebuild();
+    warm.nav.rebuild();
+    warm.nav.warm(ELITE.radius, ELITE.height);
+    warm.nav.warm(NaN); // ignored
+    warm.nav.warm(0.3); // nothing to do for a body the default agent covers
+    for (const [a, b] of [[fc.marks.staging, fc.marks.underBalcony], [fc.marks.eastLoop, planPos(66.5, 23)], [fc.marks.westLoop, fc.marks.balcony]] as const) {
+      expect(warm.nav.findPathFor(a, b, ELITE.radius, ELITE.height)).toEqual(cold.nav.findPathFor(a, b, ELITE.radius, ELITE.height));
+    }
+    expect(fw.marks.staging).toEqual(fc.marks.staging);
+    const empty = world();
+    expect(() => empty.nav.warm(1.2, 3.6)).not.toThrow();
+  });
+
+  it('incremental rebuilds leave exactly the grid a full build would (random edits near ramps and decks)', () => {
+    // every structural edit is recorded so a second world can replay it and build once, in full
+    type Edit = (w: PhysicsWorld, f: ReturnType<typeof buildZ04>, extra: Array<{ enabled: boolean }>) => void;
+    const edits: Edit[] = [];
+    const w = world();
+    const f = buildZ04(w);
+    const extra: Array<{ enabled: boolean }> = [];
+    w.nav.rebuild();
+    const rng = mulberry32(11);
+    let incremental = 0;
+    for (let round = 0; round < 24; round++) {
+      const r = rng(), x = 8 + rng() * 48, n = 4 + rng() * 30, yaw = rng() * 3, top = 0.3 + rng() * 2.4, i = Math.floor(rng() * 4);
+      let e: Edit;
+      if (r < 0.3) e = (ww, ff) => { ff.highCover[i].enabled = !ff.highCover[i].enabled; };
+      else if (r < 0.5) e = (ww, ff) => { const c = ff.lowCover[i]; c.setPose(c.desc.x + (x - 30) * 0.05, c.desc.y, c.desc.z + (n - 19) * 0.05, yaw); };
+      else if (r < 0.6) e = (ww, ff) => { ff.door.desc.blocksMove = ff.door.desc.blocksMove === false; };
+      else if (r < 0.7) e = (ww, ff) => { ff.westRamp.enabled = !ff.westRamp.enabled; };
+      else if (r < 0.8) e = (ww, ff) => { ff.southRamp.setPose!(ff.southRamp.desc.x + (yaw - 1.5) * 0.1, ff.southRamp.desc.y, ff.southRamp.desc.z); };
+      else if (r < 0.9 || extra.length === 0) e = (ww, ff, ex) => { ex.push(ww.addCollider({ shape: { kind: 'box', hx: 0.6, hy: top / 2, hz: 1.4 }, x, y: top / 2 + (i === 0 ? 2 : 0), z: -n, yaw })); };
+      else e = (ww, ff, ex) => { ex[i % ex.length].enabled = !ex[i % ex.length].enabled; };
+      edits.push(e);
+      e(w, f, extra);
+      w.nav.rebuild();
+      if (!w.nav.stats.lastBuildFull) incremental++;
+      const w2 = world();
+      const f2 = buildZ04(w2);
+      const extra2: Array<{ enabled: boolean }> = [];
+      for (const ed of edits) ed(w2, f2, extra2);
+      w2.nav.rebuild();
+      expect(w.nav.nodeCount).toBe(w2.nav.nodeCount);
+      for (let q = 0; q < 14; q++) {
+        const a = w2.nav.randomPoint(f.marks.floorMid, 40, round * 64 + q * 2), b = w2.nav.randomPoint(f.marks.floorMid, 40, round * 64 + q * 2 + 1);
+        expect(w.nav.randomPoint(f.marks.floorMid, 40, round * 64 + q * 2)).toEqual(a);
+        if (!a || !b) continue;
+        expect(w.nav.findPath(a, b)).toEqual(w2.nav.findPath(a, b));
+        expect(w.nav.walkable(a, b)).toBe(w2.nav.walkable(a, b));
+        if (q % 4 === 0) expect(w.nav.findPathFor(a, b, ELITE.radius, ELITE.height)).toEqual(w2.nav.findPathFor(a, b, ELITE.radius, ELITE.height));
+      }
+    }
+    expect(incremental).toBeGreaterThan(18);
+  });
+
   it('a wide agent\'s cached fit is refreshed only around what changed', () => {
     const w = world();
     const f = buildZ08(w);
@@ -307,6 +365,82 @@ describe('path endpoints are exact (review: cell-granular goals)', () => {
       if (p.points.length !== 2) throw new Error(`directly walkable pair got ${p.points.length} points: ${JSON.stringify(p.points)}`);
     }
     expect(direct).toBeGreaterThan(40);
+  });
+});
+
+describe('links are walkable, not just their two ends (the nav side of the soffit blocker)', () => {
+  it('a soffit edge over a ramp: both nodes beside it are fine, the walk between them is not', () => {
+    const w = world();
+    w.addSurface({ shape: { kind: 'rect', hx: 30, hz: 30 }, x: 0, z: 0, y: 0 });
+    w.addSurface({ shape: { kind: 'rect', hx: 2, hz: 6 }, x: 6, z: 0, yaw: Math.PI / 2, y: 0, y1: 3, tag: 'ramp' }); // x 0..12, rises 0 → 3
+    // slab over the ramp's first 1.78 m, underside 2.25: a 1.8 m head fits under it only below x = 1.8
+    const slab = w.addCollider({ shape: { kind: 'box', hx: 2, hy: 0.2, hz: 2.5 }, x: -0.22, y: 2.45, z: 0, tag: 'soffit' });
+    const foot = { x: -1, y: 0, z: 0 }, up = { x: 6, y: 1.5, z: 0 };
+    // the node just under the slab's edge (head clear) and the node just past it (clear of the slab) both exist
+    expect(w.nav.isWalkable(1.75, 0.4375, 0)).toBe(true);
+    expect(w.nav.isWalkable(2.25, 0.5625, 0)).toBe(true);
+    // …but coming down the ramp the body meets the slab's edge with its head still 10 cm too high
+    let pos: Vec3Like = up;
+    let last = w.moveCharacter(pos, 0.4, 0, 0);
+    for (let i = 0; i < 120; i++) { last = w.moveCharacter(pos, 0.4, -0.08, 0); pos = { x: last.x, y: last.y, z: last.z }; }
+    expect(pos.x).toBeGreaterThan(2.17);
+    expect(last).toMatchObject({ blocked: true, reason: 'solid' });
+    // so nav must not link the two nodes (links are two-way), and with the ramp's sides more than a step up
+    // beyond that line there is no other way
+    expect(w.nav.walkable({ x: 2.25, y: 0.5625, z: 0 }, { x: 1.75, y: 0.4375, z: 0 })).toBe(false);
+    expect(w.nav.findPath(up, foot)).toBeNull();
+    expect(w.nav.findPath(foot, up)).toBeNull();
+    expect(w.nav.findPathFor(up, foot, 0.6, 2.2)).toBeNull();
+    slab.enabled = false;
+    const p = w.nav.findPath(up, foot)!;
+    expect(p).not.toBeNull();
+    expect(follow(w, p)).toMatchObject({ reached: true, blocked: 0 });
+    expect(follow(w, w.nav.findPath(foot, up)!)).toMatchObject({ reached: true, blocked: 0 });
+    slab.enabled = true;
+    expect(w.nav.findPath(up, foot)).toBeNull();
+    // raised 30 cm the slab clears a 1.8 m head everywhere, but not a 2.2 m one: same cut, for that body only
+    slab.setPose(-0.22, 2.45 + 0.3, 0);
+    expect(w.nav.findPath(up, foot)).not.toBeNull();
+    expect(w.nav.findPathFor(up, foot, 0.5, 2.2)).toBeNull();
+    expect(w.nav.findPathFor(up, { x: 4, y: 1, z: 0 }, 0.5, 2.2)).not.toBeNull(); // above the line is still fine
+  });
+
+  it('a straight link squeezed between a solid tip and a ledge is not offered', () => {
+    const w = world();
+    fxFloor(w, 0, 0, 30, 10, 0); // the south edge (z = 0) is a bare ledge: feet stay 0.25 m in
+    // a thin fin pointing at the ledge: its tip is 0.385 m from the row of nodes along the margin line —
+    // 0.45 m clear of both neighbouring cell centres, yet 1.5 cm too close for a 0.4 m body walking between them
+    w.addCollider({ shape: { kind: 'box', hx: 0.01, hy: 1, hz: 2 }, x: 13.5, y: 1, z: -0.25 - 0.385 - 2 });
+    const a = planPos(12.75, 0.25), b = planPos(14.75, 0.25);
+    expect(w.nav.isWalkable(13.25, 0, -0.25)).toBe(true);
+    expect(w.nav.isWalkable(13.75, 0, -0.25)).toBe(true);
+    const direct = w.moveCharacter(a, 0.4, 2, 0); // the body cannot pass along the margin line
+    expect(direct.blocked).toBe(true);
+    expect(direct.x).toBeLessThan(13.5);
+    expect(w.nav.walkable(a, b)).toBe(false);
+    const p = w.nav.findPath(a, b)!; // round the fin's far end instead
+    expect(p).not.toBeNull();
+    expect(p.length).toBeGreaterThan(9);
+    expect(follow(w, p)).toMatchObject({ reached: true, blocked: 0 });
+  });
+
+  it('a thin raised strip without a solid (headroom rule only) is routed around', () => {
+    const w = world();
+    fxFloor(w, 0, 0, 30, 40, 0);
+    // 0.2 m wide strip 0.8 m up, x 13.4..13.6, n 20..30: no cell centre lies under it
+    w.addSurface({ shape: { kind: 'rect', hx: 0.1, hz: 5 }, x: 13.5, z: -25, y: 0.8, tag: 'strip' });
+    const a = planPos(11, 25), b = planPos(16, 25);
+    expect(w.nav.isWalkable(13.25, 0, -25)).toBe(true);
+    expect(w.nav.isWalkable(13.75, 0, -25)).toBe(true);
+    const straight = w.moveCharacter(a, 0.4, 5, 0);
+    expect(straight).toMatchObject({ blocked: true, reason: 'edge' });
+    expect(straight.x).toBeLessThanOrEqual(13.4 + 1e-6);
+    expect(w.nav.walkable(a, b)).toBe(false);
+    const p = w.nav.findPath(a, b)!;
+    expect(p).not.toBeNull();
+    expect(p.length).toBeGreaterThan(10); // round an end of the strip
+    expect(follow(w, p)).toMatchObject({ reached: true, blocked: 0 });
+    expect(w.validate().some((i) => i.kind === 'narrow')).toBe(true); // and the strip itself is reported
   });
 });
 

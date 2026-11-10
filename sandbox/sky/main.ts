@@ -86,7 +86,8 @@ function buildScenic(list: string): void {
     else if (name === 'crownmarkArm') o = f.crownmarkArm();
     else if (name === 'megaRibs') o = f.megaRibs();
     else if (name === 'dominionShuttle' || name === 'reformationTransport') { o = f.ship(name); o.position.set(-3, 0, -30); o.rotation.y = -0.95; }
-    else if (name === 'dominionCapital' || name === 'reformationCapital') { o = f.ship(name); o.position.set(0, 260, -1400); o.rotation.y = 1.1; }
+    else if (name === 'dominionCapital') { o = f.ship(name); o.position.set(-420, 250, -1400); o.rotation.y = 1.1; }
+    else if (name === 'reformationCapital') { o = f.ship(name); o.position.set(520, 330, -1500); o.rotation.y = -1.0; }
     else if (name === 'wreckDominion' || name === 'wreckReformation') { o = f.wreck(name === 'wreckDominion' ? 'dominion' : 'reformation'); o.position.set(-1, 0, -19); o.rotation.y = 0.75; }
     else console.warn(`[sandbox] unknown scenic "${name}"`);
     if (o) scenicRoot.add(o);
@@ -150,13 +151,17 @@ Object.assign(window, {
     sky.carrier.setProgress(from);
     run = { from, to, seconds: Math.max(seconds, 1e-3), t: 0 };
   },
+  /** switch the render quality level the sky follows (low | medium | high | ultra) */
+  __q: (level: string) => { (game.render.quality as { level: string }).level = level; sky.update(0, h.camera); return level; },
   /** average ms of `frames` direct scene renders (software GL: only meaningful as a ratio between settings) */
   __time: (frames = 3) => {
     const gl = h.renderer.getContext();
-    h.renderer.render(h.scene, h.camera);
-    gl.finish();
+    const px = new Uint8Array(4);
+    // reading a pixel back is the only reliable way to wait for the frame under ANGLE
+    const frame = (): void => { h.renderer.render(h.scene, h.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+    frame();
     const t0 = performance.now();
-    for (let i = 0; i < frames; i++) { h.renderer.render(h.scene, h.camera); gl.finish(); }
+    for (let i = 0; i < frames; i++) frame();
     return Math.round(((performance.now() - t0) / frames) * 10) / 10;
   },
   __scenic: (list: string) => buildScenic(list),

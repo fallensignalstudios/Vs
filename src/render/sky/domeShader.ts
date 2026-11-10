@@ -7,10 +7,13 @@
  * plane and drawn after the opaque scene with a depth test and no depth write, so interiors that hide the sky
  * pay nothing for it.
  *
- * COST. `uDetail` (0 low · 1 medium · 2 high/ultra, from QualityProfile; forced to 0 for small secondary targets)
- * scales the noise budget. Worst-case value-noise evaluations per pixel (inside the Wound's halo AND the red
- * nebula): low ≈ 14, medium ≈ 26, high ≈ 34 (the first version: ≈ 50 everywhere within 7 remnant radii).
- * Each body is skipped outside its own cone: red nebula 4.6 radii, Wound 3.3 radii.
+ * COST. The fragment program is compiled per quality tier (`#define SKY_DETAIL` 0 low · 1 medium · 2 high/ultra,
+ * from QualityProfile), so the cheaper tiers do not merely branch around the expensive code — it is not in the
+ * program at all (software rasterisers and some mobile compilers flatten uniform branches). Worst-case
+ * value-noise evaluations per pixel (inside the Wound's halo AND the red nebula): low ≈ 14, medium ≈ 26,
+ * high ≈ 34 (the first version: ≈ 50 everywhere within 7 remnant radii). Each body is skipped outside its own
+ * cone: red nebula 4.6 radii, Wound 3.3 radii. `uLite` (set per pass for small secondary targets: reflections,
+ * PMREM faces) additionally drops the fine debris and the violet at run time.
  */
 import { GLSL_DITHER, GLSL_HAZE, GLSL_NOISE } from './glsl';
 
@@ -29,7 +32,7 @@ precision highp float;
 varying vec3 vDir;
 
 uniform float uTime;
-uniform float uDetail;
+uniform float uLite;
 uniform vec3 uCamRight;
 uniform vec3 uCamUp;
 uniform float uWoundR;
@@ -55,16 +58,23 @@ ${GLSL_NOISE}
 ${GLSL_HAZE}
 ${GLSL_DITHER}
 
-// fbm with a runtime octave count (quality tiers share one program: no recompile when the profile changes)
-float fbmN(vec3 p, int oct) {
-  float a = 0.5, s = 0.0, n = 0.0;
-  for (int i = 0; i < 5; i++) {
-    if (i >= oct) break;
-    s += a * vnoise(p); n += a;
-    p = FBM_ROT * p * 2.03 + 17.1; a *= 0.5;
-  }
-  return s / n;
+float fbm2(vec3 p) { return (0.5 * vnoise(p) + 0.25 * vnoise(FBM_ROT * p * 2.03 + 17.1)) / 0.75; }
+float fbm4(vec3 p) {
+  float a = 0.5, s = 0.0;
+  for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = FBM_ROT * p * 2.03 + 17.1; a *= 0.5; }
+  return s / 0.9375;
 }
+// octave budget of the two fbm sizes used throughout, per quality tier
+#if SKY_DETAIL >= 2
+  #define FBM_BIG(p) fbm5(p)
+  #define FBM_SMALL(p) fbm3(p)
+#elif SKY_DETAIL == 1
+  #define FBM_BIG(p) fbm4(p)
+  #define FBM_SMALL(p) fbm2(p)
+#else
+  #define FBM_BIG(p) fbm3(p)
+  #define FBM_SMALL(p) fbm2(p)
+#endif
 
 // ---------------------------------------------------------------------------------------------------------
 // Stars: one jittered star per 3D lattice cell that the unit sphere passes through. Radius is clamped to the
@@ -78,7 +88,11 @@ vec2 starDensity(vec3 d) {
   float lat = dot(d, STAR_POLE);
   float band = exp(-lat * lat * 13.0);
   float clump = vnoise(d * 3.3 + 40.0);
-  float lane = uDetail > 0.5 ? smoothstep(0.30, 0.62, vnoise(d * vec3(6.0, 10.0, 6.0) + 11.0)) : 1.0;
+  #if SKY_DETAIL >= 1
+  float lane = smoothstep(0.30, 0.62, vnoise(d * vec3(6.0, 10.0, 6.0) + 11.0));
+  #else
+  float lane = 1.0;
+  #endif
   return vec2(clamp(0.10 + 0.85 * clump * clump * clump * 2.0 + 1.25 * band * lane, 0.0, 1.5), band * lane);
 }
 
@@ -130,16 +144,14 @@ vec3 starField(vec3 d, float px) {
 
 vec3 nebula(vec3 d) {
   vec3 p = d * 1.9;
-  vec3 w = vec3(0.0);
-  float n, n2;
-  if (uDetail > 0.5) {
-    w = vec3(vnoise(p * 1.3 + 3.1), vnoise(p * 1.3 + 41.7), vnoise(p * 1.3 + 77.3)) - 0.5;
-    n = fbmN(p + w * 1.5, uDetail > 1.5 ? 5 : 4);
-    n2 = fbmN(p * 2.9 - w * 1.2 + 9.0, uDetail > 1.5 ? 3 : 2);
-  } else {
-    n = fbmN(p, 3);
-    n2 = vnoise(p * 2.9 + 9.0);
-  }
+  #if SKY_DETAIL >= 1
+  vec3 w = vec3(vnoise(p * 1.3 + 3.1), vnoise(p * 1.3 + 41.7), vnoise(p * 1.3 + 77.3)) - 0.5;
+  float n = FBM_BIG(p + w * 1.5);
+  float n2 = FBM_SMALL(p * 2.9 - w * 1.2 + 9.0);
+  #else
+  float n = fbm3(p);
+  float n2 = vnoise(p * 2.9 + 9.0);
+  #endif
   float m = smoothstep(0.40, 0.82, n);
   vec3 c = mix(vec3(0.030, 0.036, 0.062), vec3(0.070, 0.056, 0.086), n2);
   c *= m * m * (0.3 + 0.7 * smoothstep(0.28, 0.72, n2));
@@ -162,16 +174,16 @@ vec4 redRemnant(vec3 d, float px) {
   vec3 tw = uWoundDir - uRedDir * dot(uWoundDir, uRedDir);
   vec3 twn = tw / max(length(tw), 1e-4);
   float side = dot(en, twn);
-  int big = uDetail > 1.5 ? 5 : (uDetail > 0.5 ? 4 : 3);
-  int small = uDetail > 1.5 ? 3 : 2;
 
   float f = 1.1 / uRedR;
   vec3 q = d * f + vec3(0.0, uTime * 0.003, 0.0);
-  vec3 w = uDetail > 0.5
-    ? vec3(vnoise(q * 0.55 + 11.0), vnoise(q * 0.55 + 37.0), vnoise(q * 0.55 + 71.0)) - 0.5
-    : vec3(vnoise(q * 0.55 + 11.0) - 0.5);
-  float n1 = fbmN(q + w * 2.4, big);
-  float billow = 1.0 - abs(2.0 * fbmN(q * 1.9 - w * 1.7 + 5.0, small) - 1.0);
+  #if SKY_DETAIL >= 1
+  vec3 w = vec3(vnoise(q * 0.55 + 11.0), vnoise(q * 0.55 + 37.0), vnoise(q * 0.55 + 71.0)) - 0.5;
+  #else
+  vec3 w = vec3(vnoise(q * 0.55 + 11.0) - 0.5);
+  #endif
+  float n1 = FBM_BIG(q + w * 2.4);
+  float billow = 1.0 - abs(2.0 * FBM_SMALL(q * 1.9 - w * 1.7 + 5.0) - 1.0);
   // the mass thins with distance and is dragged out into a tongue toward the Wound
   float reach = 0.42 - 0.17 * max(side, 0.0);
   float fall = exp(-max(r - 0.85, 0.0) * reach) * (1.0 - smoothstep(2.9, 4.6, r));
@@ -181,7 +193,11 @@ vec4 redRemnant(vec3 d, float px) {
   col = mix(col, vec3(1.5, 0.14, 0.04), smoothstep(0.5, 1.0, heat) * 0.85);
   col *= dens * (0.3 + 0.7 * billow) * 0.85;
   // dark dust lanes cut through the mass
-  float lanes = uDetail > 1.5 ? fbm3(q * 0.9 + w + 31.0) : vnoise(q * 0.9 + w + 31.0);
+  #if SKY_DETAIL >= 2
+  float lanes = fbm3(q * 0.9 + w + 31.0);
+  #else
+  float lanes = vnoise(q * 0.9 + w + 31.0);
+  #endif
   col *= 0.30 + 0.70 * smoothstep(0.30, 0.56, lanes);
   // inner corona, brighter on the side that faces the Wound
   col += vec3(1.2, 0.085, 0.03) * exp(-max(r - 1.0, 0.0) * 2.6) * (0.10 + 0.20 * smoothstep(-0.6, 0.8, side)) * (0.5 + n1);
@@ -194,8 +210,8 @@ vec4 redRemnant(vec3 d, float px) {
     float z = sqrt(max(1.0 - r * r, 0.0));
     float lambert = clamp(side * r * 0.90 + z * 0.36 + 0.12, 0.0, 1.0);
     vec3 sq = d * (f * 2.6) + w * 2.6 + vec3(uTime * 0.005, 0.0, 0.0);
-    float pl = fbmN(sq, big);
-    float veins = pow(1.0 - abs(2.0 * fbmN(sq * 2.1 + pl * 2.0, small) - 1.0), 4.0);
+    float pl = FBM_BIG(sq);
+    float veins = pow(1.0 - abs(2.0 * FBM_SMALL(sq * 2.1 + pl * 2.0) - 1.0), 4.0);
     float limb = pow(1.0 - z, 3.0);
     vec3 surf = mix(vec3(0.030, 0.0012, 0.0012), vec3(0.42, 0.020, 0.008), smoothstep(0.25, 0.8, pl));
     surf += vec3(1.25, 0.085, 0.022) * veins * smoothstep(0.35, 0.8, pl);
@@ -302,7 +318,11 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   if (rn < 1.0 + 2.0 * pxn && rn > 0.42) {
     float depth = smoothstep(0.42, 1.0, rn);
     vec3 qi = rotAxis(d, W, -uTime * 0.010 - 2.4 * rn);
-    float m = uDetail > 0.5 ? fbm3(qi * (2.2 / R) + W * (uTime * 0.018)) : vnoise(qi * (2.2 / R) + W * (uTime * 0.018));
+    #if SKY_DETAIL >= 1
+    float m = fbm3(qi * (2.2 / R) + W * (uTime * 0.018));
+    #else
+    float m = vnoise(qi * (2.2 / R) + W * (uTime * 0.018));
+    #endif
     float veil = smoothstep(0.50, 0.86, m) * depth * depth;
     inner = vec3(0.085, 0.028, 0.22) * veil * act * 0.42;
     float surge = vnoise(qi * (1.1 / R) + vec3(uTime * 0.11, 3.0, -uTime * 0.07));
@@ -339,25 +359,32 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   float twist = 1.7 * log(max(rn, 0.35));
   vec3 q = rotAxis(d, W, twist + uTime * 0.0045);
   float fq = 3.0 / R;
-  float dust = fbmN(q * fq + W * (uTime * 0.012), uDetail > 1.5 ? 5 : (uDetail > 0.5 ? 4 : 3));
+  float dust = FBM_BIG(q * fq + W * (uTime * 0.012));
   float ring = exp(-pow(max(rn - 1.0, 0.0) / 0.62, 1.25));
   float halo = (ring * smoothstep(0.28, 0.80, dust) + 0.55 * stream * (0.35 + dust)) * uWoundHalo * outside;
   vec3 haloCol = vec3(0.034, 0.030, 0.050) + vec3(0.110, 0.016, 0.010) * (sr * sr + streamR) + vec3(0.040, 0.048, 0.062) * (sw * sw + streamW);
   col += haloCol * halo * 2.4;
 
   // --- violet: thin filaments riding the swirl, alive only in a few drifting arcs, slow swell (never a strobe)
-  float v1 = vnoise(q * fq * 1.6 + vec3(0.0, uTime * 0.045, 3.0));
-  float v2 = uDetail > 0.5 ? vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0)) : v1;
-  float ridge = 1.0 - abs(2.0 * (0.64 * v1 + 0.36 * v2) - 1.0);
-  float fil = pow(ridge, 22.0);
-  float gate = smoothstep(0.52, 0.80, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
-  float swell = uDetail > 0.5 ? 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * vnoise(q * (0.9 / R) + 4.0)) : 0.75;
-  float band = smoothstep(0.80, 1.0, rn) * exp(-max(rn - 1.0, 0.0) / 0.34);
-  // sub-linear in activity so the default mid settings still show a few live threads
-  float vio = act * (0.55 + 0.45 * act) + 0.5 * sqrt(act) * (1.0 - act);
-  vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * vio * 2.0;
-  violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * vio * 0.45;
-  col += violet * outside;
+  if (uLite < 0.5) {
+    float v1 = vnoise(q * fq * 1.6 + vec3(0.0, uTime * 0.045, 3.0));
+    #if SKY_DETAIL >= 1
+    float v2 = vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0));
+    float swell = 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * vnoise(q * (0.9 / R) + 4.0));
+    #else
+    float v2 = v1;
+    float swell = 0.75;
+    #endif
+    float ridge = 1.0 - abs(2.0 * (0.64 * v1 + 0.36 * v2) - 1.0);
+    float fil = pow(ridge, 22.0);
+    float gate = smoothstep(0.52, 0.80, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
+    float band = smoothstep(0.80, 1.0, rn) * exp(-max(rn - 1.0, 0.0) / 0.34);
+    // sub-linear in activity so the default mid settings still show a few live threads
+    float vio = act * (0.55 + 0.45 * act) + 0.5 * sqrt(act) * (1.0 - act);
+    vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * vio * 2.0;
+    violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * vio * 0.45;
+    col += violet * outside;
+  }
 
   col = mix(inner, col, outside);
 
@@ -372,7 +399,8 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   //     of angular rocks orbit at different speeds (inner faster) → differential motion and parallax.
   float occ = 0.0;
   float lit = 0.0;
-  if (uDetail > 0.5) {
+  #if SKY_DETAIL >= 1
+  if (uLite < 0.5) {
     vec3 p = rotAxis(d, W, uTime * 0.0060 + 0.6) * (5.2 / R);
     float n = debrisField(p, 1.7);
     float thr = mix(0.38, 0.82, smoothstep(0.92, 1.65 + 0.5 * streamR, rn));
@@ -380,21 +408,24 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
     float w = smoothstep(0.80, 0.94, rn) * (1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn))) * (1.0 - smoothstep(1.7, 2.1, rn));
     occ = w * smoothstep(thr - aa, thr + aa, n);
   }
+  #endif
   float turn = theta / 6.2832 + 0.5;
   float open = 1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn));
   {
     float fill = (0.42 * smoothstep(0.86, 1.02, rn) * (1.0 - smoothstep(1.25, 1.9, rn)) + 0.50 * stream) * open;
-    vec2 rk = rockBand(turn + uTime * 0.00095, rn, 22.0, 7.0, 3.0, fill, px, L, uDetail > 0.5);
+    vec2 rk = rockBand(turn + uTime * 0.00095, rn, 22.0, 7.0, 3.0, fill, px, L, SKY_DETAIL >= 1);
     lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }
-  if (uDetail > 0.5) {
+  #if SKY_DETAIL >= 1
+  if (uLite < 0.5) {
     float fill = (0.30 * smoothstep(0.98, 1.15, rn) * (1.0 - smoothstep(1.7, 2.5, rn)) + 0.55 * stream) * open;
-    vec2 rk = rockBand(turn + uTime * 0.00060 + 0.31, rn, 46.0, 15.0, 9.0, fill, px, L, uDetail > 1.5);
+    vec2 rk = rockBand(turn + uTime * 0.00060 + 0.31, rn, 46.0, 15.0, 9.0, fill, px, L, SKY_DETAIL >= 2);
     lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }
-  {
+  #endif
+  if (uLite < 0.5) {
     float fill = 0.17 * smoothstep(1.05, 1.3, rn) * (1.0 - smoothstep(2.0, 3.0, rn)) + 0.60 * stream;
-    vec2 rk = rockBand(turn + uTime * 0.00035 + 0.67, rn, 96.0, 34.0, 23.0, fill, px, L, uDetail > 1.5);
+    vec2 rk = rockBand(turn + uTime * 0.00035 + 0.67, rn, 96.0, 34.0, 23.0, fill, px, L, SKY_DETAIL >= 2);
     lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }
   occ *= uWoundDebris;

@@ -10,19 +10,13 @@
 import type { NavGrid, NavPath } from '@/core/api/physics';
 import type { Vec3Like } from '@/core/api/common';
 import { mulberry32 } from '@/core/mathx';
-import { GAP_TOL } from './shapes';
-import { DEF_HEIGHT, DEF_MAX_DROP, DEF_STEP_UP } from './world';
+import { DEF_HEIGHT, DEF_STEP_UP } from './world';
+import { LEVELS } from './navsearch';
 import { stringPull, toNavPath } from './navsmooth';
-import { CLEARANCE_CAP, LEVEL_TOL, NavGridBase } from './navgrid';
+import { CLEARANCE_CAP, GROUND_FOLLOW, LEVEL_TOL, NavGridBase } from './navgrid';
 
-/** smoothed paths stay within this of the true ground height (keeps waypoints at ramp ends) */
-const GROUND_FOLLOW = 0.3;
 /** re-snap distance for endpoints stranded in a disconnected pocket, in agent radii (must stay < 2) */
 const POCKET_SNAP = 1.9;
-/** ground sampling of the exact swept test (below GAP_TOL, so no void hides between samples) */
-const SWEEP_STEP = GAP_TOL * 0.75;
-/** a height change between two sweep samples larger than this is a step (both bands are tested across it) */
-const SWEEP_RISE = 0.05;
 /**
  * How far a big agent's endpoint may be moved ON ITS OWN LEVEL before another level is considered: a body
  * that stands where it does not fit is put beside the obstacle, not on the balcony above it.
@@ -106,48 +100,6 @@ export class NavGridImpl extends NavGridBase implements NavGrid {
     return cur;
   }
 
-  /**
-   * Exact swept test a → b for the current agent, by the rules of movement: the ground is followed every
-   * SWEEP_STEP (never up or down more than a step: nav links are two-way) with headroom and the ledge margin,
-   * and the body is tested against solids often enough that the discs overlap to within a centimetre — at
-   * every sample on a slope, and in the height band of BOTH sides wherever the ground steps, because the body
-   * changes height somewhere between the two samples. Returns the ground height at b, or NaN.
-   * `skipStart` leaves the start position itself unjudged. With `lineA` / `lineB` (heights of the a→b line at
-   * its ends) the ground must also stay within GROUND_FOLLOW of that line.
-   */
-  private sweepTo(
-    ax: number, ay: number, az: number, bx: number, bz: number, skipStart: boolean, lineA: number, lineB: number,
-  ): number {
-    const f = this.fit, core = this.core;
-    const r = f ? f.radius : this.agentRadius, hh = f ? f.height : DEF_HEIGHT, m = f ? f.margin : this.margin;
-    const dx = bx - ax, dz = bz - az;
-    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SWEEP_STEP));
-    const follow = lineA === lineA;
-    let cur = ay, px = ax, pz = az;
-    /** was the previous sample position tested against solids (at its own height)? */
-    let tested = false;
-    /** may the previous sample position be judged at all? (not the caller's own start) */
-    let judge = false;
-    for (let i = skipStart ? 1 : 0; i <= n; i++) {
-      const t = i / n;
-      const x = ax + dx * t, z = az + dz * t;
-      const g = core.place(x, z, cur, DEF_STEP_UP, DEF_MAX_DROP, hh, true, m);
-      if (g !== g || cur - g > DEF_STEP_UP + 1e-6) return NaN;
-      if (follow && Math.abs(g - (lineA + (lineB - lineA) * t)) > GROUND_FOLLOW) return NaN;
-      const rise = g > cur ? g - cur : cur - g;
-      if (rise > SWEEP_RISE && judge) {
-        if (!tested && !core.standClear(px, pz, cur, r, DEF_STEP_UP, hh)) return NaN;
-        if (!core.standClear(px, pz, g, r, DEF_STEP_UP, hh) || !core.standClear(x, z, cur, r, DEF_STEP_UP, hh)) return NaN;
-      }
-      if ((i & 1) === 0 || i === n || rise > 1e-9) {
-        if (!core.standClear(x, z, g, r, DEF_STEP_UP, hh)) return NaN;
-        tested = true;
-      } else tested = false;
-      cur = g; px = x; pz = z; judge = true;
-    }
-    return cur;
-  }
-
   /** sweepTo as a yes / no test of the straight leg a → b (which must also end on the level of b). */
   private sweep(
     ax: number, ay: number, az: number, bx: number, by: number, bz: number, skipStart: boolean,
@@ -162,6 +114,13 @@ export class NavGridImpl extends NavGridBase implements NavGrid {
 
   walkableFor(a: Vec3Like, b: Vec3Like, radius: number, height = 0): boolean {
     return this.straight(a, b, radius, height);
+  }
+
+  warm(radius: number, height = 0): void {
+    if (!(radius > 0) || !this.begin(radius, height) || this.fit === null) return;
+    const ny = this.ny, slots = this.cols * this.rows * LEVELS;
+    for (let s = 0; s < slots; s++) if (ny[s] === ny[s]) this.passes(s);
+    this.fit = null;
   }
 
   private straight(a: Vec3Like, b: Vec3Like, radius: number, height: number): boolean {
@@ -298,7 +257,7 @@ export class NavGridImpl extends NavGridBase implements NavGrid {
       // the nearest node that fits, when it is on the goal's own level and in the area the body is in
       const direct = t >= 0 && this.comp[t] === this.comp[s] && Math.abs(this.ny[t] - refY) <= 2;
       const found = direct
-        && search.run(s, t, this.nbr, this.cols, this.cell, slots, this.pass, this.crowd, this.ny, refX, refZ, refY);
+        && search.run(s, t, this.nbr, this.cols, this.cell, slots, this.pass, this.crowd, this.ny, refX, refZ, refY, this.passLink);
       this.stats.lastSearchExpanded = direct ? search.expanded : 0;
       if (!found) {
         // The goal is somewhere this body cannot go (under a balcony, down a corridor narrower than itself):
@@ -306,7 +265,7 @@ export class NavGridImpl extends NavGridBase implements NavGrid {
         // have walked there from here, so a sealed room stays unreachable.
         if (t0 < 0 || this.comp[t0] !== this.comp[s] || this.passes(t0)) return null;
         if (!direct) {
-          search.run(s, t0, this.nbr, this.cols, this.cell, slots, this.pass, this.crowd, this.ny, refX, refZ, refY);
+          search.run(s, t0, this.nbr, this.cols, this.cell, slots, this.pass, this.crowd, this.ny, refX, refZ, refY, this.passLink);
           this.stats.lastSearchExpanded = search.expanded;
         }
         if (search.nearest < 0) return null;
@@ -368,5 +327,58 @@ export class NavGridImpl extends NavGridBase implements NavGrid {
     if (n <= 4 && walk(0, n - 1)) { px.splice(1, n - 2); py.splice(1, n - 2); pz.splice(1, n - 2); return; }
     if (walk(n - 3, n - 1)) { cut(n - 2); n--; }
     if (n >= 3 && walk(0, 2)) cut(1);
+  }
+
+  // -------------------------------------------------------------------------------------------------------
+  // debug
+  // -------------------------------------------------------------------------------------------------------
+  /** Append every node position as x,y,z triples (debug drawing, tests). */
+  debugNodes(out: number[]): void {
+    if (!this.built) return;
+    const slots = this.cols * this.rows * LEVELS;
+    for (let s = 0; s < slots; s++) {
+      const h = this.ny[s];
+      if (h === h) out.push(this.slotX(s), h, this.slotZ(s));
+    }
+  }
+
+  /**
+   * Report the nodes as merged strips: every maximal run of east–west neighbours at one height becomes one
+   * call `emit(x0, x1, z, y, tight)` (x0..x1 = cell centres of its ends; `tight` = nodes hugging an obstacle
+   * or an edge). A flat hall collapses to a few hundred strips instead of ten thousand cells.
+   */
+  debugStrips(emit: (x0: number, x1: number, z: number, y: number, tight: boolean) => void): void {
+    if (!this.built) return;
+    const { cols, rows, ny, crowd, cell } = this;
+    const runH = new Float64Array(LEVELS), runX = new Int32Array(LEVELS), runT = new Uint8Array(LEVELS);
+    const live = new Uint8Array(LEVELS), seen = new Uint8Array(LEVELS);
+    for (let iz = 0; iz < rows; iz++) {
+      const z = this.minZ + (iz + 0.5) * cell;
+      live.fill(0);
+      for (let ix = 0; ix <= cols; ix++) {
+        seen.fill(0);
+        if (ix < cols) {
+          const base = (iz * cols + ix) * LEVELS;
+          for (let l = 0; l < LEVELS; l++) {
+            const h = ny[base + l];
+            if (h !== h) break;
+            const tight = crowd[base + l] !== 0 ? 1 : 0; // beside an obstacle / edge, or with a cut link
+            let r = -1;
+            for (let k = 0; k < LEVELS; k++) if (live[k] && runH[k] === h && runT[k] === tight) { r = k; break; }
+            if (r < 0) {
+              for (let k = 0; k < LEVELS; k++) if (!live[k] && !seen[k]) { r = k; break; }
+              if (r < 0) continue;
+              live[r] = 1; runH[r] = h; runX[r] = ix; runT[r] = tight;
+            }
+            seen[r] = 1;
+          }
+        }
+        for (let k = 0; k < LEVELS; k++) {
+          if (!live[k] || seen[k]) continue;
+          emit(this.minX + (runX[k] + 0.5) * cell, this.minX + (ix - 0.5) * cell, z, runH[k], runT[k] === 1);
+          live[k] = 0;
+        }
+      }
+    }
   }
 }

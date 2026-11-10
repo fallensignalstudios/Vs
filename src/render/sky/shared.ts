@@ -34,13 +34,8 @@ export interface SharedUniforms {
   /** linear HDR colour of the live fleet-battle light and the direction it comes from */
   uBattleGlow: { value: THREE.Color };
   uBattleDir: { value: THREE.Vector3 };
-  /**
-   * Dome shading detail for the pass being drawn: 0 = low, 1 = medium, 2 = high / ultra. Follows
-   * `game.render.quality.level`, and drops to 0 for small secondary targets (reflections, PMREM faces).
-   */
-  uDetail: { value: number };
-  /** the main view's tier (not read by shaders; `viewportTracker` copies it into uDetail per pass) */
-  uDetailMain: { value: number };
+  /** 1 while a small secondary target is being drawn (reflections, PMREM faces): the dome drops its fine detail */
+  uLite: { value: number };
   /** a transient world-space point light (the carrier's contact flash) that lights every scenic surface near it */
   uFlashPos: { value: THREE.Vector3 };
   uFlashColor: { value: THREE.Color };
@@ -68,8 +63,7 @@ export function createSharedUniforms(): SharedUniforms {
     uBodies: { value: new THREE.Vector4(0.1, 0, 0.07, 0) },
     uBattleGlow: { value: new THREE.Color(0, 0, 0) },
     uBattleDir: { value: new THREE.Vector3(0, 1, 0) },
-    uDetail: { value: 2 },
-    uDetailMain: { value: 2 },
+    uLite: { value: 0 },
     uFlashPos: { value: new THREE.Vector3() },
     uFlashColor: { value: new THREE.Color(0, 0, 0) },
   };
@@ -111,8 +105,7 @@ export function viewportTracker(u: SharedUniforms): THREE.Object3D['onBeforeRend
     u.uFarZ.value = renderer.capabilities.reversedDepthBuffer ? 0 : 1;
     // reflection, transmission and PMREM targets are much smaller than the frame: nobody can see the fine
     // debris or the lensing arcs there, so those passes shade the cheapest tier
-    const secondary = !!rt && rt.width * rt.height < _size.x * _size.y * 0.3;
-    u.uDetail.value = secondary ? 0 : u.uDetailMain.value;
+    u.uLite.value = !!rt && rt.width * rt.height < _size.x * _size.y * 0.3 ? 1 : 0;
   };
 }
 

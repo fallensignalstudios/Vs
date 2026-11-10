@@ -42,11 +42,14 @@ const dB = (d: number): number => Math.pow(10, d / 20);
 /** Reverb return level (the impulses have unit energy, so send × return is the wet level). */
 const REVERB_RETURN = 0.5;
 /**
- * A freshly created DynamicsCompressorNode attenuates for its first ~150 ms. Until this long after the
- * graph is built the dynamics are bypassed (the soft ceiling still protects the output), so the click that
- * unlocked audio is heard at its real level.
+ * A freshly created DynamicsCompressorNode starts fully attenuated and takes its whole release time (~150 ms
+ * here) to open — the click that unlocks audio would be swallowed. Each compressor is therefore given a
+ * near-zero release for its first 40 ms (it opens in a few milliseconds instead), and for those milliseconds
+ * the dynamics are bypassed altogether (the soft ceiling still protects the output). From `PRIME_SECONDS` on
+ * the chain behaves exactly as it will for the rest of the session.
  */
-export const PRIME_SECONDS = 0.2;
+export const PRIME_SECONDS = 0.045;
+const PRIME_RELEASE = 0.04;
 /** how far impacts push the score down (dB) — they read without having to be louder */
 const SIDECHAIN_DB = 2.5;
 
@@ -65,7 +68,7 @@ export interface CompParams {
  * note attacks through — percussion never passes it. Then the master glue compressor into a fast limiter.
  */
 export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
-  music: { threshold: -17, knee: 8, ratio: 2, attack: 0.025, release: 0.25, makeupDb: 3.2 },
+  music: { threshold: -17, knee: 8, ratio: 2, attack: 0.025, release: 0.25, makeupDb: 3.9 },
   glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
   limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
 };
@@ -132,7 +135,8 @@ export class Mixer {
       n.knee.value = c.knee;
       n.ratio.value = c.ratio;
       n.attack.value = c.attack;
-      n.release.value = c.release;
+      n.release.setValueAtTime(0.0001, t0);
+      n.release.setValueAtTime(c.release, t0 + PRIME_RELEASE);
       return n;
     };
     const conv = (buffer: AudioBuffer): ConvolverNode => {
@@ -158,9 +162,9 @@ export class Mixer {
       chainOut.connect(dyn);
       dyn.connect(to);
       bypass.gain.setValueAtTime(1, t0 + PRIME_SECONDS);
-      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_SECONDS + 0.03);
+      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_SECONDS + 0.012);
       dyn.gain.setValueAtTime(0, t0 + PRIME_SECONDS);
-      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_SECONDS + 0.03);
+      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_SECONDS + 0.012);
     };
 
     // --- master: slider → subsonic guard → gentle glue → fast limiter → soft ceiling (never hard-clips) ---

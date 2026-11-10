@@ -8,13 +8,13 @@ import { breath, crack, glass, pure, servo, struck, thump, wrong } from './parts
 const AMB = { prio: 0, max: 2, gap: 0.2, send: 0.6, vary: 220 } as const;
 
 export const AMBIENT_SFX: RecipeTable = {
-  ambMetalTick: sfx(-24, AMB, (k) => {
+  ambMetalTick: sfx(-24, { ...AMB, bake: 3 }, (k) => {
     // hot metal cooling
     struck(k, 'bar', k.rr(900, 2600), k.rr(0.05, 0.16), 1);
     crack(k, 0.3, 0, 3000, 0.004);
     if (k.rnd() < 0.4) struck(k, 'bar', k.rr(1200, 3000), 0.06, 0.5, { at: k.rr(0.08, 0.22) });
   }),
-  ambEmberPop: sfx(-24, AMB, (k) => {
+  ambEmberPop: sfx(-24, { ...AMB, bake: 3 }, (k) => {
     k.noise('crackle', { a: 0.002, d: k.rr(0.08, 0.3), g: 1 }, { hp: 1800 });
     if (k.rnd() < 0.5) thump(k, 180, 90, 0.04, 0.4);
   }),
@@ -36,7 +36,7 @@ export const AMBIENT_SFX: RecipeTable = {
       k.noise('pink', { a: 0.03, d: 0.12, g: 0.2 }, { at, to: mouth });
     }
   }),
-  ambDrip: sfx(-26, { ...AMB, vary: 400 }, (k) => {
+  ambDrip: sfx(-26, { ...AMB, vary: 400, bake: 3 }, (k) => {
     const e = k.echo(0.11, 0.3, 0.3);
     k.osc('sine', [k.rr(900, 1400), k.rr(1800, 2600), 0.03], { a: 0.001, d: 0.06, g: 1 }, { to: e });
     crack(k, 0.2, 0, 3500, 0.003);
@@ -46,7 +46,7 @@ export const AMBIENT_SFX: RecipeTable = {
     k.osc('sine', 1046.5, { a: 0.004, h: 0.07, d: 0.05, g: 1 });
     k.osc('sine', 2093, { a: 0.004, h: 0.07, d: 0.04, g: 0.1 });
   }),
-  ambIceTick: sfx(-25, { ...AMB, gap: 0.1, max: 3, vary: 500 }, (k) => {
+  ambIceTick: sfx(-25, { ...AMB, gap: 0.1, max: 3, vary: 500, bake: 4 }, (k) => {
     k.noise('crackle', { a: 0.0008, d: k.rr(0.015, 0.06), g: 1 }, { hp: 4000 });
     k.osc('sine', k.rr(3200, 6400), { a: 0.0008, d: k.rr(0.02, 0.08), g: 0.4 });
     if (k.rnd() < 0.3) k.osc('sine', k.rr(4000, 7000), { a: 0.0008, d: 0.03, g: 0.3 }, { at: k.rr(0.03, 0.09) });
@@ -64,12 +64,12 @@ export const AMBIENT_SFX: RecipeTable = {
     k.osc('square', k.rr(900, 1400), { a: 0.003, h: 0.07, d: 0.03, g: 0.4 }, { at: 0.14, bp: 1600, q: 2 });
     k.noise('white', { a: 0.003, d: 0.06, g: 0.5 }, { at: 0.26, bp: 2400, q: 1.5 });
   }),
-  ambWhisper: sfx(-27, { ...AMB, vary: 0, send: 0.8, ref: 6 }, (k) => {
+  ambWhisper: sfx(-27, { ...AMB, vary: 0, send: 0.8, ref: 6, exact: true, bake: 1 }, (k) => {
     // not words. The same four breaths, every time, exactly evenly spaced
     for (let i = 0; i < 4; i++) breath(k, { a: 0.06, d: 0.2, g: 1 - i * 0.12 }, 0.75, { at: i * 0.31, pan: i % 2 ? 0.5 : -0.5 });
     wrong(k, 277.2, { a: 0.3, h: 0.6, d: 0.5, g: 0.1 }, { rate: 3.2 });
   }),
-  ambRelayClick: sfx(-27, { ...AMB, gap: 0.3, vary: 150 }, (k) => {
+  ambRelayClick: sfx(-27, { ...AMB, gap: 0.3, vary: 150, bake: 3 }, (k) => {
     crack(k, 1, 0, 1800, 0.006);
     struck(k, 'bar', k.rr(500, 800), 0.05, 0.5);
     if (k.rnd() < 0.6) crack(k, 0.7, k.rr(0.05, 0.12), 2200, 0.005);
@@ -89,7 +89,7 @@ export const AMBIENT_SFX: RecipeTable = {
     [1, 1.414, 2.236, 3.162].forEach((r, i) => k.osc('sine', 138.6 * r, { ...e, g: 0.5 / (i + 1) }, { pan: i % 2 ? 0.6 : -0.6, fixed: true }));
     k.noise('pink', { ...e, g: 0.25 }, { bp: [300, 900, 5], q: 5 });
   }),
-  ambAlignClick: sfx(-26, { ...AMB, gap: 0.15, max: 3, vary: 60 }, (k) => {
+  ambAlignClick: sfx(-26, { ...AMB, gap: 0.15, max: 3, vary: 60, bake: 3 }, (k) => {
     // a mechanism the size of a cathedral moving by a hair
     const n = k.rnd() < 0.35 ? 3 : 1;
     for (let i = 0; i < n; i++) {
@@ -103,7 +103,7 @@ export const AMBIENT_SFX: RecipeTable = {
     const f = [293.66, 440, 587.33, 659.25, 880][Math.floor(k.rnd() * 5)];
     pure(k, f, { a: 0.02, d: 2.4, g: 1 });
   }),
-  ambConsoleTick: sfx(-31, { ...AMB, vary: 80, send: 0.2 }, (k) => {
+  ambConsoleTick: sfx(-31, { ...AMB, vary: 80, send: 0.2, bake: 2 }, (k) => {
     crack(k, 0.8, 0, 2600, 0.004);
     k.osc('sine', k.rr(1300, 1700), { a: 0.002, d: 0.05, g: 0.3 });
   }),

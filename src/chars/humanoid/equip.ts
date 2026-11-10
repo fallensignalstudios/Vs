@@ -41,6 +41,9 @@ export class Equipment {
   barrel: THREE.Vector3 | null = null;
   /** blade tips of the held melee weapon in right-hand space (kept above the floor by the solver) */
   tips: THREE.Vector3[] | null = null;
+  /** blade axis of a ring-hilted weapon in right-hand space (see SolveOpts.ring) */
+  ring: THREE.Vector3 | null = null;
+  private readonly ringV = new THREE.Vector3();
   /** current extension 0..1 of Verity's forward / rear blade */
   readonly bladeLen: [number, number] = [1, 1];
   private readonly barrelV = new THREE.Vector3();
@@ -124,6 +127,7 @@ export class Equipment {
     }
     this.barrel = null;
     if (rangedHeld && it.ranged) this.barrel = this.barrelV.set(0, 0, -1).applyQuaternion(mountQuat(it.ranged.held, _q));
+    this.ring = meleeHeld && it.melee?.blades ? this.ringV.set(0, 0, -1).applyQuaternion(mountQuat(it.melee.held, _q)) : null;
     this.tips = null;
     if (meleeHeld && it.melee?.sockets) {
       const m = it.melee.held, s = it.melee.sockets;
@@ -162,7 +166,7 @@ export class Equipment {
     const q1 = new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
     const p1 = new THREE.Vector3(p0.x - _z.x * 0.1, item.rest ?? 0.02, p0.z - _z.z * 0.1);
     this.drop = { bone, item, t: 0, p0, q0, p1, q1 };
-    this.heldR = false; this.hasGrip2 = false; this.tips = null; this.barrel = null;
+    this.heldR = false; this.hasGrip2 = false; this.tips = null; this.barrel = null; this.ring = null;
     this.meleeHeld = false; this.rangedHeld = false;
     this.bladeTarget = 0;
     this.stanceKey = 'none';

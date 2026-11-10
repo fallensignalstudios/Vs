@@ -6,7 +6,7 @@
  */
 import { clamp } from '@/core/mathx';
 import { isStub } from '@/core/stub';
-import type { AudioSystem, Game } from '@/core/api';
+import type { AudioSystem, Game, GameEvents } from '@/core/api';
 
 export interface WiredAudio extends AudioSystem {
   setPaused(paused: boolean): void;
@@ -18,8 +18,15 @@ const VOLUME_KEYS = new Set(['masterVolume', 'musicVolume', 'sfxVolume']);
 const DIALOGUE_DUCK = 0.4;
 const DEATH_MUFFLE = 0.65;
 
-export function wireEvents(game: Game, audio: WiredAudio): void {
-  const ev = game.events;
+/** Subscribe the audio system to the game's events. Returns the unsubscribe functions (AudioSystem.dispose). */
+export function wireEvents(game: Game, audio: WiredAudio): Array<() => void> {
+  const offs: Array<() => void> = [];
+  const ev = {
+    on: <K extends keyof GameEvents>(type: K, fn: (payload: GameEvents[K]) => void): void => {
+      const off = game.events.on(type, fn);
+      if (typeof off === 'function') offs.push(off);
+    },
+  };
   let muffleBeforeDeath = 0;
   let lastSever = -100;
 
@@ -69,4 +76,5 @@ export function wireEvents(game: Game, audio: WiredAudio): void {
     // a new link re-locks the cadence — unless it is just the bookkeeping around a sever
     if (game.time.now - lastSever > 1.5) audio.setCadenceIrregular(0);
   });
+  return offs;
 }

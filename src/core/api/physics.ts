@@ -157,9 +157,10 @@ export interface MoveOpts {
   /**
    * ADDED (physics-nav): how far the feet point keeps from a ledge (a void, or a drop deeper than maxDrop).
    * Default: 0.25 m or half the radius, whichever is larger, capped at the radius — so a 0.4 m body
-   * overhangs an unrailed edge by 0.15 m instead of 0.4 m, and the 1.2 m elite by 0.6 m instead of 1.2 m. Pass 0 for the bare feet-point rule. Walkways must
-   * be wider than twice this to be usable (≥ 0.6 m for humans). An actor that already stands inside the
-   * margin (spawned on a rim) is not trapped: the rule re-arms once it has walked clear.
+   * overhangs an unrailed edge by 0.15 m instead of 0.4 m, and the 1.2 m elite by 0.6 m instead of 1.2 m.
+   * Pass 0 for the bare feet-point rule. Walkways must be wider than twice this to be usable (≥ 0.6 m for
+   * humans). An actor that already stands inside the margin (spawned on a rim) is not trapped: the rule
+   * re-arms once it has walked clear.
    */
   edgeMargin?: number;
   /**
@@ -282,6 +283,9 @@ export interface PhysicsWorld {
    *    unless `opts.freeRoam` asks for that.
    *  - A character pushed out of a solid that appears on it (a closing door) leaves through the nearest face,
    *    but never to the far side of a different wall.
+   *  - Stepping off a ledge of 0.45–0.7 m whose riser is a solid (a dock, the low side of a ramp with
+   *    under-fill) lands the body clear of that riser in the same call: up to one radius further than the
+   *    requested displacement. Smooth the visual position, as for `stepDy`.
    *  - Allocation: a new MoveResult per call unless `opts.out` is supplied.
    */
   moveCharacter(from: Vec3Like, radius: number, dx: number, dz: number, opts?: MoveOpts): MoveResult;
@@ -408,8 +412,13 @@ export interface NavGrid {
   /**
    * (Re)build from current surfaces + colliders. Defaults: cell 0.5 m, agentRadius 0.45 m (options persist for
    * later calls). When only a few colliders/surfaces changed since the last build, only the cells they touch
-   * are re-evaluated (≈ 1 ms for a door; a full 70 × 48 m build is ~15 ms warm, a few times that the first
+   * are re-evaluated (≈ 1 ms for a door; a full 70 × 48 m build is ~20 ms warm, a few times that the first
    * time in a session); with no changes it is a no-op.
+   *
+   * What the grid guarantees: a node exists exactly where the default agent can stand by the rules of
+   * moveCharacter, and two neighbouring nodes are linked only when it can also WALK between them — on ramps,
+   * steps and beside overhanging surfaces every link is tested along its length (a soffit edge over a ramp
+   * can leave both ends standable and the hop between them impossible).
    *
    * Calling it is OPTIONAL: every query first brings a stale grid up to date itself (and the first query on an
    * unbuilt grid builds it), so nav never answers from out-of-date geometry — toggling `door.enabled`,
@@ -468,7 +477,7 @@ export interface NavGrid {
    * the goal is somewhere the body cannot go — under that balcony, down a corridor narrower than itself — the
    * path ends at the nearest place it CAN reach on the goal's own level (beside the balcony, not on top of
    * it; of two equally near spots, the one with the shorter walk). That fallback searches the body's whole
-   * reachable area (≈ 1–2 ms in a 70 × 48 m zone): fine per repath, not per frame. null when the goal is
+   * reachable area (≈ 2 ms in a 70 × 48 m zone): fine per repath, not per frame. null when the goal is
    * somewhere no agent could walk to from here (a sealed room).
    *
    * Always pass the same radius / height you give moveCharacter for that actor. On the 0.5 m grid a body
@@ -477,6 +486,14 @@ export interface NavGrid {
   findPathFor(from: Vec3Like, to: Vec3Like, radius: number, height?: number): NavPath | null;
   /** ADDED (physics-nav): walkable() for a big agent of the given radius (and height, default 1.8). */
   walkableFor(a: Vec3Like, b: Vec3Like, radius: number, height?: number): boolean;
+  /**
+   * ADDED (physics-nav): test every nav node for a big agent NOW instead of lazily during its first path
+   * queries (10–30 ms for a 70 × 48 m zone: a loading-screen cost that would otherwise land on the first
+   * query that has to search the whole zone). Call it after the zone's `rebuild()` for each big body the
+   * zone spawns — `nav.warm(1.2, 3.6)` for the elite. Optional: results are identical without it, and after
+   * incremental rebuilds only the nodes around the change are tested again.
+   */
+  warm(radius: number, height?: number): void;
   /**
    * ADDED (physics-nav): free radius at a nav point — distance (m, capped at 3) to the nearest
    * movement-blocking solid overlapping a body of `height` (default 1.8) standing there; 0 when the point is

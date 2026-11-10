@@ -8,7 +8,9 @@
  *   ?view=drones                         security drone vs contaminated variant
  *   ?view=devices                        every device live (front row) and disabled / destroyed (back rows)
  *   ?view=states&who=weaver              shader states: base, flash, frozen, corrupted, dissolving, telegraph
- *   &stage=pale|dark  &variant=1  &seed=3  &manual=1
+ *   ?view=wreck                          every device destroyed (front row, end pose) behind its live self
+ *   ?view=bodies                         the elite's two bodies side by side: procedural fallback | generated skin
+ *   &stage=pale|dark  &variant=1  &seed=3  &manual=1  &skin=0 (procedural bodies only)
  *
  * Globals for tools/shot.cjs: __c (visuals), __play(action, i?), __seek(action, t, i?), __call(method, ...args),
  * __cam(preset | [pos], [look]), __info().
@@ -16,7 +18,7 @@
 import * as THREE from 'three';
 import type { CharacterVisual, CreatureArchetype, DeviceArchetype } from '@/core/api';
 import { asDevice, asDrone, asElite, asWallrunner, asWeaver, CREATURE_ACTIONS } from '@/core/api/creatures';
-import { createCreature } from '@/chars/creatures';
+import { createCreature, preloadCreatureSkins, setCreatureSkinsEnabled } from '@/chars/creatures';
 import { createHarness, miniGame } from '../harness';
 
 type Arch = CreatureArchetype | DeviceArchetype;
@@ -27,6 +29,9 @@ const stage = q.get('stage') ?? 'pale';
 const h = createHarness({ bloom: true, env: 'dark', background: stage === 'dark' ? 0x05060a : 0x14161b, lights: false, exposure: 1 });
 h.scene.environmentIntensity = stage === 'dark' ? 0.3 : 0.55;
 const game = miniGame(h);
+// generated-mesh skins: loaded up front so captures never catch the procedural → skin swap
+if (q.get('skin') === '0') setCreatureSkinsEnabled(false);
+else await preloadCreatureSkins();
 
 // ---------------------------------------------------------------------------------------------- stage
 function buildStage(): void {
@@ -215,6 +220,28 @@ if (view === 'lineup') {
   label('live', -8.4, 1.2, 0);
   label('disabled', -8.4, 1.2, 3.6);
   h.setCam([1.5, 4.6, -11.5], [0, 0.9, 1.6], 38);
+} else if (view === 'wreck') {
+  const order: [Arch, number][] = [['commandEmitter', 0], ['relayReceiver', 0], ['relayReceiver', 1], ['scanHead', 0], ['weaverAnchor', 0], ['frostAnchor', 0]];
+  order.forEach(([a, variant], i) => {
+    const x = (i - (order.length - 1) / 2) * 3.0;
+    spawn(a, x, 3.4, { variant, yaw: 0.45 });
+    const d = spawn(a, x, 0, { variant, yaw: 0.45, seed: 2 + i });
+    seek(d, 'death', Number(q.get('t') ?? 4));
+    label(a + (a === 'relayReceiver' ? (variant ? ' B' : ' A') : ''), x, -0.08, 0);
+  });
+  label('destroyed', -9.6, 0.6, 0);
+  label('live', -9.6, 1.2, 3.4);
+  h.setCam([1.5, 4.4, -11.5], [0, 0.6, 1.2], 40);
+} else if (view === 'bodies') {
+  setCreatureSkinsEnabled(false);
+  const a = spawn('elite', 2.6, 0, { yaw: 0.45 });
+  setCreatureSkinsEnabled(q.get('skin') !== '0');
+  const b = spawn('elite', -2.6, 0, { yaw: 0.45 });
+  if (action) { seek(a, action, tParam || 0.5); seek(b, action, tParam || 0.5); }
+  human(0, 0);
+  label('procedural fallback', 2.6, -0.08, 0);
+  label('generated skin', -2.6, -0.08, 0);
+  h.setCam([0, 2.3, -11], [0, 1.9, 0], 40);
 } else if (view === 'cling') {
   const mat = new THREE.MeshStandardMaterial({ color: 0x8f8a7e, roughness: 0.6 });
   const wall = new THREE.Mesh(new THREE.BoxGeometry(11, 6, 0.4), mat);
@@ -288,6 +315,7 @@ h.onUpdate((dt) => {
 const w = window as unknown as Record<string, unknown>;
 w.__c = visuals;
 w.__ext = { asDevice, asDrone, asElite, asWallrunner, asWeaver };
+w.__three = THREE;
 w.__play = (a: string, i = 0) => visuals[i]?.play(a);
 w.__seek = (a: string, t: number, i = 0) => { const v = visuals[i]; if (v) seek(v, a, t); h.render(); };
 w.__hold = (i = 0, hold = true) => { const v = visuals[i]; if (!v) return; if (hold) frozenClock.add(v); else frozenClock.delete(v); };

@@ -39,6 +39,12 @@ export interface SolveOpts {
   barrel: THREE.Vector3 | null;
   /** points on the right-hand item, in right-hand space, that must stay above the floor (blade tips) */
   tips: THREE.Vector3[] | null;
+  /**
+   * Ring grip (Verity): axis of the double blade in right-hand space. The fist sits inside the hilt ring, so the
+   * blade line stays within RING_SLACK of perpendicular to the forearm — the rear blade can never run back
+   * along the arm that holds it. null = ordinary grip.
+   */
+  ring: THREE.Vector3 | null;
 }
 
 const V = (): THREE.Vector3 => new THREE.Vector3();
@@ -51,6 +57,8 @@ const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const IDENT = new THREE.Quaternion();
+/** ring grip: largest |cos| between the blade line and the forearm (≈ 20° of wrist play) */
+const RING_SLACK = 0.34;
 /** the floor is the plane y = 0 of model space: lowest a palm / a blade tip may go */
 const FLOOR_HAND = 0.03, FLOOR_TIP = 0.015;
 /** ankle → ball of the foot (the toe joint, 3 cm above the sole), heel bottom, toe tip from the ball */
@@ -151,14 +159,14 @@ export class BodySolver {
 
     // right arm first (the left may ride its weapon)
     const pinR = opts.pins ? opts.pins[1] : null, pinL = opts.pins ? opts.pins[0] : null;
-    this.solveArm(pose, 1, add, null, null, 0, pinR, opts.tips);
+    this.solveArm(pose, 1, add, null, null, 0, pinR, opts.tips, opts.ring);
     if (pose.grip > 1e-3 && opts.grip2) {
       const hr = I.handR;
       _g.copy(this.palm[1]).add(opts.grip2).applyQuaternion(this.wq[hr]).add(this.wp[hr]);
       _gq.copy(this.wq[hr]);
       if (opts.grip2Rot) _gq.multiply(opts.grip2Rot);
-      this.solveArm(pose, 0, add, _g, _gq, pose.grip, pinL, null);
-    } else this.solveArm(pose, 0, add, null, null, 0, pinL, null);
+      this.solveArm(pose, 0, add, _g, _gq, pose.grip, pinL, null, null);
+    } else this.solveArm(pose, 0, add, null, null, 0, pinL, null, null);
 
     this.solveLeg(pose, 0);
     this.solveLeg(pose, 1);
@@ -171,7 +179,7 @@ export class BodySolver {
     }
   }
 
-  private solveArm(pose: Pose, s: number, add: Additive | null, gripPos: THREE.Vector3 | null, gripRot: THREE.Quaternion | null, gripW: number, pin: { pos: THREE.Vector3; w: number } | null, tips: THREE.Vector3[] | null): void {
+  private solveArm(pose: Pose, s: number, add: Additive | null, gripPos: THREE.Vector3 | null, gripRot: THREE.Quaternion | null, gripW: number, pin: { pos: THREE.Vector3; w: number } | null, tips: THREE.Vector3[] | null, ring: THREE.Vector3 | null): void {
     const I = this.idx, q = pose.q;
     const L = s === 0;
     const clav = L ? I.clavL : I.clavR, ua = L ? I.uArmL : I.uArmR, fa = L ? I.fArmL : I.fArmR, ha = L ? I.handL : I.handR;
@@ -216,6 +224,7 @@ export class BodySolver {
       _pole.set(L ? -0.5 : 0.5, -0.7, 0.35).applyQuaternion(this.wq[chest]);
       this.ikArm(s, rest, ua, pin.pos, _qh, _pole, pin.w);
     }
+    if (ring && w > 0.5) this.ringGrip(s, rest, ua, fa, ha, ring);
     this.floorArm(s, rest, ua, fa, ha, gripW > 0.5 ? null : tips, gripW > 0.5);
     this.wq[ua].copy(this.ua);
     this.wp[fa].copy(this.off[fa]).applyQuaternion(this.ua).add(this.wp[ua]);
@@ -240,6 +249,43 @@ export class BodySolver {
     _fe.copy(this.off[fa]).applyQuaternion(this.ua).add(this.wp[ua]);
     _fw.copy(this.off[ha]).applyQuaternion(this.fa).add(_fe);
     _fp.copy(this.palm[s]).applyQuaternion(this.ha).add(_fw);
+  }
+
+  /**
+   * Ring grip (see SolveOpts.ring): keep the blade line near perpendicular to the forearm, and turn the hand
+   * about the blade line until the forearm passes straight through the ring — whatever the pose authored.
+   */
+  private ringGrip(s: number, rest: TwoBoneRest, ua: number, fa: number, ha: number, axis: THREE.Vector3): void {
+    for (let pass = 0; pass < 3; pass++) {
+      this.armPoints(s, ua, fa, ha);
+      _ft.copy(_fw).sub(_fe).normalize();
+      _fk.copy(axis).applyQuaternion(this.ha);
+      _fq.copy(this.ha);
+      let moved = false;
+      const c = _fk.dot(_ft);
+      if (Math.abs(c) > RING_SLACK) {
+        const cur = Math.acos(Math.max(-1, Math.min(1, c)));
+        const want = c > 0 ? Math.acos(RING_SLACK) : Math.PI - Math.acos(RING_SLACK);
+        // swing the blade line away from the forearm in their common plane
+        _v.crossVectors(_ft, _fk);
+        if (_v.lengthSq() < 1e-8) _v.set(1, 0, 0).applyQuaternion(this.ha);
+        _q.setFromAxisAngle(_v.normalize(), want - cur);
+        _fq.premultiply(_q);
+        _fk.applyQuaternion(_q);
+        moved = true;
+      }
+      // twist about the blade line: fingers (hand −Y) continue the forearm
+      _v.set(0, -1, 0).applyQuaternion(_fq).addScaledVector(_fk, -_v.dot(_fk));
+      _v2.copy(_ft).addScaledVector(_fk, -_ft.dot(_fk));
+      if (_v.lengthSq() > 1e-6 && _v2.lengthSq() > 1e-6) {
+        _v.normalize(); _v2.normalize();
+        const tw = Math.atan2(_end.crossVectors(_v, _v2).dot(_fk), _v.dot(_v2));
+        if (Math.abs(tw) > 0.02) { _fq.premultiply(_q.setFromAxisAngle(_fk, tw)); moved = true; }
+      }
+      if (!moved) return;
+      _pole.copy(_fe).sub(this.wp[ua]);
+      this.ikArm(s, rest, ua, _fp, _fq, _pole, 1);
+    }
   }
 
   /**

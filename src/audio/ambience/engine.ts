@@ -128,13 +128,13 @@ export class AmbienceEngine {
     }
     this.id = def ? id : 'none';
     if (!def) {
-      this.mixer.setRoom(0.6, 6500, fade);
+      this.mixer.setRoom(0.6, 6500, [0.3, 0.9, 0.3], fade);
       return;
     }
     const gain = (this.norm[id] ?? UNCALIBRATED) * dbToGain(def.db);
     this.deck = new BedDeck(this.ac, this.res, this.mixer, def, gain, now + 0.02, this.rnd);
     this.deck.fader.fade(now, now + 0.02, fade, gain);
-    this.mixer.setRoom(def.room * 0.6, def.tone, fade);
+    this.mixer.setRoom(def.room * 0.6, def.tone, def.space, fade);
   }
 
   update(): void {

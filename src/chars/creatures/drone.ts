@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import type { CharacterCreateOpts, Game } from '@/core/api';
 import type { DroneVisual } from '@/core/api/creatures';
 import { clamp01, damp } from '@/core/mathx';
-import { impact, keys, noise1, rot, move, win } from './core/anim';
+import { groundDeficit, impact, keys, noise1, probe, rot, move, win, type GroundProbe } from './core/anim';
 import { CreatureBase, type ActionDef, type Slot } from './core/base';
 import { arcPath, band, blob, box, cyl, plate, prism, sphere, T, torus, tube, type Pt2, type Pt3 } from './core/geo';
 import { P, tint } from './core/palette';
@@ -22,6 +22,10 @@ import { getTemplate, RigBuilder, type RigTemplate } from './core/rig';
 const G = { eye: 1, vent: 2, muzzle: 3, lights: 4, repulsor: 5, growth: 6 } as const;
 
 const VANES = ['UR', 'UL', 'LR', 'LL'] as const;
+/** contaminated filament lengths (metres) */
+const FIL_LEN = [0.46, 0.34, 0.26];
+const DOWN = new THREE.Vector3(0, -1, 0);
+const _mb = new THREE.Matrix4(), _qb = new THREE.Quaternion(), _qf = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _pf = new THREE.Vector3(), _df = new THREE.Vector3();
 
 function mul(...m: THREE.Matrix4[]): THREE.Matrix4 {
   const out = new THREE.Matrix4();
@@ -66,7 +70,8 @@ function buildDrone(contam: boolean): RigTemplate {
   b.addPair('body', 'body', P.refSteel, box(0.084, 0.118, 0.026, 0.006), T(0.205, 0, 0.0));
   b.addPair('body', 'body', P.refSteel, box(0.084, 0.118, 0.026, 0.006), T(0.205, 0, 0.15));
   for (let i = 0; i < 3; i++) b.addPair('body', 'body', P.refDark, box(0.005, 0.012, 0.085, 0.002), T(0.2435, 0.03 - i * 0.026, 0.075));
-  b.addPair('body', 'body', P.refGlow, box(0.006, 0.01, 0.05, 0.002), T(0.2435, -0.04, 0.075), { group: G.lights });
+  // belt line: one long running light down each side module (the read at 8–12 m on a dark stage)
+  b.addPair('body', 'body', P.refGlow, box(0.007, 0.016, 0.21, 0.002), T(0.2437, -0.043, 0.07), { group: G.lights });
   // --- the eye: steel bezel, dark lens, lit iris + pupil
   b.add('eye', P.refSteel, band(0.098, 0.034, 0.05, 16, 0.009), T(0, 0.005, -0.275, -HALF_PI, 0, 0));
   b.add('eye', P.refNavy, band(0.125, 0.022, 0.03, 8, 0.007), T(0, 0.005, -0.262, -HALF_PI, 0, 0));
@@ -111,6 +116,8 @@ function buildDrone(contam: boolean): RigTemplate {
     const lead: Pt2[] = ([[0, 0.05], [0.09, 0.062], [0.21, 0.005], [0.2, -0.015], [0.09, 0.04], [0, 0.03]] as Pt2[]).map((p) => [p[0] * k, p[1] * k] as Pt2);
     b.addPair(tR, tL, P.refSteel, prism(lead, 0.02, 0.004), place);
     b.addPair(tR, tL, P.refGlow, box(0.05, 0.022, 0.01, 0.003), mul(place, T(tipX - 0.035, tipY + 0.022, 0, 0, 0, -1.05)), { group: G.lights });
+    // leading-edge strip: the vanes draw an X of light, so the drone's attitude reads from its lights alone
+    b.addPair(tR, tL, P.refGlowSoft, box(0.125 * k, 0.011, 0.024, 0.003), mul(place, T(0.152 * k, 0.04 * k, 0, 0, 0, -0.44)), { group: G.lights });
   };
   vane('U', [0.235, 0.05, 0.04], [0.33, 0.1, 0.07], 0.5, blade);
   vane('L', [0.225, -0.05, 0.1], [0.29, -0.1, 0.13], -0.62, bladeS);
@@ -136,9 +143,8 @@ function buildDrone(contam: boolean): RigTemplate {
     for (const n of nodes) b.add('body', P.violet, sphere(0.014, 1), T(n[0], n[1], n[2]), { group: G.growth, crease: 180 });
     // dangling filaments
     const roots: Pt3[] = [[-0.1, -0.13, 0.1], [0.085, -0.15, 0.22], [-0.02, -0.13, 0.26]];
-    const lens = [0.46, 0.34, 0.26];
     roots.forEach((r, i) => {
-      const seg = lens[i]! / 3;
+      const seg = FIL_LEN[i]! / 3;
       const chain = b.chain('fil' + i + '_', 'body', [r, [r[0], r[1] - seg, r[2] + 0.01], [r[0], r[1] - seg * 2, r[2] + 0.02]]);
       b.tubeOn(chain, [r[0], r[1] - seg * 3, r[2] + 0.03], P.sinew, (t) => 0.013 * (1 - t * 0.8) + 0.002, 5);
       b.add(chain[2]!, P.violet, sphere(0.012, 1), T(r[0], r[1] - seg * 3, r[2] + 0.03), { group: G.growth, crease: 180 });
@@ -158,14 +164,22 @@ const ACTIONS: Record<string, ActionDef> = {
   idle: { dur: 2, loop: true },
   shoot: { dur: 0.42, hits: [0.05], hitName: 'release', fade: 0.03 },
   volley: { dur: 0.9, hits: [0.06, 0.3, 0.54], hitName: 'release', fade: 0.04 },
-  hitLight: { dur: 0.4, fade: 0.03 },
-  hitHeavy: { dur: 0.65, fade: 0.03 },
+  hitLight: { dur: 0.4, fade: 0.03, react: true, ignoreFreeze: true },
+  hitHeavy: { dur: 0.65, fade: 0.03, react: true, ignoreFreeze: true },
   stagger: { dur: 1.15, fade: 0.05, out: 0.3 },
-  death: { dur: 2.3, hold: true, fade: 0.05, events: [[1.25, 'impact']] },
-  spawn: { dur: 0.9, fade: 0 },
+  death: { dur: 2.3, hold: true, fade: 0.05, ignoreFreeze: true, thaw: true, events: [[1.25, 'impact']] },
+  spawn: { dur: 0.9, fade: 0, revive: true },
   scan: { dur: 2.4, loop: true },
-  generic: { dur: 0.6 },
+  generic: { dur: 0.6, react: true, ignoreFreeze: true },
 };
+const FALL_START = 0.45, LAND_T = 1.25;
+const K = {
+  deSpin: [0, 0, 0.5, 2.2, LAND_T, 7.5, 2.3, 8.1],
+  deSettle: [LAND_T - 0.15, 0, LAND_T + 0.25, 1],
+  deLimp: [0, 0, 0.4, 1],
+  deGun: [0, 0, 0.3, 1],
+  spFold: [0.1, 0, 0.75, 1],
+} as const;
 
 const ALIASES: Record<string, string> = {
   hover: 'idle', frozen: 'idle', linkedSync: 'idle', aim: 'idle', lookAround: 'scan',
@@ -190,6 +204,7 @@ export class Drone extends CreatureBase implements DroneVisual {
   private readonly bVane: THREE.Bone[];
   private readonly bTip: THREE.Bone[];
   private readonly bFil: THREE.Bone[][] = [];
+  private readonly wreckProbes: GroundProbe[];
 
   constructor(game: Game | null, contam: boolean, opts: CharacterCreateOpts = {}) {
     super(game, {
@@ -204,6 +219,7 @@ export class Drone extends CreatureBase implements DroneVisual {
       frostRange: 0.7,
       eclipse: contam,
       baseCorruption: contam ? 0.5 : 0,
+      rim: contam ? [0x9a86e0, 0.26] : [0xa8d8ff, 0.3],
     }, opts);
     this.contam = contam;
     const r = this.rig;
@@ -216,6 +232,21 @@ export class Drone extends CreatureBase implements DroneVisual {
     this.bVane = VANES.map((v) => r.b('vane' + v));
     this.bTip = VANES.map((v) => r.b('tip' + v));
     if (contam) for (let i = 0; i < 3; i++) this.bFil.push([0, 1, 2].map((j) => r.b(`fil${i}_${j}`)));
+    // what touches the floor first when the wreck comes down: vane tips, muzzle, hull
+    this.wreckProbes = [
+      probe(this.bTip[0]!, [0.33, 0.1, 0.07], [0.33 + 0.237, 0.1 + 0.129, 0.18], 0.015),
+      probe(this.bTip[1]!, [-0.33, 0.1, 0.07], [-0.33 - 0.237, 0.1 + 0.129, 0.18], 0.015),
+      probe(this.bTip[2]!, [0.29, -0.1, 0.13], [0.29 + 0.158, -0.1 - 0.113, 0.209], 0.015),
+      probe(this.bTip[3]!, [-0.29, -0.1, 0.13], [-0.29 - 0.158, -0.1 - 0.113, 0.209], 0.015),
+      probe(this.bTip[0]!, [0.33, 0.1, 0.07], [0.33, 0.1, 0.07], 0.03),
+      probe(this.bTip[1]!, [-0.33, 0.1, 0.07], [-0.33, 0.1, 0.07], 0.03),
+      probe(this.bTip[2]!, [0.29, -0.1, 0.13], [0.29, -0.1, 0.13], 0.03),
+      probe(this.bTip[3]!, [-0.29, -0.1, 0.13], [-0.29, -0.1, 0.13], 0.03),
+      probe(this.bGun, [0, -0.135, -0.08], [0, -0.19, -0.43], 0.035),
+      probe(this.bBody, [0, 0, 0], [0, 0, 0.02], 0.2),
+      probe(this.bBody, [0, 0, 0], [0, 0, 0.3], 0.1),
+      probe(this.bAnt, [0.07, 0.14, 0.16], [0.09, 0.37, 0.235], 0.01),
+    ];
     this.u.uDissolveColor.value.setHex(contam ? 0x7a3cff : 0xa8d8ff);
     this.u.uHot.value.set(1, 0.97, 0.92, 1);
   }
@@ -232,6 +263,14 @@ export class Drone extends CreatureBase implements DroneVisual {
 
   protected override lookHeight(): number {
     return 0;
+  }
+
+  protected override heal(): void {
+    this.twitch = 0; this.flicker = 1; this.flickerT = 0; this.lastBeat = 1; this.deathFlicker = 0;
+  }
+
+  protected override onRevive(): void {
+    this.deathFlicker = 0;
   }
 
   protected override pose(adt: number): void {
@@ -305,7 +344,37 @@ export class Drone extends CreatureBase implements DroneVisual {
     let muzzle = 0.35 + tel * 3.2;
     let lights = 1;
     for (const s of this.active) muzzle += this.applyAction(s, adt);
-    if (this.dead) lights = 0;
+    if (this.dead) {
+      lights = 0;
+      // the wreck rests ON the floor: lift the hull by whatever its lowest part is short of it
+      for (let i = 0; i < 4; i++) this.bTip[i]!.updateWorldMatrix(true, false);
+      this.bGun.updateWorldMatrix(true, false);
+      this.bAnt.updateWorldMatrix(true, false);
+      const lack = groundDeficit(this.wreckProbes, this.rig.toModel, -this.hoverHeight / this.scale);
+      if (lack > 0) body.position.y += lack;
+      // contaminated filaments go slack along the ground: each is laid from its root down to the floor
+      const flat = keys(this.timeOf('death'), K.deSettle);
+      if (this.bFil.length) {
+        body.updateWorldMatrix(true, false);
+        _mb.multiplyMatrices(this.rig.toModel, body.matrixWorld);
+        _qb.setFromRotationMatrix(_mb).invert();
+        const floorY = -this.hoverHeight / this.scale + 0.02;
+        for (let i = 0; i < this.bFil.length; i++) {
+          const ch = this.bFil[i]!;
+          _pf.copy(ch[0]!.position).applyMatrix4(_mb);
+          const len = FIL_LEN[i]!;
+          const dy = Math.max(-1, Math.min(0, -(_pf.y - floorY) / len));
+          const h = Math.sqrt(1 - dy * dy), a = 0.6 + i * 2.2;
+          _df.set(Math.cos(a) * h, dy, Math.sin(a) * h);
+          _qf.setFromUnitVectors(DOWN, _df).premultiply(_qb);
+          // free while the root is a filament's length above the floor; fully laid once it is not
+          const k = Math.max(flat, clamp01((1 + dy) * 4));
+          if (k <= 0) continue;
+          ch[0]!.quaternion.slerp(_qf, k);
+          for (let j = 1; j < ch.length; j++) ch[j]!.quaternion.slerp(_qi, k);
+        }
+      }
+    }
 
     // ---- emissive groups
     if (c) {
@@ -385,30 +454,36 @@ export class Drone extends CreatureBase implements DroneVisual {
         return -0.3 * env;
       }
       case 'death': {
-        // spin up, lights stutter out, drop under gravity, bounce, settle on a broken vane
-        const drop = this.hoverHeight / this.scale - 0.13;
-        const fallStart = 0.45, land = 1.25;
+        // spin up, lights stutter out, drop under gravity, bounce, settle on its side. The scripted drop aims just
+        // below the floor; the wreck probes in pose() seat whatever touches first exactly on it
+        const drop = this.hoverHeight / this.scale + 0.05;
+        const fallStart = FALL_START, land = LAND_T;
         const f = clamp01((t - fallStart) / (land - fallStart));
         let y = -drop * f * f;
         y += Math.abs(Math.sin((t - land) * 9)) * 0.12 * impact(t, land, 0.22);
         if (t < fallStart) y += 0.06 * Math.sin((t / fallStart) * Math.PI);
-        const spin = keys(t, [0, 0, 0.5, 2.2, land, 7.5, 2.3, 8.1]);
-        const settle = keys(t, [land - 0.15, 0, land + 0.25, 1]);
+        const spin = keys(t, K.deSpin);
+        const settle = keys(t, K.deSettle);
         move(body, 0.25 * f, y * w, 0.15 * f);
-        rot(body, (0.5 * Math.sin(t * 5) * (1 - settle) + 0.22 * settle) * w, spin * w, (0.8 * f * (1 - settle) + 1.05 * settle) * w);
+        // comes down rolled onto its left side module; the pose below is then seated on the floor by the wreck probes
+        rot(body, (0.5 * Math.sin(t * 5) * (1 - settle) + 0.18 * settle) * w, spin * w, (0.8 * f * (1 - settle) + 0.62 * settle) * w);
+        const limp = keys(t, K.deLimp);
         for (let i = 0; i < 4; i++) {
-          const right = i % 2 === 0 ? 1 : -1, upper = i < 2 ? 1 : -1;
-          const limp = keys(t, [0, 0, 0.4, 1]);
-          rot(this.bVane[i]!, 0, (0.3 + 0.2 * i) * limp * -right * (1 - settle * 0.5), (-0.9 * upper * limp + Math.sin(t * 13 + i) * 0.2 * (1 - settle)) * right * upper);
-          rot(this.bTip[i]!, 0, 0, (-0.7 * limp * upper + (i === 0 ? 1.2 * settle : 0)) * right);
+          const right = i % 2 === 0 ? 1 : -1;
+          // falling: every vane trails upward in the airflow. Landed: the left pair is pinned up against the hull
+          // by the floor, the right pair flops down across it
+          const trail = 0.55 * limp * (1 - settle);
+          const rest = (right > 0 ? -0.95 : -0.5) * settle;
+          rot(this.bVane[i]!, 0, (0.3 + 0.2 * i) * limp * -right * (1 - settle * 0.5), right * trail + rest + Math.sin(t * 13 + i) * 0.2 * limp * (1 - settle));
+          rot(this.bTip[i]!, 0, 0, right * 0.3 * trail + (right > 0 ? -0.6 : -0.45 - (i === 1 ? 0.5 : 0)) * settle);
         }
-        rot(this.bGun, 0.8 * keys(t, [0, 0, 0.3, 1]), 0.3 * settle, 0);
+        rot(this.bGun, 0.8 * keys(t, K.deGun), 0.3 * settle, 0);
         for (let i = 0; i < 3; i++) rot(this.bFlaps[i]!, -0.5 * settle * (i === 1 ? 1.6 : 0.6), 0, 0);
         this.deathFlicker = t < 0.9 ? (Math.sin(t * 43) > 0.2 ? 1.6 : 0.05) * (1 - t / 0.9) : 0;
         return -1;
       }
       case 'spawn': {
-        const k = (1 - keys(t, [0.1, 0, 0.75, 1])) * w;
+        const k = (1 - keys(t, K.spFold)) * w;
         for (let i = 0; i < 4; i++) {
           const right = i % 2 === 0 ? 1 : -1, upper = i < 2 ? 1 : -1;
           rot(this.bVane[i]!, 0, -1.1 * k * right, -0.5 * k * right * upper);

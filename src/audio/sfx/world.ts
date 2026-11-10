@@ -198,7 +198,7 @@ export const WORLD_SFX: RecipeTable = {
     k.noise('pink', { a: 0.2, d: 1.2, g: 0.18 }, { at: 0.2, hp: 3500 }); // dust
     thump(k, 80, 44, 0.2, 0.6, k.rr(0.1, 0.3));
   }),
-  explosionSmall: sfx(-6, { gap: 0.12, max: 3, prio: 2, send: 0.55, ref: 9 }, (k) => {
+  explosionSmall: sfx(-6, { gap: 0.12, max: 3, prio: 2, send: 0.55, ref: 9, bake: 2 }, (k) => {
     blast(k, 0.8, 1);
     k.noise('crackle', { a: 0.005, d: 0.4, g: 0.3 }, { at: 0.05, hp: 2500 });
   }),

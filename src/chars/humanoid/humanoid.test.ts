@@ -30,9 +30,9 @@ describe('humanoid figures', () => {
       expect(v.height).toBeLessThan(2.2);
       expect(v.triangles).toBeGreaterThan(5000);
       expect(v.triangles).toBeLessThan(60000);
-      // ≤ 3 draw calls per character including weapons
+      // ≤ 3 draw calls per character including weapons: one level of detail, the shadow caster, an overlay
       let meshes = 0;
-      v.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes++; });
+      v.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) meshes++; });
       expect(meshes).toBeLessThanOrEqual(3);
       const g = (v.root.getObjectByName('body') as THREE.SkinnedMesh).geometry;
       const w = g.getAttribute('skinWeight');

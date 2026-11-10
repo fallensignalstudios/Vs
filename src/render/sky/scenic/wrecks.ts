@@ -64,7 +64,7 @@ export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, sc
   const dom = faction === 'dominion';
   const W = dom ? 3.0 : 3.2, H = dom ? 2.2 : 2.25; // half width / half height of the barrel
   const LEN = 13;
-  const roll = dom ? 0.3 : -0.22, pitch = dom ? -0.15 : -0.1, liftY = H * 0.74;
+  const roll = dom ? 0.2 : -0.16, pitch = dom ? -0.13 : -0.09, liftY = H * 0.74;
 
   /** barrel section at z, scaled by k: a rounded hull for the Dominion craft, a chamfered module for the other */
   const ringAt = (z: number, k: number): P3[] => {
@@ -81,10 +81,10 @@ export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, sc
   };
   const stations = [-LEN / 2, -LEN / 3, -LEN / 8, LEN / 8, LEN / 3, LEN / 2];
   const taper = (z: number): number => 1 - 0.1 * Math.max(0, -z / (LEN / 2));
-  // the gash: ring indices i0..i1 of skin are gone (upper shoulder), wider toward the torn rear
+  // the gash: ring indices i0..i1 of skin are gone (the roof, leaning to one shoulder), wider toward the torn rear
   const gash = (s: number): [number, number] => {
     const t = s / (stations.length - 1);
-    return [Math.round(9 - 2.5 * t), Math.round(12.5 + 3.5 * t)];
+    return [9.6 - 1.5 * t, 12.4 + 1.7 * t];
   };
 
   sink.push().translate(0, liftY, 0).rotateZ(roll).rotateX(pitch);
@@ -92,7 +92,7 @@ export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, sc
   // ---- skin: two open strips either side of the gash, with a ragged rear edge; inner lining behind them
   const jag = (p: P3, amt: number): P3 => [p[0], p[1], p[2] + (rand() - 0.5) * amt];
   const strip = (from: (s: number) => number, to: (s: number) => number, kOuter: number, inward: boolean): P3[][] => {
-    const n = 9;
+    const n = 16;
     return stations.map((z, s) => {
       const ring = ringAt(z, taper(z) * kOuter);
       const a = from(s), b2 = to(s);
@@ -116,7 +116,45 @@ export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, sc
   const lower = (s: number): number => gash(s)[1] - N;       // from the gash's far lip, round the keel…
   const upper = (s: number): number => gash(s)[0];           // …to its near lip
   sink.p('hull').skin(strip(lower, upper, 1, false).map((r) => [...r].reverse()), { open: true });
-  sink.p('dark').skin(strip(lower, upper, 0.94, true).map((r) => [...r].reverse()), { open: true });
+  sink.p('accent').skin(strip(lower, upper, 0.94, true).map((r) => [...r].reverse()), { open: true });
+  // the tear itself: ragged tongues of skin left standing along both lips of the gash, bent out by the blast
+  for (let s = 0; s < stations.length - 1; s++) {
+    for (const lip of [0, 1]) {
+      for (let k = 0; k < 2; k++) {
+        if (rand() < 0.25) continue;
+        const t0 = k / 2 + rand() * 0.12, t1 = t0 + 0.2 + rand() * 0.22;
+        const at = (t: number): P3 => {
+          const z = stations[s] + (stations[s + 1] - stations[s]) * t;
+          const g0 = gash(s)[lip], g1 = gash(s + 1)[lip];
+          const f = g0 + (g1 - g0) * t;
+          const ring = ringAt(z, taper(z) * 1.01);
+          const i0 = Math.floor(f), u = f - i0;
+          const p = ring[i0 % N], q = ring[(i0 + 1) % N];
+          return [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u, z];
+        };
+        const a = at(t0), c = at(Math.min(t1, 1));
+        const dir = lip === 0 ? 1 : -1;
+        const top = (p: P3, h: number, out: number): P3 => [p[0] + dir * out + (rand() - 0.5) * 0.2, p[1] + h, p[2] + (rand() - 0.5) * 0.4];
+        const ta = top(a, 0.12 + rand() * 0.4, 0.1 + rand() * 0.5), tc = top(c, 0.1 + rand() * 0.3, 0.15 + rand() * 0.6);
+        sink.p('hull', 0.8).poly([a, c, tc, ta]).poly([ta, tc, c, a]);
+      }
+    }
+  }
+  if (!dom) {
+    // the module's exterior frames (the transport's signature), still standing proud of the skin
+    for (let i = 0; i < 5; i++) {
+      const z = -LEN / 2 + 1.6 + i * 2.5;
+      const ring = ringAt(z, taper(z) * 1.03);
+      const g = gash((i / 4) * (stations.length - 1));
+      const frames: Frame[] = [];
+      for (let j = Math.ceil(g[1]) - N; j <= Math.floor(g[0]); j++) {
+        const p = ring[((j % N) + N) % N];
+        const l = Math.hypot(p[0], p[1]) || 1;
+        frames.push({ p: [p[0], p[1], z], side: [0, 0, 1], up: [p[0] / l, p[1] / l, 0], w: 0.22, d: 0.16 });
+      }
+      sink.p('metal').sweepProfile(frames, RECT, { caps: true });
+    }
+  }
   // nose bulkhead, crumpled inward
   const nose = ringAt(stations[0] + 0.3, taper(stations[0]) * 0.96);
   sink.p('accent').poly(nose.map((p): P3 => [p[0], p[1], p[2] + (rand() - 0.5) * 0.5]));
@@ -126,7 +164,8 @@ export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, sc
     const z = -LEN / 2 + 0.9 + (i * (LEN - 1.8)) / 5;
     const ring = ringAt(z, taper(z) * 0.93);
     const snapped = i === 4 || (i === 2 && rand() < 0.7);
-    const [g0, g1] = gash(Math.round((i / 5) * (stations.length - 1)));
+    const g = gash((i / 5) * (stations.length - 1));
+    const g0 = Math.floor(g[0]), g1 = Math.ceil(g[1]);
     const frames: Frame[] = [];
     const count = snapped ? N - (g1 - g0) - 1 : N;
     const start = snapped ? g1 + 1 : 0;

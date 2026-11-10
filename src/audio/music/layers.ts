@@ -2,18 +2,23 @@
  * Layer runtimes. A deck asks each layer to react to chord changes, bar starts and 16th-note steps; the layer
  * schedules notes at the given absolute context time. Each layer ends in its own level gain, which the deck
  * drives from the smoothed intensity so combat layers cross-fade in and out.
+ *
+ * Routing: sustained/tonal layers go to the deck's `tonal` bus (tilt EQ + gentle levelling in the mixer);
+ * everything struck — percussion, ostinati, stabs, the cadence — goes to `drums`, which nothing compresses.
  */
 import { lerp } from '@/core/mathx';
 import { Kit, setQ } from '../synth/kit';
 import type { Shared } from '../synth/shared';
+import type { SampleBank } from '../synth/samples';
 import { mtof, openVoicing, parsePattern, tierFor, voicing, type Chord } from './theory';
 import type { Layer } from './types';
-import { brassNote, cadenceHit, hit, motifNote, padNote, pulseNote, stringNote } from './instruments';
+import { brassNote, cadenceHit, motifNote, padNote, pulseNote, strike, stringNote } from './instruments';
 
 /** Live state shared by every layer of a deck. Mutated by the deck/engine, read at scheduling time. */
 export interface DeckEnv {
   readonly ac: BaseAudioContext;
   readonly res: Shared;
+  readonly samples: SampleBank;
   readonly rnd: () => number;
   readonly tonic: number;
   readonly stepDur: number;
@@ -24,6 +29,16 @@ export interface DeckEnv {
   irregular: number;
   /** context time of the last cadence beat supplied by gameplay (AudioSystem.cadenceTick); −∞ if never */
   externalCadenceAt: number;
+}
+
+/** The four places a layer can send to (all faded together by the deck). */
+export interface DeckOut {
+  tonal: AudioNode;
+  drums: AudioNode;
+  /** score hall */
+  wet: AudioNode;
+  /** short drum room */
+  room: AudioNode;
 }
 
 export interface LayerRt {
@@ -49,7 +64,7 @@ export function subHz(m: number): number {
 }
 
 /** Lowest chord root at or above `low`, and a consonant partner above it (the fifth when the chord has one). */
-function rootAndPartner(tonic: number, c: Chord, low: number): [number, number] {
+export function rootAndPartner(tonic: number, c: Chord, low: number): [number, number] {
   let r = tonic + c.root;
   while (r < low) r += 12;
   while (r - 12 >= low) r -= 12;
@@ -57,18 +72,47 @@ function rootAndPartner(tonic: number, c: Chord, low: number): [number, number] 
   return [mtof(r), mtof(partner)];
 }
 
-export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNode, start: number): LayerRt {
+/** Whether a layer is struck (→ uncompressed drum bus) or sustained (→ tonal bus). */
+export const isStruck = (def: Layer): boolean =>
+  def.kind === 'perc' || def.kind === 'pulse' || def.kind === 'cadence' || (def.kind === 'brass' && !!def.pattern);
+
+/**
+ * A chord's worth of sustained notes shares one gain, so that when the harmony is re-voiced early (the
+ * Meridian resolving mid-chord, recovery after a stall) the old voicing can be faded instead of clashing.
+ */
+class Generations {
+  private prev: { g: GainNode; end: number } | null = null;
+
+  constructor(private readonly ac: BaseAudioContext, private readonly to: AudioNode) {}
+
+  next(t: number, dur: number): GainNode {
+    const p = this.prev;
+    if (p && t < p.end - 0.25) {
+      p.g.gain.setValueAtTime(1, t);
+      p.g.gain.linearRampToValueAtTime(0, t + 0.5);
+    }
+    const g = this.ac.createGain();
+    g.connect(this.to);
+    this.prev = { g, end: t + dur };
+    return g;
+  }
+}
+
+export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number): LayerRt {
   const { ac, res, rnd } = env;
   const level = ac.createGain();
   level.gain.value = 0;
-  level.connect(dry);
-  if (def.wet) {
+  level.connect(isStruck(def) ? out.drums : out.tonal);
+  const send = (amount: number | undefined, to: AudioNode): void => {
+    if (!amount) return;
     const w = ac.createGain();
-    w.gain.value = def.wet;
+    w.gain.value = amount;
     level.connect(w);
-    w.connect(wet);
-  }
-  const kit = (out: AudioNode, sustain = false): Kit => new Kit(ac, res, out, 0, 1, rnd, sustain);
+    w.connect(to);
+  };
+  send(def.wet, out.wet);
+  send(def.room, out.room);
+  const kit = (to: AudioNode, sustain = false): Kit => new Kit(ac, res, to, 0, 1, rnd, sustain);
   const none = (): void => {};
 
   switch (def.kind) {
@@ -110,12 +154,14 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
       // the choir sings through a slowly shifting vowel
       const input: AudioNode = def.voice === 'choir' ? ks.bank([560, 1020, 2350], 3.2, { to: filt, gains: [1, 0.55, 0.22], g: 2.2 }) : filt;
       const k = kit(input);
+      const gens = new Generations(ac, input);
       return {
         def, level,
         chord: (c, t, dur) => {
           const notes = voicing(env.tonic, c, def.low, def.n);
           const vel = 1 / Math.sqrt(notes.length);
-          notes.forEach((m, i) => padNote(def.voice, k, t, mtof(m), dur, vel, (i % 2 ? 1 : -1) * Math.min(0.7, 0.3 + 0.12 * i)));
+          const g = gens.next(t, dur);
+          notes.forEach((m, i) => padNote(def.voice, k, t, mtof(m), dur, vel, (i % 2 ? 1 : -1) * Math.min(0.7, 0.3 + 0.12 * i), g));
           filt.frequency.setTargetAtTime(lerp(bright[0], bright[1], env.intensity), t, 0.8);
         },
         dispose: (at) => ks.stopAll(at),
@@ -142,6 +188,9 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
       const ks = kit(filt, true);
       ks.lfo(0.11, bright[0] * 0.25, filt.frequency, { at: start });
       const k = kit(filt);
+      // the bow's bite lands after the filter (it is noise from the string's surface, not its pitch)
+      const bite = kit(level);
+      const gens = new Generations(ac, filt);
       const gates = (def.gate ?? []).map(parsePattern);
       let pat: number[] | null = null;
       return {
@@ -149,7 +198,8 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
         chord: (c, t, dur) => {
           const notes = openVoicing(env.tonic, c, def.low, def.n);
           const vel = 1 / Math.sqrt(notes.length);
-          notes.forEach((m, i) => stringNote(k, t, mtof(m), dur, vel, (i % 2 ? 0.5 : -0.5)));
+          const g = gens.next(t, dur);
+          notes.forEach((m) => stringNote(k, t, mtof(m), dur, vel, g));
         },
         bar: (_bar, t) => {
           const legato = def.legato !== false;
@@ -166,6 +216,7 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
           if (v <= 0) return;
           gate.gain.setTargetAtTime(v, t, 0.005);
           gate.gain.setTargetAtTime(0.04, t + 0.035, env.stepDur * 0.6);
+          strike(env.samples, rnd, 'bow', bite, t, v * 0.22);
         },
         dispose: (at) => ks.stopAll(at),
       };
@@ -241,8 +292,8 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
         step: (step, t) => {
           const v = pat.length ? pat[step % pat.length] : 0;
           if (v <= 0) return;
-          if (human > 0) hit(def.inst, k, t + rnd() * human, v * (0.88 + rnd() * 0.2), def.tune);
-          else hit(def.inst, k, t, v, def.tune);
+          if (human > 0) strike(env.samples, rnd, def.inst, k, t + rnd() * human, v * (0.88 + rnd() * 0.2), def.tune);
+          else strike(env.samples, rnd, def.inst, k, t, v, def.tune);
         },
         dispose: none,
       };
@@ -290,7 +341,7 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
         step: (step, t) => {
           const v = pat[step % pat.length];
           if (v <= 0 || t - env.externalCadenceAt < EXTERNAL_CADENCE_HOLD) return;
-          const irr = env.irregular;
+          const irr = Number.isFinite(env.irregular) ? env.irregular : 0;
           if (irr <= 0.001) {
             cadenceHit(k, t, v, 0);
             return;

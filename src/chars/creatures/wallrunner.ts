@@ -1,5 +1,6 @@
 /**
- * Wall-runner — lean Eclipse quadruped (≈1.6 m nose to haunch) built from stretched appropriated plating.
+ * Wall-runner — lean Eclipse quadruped (≈1.6 m nose to haunch, ≈2.5 m with prow and tail) built from stretched
+ * appropriated plating.
  * Long blade shins under knees that ride above its back (a spider's stance, nothing like the upright
  * Linkbound), a narrow prow of a head with the shared lit cleft, a whip tail. It skitters on IK-planted feet,
  * clings to walls and ceilings (`setCling`), and pounces through a crouch → launch → flight → landing arc.
@@ -11,7 +12,7 @@ import * as THREE from 'three';
 import type { CharacterCreateOpts, Game } from '@/core/api';
 import type { WallrunnerCling, WallrunnerVisual } from '@/core/api/creatures';
 import { clamp, clamp01, damp, smoothstep, TAU } from '@/core/mathx';
-import { gaitFoot, gaitRate, impact, keys, Limb2, move, noise1, rot, win, type GaitOut } from './core/anim';
+import { gaitFoot, gaitRate, groundDeficit, impact, keys, Limb2, move, noise1, PlantYaw, probe, rot, win, type GaitOut, type GroundProbe } from './core/anim';
 import { CreatureBase, type ActionDef } from './core/base';
 import { along, arcPath, blob, shard, sphere, T, tube, type Pt3 } from './core/geo';
 import { P, tint } from './core/palette';
@@ -23,7 +24,7 @@ const G = { eye: 1, core: 2, nodes: 3 } as const;
 const W = {
   hips: [0, 0.62, 0.42] as Pt3, spine: [0, 0.67, 0.1] as Pt3, chest: [0, 0.64, -0.24] as Pt3,
   neck: [0, 0.62, -0.5] as Pt3, head: [0, 0.58, -0.72] as Pt3, jaw: [0, 0.54, -0.74] as Pt3,
-  tail: [[0, 0.62, 0.6], [0, 0.6, 0.86], [0, 0.56, 1.1], [0, 0.5, 1.32]] as Pt3[], tailTip: [0, 0.44, 1.56] as Pt3,
+  tail: [[0, 0.62, 0.6], [0, 0.63, 0.78], [0, 0.62, 0.95], [0, 0.59, 1.1]] as Pt3[], tailTip: [0, 0.55, 1.26] as Pt3,
   /** the body is modelled at this height and carried lower: knees stay above the back line */
   ride: -0.14,
 };
@@ -112,7 +113,7 @@ function buildWallrunner(): RigTemplate {
   }
   // ---- whip tail with a blade tip
   b.tubeOn(tail, W.tailTip, P.sinew, (t) => 0.05 * (1 - t * 0.8) + 0.008, 6, {}, 1, 3);
-  addPlate(b, tail[3]!, P.whiteGold, bladeOutline(0.08, 0.3, 670), facing([0, 0.47, 1.5], [0.2, 1, 0.3], [0, -0.25, 1], 0.2), { thick: 0.016, lift: 0.02 });
+  addPlate(b, tail[3]!, P.whiteGold, bladeOutline(0.08, 0.24, 670), facing([0, 0.565, 1.2], [0.2, 1, 0.3], [0, -0.2, 1], 0.2), { thick: 0.016, lift: 0.02 });
   for (let i = 0; i < 3; i++) {
     const o = W.tail[i]!;
     b.add(tail[i]!, P.ivoryWorn, shard(0.11 - i * 0.02, 0.03, 0.02, 680 + i, 4, 0.7), along([o[0], o[1] + 0.03, o[2] + 0.06], [o[0], o[1] + 0.13 - i * 0.02, o[2] + 0.13]), { crease: 30 });
@@ -131,12 +132,12 @@ const ACTIONS: Record<string, ActionDef> = {
   lunge: { dur: 0.75, hits: [0.3], fade: 0.06, out: 0.2 },
   pounce: { dur: 1.3, hits: [0.82], fade: 0.08, out: 0.25, events: [[0.45, 'launch'], [0.88, 'land']] },
   ceilingCling: { dur: 2.4, loop: true, fade: 0.4, out: 0.3 },
-  hitLight: { dur: 0.35, fade: 0.03 },
-  hitHeavy: { dur: 0.6, fade: 0.03 },
+  hitLight: { dur: 0.35, fade: 0.03, react: true, ignoreFreeze: true },
+  hitHeavy: { dur: 0.6, fade: 0.03, react: true, ignoreFreeze: true },
   stagger: { dur: 1.2, fade: 0.05, out: 0.3 },
-  spawn: { dur: 1.1, fade: 0 },
-  death: { dur: 2.4, hold: true, fade: 0.06, events: [[0.5, 'impact']] },
-  generic: { dur: 0.5 },
+  spawn: { dur: 1.1, fade: 0, revive: true, dissolveIn: 0.7 },
+  death: { dur: 2.4, hold: true, fade: 0.06, ignoreFreeze: true, thaw: true, events: [[0.5, 'impact']], dissolveOut: [1.2, 2.4] },
+  generic: { dur: 0.5, react: true, ignoreFreeze: true },
 };
 const ALIASES: Record<string, string> = {
   leap: 'pounce', attackHeavy: 'pounce', attackLight1: 'lunge', attackLight2: 'lunge', attackLight3: 'lunge', attackLight4: 'lunge', batonStrike: 'lunge',
@@ -145,11 +146,23 @@ const ALIASES: Record<string, string> = {
 
 const LAUNCH = 0.45, LAND = 0.88;
 const DUTY = 0.55;
+const TURN_LIMIT = 0.34, TURN_STEP_TIME = 0.13;
+const K = {
+  luThrust: [0, 0, 0.16, -0.25, 0.3, 1, 0.45, 0.8, 0.75, 0],
+  luJaw: [0.1, 0, 0.26, 1, 0.34, 0],
+  // anticipation: down in 0.26 s, then HELD (trembling) until the launch — the read the player dodges on
+  poCrouch: [0, 0, 0.26, 1, LAUNCH, 1.06, LAUNCH + 0.07, 0],
+  poSettle: [LAND, 1, LAND + 0.12, 0.6, 1.3, 0],
+  stDown: [0, 0, 0.14, 1, 0.6, 0.9, 1.2, 0],
+  spCurl: [0.1, 0, 0.9, 1],
+  deDrop: [0, 0, 0.5, 1],
+  deCurl: [0.3, 0, 1.3, 1],
+} as const;
 const _t = new THREE.Vector3(), _pole = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _f = new THREE.Vector3(), _x = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _qI = new THREE.Quaternion();
 const _g: GaitOut = { along: 0, lift: 0, planted: 1 };
 
-interface Leg { limb: Limb2; rest: THREE.Vector3; off: THREE.Vector3; phase: number; side: number; front: boolean }
+interface Leg { limb: Limb2; rest: THREE.Vector3; off: THREE.Vector3; phase: number; side: number; front: boolean; plant: PlantYaw }
 
 export class Wallrunner extends CreatureBase implements WallrunnerVisual {
   private cling: { height: number; wallYaw: number | null; inset: number } | null = null;
@@ -163,13 +176,15 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
   private headPitch = 0;
   private telegraph = 0;
   private readonly legs: Leg[] = [];
+  private readonly probes: GroundProbe[];
   private readonly bCling: THREE.Bone; private readonly hips: THREE.Bone; private readonly spine: THREE.Bone; private readonly chest: THREE.Bone;
   private readonly neck: THREE.Bone; private readonly head: THREE.Bone; private readonly jaw: THREE.Bone; private readonly tail: THREE.Bone[];
 
   constructor(game: Game | null, opts?: CharacterCreateOpts) {
     super(game, {
-      archetype: 'wallrunner', height: 0.95, radius: 0.55, template: getTemplate('wallrunner', buildWallrunner),
+      archetype: 'wallrunner', height: 0.95, radius: 0.7, template: getTemplate('wallrunner', buildWallrunner),
       actions: ACTIONS, aliases: ALIASES, groups: G, frostOrigin: [0, 0.6, 0], frostRange: 1.3, eclipse: true, baseCorruption: 0.6,
+      rim: [0xb9a8e6, 0.22],
     }, opts);
     const r = this.rig;
     this.bCling = r.b('cling'); this.hips = r.b('hips'); this.spine = r.b('spine'); this.chest = r.b('chest');
@@ -185,16 +200,28 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
         const phase = front === side > 0 ? 0 : 0.5;
         this.legs.push({
           limb: new Limb2(this.bCling, r.b(tag + '0'), r.b(tag + '1'), v(m(L.a)), v(m(L.k)), v(m(L.f)), new THREE.Vector3(side * 0.6, 1, 0)),
-          rest: v(m(L.f)), off: new THREE.Vector3(), phase, side, front,
+          rest: v(m(L.f)), off: new THREE.Vector3(), phase, side, front, plant: new PlantYaw(),
         });
       }
     }
+    // parts of the body that must stay on or above the surface it stands on
+    this.probes = [
+      probe(this.hips, W.hips, W.hips, 0.15),
+      probe(this.chest, W.chest, [0, 0.52, -0.24], 0.17),
+      probe(this.neck, W.neck, W.neck, 0.11),
+      probe(this.head, W.head, [0, 0.6, -1.14], 0.05),
+      probe(this.head, W.head, [0, 0.56, -0.78], 0.1),
+      probe(this.jaw, W.jaw, [0, 0.52, -1.02], 0.04),
+      probe(this.tail[3]!, W.tail[3]!, W.tailTip, 0.05),
+      probe(this.tail[2]!, W.tail[2]!, W.tail[2]!, 0.06),
+      probe(this.tail[3]!, W.tail[3]!, [0, 0.58, 1.44], 0.03),
+    ];
   }
 
   // ------------------------------------------------------------------ WallrunnerVisual
   setCling(cling: WallrunnerCling | null, blendSeconds = 0.35): void {
     this.clingRate = 1 / Math.max(0.02, Number.isFinite(blendSeconds) ? blendSeconds : 0.35);
-    if (!cling || !Number.isFinite(cling.height)) { this.cling = null; return; }
+    if (!cling || !Number.isFinite(cling.height) || this.dead) { this.cling = null; return; }
     const wy = cling.wallYaw;
     this.cling = { height: cling.height, wallYaw: typeof wy === 'number' && Number.isFinite(wy) ? wy : null, inset: Number.isFinite(cling.inset) ? (cling.inset as number) : 0 };
   }
@@ -224,6 +251,17 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
     if (name === 'death' && this.cling) { this.cling = null; this.clingRate = 1 / 0.45; }
   }
 
+  protected override onRevive(): void {
+    this.telegraph = 0;
+    for (const l of this.legs) l.plant.reset();
+  }
+
+  protected override heal(): void {
+    this.gait = 0; this.headYaw = 0; this.headPitch = 0; this.clingBlend = this.cling ? 1 : 0;
+    this.clingPos.set(0, 0, 0); this.clingQuat.identity();
+    for (const l of this.legs) l.plant.reset();
+  }
+
   /** compute the cling frame (rig-group space) for the current request */
   private updateClingTarget(): void {
     const c = this.cling;
@@ -234,7 +272,8 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
       this.clingQuat.setFromAxisAngle(_v.set(0, 0, 1), Math.PI);
       return;
     }
-    const th = c.wallYaw - this.root.rotation.y;
+    const yaw = this.root.rotation.y;
+    const th = c.wallYaw - (Number.isFinite(yaw) ? yaw : 0);
     _n.set(-Math.sin(th), 0, -Math.cos(th)); // wall normal in root space
     _f.set(0, 0, -1).addScaledVector(_n, _n.z); // heading projected onto the wall
     if (_f.lengthSq() < 0.14) _f.set(0, -1, 0); // facing into / out of the wall → hang head-down
@@ -272,8 +311,10 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
       _v.copy(this.lookWorld);
       this.bCling.worldToLocal(_v);
       _v.y -= 0.6; _v.z += 0.6;
-      ty = Math.atan2(-_v.x, -_v.z);
-      tp = Math.atan2(_v.y, Math.max(0.05, Math.hypot(_v.x, _v.z)));
+      if (Number.isFinite(_v.x + _v.y + _v.z)) {
+        ty = Math.atan2(-_v.x, -_v.z);
+        tp = Math.atan2(_v.y, Math.max(0.05, Math.hypot(_v.x, _v.z)));
+      }
     }
     this.headYaw = damp(this.headYaw, clamp(ty, -1.3, 1.3), 9, adt);
     this.headPitch = damp(this.headPitch, clamp(tp, -0.8, 1.2), 9, adt);
@@ -288,8 +329,9 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
     rot(head, -0.08 + this.headPitch * 0.6 + this.aimPitch * 0.4 + beat * 0.09 * alive + Math.max(0, noise1(t * 2.3)) * 0.1 * alive,
       this.headYaw * 0.6 + noise1(t * 0.9 + 4) * 0.14 * alive, (0.26 + beat * 0.14) * alive);
     rot(jaw, -0.06 - Math.max(0, noise1(t * 1.3 + 2)) * 0.18 * alive - tel * 0.3, 0, 0);
+    // tail: −x lifts it. It rides level, rising as a telegraph builds
     for (let j = 0; j < 4; j++) {
-      rot(this.tail[j]!, (0.08 + tel * 0.28) * (j === 0 ? 1 : 0.6) + Math.sin(t * 1.3 - j * 0.7) * 0.05 * alive, Math.sin(t * 1.7 - j * 0.9) * 0.16 * alive + beat * 0.08 * (j % 2 ? 1 : -1), 0);
+      rot(this.tail[j]!, (0.04 - tel * 0.26) * (j === 0 ? 1 : 0.6) + Math.sin(t * 1.3 - j * 0.7) * 0.05 * alive, Math.sin(t * 1.7 - j * 0.9) * 0.16 * alive + beat * 0.08 * (j % 2 ? 1 : -1), 0);
     }
 
     // ---- skitter: diagonal trot on planted feet, spine and tail snaking against each other
@@ -298,9 +340,10 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
     const stride = 0.42 + clamp01(sp / 8) * 0.62;
     this.gait += gaitRate(sp, stride, DUTY) * adt;
     const dx = -Math.sin(this.moveYaw), dz = -Math.cos(this.moveYaw);
+    const inv = 1 / this.scale;
     for (const l of this.legs) {
       gaitFoot(this.gait + l.phase, stride, 0.13 + clamp01(sp / 8) * 0.08, DUTY, _g);
-      l.off.x += dx * _g.along * mv; l.off.z += dz * _g.along * mv; l.off.y += _g.lift * mv;
+      l.off.x += dx * _g.along * mv * inv; l.off.z += dz * _g.along * mv * inv; l.off.y += _g.lift * mv;
     }
     const ph = this.gait * TAU;
     move(hips, 0, (Math.cos(ph * 2) * 0.018 - 0.07) * mv, 0);
@@ -319,16 +362,15 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
     // ---- actions
     for (const s of this.active) {
       const w = s.w, st = s.t;
-      const k = (arr: readonly number[]): number => keys(st, arr) * w;
       switch (s.name) {
         case 'lunge': {
-          const thrust = k([0, 0, 0.16, -0.25, 0.3, 1, 0.45, 0.8, 0.75, 0]);
+          const thrust = keys(st, K.luThrust) * w;
           move(hips, 0, -0.06 * Math.abs(thrust), -0.3 * thrust);
           move(chest, 0, -0.08 * thrust, -0.22 * thrust);
           rot(spine, 0.12 * thrust, 0, 0);
           rot(neck, -0.25 * thrust, 0, 0);
           rot(head, 0.3 * thrust, 0, -0.2 * thrust);
-          rot(jaw, -0.7 * k([0.1, 0, 0.26, 1, 0.34, 0]), 0, 0);
+          rot(jaw, -0.7 * keys(st, K.luJaw) * w, 0, 0);
           for (const l of this.legs) {
             if (!l.front) continue;
             l.off.z += -0.55 * Math.max(0, thrust) * (l.side > 0 ? 1 : 0.6);
@@ -338,23 +380,26 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
           break;
         }
         case 'pounce': {
-          const crouch = k([0, 0, 0.32, 1, LAUNCH, 1.1, LAUNCH + 0.07, 0]);
+          // play-bow: chest to the floor, haunches high, forelegs gathered under it, tail whipped up — held,
+          // shaking, until the launch
+          const crouch = keys(st, K.poCrouch) * w;
           const fl = clamp01((st - LAUNCH) / (LAND - LAUNCH));
           const air = (st > LAUNCH && st < LAND ? 1 : 0) * w;
           const arc = Math.sin(Math.PI * fl) * 0.75 * (1 - cb) * w * (st > LAUNCH && st <= LAND ? 1 : 0);
           const landK = impact(st, LAND, 0.16, 15) * w;
-          const settle = k([LAND, 1, LAND + 0.12, 0.6, 1.3, 0]);
-          const tremble = noise1(st * 40) * crouch * 0.006;
-          move(hips, tremble, -0.1 * crouch + arc - 0.1 * settle - 0.04 * landK, 0.16 * crouch - 0.1 * air);
-          move(chest, 0, -0.07 * crouch - 0.05 * settle, 0.05 * crouch - 0.16 * air);
-          rot(hips, 0.22 * crouch + air * (0.45 - fl * 1.0) - 0.1 * settle, 0, 0);
-          rot(spine, -0.2 * crouch + air * 0.12, 0, 0);
-          rot(neck, 0.25 * crouch - air * 0.2, 0, 0);
-          rot(head, 0.2 * crouch + air * 0.2 * fl, 0, 0);
-          rot(jaw, -0.2 * crouch - 0.8 * air * smoothstep(0.3, 0.8, fl), 0, 0);
-          for (let j = 0; j < 4; j++) rot(this.tail[j]!, 0.3 * crouch - air * 0.25 + 0.2 * settle, 0, 0);
+          const settle = keys(st, K.poSettle) * w;
+          const tremble = noise1(st * 40) * crouch * 0.012 * smoothstep(0.22, 0.3, st);
+          move(hips, tremble, -0.12 * crouch + arc - 0.1 * settle - 0.04 * landK, 0.24 * crouch - 0.1 * air);
+          move(chest, 0, -0.06 * crouch - 0.05 * settle, 0.05 * crouch - 0.16 * air);
+          rot(hips, -0.3 * crouch + air * (0.45 - fl * 1.0) - 0.1 * settle, 0, 0);
+          rot(spine, 0.06 * crouch + air * 0.12, 0, 0);
+          rot(neck, 0.32 * crouch - air * 0.2, 0, 0);
+          rot(head, 0.3 * crouch + air * 0.2 * fl, 0, 0);
+          rot(jaw, -0.35 * crouch - 0.8 * air * smoothstep(0.3, 0.8, fl), 0, 0);
+          for (let j = 0; j < 4; j++) rot(this.tail[j]!, -0.4 * crouch + air * 0.14 - 0.1 * settle, 0, 0);
           for (const l of this.legs) {
-            l.off.x += l.side * (0.12 * crouch + 0.16 * settle);
+            l.off.x += l.side * ((l.front ? -0.1 : 0.12) * crouch + 0.16 * settle);
+            l.off.z += (l.front ? 0.3 : -0.1) * crouch;
             if (air > 0) {
               // airborne: the feet travel with the body — forelegs reach for the target, hind legs trail
               const reach = l.front ? -0.3 - 0.45 * fl : 0.4 - 0.25 * fl;
@@ -385,44 +430,44 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
           break;
         }
         case 'stagger': {
-          const down = k([0, 0, 0.14, 1, 0.6, 0.9, 1.2, 0]);
+          const down = keys(st, K.stDown) * w;
           const scrab = Math.sin(st * 26) * win(st, 0.5, 0.65, 1.0, 1.2) * w;
-          move(hips, 0, -0.36 * down, 0.1 * down);
-          move(chest, 0, -0.04 * down, 0);
+          move(hips, 0, -0.3 * down, 0.1 * down);
           rot(hips, 0, 0, 0.25 * down);
-          rot(head, -0.3 * down, 0, 0.5 * down);
+          rot(neck, 0.1 * down, 0, 0);
+          rot(head, -0.05 * down, 0, 0.5 * down);
           rot(jaw, -0.5 * down, 0, 0);
           for (const l of this.legs) { l.off.x += l.side * 0.26 * down; l.off.y += Math.max(0, scrab * (l.front ? 1 : -1)) * 0.12; }
           for (let j = 0; j < 4; j++) rot(this.tail[j]!, -0.2 * down, Math.sin(st * 9 - j) * 0.3 * down, 0);
           break;
         }
         case 'spawn': {
-          const curl = (1 - keys(st, [0.1, 0, 0.9, 1])) * w;
-          move(hips, 0, -0.34 * curl, 0);
-          rot(spine, -0.4 * curl, 0, 0);
-          rot(neck, -0.5 * curl, 0, 0);
+          const curl = (1 - keys(st, K.spCurl)) * w;
+          move(hips, 0, -0.3 * curl, 0);
+          rot(spine, -0.2 * curl, 0, 0);
+          rot(neck, -0.2 * curl, 0, 0);
           for (const l of this.legs) { l.off.x -= l.side * 0.28 * curl; l.off.z += (l.front ? 0.2 : -0.2) * curl; }
-          this.autoDissolve = (1 - keys(st, [0, 0, 0.7, 1])) * (s.state === 2 ? 0 : 1);
           break;
         }
         case 'death': {
-          const drop = k([0, 0, 0.5, 1]);
-          const curl = k([0.3, 0, 1.3, 1]);
+          // drops onto its belly, rolls half onto its side and draws its legs in; the head comes to rest on
+          // the floor, not through it
+          const drop = keys(st, K.deDrop) * w;
+          const curl = keys(st, K.deCurl) * w;
           const thud = impact(st, 0.5, 0.14, 20) * w;
-          move(hips, 0, -0.44 * drop + 0.03 * thud, 0);
-          move(chest, 0, -0.02 * drop, 0);
-          rot(hips, 0, 0.2 * curl, 0.5 * drop);
-          rot(spine, -0.3 * curl, 0.3 * curl, 0);
-          rot(neck, -0.5 * curl, 0.4 * curl, 0);
-          rot(head, -0.3 * curl, 0, 0.6 * drop);
+          move(hips, 0, -0.3 * drop + 0.03 * thud, 0);
+          rot(hips, 0, 0.2 * curl, 0.45 * drop);
+          rot(spine, 0, 0.3 * curl, 0);
+          rot(neck, -0.06 * curl, 0.45 * curl, 0);
+          rot(head, 0, 0.25 * curl, 0.5 * drop);
           rot(jaw, -0.6 * drop, 0, 0);
           for (const l of this.legs) {
-            l.off.x += l.side * (0.22 * drop - 0.55 * curl);
+            // it rolls onto its left side: those legs splay flat, the upper pair curls in off the ground
+            if (l.side > 0) { l.off.x += 0.22 * drop - 0.4 * curl; l.off.y += 0.55 * curl; }
+            else l.off.x -= 0.26 * drop;
             l.off.z += (l.front ? 0.2 : -0.24) * curl;
-            l.off.y += 0.1 * curl * (l.side > 0 ? 1 : 0);
           }
-          for (let j = 0; j < 4; j++) rot(this.tail[j]!, -0.12 * drop, 0.5 * curl * (1 - j * 0.1), 0);
-          this.autoDissolve = keys(st, [1.2, 0, 2.4, 1]);
+          for (let j = 0; j < 4; j++) rot(this.tail[j]!, -0.06 * drop, 0.5 * curl * (1 - j * 0.1), 0);
           break;
         }
         case 'generic': {
@@ -434,12 +479,37 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
       }
     }
 
-    // ---- legs
+    // ---- ground constraint: nothing of the trunk, head or tail goes through the surface it stands on
     this.root.updateWorldMatrix(true, false);
+    this.bCling.updateWorldMatrix(true, false);
+    jaw.updateWorldMatrix(true, false);
+    this.tail[3]!.updateWorldMatrix(true, false);
+    _m.copy(this.bCling.matrixWorld).invert();
+    const deficit = groundDeficit(this.probes, _m);
+    if (deficit > 0) hips.position.y += deficit;
+
+    // ---- turn-stepping (floor only): diagonal pairs re-plant together when the root has turned under them
+    const onFloor = cb < 0.02 && alive > 0;
+    let stepping0 = false, stepping1 = false;
+    for (const l of this.legs) { if (l.plant.stepping) { if (l.phase === 0) stepping0 = true; else stepping1 = true; } }
+    for (const l of this.legs) {
+      const otherBusy = l.phase === 0 ? stepping1 : stepping0;
+      l.plant.update(onFloor ? this.yawDelta : 0, dt, onFloor && !otherBusy && mv < 0.3, onFloor ? mv : 1, TURN_LIMIT, TURN_STEP_TIME);
+    }
+
+    // ---- legs
     for (const l of this.legs) {
       _t.copy(l.rest).add(l.off);
+      l.plant.apply(_t);
+      _t.y += l.plant.lift * 0.1;
       _pole.set(l.side * 0.6, 1, l.front ? -0.1 : 0.1);
       l.limb.solve(_t, _pole);
+      if (l.limb.end.y < -0.004) {
+        // the target was nearer than the folded leg can reach, so the foot overshot through the surface:
+        // aim higher by the overshoot and solve again
+        _t.y -= l.limb.end.y * 1.6;
+        l.limb.solve(_t, _pole);
+      }
     }
 
     // ---- glow + bounds

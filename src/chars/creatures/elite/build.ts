@@ -85,9 +85,9 @@ const lerp3 = (a: Pt3, c: Pt3, t: number): Pt3 => [a[0] + (c[0] - a[0]) * t, a[1
 const add3 = (a: Pt3, x: number, y: number, z: number): Pt3 => [a[0] + x, a[1] + y, a[2] + z];
 
 /** matte, fibrous tissue: reads as muscle and cable in a dark room instead of glossy black balls */
-const TISSUE: Paint = tint(TISSUE, { c: 0x1b1522, r: 0.72 });
-const TISSUE_W: Paint = tint(TISSUE_W, { c: 0x17111e, r: 0.56 });
-const SINEW: Paint = tint(SINEW, { c: 0x2a2030, r: 0.62 });
+const TISSUE: Paint = tint(P.tissue, { c: 0x1b1522, r: 0.72 });
+const TISSUE_W: Paint = tint(P.tissueWet, { c: 0x17111e, r: 0.56 });
+const SINEW: Paint = tint(P.sinew, { c: 0x2a2030, r: 0.62 });
 const GOLD_DEAD: Paint = tint(P.goldDeep, { r: 0.5, edge: 0.2 });
 
 /** ivory King-era fragment variations */
@@ -429,7 +429,7 @@ export function buildElite(): RigTemplate {
   b.add('head', tint(P.violetEye, { e: 3.2 }), box(0.42, 0.036, 0.05, 0.01), hm(T(H[0] - 0.01, H[1] + 0.045, H[2] - 0.3, 0.2, 0, 0.05)), { group: G.eye });
   b.add('head', tint(P.violetEye, { e: 1.6 }), box(0.03, 0.2, 0.04), hm(T(H[0] - 0.012, H[1] - 0.1, H[2] - 0.3, 0.3, 0, 0.07)), { group: G.eye });
   const crest: [Pt3, Pt3, number, number][] = [
-    [[0.05, 3.38, -0.9], [0.14, 3.96, -0.3], 0.22, 1], [[-0.2, 3.36, -0.86], [-0.6, 3.84, -0.3], 0.18, 2], [[0.28, 3.34, -0.86], [0.7, 3.74, -0.36], 0.16, 3],
+    [[0.05, 3.38, -0.9], [0.14, 3.8, -0.26], 0.22, 1], [[-0.2, 3.36, -0.86], [-0.6, 3.72, -0.28], 0.18, 2], [[0.28, 3.34, -0.86], [0.7, 3.64, -0.34], 0.16, 3],
     [[-0.4, 3.16, -0.9], [-0.92, 3.34, -0.56], 0.13, 4], [[0.42, 3.12, -0.92], [0.86, 3.2, -0.62], 0.11, 5],
   ];
   for (const [a, c, w, seed] of crest) b.add('head', seed === 2 ? IVORY_D : IVORY, shard(Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]), w, w * 0.6, seed + 110, 4, 0.5), along(a, c, seed), { crease: 30 });

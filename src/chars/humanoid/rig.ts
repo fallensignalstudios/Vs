@@ -9,6 +9,8 @@ import * as THREE from 'three';
 import type { SkinFn, SkinOut } from './geo/builder';
 
 export const REF_HEIGHT = 1.85;
+/** distance from Verity's grip to the emitter each blade leaves the hilt ring at */
+export const BLADE_ROOT = 0.128;
 
 export const BODY_BONES = [
   'root', 'hips', 'spine', 'chest', 'neck', 'head',
@@ -73,7 +75,8 @@ export function buildRigSpec(prop: Proportions): RigSpec {
     thighR: [hw, 0.945, 0.0], shinR: [hw, 0.505, -0.012], footR: [hw, 0.085, 0.018], toeR: [hw, 0.03, -0.125],
     paulL: [-sw, 1.455, 0.0], paulR: [sw, 1.455, 0.0],
     weapon: [sw + 0.024, 0.812, -0.03], gun: [sw + 0.024, 0.812, -0.03], shield: [-(sw + 0.04), 1.02, 0.0], prop: [-(sw + 0.024), 0.812, -0.03],
-    bladeA: [sw + 0.024, 0.812, -0.03], bladeB: [sw + 0.024, 0.812, -0.03],
+    // Verity's blades scale about the emitters on the hilt ring, so a shortened blade stays outside the fist
+    bladeA: [sw + 0.024, 0.812, -0.03 - BLADE_ROOT], bladeB: [sw + 0.024, 0.812, -0.03 + BLADE_ROOT],
   };
   const names = [...BODY_BONES] as string[];
   const index: Record<string, number> = {};

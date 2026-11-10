@@ -3,8 +3,8 @@
  *
  * Timings depend on the machine and on what else it is doing, so nothing here is asserted — the unit tests
  * assert machine-independent effort instead (`nav.stats`: cells evaluated per build, nodes expanded per
- * search). Reference numbers on the dev container, warm, timed directly: full nav build 12–28 ms (Z04 / Z08 /
- * Z05), door-toggle rebuild ≈ 0.5 ms, findPath ≈ 0.3–0.4 ms, moveCharacter ≈ 1 µs (≈ 5 µs pressed against a
+ * search). Reference numbers on the dev container, warm, timed directly: full nav build 18–28 ms (Z04 / Z08 /
+ * Z05), door-toggle rebuild ≈ 0.6 ms, findPath ≈ 0.2–0.4 ms, moveCharacter ≈ 1 µs (≈ 5 µs pressed against a
  * ledge), lineOfSight over 35 m ≈ 1.5 µs. Under `vitest bench` the module runner adds overhead to every
  * imported constant (it says so itself), so the build figures printed here read about twice as high.
  *

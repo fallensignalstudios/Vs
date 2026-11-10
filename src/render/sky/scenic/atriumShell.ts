@@ -211,17 +211,20 @@ export function buildAtriumShell(shared: SharedUniforms, tips: ClipTipSlot, opts
     b.paint(KING.whiteGold, 0, 0.55).sweep(frames);
   }
 
-  // ---- the shaft: fluted walls falling away in bands with receding rings of light
-  const depth = 620;
-  for (let k = 0; k < 9; k++) {
-    const yb = -7 - ((k + 1) / 9) * depth, yt = -7 - (k / 9) * depth;
+  // ---- the shaft: fluted walls falling away in bands with receding rings of light; a hairline gold channel
+  //      runs down every other flute, so the eye has converging lines to follow into the depth
+  const depth = 620, bands = 14;
+  for (let k = 0; k < bands; k++) {
+    const yb = -7 - ((k + 1) / bands) * depth, yt = -7 - (k / bands) * depth;
     b.light(0.16, 0.2).paint(k % 2 ? KING.black : KING.blackDeep, 0, 1).lathe(0, 0, [[shaft, yt], [shaft, yb]], 96);
-    b.dress(0, 0).paint(KING.channel, 1.2 - k * 0.09).lathe(0, 0, [[shaft - 0.05, yt - 2.6], [shaft - 0.05, yt - 3.3]], 96);
+    b.dress(0, 0).paint(KING.channel, 1.25 - k * 0.06).lathe(0, 0, [[shaft - 0.05, yt - 2.6], [shaft - 0.05, yt - 3.1]], 96);
     b.dress(0, 1);
   }
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * TAU;
-    atWall(a, shaft - 0.9, -7 - depth / 2).light(0.16, 0.2).paint(KING.black, 0, 1.25).box(0, 0, 0, 2.6, depth, 1.9, { noTop: true, noBottom: true }).pop();
+    atWall(a, shaft - 0.9, -7 - depth / 2).light(0.16, 0.2).paint(KING.black, 0, 1.25).box(0, 0, 0, 2.6, depth, 1.9, { noTop: true, noBottom: true });
+    if (i % 2 === 0) b.dress(0, 0).paint(KING.channel, 0.95).box(0, 0, 0.98, 0.22, depth, 0.06, { noTop: true, noBottom: true }).dress(0, 1);
+    b.pop();
   }
 
   // ---- broken bridges. Even diagonals: long spans at gallery height, snapped in mid-air. Odd: floor stubs.

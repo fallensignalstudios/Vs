@@ -11,6 +11,8 @@ export const DIR_Z: readonly number[] = [0, 0, 1, -1, 1, 1, -1, -1];
 
 const DIAG = Math.SQRT2;
 const OCTILE = DIAG - 1;
+/** cost multiplier of a step onto a node flagged in `cost` (next to an obstacle or an edge) */
+const CROWDED = 1.25;
 /** distance handicap (m) of nodes on another level when looking for the nearest reachable node */
 const OTHER_LEVEL = 1e4;
 /** metres of closer approach a reachable node must offer per metre of extra walking to be preferred */
@@ -83,8 +85,8 @@ export class GridSearch {
   /**
    * Cheapest path start → goal over `nbr` (8 links per slot, -1 = none). Fills `out` with the slot sequence
    * (start first) and returns true, or returns false when the goal is unreachable. `pass` (optional) vetoes
-   * nodes the current agent does not fit on (and diagonal steps past such a node); `cost` (optional) is a
-   * per-node multiplier ≥ 1 on the step into that node, so paths prefer open ground without ever being refused
+   * nodes the current agent does not fit on (and diagonal steps past such a node); `cost` (optional) flags
+   * nodes whose step-in costs CROWDED times as much, so paths prefer open ground without ever being refused
    * tight ground.
    *
    * With `ny` (node heights) the run also remembers which expanded node lies closest to a reference point —
@@ -92,11 +94,13 @@ export class GridSearch {
    * search whose goal turns out to be unreachable still yields "as near as it gets". Nodes more than 2 m
    * above or below the reference only count when nothing on its own level was reached, and a longer walk
    * must buy a proportionally closer approach (DETOUR), so of two equally near spots the nearer one wins.
+   * `link` (optional, with `pass`) vetoes individual hops the current agent cannot make.
    */
   run(
     start: number, goal: number, nbr: Int32Array, cols: number, cell: number, out: number[],
     pass: ((slot: number) => boolean) | null = null, cost: Uint8Array | null = null,
     ny: Float32Array | null = null, refX = 0, refZ = 0, refY = 0,
+    link: ((from: number, dir: number, to: number) => boolean) | null = null,
   ): boolean {
     out.length = 0;
     this.expanded = 0;
@@ -144,9 +148,10 @@ export class GridSearch {
           // no corner cutting for THIS agent either: a diagonal link only proves the default agent fits on
           // the two cells beside it (they exist whenever the link does)
           if (d >= 4 && (!pass(nbr[base + (DIR_X[d] > 0 ? 0 : 1)]) || !pass(nbr[base + (DIR_Z[d] > 0 ? 2 : 3)]))) continue;
+          if (link !== null && !link(cur, d, nb)) continue;
         }
         let step = d < 4 ? cell : diagCost;
-        if (cost !== null && cost[nb] !== 0) step *= 1 + cost[nb] * 0.25;
+        if (cost !== null && cost[nb] !== 0) step *= CROWDED;
         const ng = gc + step;
         if (mark[nb] === id) {
           if (ng >= g[nb]) continue;

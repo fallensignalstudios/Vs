@@ -385,17 +385,23 @@ describe('sky system', () => {
   it('follows the render quality profile and tolerates a missing one', () => {
     const cam = new THREE.PerspectiveCamera();
     for (const [level, want] of [['low', 0], ['medium', 1], ['high', 2], ['ultra', 2], ['bogus', 2]] as const) {
-      const sky = createSkySystem(fakeGame({ render: { quality: { level } } }));
+      const quality = { level: level as string };
+      const sky = createSkySystem(fakeGame({ render: { quality } }));
       sky.update(1 / 60, cam);
       const dome = sky.root.getObjectByName('sky:dome') as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
-      // the main-view tier is what `onBeforeRender` copies into uDetail for full-size passes
-      const renderer = { getRenderTarget: () => null, getDrawingBufferSize: (v: THREE.Vector2) => v.set(1280, 720), capabilities: { reversedDepthBuffer: false } };
-      dome.onBeforeRender(renderer as unknown as THREE.WebGLRenderer, new THREE.Scene(), cam, dome.geometry, dome.material, null as unknown as THREE.Group);
-      expect(dome.material.uniforms.uDetail.value, level).toBe(want);
-      // a small secondary target (reflection / PMREM face) always shades the cheapest tier
-      const small = { ...renderer, getRenderTarget: () => ({ width: 256, height: 256 }) };
-      dome.onBeforeRender(small as unknown as THREE.WebGLRenderer, new THREE.Scene(), cam, dome.geometry, dome.material, null as unknown as THREE.Group);
-      expect(dome.material.uniforms.uDetail.value, level).toBe(0);
+      // each tier is its own compiled program (the cheap tiers do not contain the expensive code at all)
+      expect(dome.material.defines.SKY_DETAIL, level).toBe(want);
+      // a small secondary target (reflection / PMREM face) also drops the fine detail at run time
+      const renderer = { getRenderTarget: (): unknown => null, getDrawingBufferSize: (v: THREE.Vector2) => v.set(1280, 720), capabilities: { reversedDepthBuffer: false } };
+      const draw = (r: unknown): void => dome.onBeforeRender(r as THREE.WebGLRenderer, new THREE.Scene(), cam, dome.geometry, dome.material, null as unknown as THREE.Group);
+      draw(renderer);
+      expect(dome.material.uniforms.uLite.value).toBe(0);
+      draw({ ...renderer, getRenderTarget: () => ({ width: 256, height: 256 }) });
+      expect(dome.material.uniforms.uLite.value).toBe(1);
+      // the profile can change at run time (settings, the auto-quality governor)
+      quality.level = 'low';
+      sky.update(1 / 60, cam);
+      expect(dome.material.defines.SKY_DETAIL).toBe(0);
     }
     expect(() => createSkySystem(fakeGame()).update(1 / 60, cam)).not.toThrow();
   });
@@ -625,8 +631,8 @@ describe('scenic factory', () => {
       ['atriumShell', f.atriumShell(), 100000, 260000],
       ['crownmarkArm', f.crownmarkArm(), 12000, 120000],
       ['megaRibs', f.megaRibs(), 12000, 60000],
-      ['dominionShuttle', f.ship('dominionShuttle'), 6000, 45000],
-      ['reformationTransport', f.ship('reformationTransport'), 6000, 45000],
+      ['dominionShuttle', f.ship('dominionShuttle'), 7000, 45000],
+      ['reformationTransport', f.ship('reformationTransport'), 7000, 45000],
       ['dominionCapital', f.ship('dominionCapital'), 500, 12000],
       ['reformationCapital', f.ship('reformationCapital'), 500, 12000],
       ['wreck dominion', f.wreck('dominion'), 4000, 45000],
@@ -707,6 +713,17 @@ describe('scenic factory', () => {
       });
       expect(cards, name).toBeGreaterThan(200);
       expect(inside, name).toBe(0);
+      // …and no emissive surface (light seam, channel) or lit-window face either
+      let glowing = 0;
+      o.traverse((c) => {
+        const g = (c as THREE.Mesh).isMesh ? (c as THREE.Mesh).geometry : null;
+        const glow = g?.getAttribute('aGlow'), lit = g?.getAttribute('aLight'), pos = g?.getAttribute('position');
+        if (!g || !glow || !lit || !pos) return;
+        for (let i = 0; i < pos.count; i++) {
+          if ((glow.getX(i) > 0.05 || lit.getZ(i) > 0.02) && insideWound(cone, pos.getX(i), pos.getY(i), pos.getZ(i), 1)) glowing++;
+        }
+      });
+      expect(glowing, name).toBe(0);
     }
     // the rule is opt-out for other skies
     let lit = 0;

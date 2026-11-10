@@ -31,6 +31,18 @@ export const CLEARANCE_CAP = 3;
  * agent has (0.45 m nodes for 0.4 m bodies), so a body steered a few centimetres off its path does not scrape.
  */
 const WIDE_SKIN = 0.05;
+/** smoothed paths stay within this of the true ground height (keeps waypoints at ramp ends) */
+export const GROUND_FOLLOW = 0.3;
+/** ground sampling of the exact swept test (below GAP_TOL, so no void hides between samples) */
+const SWEEP_STEP = GAP_TOL * 0.75;
+/** a height change between two sweep samples larger than this is a step (both bands are tested across it) */
+const SWEEP_RISE = 0.05;
+/** links between nodes whose heights differ by more than this are verified by an exact sweep */
+const LINK_FLAT = 1e-3;
+/** opposite of each of the 8 link directions (E W S N SE SW NE NW) */
+const REV: readonly number[] = [1, 0, 3, 2, 7, 6, 5, 4];
+/** the four "forward" directions: every undirected link is E, S, SE or SW of exactly one of its two cells */
+const FORWARD: readonly boolean[] = [true, false, true, false, true, true, false, false];
 
 export class NavGridBase {
   built = false;
@@ -50,8 +62,17 @@ export class NavGridBase {
   protected ny = new Float32Array(0);
   protected nbr = new Int32Array(0);
   protected comp = new Int32Array(0);
-  /** 1 for nodes next to an obstacle or an edge (fewer than 8 links): A* steers around them when it can */
+  /**
+   * Non-zero for nodes A* steers around when it can: 1 = next to an obstacle or an edge (a neighbouring cell
+   * has no node to link to), 2 = only because one of its links was cut by verifyLinks.
+   */
   protected crowd = new Uint8Array(0);
+  /**
+   * per CELL: 1 when the boundary of a surface that could take the headroom of a node here (it hangs between
+   * step height and body height above the node) runs close enough to cross one of the cell's links
+   */
+  protected edge = new Uint8Array(0);
+  protected readonly rimSurf: Array<SurfaceRec | null> = new Array<SurfaceRec | null>(8).fill(null);
   protected nodes = 0;
   protected builtRevision = -1;
   protected readonly search = new GridSearch();
@@ -63,6 +84,7 @@ export class NavGridBase {
   /** profile every node touched by the current query must fit (null = the default agent) */
   protected fit: Fit | null = null;
   protected readonly pass = (slot: number): boolean => this.passes(slot);
+  protected readonly passLink = (from: number, dir: number, to: number): boolean => this.linkFits(from, dir, to);
 
   constructor(protected readonly core: PhysicsCore) {
     core.onClear = () => this.reset();
@@ -135,12 +157,14 @@ export class NavGridBase {
         this.nbr = new Int32Array(slots * 8);
         this.comp = new Int32Array(slots);
         this.crowd = new Uint8Array(slots);
+        this.edge = new Uint8Array(cols * rows);
         this.queue = new Int32Array(slots);
       }
       this.search.resize(slots);
       this.fits.reset();
       for (let iz = 0; iz < rows; iz++) for (let ix = 0; ix < cols; ix++) this.computeCell(ix, iz);
       for (let iz = 0; iz < rows; iz++) for (let ix = 0; ix < cols; ix++) this.linkCell(ix, iz);
+      this.verifyLinks(0, 0, cols - 1, rows - 1);
       cells = cols * rows;
     } else {
       const inv = 1 / cell;
@@ -157,6 +181,7 @@ export class NavGridBase {
         const lx0 = Math.max(0, x0 - 1), lz0 = Math.max(0, z0 - 1);
         const lx1 = Math.min(cols - 1, x1 + 1), lz1 = Math.min(rows - 1, z1 + 1);
         for (let iz = lz0; iz <= lz1; iz++) for (let ix = lx0; ix <= lx1; ix++) this.linkCell(ix, iz);
+        this.verifyLinks(lx0, lz0, lx1, lz1);
         cells += (x1 - x0 + 1) * (z1 - z0 + 1);
         this.fits.clearCells(
           Math.max(0, x0 - wide), Math.max(0, z0 - wide), Math.min(cols - 1, x1 + wide), Math.min(rows - 1, z1 + wide),
@@ -186,12 +211,18 @@ export class NavGridBase {
     const list = core.surfaceHash.cellAt(x, z);
     const big = core.surfaceHash.big;
     const n0 = list ? list.length : 0, total = n0 + big.length;
-    let near = false;
+    let near = false, rims = 0;
+    const rim = this.rimSurf;
+    const band = this.cell * 0.75;
     for (let i = 0; i < total && n < 16; i++) {
       const s = i < n0 ? list![i] : big[i - n0];
       if (!s.on) continue;
       const h = s.heightAt(x, z);
       if (h === h) { hs[n] = h; hf[n++] = s; } else near = true;
+      if (rims < 8) {
+        const inset = s.inset(x, z);
+        if (inset < band && inset > -band) rim[rims++] = s;
+      }
     }
     if (near) {
       // the centre may sit in a crack between two surfaces: that is floor too
@@ -226,6 +257,16 @@ export class NavGridBase {
       ny[base + used++] = h;
     }
     for (let i = used; i < LEVELS; i++) ny[base + i] = NaN;
+    // does the edge of an overhanging surface cross this cell's links? (see verifyLinks)
+    let flag = 0;
+    for (let k = 0; k < rims && flag === 0; k++) {
+      const s = rim[k]!;
+      for (let l = 0; l < used; l++) {
+        const h = ny[base + l];
+        if (s.yHi > h + DEF_STEP_UP + 1e-6 && s.yLo < h + DEF_HEIGHT - 1e-6) { flag = 1; break; }
+      }
+    }
+    this.edge[iz * this.cols + ix] = flag;
   }
 
   /** Slot of cell (ix,iz) whose height is closest to y within tol, or -1. */
@@ -296,6 +337,147 @@ export class NavGridBase {
       }
       this.crowd[slot] = open < 8 ? 1 : 0;
     }
+  }
+
+  /**
+   * Exact swept test a → b for the current agent, by the rules of movement: the ground is followed every
+   * SWEEP_STEP (never up or down more than a step: nav links are two-way) with headroom and the ledge margin,
+   * and the body is tested against solids often enough that the discs overlap to within a centimetre — at
+   * every sample on a slope, and in the height band of BOTH sides wherever the ground steps, because the body
+   * changes height somewhere between the two samples. Returns the ground height at b, or NaN.
+   * `skipStart` leaves the start position itself unjudged. With `lineA` / `lineB` (heights of the a→b line at
+   * its ends) the ground must also stay within GROUND_FOLLOW of that line. `groundOnly` skips the solids (for
+   * hops whose ends are known to cover them).
+   */
+  protected sweepTo(
+    ax: number, ay: number, az: number, bx: number, bz: number, skipStart: boolean, lineA: number, lineB: number,
+    groundOnly = false,
+  ): number {
+    const f = this.fit, core = this.core;
+    const r = f ? f.radius : this.agentRadius, hh = f ? f.height : DEF_HEIGHT, m = f ? f.margin : this.margin;
+    const dx = bx - ax, dz = bz - az;
+    const n = Math.max(1, Math.ceil(Math.hypot(dx, dz) / SWEEP_STEP));
+    const follow = lineA === lineA;
+    let cur = ay, px = ax, pz = az;
+    /** was the previous sample position tested against solids (at its own height)? */
+    let tested = false;
+    /** may the previous sample position be judged at all? (not the caller's own start) */
+    let judge = false;
+    for (let i = skipStart ? 1 : 0; i <= n; i++) {
+      const t = i / n;
+      const x = ax + dx * t, z = az + dz * t;
+      const g = core.place(x, z, cur, DEF_STEP_UP, DEF_MAX_DROP, hh, true, m);
+      if (g !== g || cur - g > DEF_STEP_UP + 1e-6) return NaN;
+      if (follow && Math.abs(g - (lineA + (lineB - lineA) * t)) > GROUND_FOLLOW) return NaN;
+      if (groundOnly) { cur = g; continue; }
+      const rise = g > cur ? g - cur : cur - g;
+      if (rise > SWEEP_RISE && judge) {
+        if (!tested && !core.standClear(px, pz, cur, r, DEF_STEP_UP, hh)) return NaN;
+        if (!core.standClear(px, pz, g, r, DEF_STEP_UP, hh) || !core.standClear(x, z, cur, r, DEF_STEP_UP, hh)) return NaN;
+      }
+      if ((i & 1) === 0 || i === n || rise > 1e-9) {
+        if (!core.standClear(x, z, g, r, DEF_STEP_UP, hh)) return NaN;
+        tested = true;
+      } else tested = false;
+      cur = g; px = x; pz = z; judge = true;
+    }
+    return cur;
+  }
+
+  /**
+   * Two nodes at different heights (a ramp, a step) are individually standable, but the body changes height
+   * on the way between them: a soffit, a low solid or a jump in the ground can make the transit impossible
+   * although both ends are fine. Every such link of the cells in [x0..x1] × [z0..z1] is swept exactly, once
+   * per pair, and cut in both directions when the default agent cannot make the walk.
+   *
+   * Links between nodes at the same height are cheaper to vouch for:
+   *  - solids: two agent discs one cell apart cover a body of √(r² − (cell/2)²) between them — 0.37 m for the
+   *    defaults, 3 cm short of a 0.4 m body — so next to an obstacle the midpoint of a straight link is tested
+   *    too (diagonal links are covered by the four nodes the corner rule demands);
+   *  - ground: where the edge of a surface that hangs over the nodes' level (between step and body height)
+   *    runs between the two cells, the ground rules are followed across the hop: the corner of a bare ramp
+   *    or a thin raised strip has no headroom beneath it for the feet, although both cell centres stand
+   *    clear of it. (Voids need no such test: with the ledge margin on both sides no link spans one.)
+   */
+  protected verifyLinks(x0: number, z0: number, x1: number, z1: number): number {
+    const { cols, ny, nbr, crowd, cell, edge } = this;
+    let swept = 0;
+    for (let iz = z0; iz <= z1; iz++) {
+      for (let ix = x0; ix <= x1; ix++) {
+        const base = (iz * cols + ix) * LEVELS;
+        const x = this.minX + (ix + 0.5) * cell, z = this.minZ + (iz + 0.5) * cell;
+        for (let l = 0; l < LEVELS; l++) {
+          const slot = base + l;
+          const y = ny[slot];
+          if (y !== y) break;
+          for (let d = 0; d < 8; d++) {
+            const t = nbr[slot * 8 + d];
+            if (t < 0) continue;
+            const ty = ny[t];
+            const jx = ix + DIR_X[d], jz = iz + DIR_Z[d];
+            const flat = ty - y <= LINK_FLAT && y - ty <= LINK_FLAT;
+            const rim = edge[iz * cols + ix] !== 0 || edge[jz * cols + jx] !== 0;
+            const tight = d < 4 && (crowd[slot] === 1 || crowd[t] === 1);
+            if (flat && !rim && !tight) continue;
+            // a pair inside the rect is judged from its forward side only; across the border, from here
+            if (!FORWARD[d] && jx >= x0 && jx <= x1 && jz >= z0 && jz <= z1) continue;
+            const tx = x + DIR_X[d] * cell, tz = z + DIR_Z[d] * cell;
+            let ok = true;
+            if (!flat || rim) {
+              // always swept in the forward direction, so both sides of a border agree
+              const end = FORWARD[d] ? this.sweepTo(x, y, z, tx, tz, flat, NaN, NaN, flat) : this.sweepTo(tx, ty, tz, x, z, flat, NaN, NaN, flat);
+              const want = FORWARD[d] ? ty : y;
+              swept++;
+              ok = end === end && end - want <= LINK_FLAT && want - end <= LINK_FLAT;
+            }
+            if (ok && flat && tight) ok = this.core.standClear((x + tx) * 0.5, (z + tz) * 0.5, y, this.agentRadius, DEF_STEP_UP, DEF_HEIGHT);
+            if (ok) continue;
+            nbr[slot * 8 + d] = -1; nbr[t * 8 + REV[d]] = -1;
+          }
+        }
+      }
+    }
+    // flag 2 = "has a cut link", derived afresh for every node whose links may have changed (the rect and the
+    // ring around it), so an incremental rebuild leaves exactly the flags a full build would
+    const rows = this.rows;
+    for (let iz = Math.max(0, z0 - 1); iz <= Math.min(rows - 1, z1 + 1); iz++) {
+      for (let ix = Math.max(0, x0 - 1); ix <= Math.min(cols - 1, x1 + 1); ix++) {
+        const base = (iz * cols + ix) * LEVELS;
+        for (let l = 0; l < LEVELS; l++) {
+          const slot = base + l;
+          if (ny[slot] !== ny[slot]) break;
+          if (crowd[slot] === 1) continue;
+          let cut = 0;
+          for (let d = 0; d < 8; d++) if (nbr[slot * 8 + d] < 0) { cut = 2; break; }
+          crowd[slot] = cut;
+        }
+      }
+    }
+    return swept;
+  }
+
+  /**
+   * Can the big agent of the current query make the hop between two linked nodes? Same question as
+   * verifyLinks answers for the default agent, asked lazily per link and remembered in the fit profile: with
+   * the ends at different heights the body must clear every solid in the band of BOTH heights, at both ends
+   * and half way.
+   */
+  protected linkFits(a: number, d: number, b: number): boolean {
+    const f = this.fit;
+    if (f === null) return true;
+    const ya = this.ny[a], yb = this.ny[b];
+    if (ya - yb <= LINK_FLAT && yb - ya <= LINK_FLAT) return true;
+    const known = f.link[a * 8 + d];
+    if (known !== 0) return known === 1;
+    const lo = ya < yb ? ya : yb, h = f.height + (ya < yb ? yb - ya : ya - yb);
+    const ax = this.slotX(a), az = this.slotZ(a), bx = this.slotX(b), bz = this.slotZ(b);
+    const core = this.core;
+    const ok = core.standClear(ax, az, lo, f.radius, DEF_STEP_UP, h)
+      && core.standClear(bx, bz, lo, f.radius, DEF_STEP_UP, h)
+      && core.standClear((ax + bx) * 0.5, (az + bz) * 0.5, lo, f.radius, DEF_STEP_UP, h);
+    f.link[a * 8 + d] = ok ? 1 : 2;
+    f.link[b * 8 + REV[d]] = ok ? 1 : 2;
+    return ok;
   }
 
   protected labelComponents(): void {
@@ -425,58 +607,5 @@ export class NavGridBase {
       if (best >= 0) return best;
     }
     return -1;
-  }
-
-  // -------------------------------------------------------------------------------------------------------
-  // debug
-  // -------------------------------------------------------------------------------------------------------
-  /** Append every node position as x,y,z triples (debug drawing, tests). */
-  debugNodes(out: number[]): void {
-    if (!this.built) return;
-    const slots = this.cols * this.rows * LEVELS;
-    for (let s = 0; s < slots; s++) {
-      const h = this.ny[s];
-      if (h === h) out.push(this.slotX(s), h, this.slotZ(s));
-    }
-  }
-
-  /**
-   * Report the nodes as merged strips: every maximal run of east–west neighbours at one height becomes one
-   * call `emit(x0, x1, z, y, tight)` (x0..x1 = cell centres of its ends; `tight` = nodes hugging an obstacle
-   * or an edge). A flat hall collapses to a few hundred strips instead of ten thousand cells.
-   */
-  debugStrips(emit: (x0: number, x1: number, z: number, y: number, tight: boolean) => void): void {
-    if (!this.built) return;
-    const { cols, rows, ny, crowd, cell } = this;
-    const runH = new Float64Array(LEVELS), runX = new Int32Array(LEVELS), runT = new Uint8Array(LEVELS);
-    const live = new Uint8Array(LEVELS), seen = new Uint8Array(LEVELS);
-    for (let iz = 0; iz < rows; iz++) {
-      const z = this.minZ + (iz + 0.5) * cell;
-      live.fill(0);
-      for (let ix = 0; ix <= cols; ix++) {
-        seen.fill(0);
-        if (ix < cols) {
-          const base = (iz * cols + ix) * LEVELS;
-          for (let l = 0; l < LEVELS; l++) {
-            const h = ny[base + l];
-            if (h !== h) break;
-            const tight = crowd[base + l];
-            let r = -1;
-            for (let k = 0; k < LEVELS; k++) if (live[k] && runH[k] === h && runT[k] === tight) { r = k; break; }
-            if (r < 0) {
-              for (let k = 0; k < LEVELS; k++) if (!live[k] && !seen[k]) { r = k; break; }
-              if (r < 0) continue;
-              live[r] = 1; runH[r] = h; runX[r] = ix; runT[r] = tight;
-            }
-            seen[r] = 1;
-          }
-        }
-        for (let k = 0; k < LEVELS; k++) {
-          if (!live[k] || seen[k]) continue;
-          emit(this.minX + (runX[k] + 0.5) * cell, this.minX + (ix - 0.5) * cell, z, runH[k], runT[k] === 1);
-          live[k] = 0;
-        }
-      }
-    }
   }
 }

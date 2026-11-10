@@ -13,8 +13,10 @@ interface LayerBase {
   th?: readonly [number, number];
   /** bar mask over the chord cycle (`x` = play, `.` = rest), repeated — call-and-response between layers */
   mask?: string;
-  /** extra reverb send for this layer (0..1) */
+  /** send into the score's hall (0..1): pads, bells, swells */
   wet?: number;
+  /** send into the short drum room (0..1): percussion gets air without a tail that smears the next beat */
+  room?: number;
   /** only while the Meridian is unresolved / resolved */
   when?: 'unresolved' | 'resolved';
 }
@@ -22,7 +24,7 @@ interface LayerBase {
 export type PadVoice = 'warm' | 'glass' | 'choir' | 'air' | 'wrong' | 'felt';
 export type PulseVoice = 'pluck' | 'tick' | 'glass' | 'bass' | 'clock';
 export type MotifVoice = 'bell' | 'glass' | 'horn' | 'felt';
-export type PercInst = 'taiko' | 'odaiko' | 'metal' | 'anvil' | 'hat' | 'rim' | 'kick' | 'boom' | 'clack';
+export type PercInst = 'taiko' | 'odaiko' | 'shime' | 'kane' | 'metal' | 'anvil' | 'hat' | 'shaker' | 'bow' | 'rim' | 'kick' | 'boom' | 'clack';
 
 /** `[step, semitones above base, length in steps, velocity]` */
 export type MotifNote = readonly [number, number, number, number?];
@@ -58,7 +60,10 @@ export interface MusicDef {
   /** chord cycle once `meridianComplete` has resolved the King identity */
   resolved?: readonly Chord[];
   layers: readonly Layer[];
-  /** target bed loudness, dBFS RMS at reference settings (default −20) */
+  /**
+   * target bed loudness, dBFS RMS at reference settings (default −20), at intensity 0.6 (or `fixedIntensity`).
+   * Calibration also holds full intensity to at most `db + 2.5`.
+   */
   db?: number;
   /** combat layers ignore setIntensity and sit at this value (title, credits, story beds) */
   fixedIntensity?: number;

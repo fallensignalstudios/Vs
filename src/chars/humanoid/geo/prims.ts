@@ -237,20 +237,23 @@ function loftTube(b: MeshBuilder, S: FullSec[], o: LoftOpts): void {
 
 interface Lat { t: number; kind: number }
 
-/** Border lattice: positions in metres along a span of `len`, with bevel + optional trim at each end. */
-function lattice(len: number, n: number, bevel: number, trim: number, lo: boolean, hi: boolean, trimLo: boolean, trimHi: boolean): Lat[] {
+/**
+ * Border lattice: positions in metres along a span of `len`, with bevel + optional trim at each end.
+ * `lean` (lower LODs) spends one row on the trim band instead of two and none on the bevel.
+ */
+function lattice(len: number, n: number, bevel: number, trim: number, lo: boolean, hi: boolean, trimLo: boolean, trimHi: boolean, lean = false): Lat[] {
   const out: Lat[] = [];
   const step = Math.min(0.004, trim * 0.5 || 0.004);
   let a = 0, c = len;
   if (lo) {
     out.push({ t: 0, kind: 2 });
-    if (trimLo && trim > 0) { out.push({ t: bevel, kind: 1 }, { t: bevel + trim, kind: 1 }); a = bevel + trim + step; }
+    if (trimLo && trim > 0) { if (!lean) out.push({ t: bevel, kind: 1 }); out.push({ t: bevel + trim, kind: 1 }); a = bevel + trim + step; }
     else a = bevel;
   }
   const tail: Lat[] = [];
   if (hi) {
     tail.push({ t: len, kind: 2 });
-    if (trimHi && trim > 0) { tail.push({ t: len - bevel, kind: 1 }, { t: len - bevel - trim, kind: 1 }); c = len - bevel - trim - step; }
+    if (trimHi && trim > 0) { if (!lean) tail.push({ t: len - bevel, kind: 1 }); tail.push({ t: len - bevel - trim, kind: 1 }); c = len - bevel - trim - step; }
     else c = len - bevel;
   }
   if (c <= a) { a = len * 0.4; c = len * 0.6; }
@@ -290,10 +293,14 @@ function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): vo
   };
 
   // v lattice: borders + every authored section in between
-  const vb = lattice(total, 1, bevel, tw, true, true, trim ? trim.v0 !== false : false, trim ? trim.v1 !== false : false);
+  const lean = b.detail < 1;
+  const vb = lattice(total, 1, bevel, tw, true, true, trim ? trim.v0 !== false : false, trim ? trim.v1 !== false : false, lean);
   const vLo = vb.findIndex((x) => x.kind === 0), vHi = vb.length - 1 - [...vb].reverse().findIndex((x) => x.kind === 0);
   const vs: Lat[] = vb.slice(0, vLo + 1);
-  for (let j = 1; j < S.length - 1; j++) if (L[j] > vb[vLo].t + 1e-4 && L[j] < vb[vHi].t - 1e-4) vs.push({ t: L[j], kind: 0 });
+  for (let j = 1; j < S.length - 1; j++) {
+    if (b.detail < 0.45 && S.length > 4 && j % 2 === 1) continue;
+    if (L[j] > vb[vLo].t + 1e-4 && L[j] < vb[vHi].t - 1e-4) vs.push({ t: L[j], kind: 0 });
+  }
   for (let i = vHi; i < vb.length; i++) vs.push(vb[i]);
 
   // u lattice
@@ -301,7 +308,7 @@ function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): vo
   const arcLen = Math.max(1e-3, Math.abs(mid.a1 - mid.a0) * DEG * (mid.rx + mid.rz) * 0.5);
   const us: Lat[] = wrap
     ? Array.from({ length: seg }, (_, k) => ({ t: (k / seg) * arcLen, kind: 0 }))
-    : lattice(arcLen, seg, bevel, tw, true, true, trim ? trim.u0 !== false : false, trim ? trim.u1 !== false : false);
+    : lattice(arcLen, seg, bevel, tw, true, true, trim ? trim.u0 !== false : false, trim ? trim.u1 !== false : false, lean);
 
   const nu = us.length, nv = vs.length;
   const G: number[] = new Array(nu * nv);
@@ -354,9 +361,12 @@ function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): vo
   };
   const row = (vi: number): number[] => { const r: number[] = []; for (let ui = 0; ui < nu; ui++) r.push(G[vi * nu + ui]); if (wrap) r.push(G[vi * nu]); return r; };
   const colm = (ui: number): number[] => { const r: number[] = []; for (let vi = 0; vi < nv; vi++) r.push(G[vi * nu + ui]); return r; };
-  wall(row(0), row(1));
-  wall(row(nv - 1), row(nv - 2));
-  if (!wrap) { wall(colm(0), colm(1)); wall(colm(nu - 1), colm(nu - 2)); }
+  // far LODs: plates are paper shells (their thickness is below a pixel)
+  if (b.detail >= 0.45) {
+    wall(row(0), row(1));
+    wall(row(nv - 1), row(nv - 2));
+    if (!wrap) { wall(colm(0), colm(1)); wall(colm(nu - 1), colm(nu - 2)); }
+  }
 
   if (o.inner) {
     const islot = o.innerSlot ?? 0;

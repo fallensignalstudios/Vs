@@ -100,6 +100,49 @@ const dodge: ClipSpec = {
   events: [[0.1, 'step']],
 };
 
+const NEUTRAL: PoseSpec = {
+  hips: [0, 0, 0], hipsR: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], neck: [0, 0, 0], head: [0, 0, 0],
+  armL: { sh: [2, 6, 0], el: 14 }, armR: { sh: [2, 6, 0], el: 14 }, legL: { p: [-0.115, 0, 0], yaw: 8, pitch: 0, air: false }, legR: { p: [0.115, 0, 0], yaw: 8, pitch: 0, air: false },
+};
+
+/**
+ * Directional dodges built on a stance: a back-skip and a side-step to either flank (the forward dive is authored
+ * per archetype). `arms` is what the arms do while the body goes — tuck the weapon, keep the shield in.
+ * play('dodge', { dir }) picks among them.
+ */
+export function dodgeVariants(base: PoseSpec | undefined, arms: PoseSpec = {}): Record<string, ClipSpec> {
+  const home = base ?? NEUTRAL;
+  const side = (s: number): ClipSpec => ({
+    duration: 0.45, base, fadeIn: 0.04, fadeOut: 0.14,
+    keys: [
+      { t: 0 },
+      // push off the trailing foot, the leading leg reaches for the floor a long step away
+      { t: 0.3, ease: 'out', hips: [s * 0.14, -0.3, 0], hipsR: [12, s * -8, s * 14], spine: [12, 0, s * 10], chest: [8, s * 6, s * 6], neck: [-8, s * -10, s * -8], head: [-8, s * -14, s * -8], ...arms,
+        legL: s < 0 ? { p: [-0.42, 0.07, 0.02], yaw: 20, pitch: 10, air: true } : { p: [-0.02, 0, 0], yaw: 6, pitch: -34, air: false },
+        legR: s < 0 ? { p: [0.02, 0, 0], yaw: 6, pitch: -34, air: false } : { p: [0.42, 0.07, 0.02], yaw: 20, pitch: 10, air: true } },
+      { t: 0.66, ease: 'inOut', hips: [s * 0.2, -0.26, 0], hipsR: [10, 0, s * 6],
+        legL: s < 0 ? { p: [-0.36, 0, 0.02], yaw: 16, pitch: 0, air: false } : { p: [0.1, 0.06, 0], yaw: 6, pitch: -10, air: true },
+        legR: s < 0 ? { p: [-0.1, 0.06, 0], yaw: 6, pitch: -10, air: true } : { p: [0.36, 0, 0.02], yaw: 16, pitch: 0, air: false } },
+      { t: 1, ease: 'inOut', ...home },
+    ],
+    events: [[0.08, 'step'], [0.66, 'step']],
+  });
+  const back: ClipSpec = {
+    duration: 0.45, base, fadeIn: 0.04, fadeOut: 0.14,
+    keys: [
+      { t: 0 },
+      // weight drops back off the front foot, the rear leg reaches behind
+      { t: 0.3, ease: 'out', hips: [0, -0.26, -0.12], hipsR: [-6, 0, 0], spine: [14, 0, 0], chest: [10, 0, 0], neck: [-10, 0, 0], head: [-10, 0, 0], ...arms,
+        legL: { p: [-0.12, 0, 0.34], yaw: 4, pitch: 14, air: false }, legR: { p: [0.15, 0.08, -0.34], yaw: 14, pitch: -20, air: true } },
+      { t: 0.66, ease: 'inOut', hips: [0, -0.24, -0.1], hipsR: [4, 0, 0],
+        legL: { p: [-0.12, 0.06, 0.1], yaw: 4, pitch: -16, air: true }, legR: { p: [0.15, 0, -0.38], yaw: 20, pitch: 0, air: false } },
+      { t: 1, ease: 'inOut', ...home },
+    ],
+    events: [[0.08, 'step'], [0.66, 'step']],
+  };
+  return { dodgeBack: back, dodgeLeft: side(-1), dodgeRight: side(1) };
+}
+
 /** Guard without a real guard tool: forearms up. */
 const guard: ClipSpec = {
   duration: 2, loop: true, upperOnly: true,
@@ -216,6 +259,7 @@ export const GENERIC: Moveset = {
     ...NARRATIVE,
     aim, aimRifle, shoot, attackLight1: strike, dodge, guard, stagger, guardBreak, knockdown, getUp, death, roar,
     shootRifle,
+    ...dodgeVariants(undefined, { armL: { sh: [40, 16, 20], el: 95 }, armR: { sh: [30, 16, 20], el: 95 } }),
   },
   alias: {
     attackLight2: 'attackLight1', attackLight3: 'attackLight1', attackLight4: 'attackLight1', attackHeavy: 'attackLight1', attackHeavyCharge: 'guard',
@@ -223,7 +267,7 @@ export const GENERIC: Moveset = {
     slam: 'attackLight1', throw: 'point', dispatch: 'attackLight1', spawnBreach: 'getUp', spawnDrop: 'getUp', linkedSync: 'listen',
     pounce: 'attackLight1', leap: 'dodge', sweep: 'attackLight1', groundSlam: 'attackLight1', charge: 'attackLight1',
     weave: 'holdPlane', pulse: 'roar', exposeJoint: 'stagger', fracture: 'stagger', floorStrike: 'kneel', tetherStop: 'holdPlane',
-    ceilingCling: 'cower', hover: 'listen',
+    ceilingCling: 'cower', hover: 'listen', lowerWeapon: 'listen', raiseWeapon: 'nod',
   },
   stances: {
     none: { idle: {} },

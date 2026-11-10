@@ -5,6 +5,7 @@
  */
 import type { CharacterCreateOpts, CharacterVisual, CreatureArchetype, DeviceArchetype, Game } from '@/core/api';
 import { warnOnce } from './core/rig';
+import { loadCreatureSkin, setSkinsEnabled, skinnable, skinsEnabled } from './core/skinlib';
 import { createDrone } from './drone';
 import { createElite } from './elite';
 import { createWeaver } from './weaver';
@@ -41,4 +42,26 @@ export function createCreature(game: Game | null, archetype: CreatureArchetype |
     return MAKERS.secDrone(game, opts);
   }
   return make(game, opts);
+}
+
+/**
+ * Generated-mesh skins (public/models/*.glb worn over a creature's procedural animator — today the elite).
+ * Skins are optional: a creature made before its skin has loaded shows its procedural body and swaps when the
+ * file arrives. Await this during a loading screen to avoid that swap. Resolves once every requested skin has
+ * loaded or failed; never rejects. Outside a browser it resolves immediately and nothing is loaded.
+ */
+export function preloadCreatureSkins(archetypes?: readonly string[]): Promise<void> {
+  const list = (archetypes ?? skinnable()).filter((a) => skinnable().includes(a));
+  if (!skinsEnabled()) return Promise.resolve();
+  return Promise.all(list.map((a) => loadCreatureSkin(a))).then(() => undefined);
+}
+
+/** Master switch for generated-mesh skins (default on). Off: creatures created from now on stay procedural. */
+export function setCreatureSkinsEnabled(on: boolean): void {
+  setSkinsEnabled(on);
+}
+
+/** Archetypes that have a generated-mesh skin. */
+export function creatureSkinArchetypes(): string[] {
+  return skinnable();
 }

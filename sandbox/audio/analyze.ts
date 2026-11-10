@@ -2,12 +2,17 @@
  * Signal analysis for the audio sandbox ("verification without ears"): level, duration, spectrum, and a
  * log-frequency spectrogram so a rendered sound can be read from a screenshot.
  */
+import { bufferLoudness } from '@/audio/synth/loudness';
 
 export interface Metrics {
   peak: number;
   peakDb: number;
   rms: number;
   rmsDb: number;
+  /** loudest 100 ms, K-weighted (dB) — what SFX levels are balanced on */
+  loudDb: number;
+  /** p95 − p50 of the 20 ms level envelope (dB): how far the hits stand out of the bed */
+  punchDb: number;
   /** time of the last sample above −60 dBFS */
   durationMs: number;
   spectralCentroidHz: number;
@@ -22,6 +27,27 @@ export interface Metrics {
 }
 
 const db = (v: number): number => (v > 1e-9 ? 20 * Math.log10(v) : -180);
+
+/** Percentiles of the 20 ms RMS envelope of the mono mix (dB). */
+export function envelopeStats(buf: AudioBuffer, from = 0, to = buf.duration): { p10: number; p50: number; p95: number } {
+  const l = buf.getChannelData(0);
+  const r = buf.numberOfChannels > 1 ? buf.getChannelData(1) : l;
+  const w = Math.floor(0.02 * buf.sampleRate);
+  const env: number[] = [];
+  const end = Math.min(l.length, Math.floor(to * buf.sampleRate));
+  for (let p = Math.floor(from * buf.sampleRate); p + w <= end; p += w) {
+    let s = 0;
+    for (let i = 0; i < w; i++) {
+      const v = (l[p + i] + r[p + i]) * 0.5;
+      s += v * v;
+    }
+    env.push(10 * Math.log10(s / w + 1e-12));
+  }
+  if (!env.length) return { p10: -120, p50: -120, p95: -120 };
+  env.sort((a, b) => a - b);
+  const q = (f: number): number => env[Math.min(env.length - 1, Math.floor(f * env.length))];
+  return { p10: q(0.1), p50: q(0.5), p95: q(0.95) };
+}
 const round = (v: number, d = 1): number => {
   const k = Math.pow(10, d);
   return Math.round(v * k) / k;
@@ -116,8 +142,10 @@ export function analyze(buf: AudioBuffer, from = 0, to = buf.duration): Metrics 
     }
   }
   for (let i = 0; i < 5; i++) bands[i] = total > 0 ? round(bands[i] / total, 3) : 0;
+  const env = envelopeStats(buf, from, to);
   return {
     peak: round(peak, 4), peakDb: round(db(peak)), rms: round(rms, 5), rmsDb: round(db(rms)),
+    loudDb: round(bufferLoudness(buf, from, to).loudDb), punchDb: round(env.p95 - env.p50),
     durationMs: Math.round(((last - s0) / sr) * 1000),
     spectralCentroidHz: den > 0 ? Math.round(num / den) : 0,
     bands, dc: round(sum / n, 5), stereo: ll > 0 && rr > 0 ? round(lr / Math.sqrt(ll * rr), 2) : 1,

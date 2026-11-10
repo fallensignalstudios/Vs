@@ -8,12 +8,15 @@ export interface SkyDome {
   readonly mesh: THREE.Mesh;
   /** push the blended state + animated scalars into the shader */
   apply(state: SkyState, activity: number, closed: number): void;
+  /** quality tier 0 low · 1 medium · 2 high: swaps to the fragment program compiled for it (built on first use) */
+  setDetail(level: number): void;
+  readonly detail: number;
   dispose(): void;
 }
 
 export function createSkyDome(shared: SharedUniforms): SkyDome {
   const uniforms = {
-    uTime: shared.uTime, uFarZ: shared.uFarZ, uDetail: shared.uDetail,
+    uTime: shared.uTime, uFarZ: shared.uFarZ, uLite: shared.uLite,
     uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 1, 0) },
     uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite,
     uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
@@ -24,18 +27,29 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
     uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall, uGround: { value: 0 }, uGain: { value: 1 },
   };
-  const material = new THREE.ShaderMaterial({
-    name: 'SkyDome',
-    uniforms,
-    vertexShader: DOME_VERTEX,
-    fragmentShader: DOME_FRAGMENT,
-    side: THREE.DoubleSide,
-    depthTest: true,
-    depthWrite: false,
-    fog: false,
-  });
+  // one program per quality tier, sharing every uniform; variants are created the first time they are needed
+  const variants: Array<THREE.ShaderMaterial | null> = [null, null, null];
+  const variant = (level: number): THREE.ShaderMaterial => {
+    let m = variants[level];
+    if (!m) {
+      m = new THREE.ShaderMaterial({
+        name: `SkyDome:${['low', 'medium', 'high'][level]}`,
+        uniforms,
+        defines: { SKY_DETAIL: level },
+        vertexShader: DOME_VERTEX,
+        fragmentShader: DOME_FRAGMENT,
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: false,
+        fog: false,
+      });
+      variants[level] = m;
+    }
+    return m;
+  };
+  let detail = 2;
   const geometry = new THREE.BoxGeometry(2, 2, 2);
-  const mesh = new THREE.Mesh(geometry, material);
+  const mesh = new THREE.Mesh(geometry, variant(detail));
   mesh.name = 'sky:dome';
   mesh.frustumCulled = false;
   mesh.renderOrder = SKY_ORDER.dome;
@@ -70,9 +84,16 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uGround.value = s.ground;
       uniforms.uGain.value = s.gain;
     },
+    get detail() { return detail; },
+    setDetail(level) {
+      const next = level <= 0 ? 0 : level >= 2 ? 2 : 1;
+      if (next === detail) return;
+      detail = next;
+      mesh.material = variant(next);
+    },
     dispose() {
       geometry.dispose();
-      material.dispose();
+      for (const m of variants) m?.dispose();
     },
   };
 }

@@ -2,26 +2,32 @@
  * Audio subsystem façade — implements the AudioSystem contract over an AudioEngine.
  *
  * Browser concerns live here: the AudioContext only exists after `unlock()` (a user gesture), so until then
- * every call is a silent no-op that merely *remembers* the requested music / ambience / mix state and applies
- * it the moment audio becomes available. With no WebAudio (node, old browsers) or `?mute`, it stays silent
- * forever and never throws.
+ * every call is a silent no-op that merely *remembers* the requested music / ambience / mix / cadence state,
+ * loops and registered recordings, and applies them the moment audio becomes available. With no WebAudio
+ * (node, old browsers) or `?mute`, it stays silent forever and never throws.
  */
 import { clamp01 } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import type {
-  AmbienceId, AudioDebugInfo, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like,
+  AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like,
 } from '@/core/api';
 import { AudioEngine } from './engine';
-import { NULL_LOOP } from './voices';
+import { MAX_LOOP_SLOTS, NULL_LOOP } from './voices';
 import type { Volumes } from './mixer';
 import type { StingerKind } from './music/engine';
+import { MUSIC } from './music/defs';
+import { AMBIENCE } from './ambience/defs';
 import { wireEvents } from './wiring';
 
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
 
+/** gestures that can unlock audio (which of them counts as a user activation differs between browsers) */
+const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown', 'click'] as const;
+
 /**
- * A loop handle that outlives the lack of an AudioContext: it remembers what was asked for and starts the
- * real voice once audio is unlocked (a zone can build its device hums before the first user gesture).
+ * A loop handle that outlives the lack of an AudioContext: it remembers what was asked for and hands it to
+ * the engine once audio is unlocked (a zone can build its device hums before the first user gesture). From
+ * then on the engine's own loop slot decides when it actually sounds (nearest first, within the caps).
  */
 class DeferredLoop implements LoopHandle {
   real: LoopHandle | null = null;
@@ -31,7 +37,8 @@ class DeferredLoop implements LoopHandle {
   private readonly opts: SfxOpts;
 
   constructor(readonly id: SfxId, opts: SfxOpts | undefined, private readonly forget: (l: DeferredLoop) => void) {
-    this.opts = { ...opts, pos: opts?.pos ? { x: opts.pos.x, y: opts.pos.y, z: opts.pos.z } : undefined };
+    const p = opts?.pos;
+    this.opts = { ...opts, pos: p ? { x: p.x, y: p.y, z: p.z } : undefined };
   }
 
   /** Start on a live engine, applying everything requested so far. */
@@ -43,15 +50,15 @@ class DeferredLoop implements LoopHandle {
   }
 
   setPosition(p: Vec3Like): void {
-    if (this.stopped || !p) return;
-    this.opts.pos = { x: p.x, y: p.y, z: p.z };
+    if (this.stopped || !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return;
+    if (this.opts.pos) this.opts.pos = { x: p.x, y: p.y, z: p.z };
     this.real?.setPosition(p);
   }
 
   setVolume(v: number, fadeSeconds?: number): void {
     if (this.stopped || !Number.isFinite(v)) return;
     this.volume = v;
-    this.real?.setVolume(v, fadeSeconds);
+    this.real?.setVolume(v, Number.isFinite(fadeSeconds) ? fadeSeconds : undefined);
   }
 
   setPitch(p: number): void {
@@ -63,7 +70,7 @@ class DeferredLoop implements LoopHandle {
   stop(fadeSeconds?: number): void {
     if (this.stopped) return;
     this.stopped = true;
-    this.real?.stop(fadeSeconds);
+    this.real?.stop(Number.isFinite(fadeSeconds) ? fadeSeconds : undefined);
     this.real = null;
     this.forget(this);
   }
@@ -74,51 +81,68 @@ function contextCtor(): Ctor | null {
   return g.AudioContext ?? g.webkitAudioContext ?? null;
 }
 
+type Target = { addEventListener?: (t: string, f: () => void, o?: unknown) => void; removeEventListener?: (t: string, f: () => void, o?: unknown) => void };
+
 class AudioSystemImpl implements AudioSystem {
   private engine: AudioEngine | null = null;
   private ctx: AudioContext | null = null;
   private failed = false;
+  private disposed = false;
+  private readonly failures = new Map<string, number>();
   private readonly warned = new Set<string>();
   private readonly loops = new Set<DeferredLoop>();
+  private readonly pendingSamples: Array<{ id: string; buffer: AudioBuffer; opts?: AudioSampleOpts }> = [];
+  private readonly cleanup: Array<() => void> = [];
+  private gestureOff: (() => void) | null = null;
   /** frames after unlock() during which a still-resuming context may be scheduled on */
   private graceFrames = 0;
 
-  // requested state (applied on unlock, and kept so getters are meaningful while silent)
+  // requested state (applied on unlock, and reported by the getters while there is no engine)
   private wantMusic: MusicState = 'silence';
   private wantAmbience: AmbienceId = 'none';
   private wantIntensity = 0;
   private wantMuffle = 0;
   private wantResolved = false;
+  /** cadence irregularity asked for before audio existed (null = never asked) */
+  private wantIrregular: number | null = null;
   private paused = false;
   private lead: 'tarrik' | 'selene' = 'tarrik';
   private readonly lpos = { x: 0, y: 0, z: 0 };
   private readonly lfwd = { x: 0, y: 0, z: -1 };
 
   constructor(private readonly game: Game) {
-    wireEvents(game, this);
+    this.cleanup.push(...wireEvents(game, this));
     // Browsers only allow audio after a gesture: the first key or pointer press anywhere unlocks, so the title
-    // screen already has its music by the time a menu button is chosen.
-    const w = globalThis as unknown as { addEventListener?: (t: string, f: () => void, o?: unknown) => void; removeEventListener?: (t: string, f: () => void, o?: unknown) => void };
-    if (typeof w.addEventListener === 'function' && !game.flags.mute) {
-      const first = (): void => {
-        w.removeEventListener?.('pointerdown', first, true);
-        w.removeEventListener?.('keydown', first, true);
+    // screen already has its music by the time a menu button is chosen. Not every such event is a user
+    // activation everywhere (Esc, a touch pointerdown), so the listeners stay until the context really runs.
+    const w = globalThis as unknown as Target;
+    if (typeof w.addEventListener === 'function' && typeof w.removeEventListener === 'function' && !game.flags.mute) {
+      const onGesture = (): void => {
         this.unlock();
+        if (this.ctx?.state === 'running' || this.failed) this.gestureOff?.();
       };
-      w.addEventListener('pointerdown', first, true);
-      w.addEventListener('keydown', first, true);
+      for (const t of UNLOCK_EVENTS) w.addEventListener(t, onGesture, true);
+      this.gestureOff = (): void => {
+        for (const t of UNLOCK_EVENTS) w.removeEventListener?.(t, onGesture, true);
+        this.gestureOff = null;
+      };
     }
     const doc = (globalThis as unknown as { document?: Document }).document;
-    doc?.addEventListener?.('visibilitychange', () => {
-      // a hidden tab stops calling update(): suspend rather than let the sustained layers drone on alone
-      if (!this.ctx) return;
-      if (doc.hidden) void this.ctx.suspend().catch(() => undefined);
-      else void this.ctx.resume().catch(() => undefined);
-    });
+    if (doc && typeof doc.addEventListener === 'function') {
+      const onVisibility = (): void => {
+        // a hidden tab stops calling update(): suspend rather than let the sustained layers drone on alone
+        if (!this.ctx) return;
+        if (doc.hidden) void this.ctx.suspend().catch(() => undefined);
+        else void this.ctx.resume().catch(() => undefined);
+      };
+      doc.addEventListener('visibilitychange', onVisibility);
+      this.cleanup.push(() => doc.removeEventListener('visibilitychange', onVisibility));
+    }
   }
 
   /**
-   * Run an engine call; any failure is reported once and swallowed (audio must never take the mission down).
+   * Run an engine call; any failure is swallowed (audio must never take the mission down) and reported — the
+   * first time, and again every few hundred repeats so a persistent fault stays visible.
    * `live` = only while the context is actually running: one-shots scheduled on a suspended context would all
    * fire together the moment it resumed. (The few frames right after unlock() are let through, so the very
    * click that unlocked audio still gets its own UI sound once resume() lands.)
@@ -129,11 +153,16 @@ class AudioSystemImpl implements AudioSystem {
     try {
       fn(e);
     } catch (err) {
-      if (!this.warned.has(what)) {
-        this.warned.add(what);
-        console.warn(`[audio] ${what} failed:`, err);
-      }
+      const n = (this.failures.get(what) ?? 0) + 1;
+      this.failures.set(what, n);
+      if (n === 1 || n % 300 === 0) console.warn(`[audio] ${what} failed${n > 1 ? ` (${n} times)` : ''}:`, err);
     }
+  }
+
+  private warnOnce(key: string, message: string): void {
+    if (this.warned.has(key)) return;
+    this.warned.add(key);
+    console.warn(message);
   }
 
   private volumes(): Volumes {
@@ -148,7 +177,7 @@ class AudioSystemImpl implements AudioSystem {
   }
 
   unlock(): void {
-    if (this.failed || this.game.flags.mute) return;
+    if (this.failed || this.disposed || this.game.flags.mute) return;
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
       return;
@@ -179,9 +208,14 @@ class AudioSystemImpl implements AudioSystem {
       e.setIntensity(this.wantIntensity);
       e.setAmbience(this.wantAmbience, 1.5);
       e.setMusic(this.wantMusic, 1.5);
+      if (this.wantIrregular !== null) e.music.setIrregular(this.wantIrregular);
       e.setPaused(this.paused);
       e.music.setLead(this.lead === 'selene' ? 'reformation' : 'dominion');
+      for (const s of this.pendingSamples) e.registerSample(s.id, s.buffer, s.opts);
+      this.pendingSamples.length = 0;
       for (const l of this.loops) l.start(e);
+      // frequent sounds are rendered once, off the main thread; until they land everything is synthesised live
+      void e.prerender();
     });
   }
 
@@ -191,7 +225,11 @@ class AudioSystemImpl implements AudioSystem {
   }
 
   loop(id: SfxId, opts?: SfxOpts): LoopHandle {
-    if (this.failed || this.game.flags.mute || this.loops.size >= MAX_PENDING_LOOPS) return NULL_LOOP;
+    if (this.failed || this.disposed || this.game.flags.mute) return NULL_LOOP;
+    if (this.loops.size >= MAX_LOOP_SLOTS) {
+      this.warnOnce('#loops', `[audio] more than ${MAX_LOOP_SLOTS} loops requested — the rest are ignored (stop() the ones you no longer need)`);
+      return NULL_LOOP;
+    }
     const l = new DeferredLoop(id, opts, (x) => this.loops.delete(x));
     this.loops.add(l);
     this.run('loop', (e) => l.start(e));
@@ -199,21 +237,31 @@ class AudioSystemImpl implements AudioSystem {
   }
 
   setMusic(state: MusicState, fadeSeconds?: number): void {
-    this.wantMusic = state;
-    this.run('setMusic', (e) => e.setMusic(state, fadeSeconds));
+    let s = state;
+    if (s !== 'silence' && !Object.prototype.hasOwnProperty.call(MUSIC, s)) {
+      this.warnOnce(`music:${String(s)}`, `[audio] unknown music state "${String(s)}" — silence`);
+      s = 'silence';
+    }
+    this.wantMusic = s;
+    this.run('setMusic', (e) => e.setMusic(s, fadeSeconds));
   }
 
   get music(): MusicState {
-    return this.wantMusic;
+    return this.engine ? this.engine.music.state : this.wantMusic;
   }
 
   setAmbience(id: AmbienceId, fadeSeconds?: number): void {
-    this.wantAmbience = id;
-    this.run('setAmbience', (e) => e.setAmbience(id, fadeSeconds));
+    let a = id;
+    if (a !== 'none' && !Object.prototype.hasOwnProperty.call(AMBIENCE, a)) {
+      this.warnOnce(`amb:${String(a)}`, `[audio] unknown ambience "${String(a)}" — none`);
+      a = 'none';
+    }
+    this.wantAmbience = a;
+    this.run('setAmbience', (e) => e.setAmbience(a, fadeSeconds));
   }
 
   get ambience(): AmbienceId {
-    return this.wantAmbience;
+    return this.engine ? this.engine.ambience.current : this.wantAmbience;
   }
 
   setIntensity(n: number): void {
@@ -225,7 +273,10 @@ class AudioSystemImpl implements AudioSystem {
   }
 
   stinger(kind: StingerKind): void {
+    // the cadence consequence of a sever must survive even if nothing can sound yet
+    if (kind === 'sever') this.wantIrregular = 1;
     this.run('stinger', (e) => e.stinger(kind), true);
+    if (kind === 'sever' && this.ctx?.state !== 'running') this.run('sever', (e) => e.music.setIrregular(1));
   }
 
   speak(speaker: string, channel: 'voice' | 'radio' | 'system' | 'narration' = 'voice'): void {
@@ -250,12 +301,14 @@ class AudioSystemImpl implements AudioSystem {
   }
 
   setMeridianResolved(resolved: boolean): void {
-    this.wantResolved = resolved;
-    this.run('setMeridianResolved', (e) => e.music.setResolved(resolved));
+    this.wantResolved = resolved === true;
+    this.run('setMeridianResolved', (e) => e.music.setResolved(this.wantResolved));
   }
 
   setCadenceIrregular(amount: number): void {
-    this.run('setCadenceIrregular', (e) => e.music.setIrregular(amount));
+    if (!Number.isFinite(amount)) return;
+    this.wantIrregular = clamp01(amount);
+    this.run('setCadenceIrregular', (e) => e.music.setIrregular(clamp01(amount)));
   }
 
   setListener(pos: Vec3Like, forward: Vec3Like): void {
@@ -275,6 +328,17 @@ class AudioSystemImpl implements AudioSystem {
     this.run('applySettings', (e) => e.setVolumes(this.volumes()));
   }
 
+  registerSample(id: SfxId, buffer: AudioBuffer, opts?: AudioSampleOpts): void {
+    if (this.failed || this.disposed || !buffer || typeof buffer.getChannelData !== 'function') return;
+    if (this.engine) this.run('registerSample', (e) => e.registerSample(id, buffer, opts));
+    else if (this.pendingSamples.length < 512) this.pendingSamples.push({ id, buffer, opts });
+  }
+
+  unregisterSample(id: SfxId): void {
+    for (let i = this.pendingSamples.length - 1; i >= 0; i--) if (this.pendingSamples[i].id === id) this.pendingSamples.splice(i, 1);
+    this.run('unregisterSample', (e) => e.unregisterSample(id));
+  }
+
   /** Current protagonist (wired to `player:protagonist` / `handoff`): flavours encounter stingers. */
   setLead(id: 'tarrik' | 'selene'): void {
     this.lead = id;
@@ -291,6 +355,7 @@ class AudioSystemImpl implements AudioSystem {
     if (this.graceFrames > 0) this.graceFrames--;
     const e = this.engine;
     if (!e || !this.ctx || this.ctx.state !== 'running') return;
+    this.gestureOff?.();
     // combat intensity: whichever is higher of the scripted value and the AI director's own reading
     let n = this.wantIntensity;
     const ai = this.game.ai;
@@ -298,7 +363,11 @@ class AudioSystemImpl implements AudioSystem {
       const a = ai.intensity;
       if (typeof a === 'number' && Number.isFinite(a) && a > n) n = clamp01(a);
     }
+    // a zone being built means long frames: schedule the score further ahead while it lasts
+    const mission = this.game.mission;
+    const busy = !!mission && !isStub(mission) && mission.loading === true;
     this.run('update', (eng) => {
+      eng.setBusy(busy);
       eng.setIntensity(n);
       eng.update(dt);
     });
@@ -310,23 +379,53 @@ class AudioSystemImpl implements AudioSystem {
     this.run('clear', (e) => e.clear());
   }
 
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const off of this.cleanup) {
+      try {
+        off();
+      } catch {
+        /* a listener that is already gone */
+      }
+    }
+    this.cleanup.length = 0;
+    this.gestureOff?.();
+    for (const l of [...this.loops]) l.stop(0.05);
+    this.loops.clear();
+    this.pendingSamples.length = 0;
+    const ctx = this.ctx;
+    this.engine = null;
+    this.ctx = null;
+    if (ctx && typeof ctx.close === 'function') {
+      try {
+        void ctx.close().catch(() => undefined);
+      } catch {
+        /* already closed */
+      }
+    }
+  }
+
   debugInfo(): AudioDebugInfo {
     const e = this.engine;
+    const loops = e ? e.voices.loopCounts : { sounding: 0, requested: this.loops.size };
     return {
       unlocked: this.unlocked,
       contextState: this.ctx ? this.ctx.state : 'none',
       voices: e ? e.voices.count : 0,
-      music: this.wantMusic,
-      ambience: this.wantAmbience,
+      music: this.music,
+      ambience: this.ambience,
       intensity: this.intensity,
       muffle: this.wantMuffle,
       meridianResolved: this.wantResolved,
+      loops: loops.sounding,
+      loopsRequested: loops.requested,
+      cadenceIrregular: e ? e.music.irregular : (this.wantIrregular ?? 0),
+      prerendered: e ? e.samples.bakedCount : 0,
+      samples: e ? e.samples.registeredCount : this.pendingSamples.length,
     };
   }
 }
-
-/** loops a zone may hold open at once (the engine sounds at most 14; the rest wait their turn silently) */
-const MAX_PENDING_LOOPS = 64;
 
 /** Factory used by Game. Never throws; returns a silent system when audio is unavailable. */
 export function createAudioSystem(game: Game): AudioSystem {

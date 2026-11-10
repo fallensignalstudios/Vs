@@ -17,6 +17,7 @@ const SKINS = [0xb98a66, 0xa9764e, 0x8a5a3c, 0xc79c7e, 0x6e4630] as const;
 
 // ---------------------------------------------------------------------------------------------------------
 export const enforcer: ArchetypeDef = {
+  seedBuckets: 2,
   proportions: (rng) => ({ height: 2.04 + rng() * 0.05, shoulder: 0.226, hip: 0.104, bulk: 1.2, fem: 0 }),
   build(ctx) {
     const { b, rig, draft, rng } = ctx;
@@ -130,6 +131,7 @@ export const malik: ArchetypeDef = {
 
 // ---------------------------------------------------------------------------------------------------------
 export const dominionSoldier: ArchetypeDef = {
+  seedBuckets: 4,
   proportions: (rng) => ({ height: 1.8 + rng() * 0.1, shoulder: 0.19 + rng() * 0.012, hip: 0.097, bulk: 1.0 + rng() * 0.08, fem: 0 }),
   build(ctx) {
     const { b, rig, draft, rng } = ctx;

@@ -6,7 +6,10 @@
 import * as THREE from 'three';
 import { MeshBuilder, PART, ZONE, type Surf } from '../geo/builder';
 import { loft, box, prism, sweep, torus, tube, lathe, type SweepPoint, type V3 } from '../geo/prims';
-import type { RigView } from '../rig';
+import { BLADE_ROOT, type RigView } from '../rig';
+
+/** length of one Verity blade beyond its emitter */
+const BLADE_LEN = 0.612;
 import type { ItemDef, Mount, OverlayDef } from '../figure';
 import type { Pal } from './armor';
 
@@ -19,10 +22,15 @@ export function inHand(rig: RigView, hand: 'R' | 'L', rot: V3 = [0, 0, 0]): Moun
   return { parent: h, pos: [p[0] - q[0], p[1] - q[1], p[2] - q[2]], rot };
 }
 
-/** Run `fn` with the builder positioned at an equipment bone's rest point, bound to that bone. */
-function atBone(b: MeshBuilder, rig: RigView, bone: string, fn: () => void): void {
-  const p = rig.p(bone);
-  b.scope(() => { b.translate(p[0], p[1], p[2]); b.skin(rig.i(bone)); fn(); });
+const GROUP: Record<string, string> = { weapon: 'melee', bladeA: 'melee', bladeB: 'melee', gun: 'ranged', shield: 'shield', prop: 'case' };
+
+/**
+ * Run `fn` with the builder positioned at an equipment bone's rest point (or at `origin`'s), bound to that bone.
+ * The geometry is tagged with the item's group so driver-only figures can keep or drop it.
+ */
+function atBone(b: MeshBuilder, rig: RigView, bone: string, fn: () => void, origin = bone): void {
+  const p = rig.p(origin);
+  b.group(GROUP[bone] ?? 'melee', () => b.scope(() => { b.translate(p[0], p[1], p[2]); b.skin(rig.i(bone)); fn(); }));
 }
 
 interface BladeOpts {
@@ -103,9 +111,9 @@ export function velkorran(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
   });
   return {
     bone: 'weapon', held: inHand(rig, 'R'),
-    // across the back: hilt over the right shoulder, point toward the left hip, flat against the cape
-    sheath: { parent: 'chest', pos: [0.2, 0.32, 0.215], axes: { z: [0.42, 0.9, -0.04], x: [0, 0.05, 1] } },
-    grip2: [0, 0, 0.165],
+    // across the back, outside the pack: hilt over the right shoulder, point toward the left hip
+    sheath: { parent: 'chest', pos: [0.21, 0.33, 0.305], axes: { z: [0.42, 0.9, -0.05], x: [0, 0.06, 1] } },
+    grip2: [0, 0, 0.165], rest: 0.022,
     sockets: { weaponBase: [0, 0, -0.16], weaponMid: [0, 0, -0.78], weaponTip: [0, 0, -1.36] },
   };
 }
@@ -114,9 +122,10 @@ export function velkorran(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
 // Verity — Selene's ring-hilted double blade
 // -------------------------------------------------------------------------------------------------------
 export function verity(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
-  const ice: Surf = { color: 0x6fa6cc, metal: 0.3, rough: 0.14, part: PART.blade, emissive: 0xbfe8ff, glow: 0.16, ...W };
-  const edge: Surf = { color: 0xd8f1ff, metal: 0.1, rough: 0.1, part: PART.blade, emissive: 0xcfeeff, glow: 2.3, ...W };
-  const core: Surf = { color: 0x4f8fc0, metal: 0.3, rough: 0.2, part: PART.blade, emissive: 0x8fd4ff, glow: 0.55, ...W };
+  // broad luminous blades: a bright core, a pale body and hot edges, so the weapon reads at gameplay distance
+  const ice: Surf = { color: 0x7fb4d8, metal: 0.2, rough: 0.16, part: PART.blade, emissive: 0xa8d8ff, glow: 0.75, ...W };
+  const edge: Surf = { color: 0xe6f6ff, metal: 0.05, rough: 0.1, part: PART.blade, emissive: 0xcfeeff, glow: 3.4, ...W };
+  const core: Surf = { color: 0xbfe4ff, metal: 0.1, rough: 0.2, part: PART.blade, emissive: 0xd8f2ff, glow: 2.2, ...W };
   atBone(b, rig, 'weapon', () => {
     // hilt ring (lies in the XZ plane: the fist sits inside it like a guard)
     b.surf({ ...pal.plate2, ...W });
@@ -131,29 +140,30 @@ export function verity(b: MeshBuilder, rig: RigView, pal: Pal): ItemDef {
     // emitters where the blades leave the ring
     for (const s of [-1, 1]) {
       b.surf({ ...pal.plate, ...W });
-      b.scope(() => { b.translate(0, 0, s * 0.1); box(b, 0.062, 0.03, 0.044, { bevel: 0.008, taper: [1, 1] }); });
+      b.scope(() => { b.translate(0, 0, s * 0.104); box(b, 0.082, 0.032, 0.05, { bevel: 0.008, taper: [1, 1] }); });
       b.surf({ ...pal.trim, ...W });
-      b.scope(() => { b.translate(0, 0, s * 0.126); box(b, 0.05, 0.022, 0.012, { bevel: 0.004 }); });
+      b.scope(() => { b.translate(0, 0, s * 0.132); box(b, 0.07, 0.024, 0.012, { bevel: 0.004 }); });
       // ring braces
-      for (const sx of [-1, 1]) tube(b, [[sx * 0.03, 0, s * 0.085], [sx * 0.07, 0, s * 0.06]], 0.006, { seg: 5 });
+      for (const sx of [-1, 1]) tube(b, [[sx * 0.036, 0, s * 0.085], [sx * 0.072, 0, s * 0.06]], 0.006, { seg: 5 });
     }
   });
   const mk = (bone: 'bladeA' | 'bladeB', dir: number): void => {
+    // authored in the weapon frame, bound to the blade bone (which sits on the emitter and scales the blade)
     atBone(b, rig, bone, () => {
       blade(b, {
-        z0: dir * -0.128, z1: dir * -0.74, axis: 'x', steel: ice, edge, fuller: core, rows: 12,
-        width: (t) => (t < 0.08 ? 0.02 + t * 0.2 : 0.036 * Math.pow(Math.max(0, 1 - (t - 0.08) / 0.92), 0.55) + 0.001),
-        thick: (t) => 0.0062 * (1 - t * 0.6),
+        z0: dir * -BLADE_ROOT, z1: dir * -(BLADE_ROOT + BLADE_LEN), axis: 'x', steel: ice, edge, fuller: core, rows: 12,
+        width: (t) => (t < 0.05 ? 0.024 + t * 0.2 : t < 0.62 ? 0.034 : 0.034 * Math.pow(Math.max(0, (1 - t) / 0.38), 0.62) + 0.0012),
+        thick: (t) => 0.0085 * (1 - t * 0.55),
       });
-    });
+    }, 'weapon');
   };
   mk('bladeA', 1);
   mk('bladeB', -1);
   return {
-    bone: 'weapon', held: inHand(rig, 'R'), blades: true,
+    bone: 'weapon', held: inHand(rig, 'R'), blades: [BLADE_ROOT, BLADE_LEN], rest: 0.02,
     // hilt ring flat against the left hip
     sheath: { parent: 'hips', pos: [-(rig.prop.hip + 0.105) * rig.prop.bulk, -0.05, 0.02], axes: { y: [-1, 0.12, 0], z: [0, 0.3, 1] } },
-    sockets: { weaponBase: [0, 0, -0.13], weaponMid: [0, 0, -0.43], weaponTip: [0, 0, -0.74], weaponTip2: [0, 0, 0.74] },
+    sockets: { weaponBase: [0, 0, -0.13], weaponMid: [0, 0, -0.43], weaponTip: [0, 0, -(BLADE_ROOT + BLADE_LEN)], weaponTip2: [0, 0, BLADE_ROOT + BLADE_LEN] },
   };
 }
 
@@ -269,7 +279,7 @@ export function rifle(b: MeshBuilder, rig: RigView, pal: Pal, dom: boolean): Ite
   return {
     bone: 'gun', held: inHand(rig, 'R', [-90, 0, 0]), rifle: true,
     sheath: { parent: 'chest', pos: [-0.06, 0.1, 0.19], axes: { z: [-0.5, -0.86, 0], x: [0, 0, 1] } },
-    grip2: [0, 0.03, -0.26], grip2Rot: [0, 78, 0],
+    grip2: [0, 0.03, -0.26], grip2Rot: [0, 78, 0], rest: 0.03,
     sockets: { muzzle: [0, 0.052, -0.735] },
   };
 }

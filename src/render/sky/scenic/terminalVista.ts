@@ -195,9 +195,11 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   //      They step aside for the corridor when a Crownmark arm lies in it, so the frame always has its flanks.
   const edge = corridor > 0 ? corridor / 2 + 30 : 0;
   const hx = (x: number, r: number): number => Math.sign(x) * Math.max(Math.abs(x), edge + r * 3.4);
+  // (pushed outward, the nearest pair also steps back so it stays inside a forward-looking frame)
+  const zf = edge > 0 ? 1.6 : 1;
   const heroes: Array<[number, number, number, number, SpireTone, SpireStyle]> = [
-    [hx(-300, 30), -330, drop + 190, 30, 'white', 'cluster'], [hx(-560, 24) - (edge > 0 ? 190 : 0), -640, drop + 90, 24, 'mixed', 'stepped'], [hx(-215, 15), -560, drop + 10, 15, 'white', 'blade'],
-    [hx(390, 32), -430, drop + 250, 32, 'white', 'cluster'], [hx(640, 26) + (edge > 0 ? 150 : 0), -780, drop + 130, 26, 'mixed', 'stepped'], [hx(270, 15), -720, drop + 30, 15, 'white', 'blade'],
+    [hx(-300, 30), -330 * zf, drop + 190, 30, 'white', 'cluster'], [hx(-560, 24) - (edge > 0 ? 190 : 0), -640, drop + 90, 24, 'mixed', 'stepped'], [hx(-215, 15), -560 * zf, drop + 10, 15, 'white', 'blade'],
+    [hx(390, 32), -430 * zf, drop + 250, 32, 'white', 'cluster'], [hx(640, 26) + (edge > 0 ? 150 : 0), -780, drop + 130, 26, 'mixed', 'stepped'], [hx(270, 15), -720 * zf, drop + 30, 15, 'white', 'blade'],
   ];
   for (const [x, z, h, r, tone, style] of heroes) {
     addPier(b, cards, x, z, yd, r, 640, rand, 1, true);

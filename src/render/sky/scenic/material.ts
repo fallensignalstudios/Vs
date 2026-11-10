@@ -247,9 +247,10 @@ void main() {
   float lum = dot(albedo, vec3(0.3, 0.55, 0.15));
   // mirror-polished black stone: almost no diffuse response, the reflection carries it
   float polish = uGloss * mix(1.0, 0.33, smoothstep(0.02, 0.22, lum));
-  // the red remnant's fill is half desaturated: it warms the far side of a tower, it must not repaint ivory as brick
-  vec3 fill = mix(vec3(dot(uFillColor, vec3(0.3, 0.55, 0.15))), uFillColor, 0.5);
-  vec3 direct = (uKeyColor * ndk + fill * ndf) * skyVis;
+  // the red remnant's fill is mostly desaturated and fades fast where the sky is only partly visible: it warms
+  // the far side of a tower, it must never repaint ivory as brick or pink
+  vec3 fill = mix(vec3(dot(uFillColor, vec3(0.3, 0.55, 0.15))), uFillColor, 0.3);
+  vec3 direct = (uKeyColor * ndk + fill * ndf * skyVis) * skyVis;
   vec3 lamp = uLamp * vLight.y;
   // soft light from the viewer's own terrace: both remnants sit behind the vista, so without it every near
   // tower would show the viewer only its shadow side

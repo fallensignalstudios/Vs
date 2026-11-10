@@ -87,6 +87,7 @@ export const lyric: ArchetypeDef = {
 // ---------------------------------------------------------------------------------------------------------
 function refTrooper(heavy: boolean): ArchetypeDef {
   return {
+    seedBuckets: heavy ? 3 : 4,
     proportions: (rng) => heavy
       ? { height: 1.86 + rng() * 0.06, shoulder: 0.2, hip: 0.098, bulk: 1.08, fem: 0 }
       : { height: 1.76 + rng() * 0.1, shoulder: 0.182 + rng() * 0.01, hip: 0.095, bulk: 0.96 + rng() * 0.06, fem: rng() > 0.6 ? 0.8 : 0 },
@@ -121,6 +122,7 @@ export const reformationMarine = refTrooper(true);
 
 // ---------------------------------------------------------------------------------------------------------
 export const medic: ArchetypeDef = {
+  seedBuckets: 2,
   proportions: (rng) => ({ height: 1.7 + rng() * 0.1, shoulder: 0.172, hip: 0.094, bulk: 0.9, fem: rng() > 0.5 ? 0.8 : 0.1 }),
   build(ctx) {
     const { b, rig, draft, rng } = ctx;

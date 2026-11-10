@@ -249,6 +249,13 @@ function gear(s: PartSink, x: number, z: number, top: number, splay: number): vo
   s.p('dark').box(x + splay, 0.155, z, 1.0, 0.03, 1.8);
 }
 
+/** A row of bolt heads along Z on a plate whose outer face is at x (hard-surface scale cue at arm's length). */
+function bolts(b: GeoBuilder, x: number, y: number, z0: number, z1: number, n: number, r = 0.035): void {
+  for (let i = 0; i < n; i++) {
+    b.push().translate(x, y, z0 + ((i + 0.5) / n) * (z1 - z0)).rotateZ(-Math.PI / 2).cyl(0, 0, 0, 0.03, r, r * 0.8, 6).pop();
+  }
+}
+
 const NEAR_SHAPE = [[0, -1], [0.55, -1], [0.92, -0.62], [1.0, -0.1], [0.97, 0.38], [0.74, 0.84], [0.36, 1.0], [0, 1.0]] as const;
 /** hard chines of NEAR_SHAPE once mirrored (keel edges, bilge chines, shoulders) */
 const NEAR_CREASE = [1, 2, 5, 9, 12, 13] as const;
@@ -303,6 +310,8 @@ export function buildDominionShuttle(s: PartSink): void {
       s.p('accent').bevelBox(0, 0, 0, 0.2, 2.5, 3.5, 0.07);
       s.p('metal').box(0.11, 1.1, 0, 0.03, 0.12, 3.3);
       s.p('dark').bevelBox(0.11, -0.2, 0, 0.04, 1.1, 2.3, 0.02);
+      bolts(s.p('metal'), 0.1, 0.92, -1.6, 1.6, 9);
+      bolts(s.p('metal'), 0.1, -1.08, -1.6, 1.6, 9);
       s.pop();
       s.p('metal').box(3.0 * k, Y + 0.55, z - 1.2, 0.3, 0.12, 0.16).box(3.0 * k, Y - 1.1, z + 1.2, 0.3, 0.12, 0.16);
     }
@@ -313,10 +322,14 @@ export function buildDominionShuttle(s: PartSink): void {
     zLathe(s.p('metal'), nx, ny, 1.9, [[0.72, 0.7], [0.95, 0], [1.08, 0.15], [1.02, 0.75]], 18);
     s.p('dark').box(nx, ny, 2.55, 1.3, 1.3, 0.06);
     zLathe(s.p('dark', 1.3), nx, ny, 10.6, [[1.18, 0], [1.3, 1.5], [1.16, 1.5], [0.8, 0.25]], 18);
-    s.p('engine').box(nx, ny, 10.9, 1.25, 1.25, 0.05);
+    zCyl(s.p('engine'), nx, ny, 10.86, 10.92, 0.8, 0.8, 18);
     for (let i = 0; i < 6; i++) s.p('metal').box(nx + 1.02, ny + 0.2, 5 + i * 0.85, 0.2, 0.9, 0.08);
     s.p('hull', 0.85).bevelBox(nx - 0.2, ny - 0.75, 6.5, 1.5, 0.5, 7.4, 0.12);
     slats(s.p('dark'), nx, ny + 1.06, 7.2, 3.0, 0.9, 9, 0.5);
+    for (const z of [3.4, 6.2, 9.4]) zLathe(s.p('metal'), nx, ny, z, [[1.2, 0], [1.24, 0], [1.24, 0.14], [1.2, 0.14]], 18);
+    // fuel and coolant lines from the nacelle down into the wing root
+    s.p('dark').tube([[nx + 0.7, ny - 0.75, 4.2], [nx + 0.95, ny - 1.25, 4.0], [nx + 0.9, Y + 0.95, 3.6]], 0.055, 6);
+    s.p('metal').tube([[nx + 0.6, ny - 0.8, 5.0], [nx + 0.85, ny - 1.3, 5.1], [nx + 0.8, Y + 0.95, 5.3]], 0.04, 6);
     // anhedral stub wing: tapered slab, leading-edge gold strip, tip fin, lift thruster, hardpoint
     s.push().translate(2.8, Y + 0.75, 3.1).rotateZ(-0.34);
     s.p('hull', 0.9).loft([
@@ -326,15 +339,16 @@ export function buildDominionShuttle(s: PartSink): void {
     s.p('metal').tube([[0, 0, -3.0], [5.3, 0, -1.4]], 0.07, 6);
     s.p('accent').bevelBox(2.4, 0.2, 0.3, 3.4, 0.08, 3.2, 0.03);
     const fin: P3[][] = [
-      [[5.22, -1.7, 2.3], [5.38, -1.7, 2.3], [5.38, -1.7, -0.6], [5.22, -1.7, -0.6]],
-      [[5.22, 0.7, 2.7], [5.38, 0.7, 2.7], [5.38, 0.7, 0.9], [5.22, 0.7, 0.9]],
+      [[5.22, -1.25, 2.2], [5.38, -1.25, 2.2], [5.38, -1.25, 0.2], [5.22, -1.25, 0.2]],
+      [[5.22, 0.6, 2.6], [5.38, 0.6, 2.6], [5.38, 0.6, 1.0], [5.22, 0.6, 1.0]],
     ];
     s.p('dark').loft(fin.map((r) => [...r].reverse()));
-    s.p('glow').box(5.4, -0.5, -0.4, 0.04, 0.45, 0.7);
+    s.p('glow').box(5.4, -0.2, -0.3, 0.04, 0.1, 0.5);
+    s.p('accent').bevelBox(5.3, -0.9, 1.2, 0.2, 0.5, 1.6, 0.03);
     zCyl(s.p('dark'), 3.3, -0.62, -0.2, 1.4, 0.62, 0.7, 14);
     s.push().translate(3.3, -0.62, 0.6).rotateX(-Math.PI / 2);
     zLathe(s.p('dark', 1.2), 0, 0, 0, [[0.5, 0], [0.74, 0.7], [0.64, 0.7], [0.4, 0.1]], 14);
-    s.p('engine').box(0, 0, 0.12, 0.7, 0.7, 0.03);
+    zCyl(s.p('engine'), 0, 0, 0.1, 0.14, 0.44, 0.44, 14);
     s.pop();
     zCyl(s.p('metal'), 1.6, -0.5, -1.6, 1.2, 0.2, 0.2, 10);
     s.p('dark').bevelBox(1.6, -0.3, -0.2, 0.2, 0.3, 1.2, 0.03);
@@ -342,9 +356,14 @@ export function buildDominionShuttle(s: PartSink): void {
     // running lights + intake glow
     s.p('glow').box(3.33, Y - 0.1, -4.6, 0.05, 0.16, 1.4).box(3.33, Y - 0.1, 2.0, 0.05, 0.16, 1.4);
     s.p('glow').box(nx, ny, 2.6, 0.7, 0.7, 0.04);
-    // hull panels and maintenance hatches
+    // hull panels, maintenance hatches with handles, a grab rail by the crew door, a row of dorsal vents
     s.p('hull', 1.15).bevelBox(1.7, Y + 2.2, -1.6, 1.3, 0.08, 2.2, 0.03).bevelBox(1.5, Y + 2.2, 1.4, 1.1, 0.08, 1.4, 0.03);
     s.p('dark').bevelBox(2.55, Y + 1.25, -5.3, 0.1, 0.5, 0.9, 0.03);
+    s.p('metal').tube([[2.62, Y + 1.38, -5.6], [2.72, Y + 1.38, -5.5], [2.72, Y + 1.38, -5.1], [2.62, Y + 1.38, -5.0]], 0.02, 5, false);
+    s.p('metal').tube([[2.5, Y + 0.4, -6.9], [2.66, Y + 0.4, -6.9], [2.74, Y + 1.3, -6.5], [2.6, Y + 1.3, -6.5]], 0.025, 5, false);
+    s.p('dark').bevelBox(2.34, Y - 0.2, -6.9, 0.08, 1.7, 0.9, 0.03);
+    slats(s.p('dark'), 0.9, Y + 2.27, -3.8, 1.4, 0.7, 6, 0.4);
+    for (let i = 0; i < 3; i++) s.p('metal').bevelBox(1.05, Y - 2.2, -4 + i * 3.4, 0.5, 0.1, 0.8, 0.03);
     // main gear under the wing roots
     gear(s, 2.3, 5.3, Y - 2.2, 0.9);
   });
@@ -353,6 +372,8 @@ export function buildDominionShuttle(s: PartSink): void {
   // belly plating with keel strakes, dorsal sensor mast
   s.p('dark').bevelBox(0, Y - 2.33, 0.4, 3.5, 0.22, 14.2, 0.08);
   for (const x of [-1.2, 1.2]) s.p('metal').bevelBox(x, Y - 2.5, 0.4, 0.16, 0.16, 12.6, 0.04);
+  for (const x of [-0.5, 0.2, 0.62]) s.p('dark').tube([[x, Y - 2.5, -5.4], [x + 0.06, Y - 2.52, 0.5], [x, Y - 2.5, 6.6]], 0.045, 6);
+  for (let i = 0; i < 5; i++) s.p('metal').bevelBox(0.05, Y - 2.47, -4.2 + i * 2.5, 1.6, 0.05, 0.12, 0.015);
   s.p('metal').tube([[0.9, Y + 2.2, -3.4], [0.9, Y + 3.5, -3.1]], [0.05, 0.02], 5);
   s.p('glow').box(0.9, Y + 3.55, -3.1, 0.08, 0.08, 0.08);
 
@@ -372,7 +393,7 @@ export function buildDominionShuttle(s: PartSink): void {
     s.p('glow').box(x * 1.3, Y - 0.1, 10.14, 0.07, 2.9, 0.05);
   }
   s.p('glow').box(0, Y + 1.64, 10.14, 3.6, 0.07, 0.05);
-  s.push().translate(0, Y - 1.78, 10.0).rotateX(-0.36);
+  s.push().translate(0, Y - 1.78, 10.0).rotateX(0.345); // hinge at the sill, far edge on the deck
   s.p('metal').bevelBox(0, -0.1, 2.5, 3.9, 0.2, 5.0, 0.06);
   for (let i = 0; i < 12; i++) s.p('dark').box(0, 0.02, 0.4 + i * 0.4, 3.3, 0.03, 0.12);
   for (const x of [-1.86, 1.86]) {
@@ -380,7 +401,7 @@ export function buildDominionShuttle(s: PartSink): void {
     s.p('dark').bevelBox(x * 1.03, 0.1, 2.5, 0.1, 0.28, 5.0, 0.03);
   }
   s.pop();
-  for (const x of [-1.95, 1.95]) s.p('metal', 1.2).tube([[x, Y + 0.4, 9.9], [x, Y - 2.2, 12.6]], [0.09, 0.055], 7);
+  for (const x of [-1.95, 1.95]) s.p('metal', 1.2).tube([[x, Y + 0.4, 9.9], [x, Y - 2.55, 12.5]], [0.09, 0.055], 7);
 }
 
 // -------------------------------------------------------------------------------------------------------------
@@ -397,6 +418,11 @@ export function buildReformationTransport(s: PartSink): void {
   for (let i = 0; i < 7; i++) {
     const z = -4.6 + i * 2.7;
     s.p('metal').bevelBox(0, Y, z, 6.62, 4.46, 0.2, 0.05);
+    for (const sx of [-1, 1]) for (let k = 0; k < 7; k++) {
+      s.push().translate(sx * 3.31, Y - 1.8 + k * 0.6, z).rotateZ((-sx * Math.PI) / 2);
+      s.p('dark').cyl(0, 0, 0, 0.03, 0.035, 0.028, 6);
+      s.pop();
+    }
   }
   both(s, () => {
     s.p('accent').bevelBox(3.24, Y - 0.25, 3.5, 0.1, 3.0, 4.6, 0.04);
@@ -452,6 +478,11 @@ export function buildReformationTransport(s: PartSink): void {
       s.p('dark').tube([[3.2, Y + 0.5, z], [tx - 0.9, ty - 0.5, z + 1.6]], 0.04, 5);
     }
     s.p('accent').tube([[tx, ty + 1.15, -1.8], [tx - 0.3, ty + 1.5, -3.2], [3.2, Y + 1.6, -4.0]], 0.05, 5);
+    // fill valve, pressure line and a service ladder on the tank
+    zCyl(s.p('dark'), tx + 0.3, ty + 1.0, 0.6, 0.95, 0.16, 0.16, 10);
+    s.p('dark').tube([[tx + 0.3, ty + 1.12, 0.8], [tx + 0.1, ty + 1.3, 2.4], [tx - 0.6, ty + 1.25, 6.0], [3.2, Y + 1.5, 7.4]], 0.035, 5);
+    for (let i = 0; i < 6; i++) s.p('metal').tube([[tx + 1.18, ty - 0.5 + i * 0.2, 4.6], [tx + 1.18, ty - 0.5 + i * 0.2, 5.1]], 0.02, 5);
+    for (const z of [4.6, 5.1]) s.p('metal').tube([[tx + 1.17, ty - 0.6, z], [tx + 1.19, ty + 0.6, z]], 0.02, 5);
     // vectoring thrusters on outriggers (fore + aft): gimbal ring, smooth nacelle, bell, glow, status strip
     for (const z of [-4.3, 11.0]) {
       s.p('metal').tube([[3.1, Y + 1.9, z], [6.1, Y + 1.7, z]], [0.2, 0.15], 8);
@@ -460,9 +491,9 @@ export function buildReformationTransport(s: PartSink): void {
       zLathe(s.p('metal'), 0, 0, -0.16, [[1.04, 0], [1.12, 0], [1.12, 0.32], [1.04, 0.32]], 16);
       zCyl(s.p('dark'), 0, 0, -1.3, 1.2, 0.8, 0.95, 16);
       zLathe(s.p('dark', 1.3), 0, 0, 1.2, [[0.95, 0], [1.1, 0.75], [0.98, 0.75], [0.7, 0.1]], 16);
-      s.p('engine').box(0, 0, 1.36, 1.0, 1.0, 0.04);
+      zCyl(s.p('engine'), 0, 0, 1.32, 1.37, 0.74, 0.74, 16);
       s.p('hull').ball(0, 0, -1.3, 0.8, 0.8, 0.5, 16, 4, -1, 1);
-      s.p('glow').box(0, 0.98, 0, 0.4, 0.04, 1.1);
+      s.p('glow').box(0, 0.98, 0, 0.12, 0.03, 0.9);
       s.pop();
     }
     // light strips, skids on struts, RCS quads
@@ -483,7 +514,7 @@ export function buildReformationTransport(s: PartSink): void {
   both(s, () => {
     zCyl(s.p('dark'), 1.7, Y + 0.5, 11.9, 13.2, 1.15, 1.3, 18);
     zLathe(s.p('dark', 1.3), 1.7, Y + 0.5, 13.2, [[1.3, 0], [1.48, 1.1], [1.34, 1.1], [1.0, 0.15]], 18);
-    s.p('engine').box(1.7, Y + 0.5, 13.5, 1.5, 1.5, 0.04);
+    zCyl(s.p('engine'), 1.7, Y + 0.5, 13.34, 13.4, 1.04, 1.04, 18);
   });
   s.p('dark').bevelBox(0, Y - 1.05, 12.08, 3.2, 2.3, 0.2, 0.06);
   s.p('metal').bevelBox(0, Y - 1.05, 12.2, 2.9, 0.12, 0.08, 0.02).box(0, Y - 1.05, 12.2, 0.06, 2.1, 0.06);

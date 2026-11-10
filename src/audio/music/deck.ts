@@ -1,9 +1,13 @@
 /**
  * A Deck plays one MusicDef: it owns the layer runtimes, a step clock scheduled ahead of the context time,
- * and a pair of faders (dry + reverb send) for cross-fading against another deck on a bar line.
+ * and one fader over its four outputs (tonal, drums, hall send, drum-room send) for leaving on a bar line.
+ *
+ * A deck is born at full level on its first downbeat — sustained layers bring their own attacks, and a drum
+ * that enters on the bar must be heard on the bar. Only the *outgoing* deck fades.
  */
 import { clamp, mulberry32 } from '@/core/mathx';
 import type { Shared } from '../synth/shared';
+import type { SampleBank } from '../synth/samples';
 import type { Mixer } from '../mixer';
 import { chordAt, layerGain } from './theory';
 import type { MusicDef } from './types';
@@ -58,20 +62,22 @@ export interface DeckShared {
   externalCadenceAt: number;
 }
 
+/** a layer that throws this many times is switched off (and reported once) rather than retried forever */
+const LAYER_STRIKES = 3;
+
 export class Deck {
   /** when this deck stops scheduling new notes (set by fadeOut: the bar line it is leaving on) */
   endAt = Infinity;
   /** when its tails have faded and it can leave the graph */
   disposeAt = Infinity;
-  private readonly dry: GainNode;
-  private readonly wet: GainNode;
-  private readonly fDry: Fader;
-  private readonly fWet: Fader;
+  private readonly outs: GainNode[];
+  private readonly faders: Fader[];
   private readonly layers: LayerRt[];
   private readonly env: DeckEnv;
   private readonly stepsPerBar: number;
   private readonly lastGain: number[];
   private readonly stamps: number[];
+  private readonly strikes: number[];
   private nextT: number;
   private stepIdx = 0;
   private lastBarT: number;
@@ -83,28 +89,37 @@ export class Deck {
     private readonly ac: BaseAudioContext,
     res: Shared,
     mixer: Mixer,
+    samples: SampleBank,
     readonly def: MusicDef,
     /** output gain reaching the def's target loudness */
-    private readonly gain: number,
+    gain: number,
     readonly startAt: number,
     seed: number,
     private readonly shared: DeckShared,
+    /** state name, for diagnostics */
+    private readonly name = '',
   ) {
-    this.dry = ac.createGain();
-    this.wet = ac.createGain();
-    this.dry.connect(mixer.music);
-    this.wet.connect(mixer.reverbIn);
-    this.fDry = new Fader(this.dry.gain, 0);
-    this.fWet = new Fader(this.wet.gain, 0);
+    const out = (to: AudioNode): GainNode => {
+      const g = ac.createGain();
+      g.connect(to);
+      return g;
+    };
+    const tonal = out(mixer.music);
+    const drums = out(mixer.musicDirect);
+    const wet = out(mixer.scoreSend);
+    const room = out(mixer.scoreRoom);
+    this.outs = [tonal, drums, wet, room];
+    this.faders = this.outs.map((g) => new Fader(g.gain, gain));
     const stepDur = 60 / def.bpm / 4;
     this.stepsPerBar = def.beats * 4;
     this.env = {
-      ac, res, rnd: mulberry32(seed), tonic: def.tonic, stepDur, barDur: stepDur * this.stepsPerBar,
+      ac, res, samples, rnd: mulberry32(seed), tonic: def.tonic, stepDur, barDur: stepDur * this.stepsPerBar,
       intensity: this.intensityNow(), irregular: shared.irregular, externalCadenceAt: shared.externalCadenceAt,
     };
-    this.layers = def.layers.map((l) => makeLayer(l, this.env, this.dry, this.wet, startAt));
+    this.layers = def.layers.map((l) => makeLayer(l, this.env, { tonal, drums, wet, room }, startAt));
     this.lastGain = this.layers.map(() => -1);
     this.stamps = this.layers.map(() => -1);
+    this.strikes = this.layers.map(() => 0);
     this.nextT = startAt;
     this.lastBarT = startAt;
     this.wasResolved = shared.resolved;
@@ -119,6 +134,16 @@ export class Deck {
     return this.env.barDur;
   }
 
+  /** one beat (s) */
+  get beatDur(): number {
+    return this.env.stepDur * 4;
+  }
+
+  /** how far this deck has already scheduled: nothing before this time can be un-played */
+  get frontier(): number {
+    return this.nextT;
+  }
+
   /** The next bar line at or after `now`. */
   nextBar(now: number): number {
     if (now <= this.startAt) return this.startAt;
@@ -130,15 +155,10 @@ export class Deck {
   /** The next beat at or after `now`. */
   nextBeat(now: number): number {
     if (now <= this.startAt) return this.startAt;
-    const beat = this.env.stepDur * 4;
+    const beat = this.beatDur;
     let t = this.lastBarT;
     while (t < now) t += beat;
     return t;
-  }
-
-  fadeIn(now: number, at: number, seconds: number): void {
-    this.fDry.fade(now, at, seconds, this.gain);
-    this.fWet.fade(now, at, seconds, this.gain);
   }
 
   /**
@@ -146,8 +166,7 @@ export class Deck {
    * sounding — pads, bells, drum tails — fades over `seconds` underneath the incoming state.
    */
   fadeOut(now: number, at: number, seconds: number): void {
-    this.fDry.fade(now, at, seconds, 0);
-    this.fWet.fade(now, at, seconds, 0);
+    for (const f of this.faders) f.fade(now, at, seconds, 0);
     this.endAt = Math.max(now, at);
     this.disposeAt = this.endAt + seconds + 0.3;
   }
@@ -155,14 +174,14 @@ export class Deck {
   /** Follow intensity / resolution with the per-layer levels. */
   applyLevels(now: number, immediate = false): void {
     const I = this.intensityNow();
-    this.env.intensity = I;
-    this.env.irregular = this.shared.irregular;
+    this.env.intensity = Number.isFinite(I) ? I : 0;
+    this.env.irregular = Number.isFinite(this.shared.irregular) ? this.shared.irregular : 0;
     this.env.externalCadenceAt = this.shared.externalCadenceAt;
     const resolved = this.shared.resolved;
     for (let i = 0; i < this.layers.length; i++) {
       const l = this.layers[i];
       const off = l.def.when !== undefined && (l.def.when === 'resolved') !== resolved;
-      const target = off ? 0 : layerGain(l.def.g, l.def.th, I);
+      const target = off ? 0 : layerGain(l.def.g, l.def.th, this.env.intensity);
       if (Math.abs(target - this.lastGain[i]) < 0.004) continue;
       this.lastGain[i] = target;
       if (immediate) l.level.gain.value = target;
@@ -170,12 +189,32 @@ export class Deck {
     }
   }
 
-  /** Schedule every step that starts before `horizon`. */
-  schedule(now: number, horizon: number): void {
+  /** Run one layer callback; a layer that keeps throwing is retired instead of taking the deck with it. */
+  private call(i: number, fn: () => void): void {
+    if (this.strikes[i] >= LAYER_STRIKES) return;
+    try {
+      fn();
+    } catch (err) {
+      if (++this.strikes[i] === LAYER_STRIKES) {
+        console.warn(`[audio] music layer "${this.layers[i].def.kind}" of ${this.name || 'a state'} disabled after repeated failures:`, err);
+      }
+    }
+  }
+
+  /**
+   * Schedule every step that starts within the horizon: `lookahead` seconds, and never less than one beat —
+   * a zone build or a shader compile that stalls the main thread for most of a second leaves no hole.
+   */
+  schedule(now: number, lookahead: number): void {
     if (this.disposed) return;
+    const step = this.env.stepDur;
     if (this.nextT < now - 0.03) {
-      // the scheduler was starved (hidden tab, long frame): pick the music up in time instead of bursting
-      this.nextT = now + 0.03;
+      // the scheduler was starved (hidden tab, a very long frame): skip whole steps, so the music picks up
+      // IN TIME — the grid keeps its phase — instead of bursting or drifting
+      const skip = Math.ceil((now + 0.02 - this.nextT) / step);
+      this.stepIdx += skip;
+      this.nextT += skip * step;
+      this.lastBarT = this.nextT - (this.stepIdx % this.stepsPerBar) * step;
       this.needChord = true;
     }
     const resolved = this.shared.resolved;
@@ -185,33 +224,38 @@ export class Deck {
     }
     const chords = resolved && this.def.resolved ? this.def.resolved : this.def.chords;
     const spb = this.stepsPerBar;
-    const end = Math.min(horizon, this.endAt);
+    const end = Math.min(now + Math.max(lookahead, this.beatDur), this.endAt);
     while (this.nextT < end) {
       const t = this.nextT;
-      const s = this.stepIdx % spb;
-      const bar = (this.stepIdx - s) / spb;
+      const idx = this.stepIdx;
+      // advance FIRST: whatever a layer does with this step, the clock has already left it behind
+      this.stepIdx = idx + 1;
+      this.nextT = t + step;
+      const s = idx % spb;
+      const bar = (idx - s) / spb;
       const at = chordAt(chords, bar);
-      if (s === 0) {
-        this.lastBarT = t;
+      if (s === 0) this.lastBarT = t;
+      if (s === 0 || this.needChord) {
+        // harmony changed under us (resolution, recovery from a stall): re-voice now, not at the next bar
         if (this.needChord) this.stamps.fill(-1);
         this.needChord = false;
         // the bar this chord began on identifies it; a layer returning from a masked bar catches up
         const stamp = bar - (at.chord.bars - at.barsLeft);
+        const remaining = at.barsLeft * this.env.barDur - s * step;
         for (let i = 0; i < this.layers.length; i++) {
           const l = this.layers[i];
           if (this.muted(l, bar)) continue;
           if (this.stamps[i] !== stamp) {
             this.stamps[i] = stamp;
-            l.chord?.(at.chord, t, at.barsLeft * this.env.barDur);
+            if (l.chord) this.call(i, () => l.chord!(at.chord, t, remaining));
           }
-          l.bar?.(bar, t, at.chord);
+          if (s === 0 && l.bar) this.call(i, () => l.bar!(bar, t, at.chord));
         }
       }
-      for (const l of this.layers) {
-        if (l.step && !this.muted(l, bar)) l.step(s, t, at.chord);
+      for (let i = 0; i < this.layers.length; i++) {
+        const l = this.layers[i];
+        if (l.step && !this.muted(l, bar)) this.call(i, () => l.step!(s, t, at.chord));
       }
-      this.stepIdx++;
-      this.nextT += this.env.stepDur;
     }
   }
 
@@ -225,10 +269,11 @@ export class Deck {
   /** Sound the cadence layer now (a beat supplied by gameplay). Returns false if this deck has none. */
   pulseCadence(t: number, irregular: boolean): boolean {
     let any = false;
-    for (const l of this.layers) {
+    for (let i = 0; i < this.layers.length; i++) {
+      const l = this.layers[i];
       if (!l.pulse) continue;
       this.env.externalCadenceAt = t;
-      l.pulse(t, irregular);
+      this.call(i, () => l.pulse!(t, irregular));
       any = true;
     }
     return any;
@@ -240,18 +285,21 @@ export class Deck {
     this.disposed = true;
     const now = this.ac.currentTime;
     for (const l of this.layers) l.dispose(now + 0.02);
-    this.dry.disconnect();
-    this.wet.disconnect();
+    for (const g of this.outs) g.disconnect();
   }
 }
 
-/** Seconds from `now` to the musical boundary a state change should land on. */
+/**
+ * The musical boundary a state change should land on: the next bar line the outgoing deck has not already
+ * scheduled past (next beat for very short fades), never making the player wait long for a response.
+ */
 export function boundaryFor(deck: Deck | null, now: number, fadeSeconds: number): number {
   if (!deck) return now + 0.03;
+  // notes up to the frontier are already in the graph: leaving before it would overlap two tempi
+  const from = Math.max(now + 0.02, deck.frontier - 1e-4);
   const quick = fadeSeconds < 0.35;
-  const b = quick ? deck.nextBeat(now + 0.02) : deck.nextBar(now + 0.02);
-  // never make the player wait long for a response: fall back to the beat, then to "now"
-  if (b - now <= (quick ? 0.6 : 2.4)) return b;
-  const beat = deck.nextBeat(now + 0.02);
-  return clamp(beat, now + 0.03, now + 1.0);
+  const b = quick ? deck.nextBeat(from) : deck.nextBar(from);
+  if (b - now <= (quick ? 0.9 : 2.6)) return b;
+  const beat = deck.nextBeat(from);
+  return clamp(beat, now + 0.03, now + 1.4);
 }

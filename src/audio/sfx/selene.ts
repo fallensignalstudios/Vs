@@ -6,7 +6,7 @@ import { sfx, type RecipeTable } from './recipe';
 import { crack, glass, servo, struck, thump, whoosh } from './parts';
 
 export const SELENE_SFX: RecipeTable = {
-  verityWhirl: sfx(-14, { gap: 0.07, max: 3, prio: 2, send: 0.25, vary: 50 }, (k) => {
+  verityWhirl: sfx(-14, { gap: 0.07, max: 3, prio: 2, send: 0.25, vary: 50, tail: 0.25, bake: 3 }, (k) => {
     // two opposed blades: one whoosh that flutters twice per turn, with a faint sung edge
     const flut = k.gain(0.6);
     k.lfo(k.rr(20, 25), 0.4, flut.gain);
@@ -14,14 +14,14 @@ export const SELENE_SFX: RecipeTable = {
     k.noise('pink', { a: 0.06, d: 0.14, g: 0.55 }, { bp: [500, 1100], q: 1 });
     k.fm([1900, 2500, 0.12], 2.01, 0.5, { a: 0.07, d: 0.12, g: 0.07 });
   }),
-  verityHit: sfx(-9, { gap: 0.05, max: 3, prio: 2, send: 0.3 }, (k) => {
+  verityHit: sfx(-9, { gap: 0.05, max: 3, prio: 2, send: 0.3, tail: 0.2, bake: 3 }, (k) => {
     crack(k, 1, 0, 3200, 0.007);
     k.noise('white', { a: 0.001, d: 0.04, g: 0.55 }, { hp: 4200 }); // the slice
     struck(k, 'blade', k.rr(1600, 1900), 0.18, 0.5);
     thump(k, 210, 110, 0.05, 0.55);
     k.noise('pink', { a: 0.002, d: 0.05, g: 0.3 }, { bp: 900, q: 1.5 });
   }),
-  deflect: sfx(-7, { gap: 0.08, max: 2, prio: 3, send: 0.55, vary: 20 }, (k) => {
+  deflect: sfx(-7, { gap: 0.08, max: 2, prio: 3, send: 0.55, vary: 20, tail: 0.6 }, (k) => {
     // crystalline ping with the projectile's pitch bending away — colder and higher than Tarrik's counter
     crack(k, 0.8, 0, 3500, 0.005);
     glass(k, 1568, { a: 0.002, d: 0.7, g: 0.8 });
@@ -30,7 +30,7 @@ export const SELENE_SFX: RecipeTable = {
     thump(k, 240, 130, 0.05, 0.35);
     k.noise('white', { a: 0.03, d: 0.25, g: 0.05 }, { hp: 8000 });
   }),
-  axiomShot: sfx(-7, { gap: 0.1, max: 2, prio: 2, send: 0.5, ref: 6, vary: 25 }, (k) => {
+  axiomShot: sfx(-7, { gap: 0.1, max: 2, prio: 2, send: 0.5, ref: 6, vary: 25, tail: 0.5, bake: 2 }, (k) => {
     // precision weapon: tight snap, a clean pitched discharge and a cold resonant tail. No bark.
     crack(k, 1, 0, 2600, 0.007);
     thump(k, 190, 64, 0.08, 0.85);
@@ -85,7 +85,7 @@ export const SELENE_SFX: RecipeTable = {
     glass(k, 3136, { ...hold, g: 0.15 });
     k.osc('sine', 196, { a: 0.05, h: 0.6, d: 0.6, g: 0.12 });
   }),
-  frostShatter: sfx(-8, { gap: 0.1, max: 2, prio: 2, send: 0.5 }, (k) => {
+  frostShatter: sfx(-8, { gap: 0.1, max: 2, prio: 2, send: 0.5, bake: 2 }, (k) => {
     crack(k, 1, 0, 1800, 0.012);
     k.noise('crackle', { a: 0.001, d: 0.35, g: 0.8 }, { hp: 3200 });
     k.noise('crackle', { a: 0.001, d: 0.25, g: 0.8 }, { bp: 1500, q: 0.8, rate: 0.6 }); // the thick pieces

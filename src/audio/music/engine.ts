@@ -1,17 +1,20 @@
 /**
- * Adaptive music engine. One Deck plays the current MusicState; `setState` starts the next deck on a musical
- * boundary and cross-fades. Intensity is smoothed (quick to rise, slow to settle) and drives every deck's
- * layer levels. All scheduling happens in `update()` against `AudioContext.currentTime` — no timers.
+ * Adaptive music engine. One Deck plays the current MusicState; `setState` starts the next deck — at full
+ * level — on a musical boundary while the outgoing one fades underneath. Intensity is smoothed (quick to
+ * rise, slow to settle) and drives every deck's layer levels. All scheduling happens in `update()` against
+ * `AudioContext.currentTime` — no timers.
  */
 import { clamp, clamp01, mulberry32 } from '@/core/mathx';
 import type { MusicState } from '@/core/api';
 import { Kit } from '../synth/kit';
 import type { Shared } from '../synth/shared';
+import type { SampleBank } from '../synth/samples';
 import type { Mixer } from '../mixer';
 import { dbToGain } from '../sfx/recipe';
 import { MUSIC } from './defs';
 import { Deck, boundaryFor, type DeckShared } from './deck';
 import { STINGER_DB, playStinger, type StingerKind } from './stingers';
+import { strike } from './instruments';
 import type { Family, MusicDef } from './types';
 
 export type { StingerKind } from './stingers';
@@ -43,14 +46,17 @@ export class MusicEngine {
     private readonly mixer: Mixer,
     private readonly seed: number,
     private readonly norm: Readonly<Record<string, number>>,
+    private readonly samples: SampleBank,
   ) {
     this.rnd = mulberry32(seed ^ 0x9e37);
+    // stingers are whole little pieces (drums + tones): they take the uncompressed path, and their hall
+    // send returns into the music path like everything else in the score
     this.stingerBus = ac.createGain();
-    this.stingerBus.connect(mixer.music);
+    this.stingerBus.connect(mixer.musicDirect);
     const send = ac.createGain();
-    send.gain.value = 0.5;
+    send.gain.value = 0.4;
     this.stingerBus.connect(send);
-    send.connect(mixer.reverbIn);
+    send.connect(mixer.scoreSend);
   }
 
   get state(): MusicState {
@@ -76,6 +82,11 @@ export class MusicEngine {
     return d ?? null;
   }
 
+  /** the deck now playing (diagnostics and the sandbox) */
+  get activeDeck(): Deck | null {
+    return this.deck;
+  }
+
   private family(): Family {
     return this.deck?.def.family ?? 'neutral';
   }
@@ -91,7 +102,7 @@ export class MusicEngine {
     this.lead = lead;
   }
 
-  /** Cross-fade to a state on the next bar line (next beat for very short fades). */
+  /** Change state on the next bar line (next beat for very short fades). */
   setState(state: MusicState, fadeSeconds = 2): void {
     if (state === this.current) return;
     const def = this.def(state);
@@ -101,8 +112,13 @@ export class MusicEngine {
     const wasEclipse = this.family() === 'eclipse';
 
     if (this.deck) {
-      this.deck.fadeOut(now, at, fade);
-      this.fading.push(this.deck);
+      if (this.deck.frontier <= this.deck.startAt + 1e-6) {
+        // superseded before it played a note: nothing to fade
+        this.deck.dispose();
+      } else {
+        this.deck.fadeOut(now, at, fade);
+        this.fading.push(this.deck);
+      }
       this.deck = null;
     }
     this.current = def ? state : 'silence';
@@ -111,13 +127,12 @@ export class MusicEngine {
     // a fresh entrance into Eclipse territory starts with the cadence locked
     if (def.family === 'eclipse' && !wasEclipse) this.shared.irregular = 0;
     const gain = (this.norm[state] ?? UNCALIBRATED) * dbToGain(def.db ?? DEFAULT_DB);
-    this.deck = new Deck(this.ac, this.res, this.mixer, def, gain, at, (this.seed + 7919 * ++this.serial) >>> 0, this.shared);
-    this.deck.fadeIn(now, at, Math.min(fade, 6) * 0.6);
+    this.deck = new Deck(this.ac, this.res, this.mixer, this.samples, def, gain, at, (this.seed + 7919 * ++this.serial) >>> 0, this.shared, state);
   }
 
   /** Target intensity 0..1; the audible value slews toward it. */
   setIntensity(n: number, snap = false): void {
-    this.target = clamp01(n);
+    this.target = clamp01(Number.isFinite(n) ? n : 0);
     if (snap) this.shared.intensity = this.target;
   }
 
@@ -128,7 +143,13 @@ export class MusicEngine {
 
   /** Eclipse cadence: 0 locks it back onto the grid, 1 lets it fall apart. */
   setIrregular(amount: number): void {
+    if (!Number.isFinite(amount)) return; // e.g. severed / total with no links: keep what we had
     this.shared.irregular = clamp01(amount);
+  }
+
+  /** current cadence irregularity 0..1 */
+  get irregular(): number {
+    return this.shared.irregular;
   }
 
   /**
@@ -164,7 +185,8 @@ export class MusicEngine {
     out.gain.value = (this.norm[`stinger:${kind}`] ?? 0.2) * dbToGain(STINGER_DB[kind]);
     out.connect(this.stingerBus);
     const k = new Kit(this.ac, this.res, out, now + 0.01, 1, this.rnd, false);
-    playStinger(kind, k, this.deck?.def.tonic ?? 38, kind === 'encounterStart' || kind === 'encounterClear' ? this.stingerFamily() : this.family());
+    const family = kind === 'encounterStart' || kind === 'encounterClear' ? this.stingerFamily() : this.family();
+    playStinger(kind, k, this.deck?.def.tonic ?? 38, family, (inst, at, vel, tune) => strike(this.samples, this.rnd, inst, k, at, vel, tune));
     k.seal();
     this.stingers.push({ out, end: now + k.end + 0.3 });
   }
@@ -176,10 +198,9 @@ export class MusicEngine {
       const step = (d > 0 ? RISE : FALL) * Math.min(dt, 0.5);
       this.shared.intensity = Math.abs(d) <= step ? this.target : this.shared.intensity + Math.sign(d) * step;
     }
-    const horizon = now + lookahead;
     if (this.deck) {
       this.deck.applyLevels(now);
-      this.deck.schedule(now, horizon);
+      this.deck.schedule(now, lookahead);
     }
     for (let i = this.fading.length - 1; i >= 0; i--) {
       const d = this.fading[i];
@@ -188,7 +209,7 @@ export class MusicEngine {
         this.fading.splice(i, 1);
       } else {
         d.applyLevels(now);
-        d.schedule(now, horizon);
+        d.schedule(now, lookahead);
       }
     }
     for (let i = this.stingers.length - 1; i >= 0; i--) {

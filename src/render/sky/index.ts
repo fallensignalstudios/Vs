@@ -160,7 +160,7 @@ class SkySystemImpl implements SkySystem {
     }
     this.pushUniforms();
     const soft = this.reduceFlash();
-    this.shared.uDetailMain.value = this.detail();
+    this.dome.setDetail(this.detail());
     this.battle.update(step, this.view, this.battleNow, soft);
     this.battleGlow.copy(this.battle.glow);
     this.shared.uBattleGlow.value.copy(this.battle.glow);

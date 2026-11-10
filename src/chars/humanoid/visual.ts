@@ -62,6 +62,8 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private readonly equip: Equipment;
   private readonly cloth: ClothSim[] = [];
   private readonly caps: ClothCapsule[] = [];
+  /** the subset cloth collides with: torso, legs, upper arms, pelvis, weapon */
+  private readonly clothCaps: ClothCapsule[] = [];
   private readonly sockets: Record<string, THREE.Object3D> = {};
   private readonly overlays: Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; base: number; with?: string }> = [];
   private stance: StanceSet;
@@ -117,6 +119,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
     for (let i = 0; i < fig.cloth.length; i++) this.cloth.push(new ClothSim(fig.cloth[i], this.rig.bones, seed * 3.1 + i));
     for (let i = 0; i < CAP_COUNT; i++) this.caps.push({ a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
+    for (let i = 0; i < CAP_COUNT; i++) if (i <= 8 || i === CAP_WEAPON) this.clothCaps.push(this.caps[i]);
 
     for (const o of fig.overlays) {
       const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.color).multiplyScalar(o.intensity), transparent: true, opacity: o.opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
@@ -158,14 +161,13 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     const proxy = !fig.ghost && fig.lods.length > 0;
     const lod = new THREE.LOD();
     lod.name = 'lod';
-    const s = this.model.scale.x;
     for (let i = 0; i < geos.length; i++) {
       const mesh = this.skinned(geos[i], this.material, i === 0 ? 'body' : 'body:lod' + i);
       mesh.castShadow = !fig.ghost && !proxy;
       mesh.receiveShadow = !fig.ghost;
       mesh.customDepthMaterial = this.depthMaterial;
       mesh.visible = i === 0;
-      lod.addLevel(mesh, i === 0 ? 0 : fig.lodDist[Math.min(i - 1, fig.lodDist.length - 1)] * (s > 0 ? 1 : 1), 0.08);
+      lod.addLevel(mesh, i === 0 ? 0 : fig.lodDist[Math.min(i - 1, fig.lodDist.length - 1)], 0.08);
     }
     this.model.add(lod);
     if (proxy) {
@@ -395,13 +397,13 @@ export class HumanoidVisualImpl implements HumanoidVisual {
       const seat = an.seat;
       for (const c of this.cloth) {
         if (seat > 0.08) { const h = sv.wp[this.fig.spec.index.hips]; c.seat.x = h.x; c.seat.z = h.z; c.seat.y = seat; c.seat.r = 0.34; } else c.seat.r = 0;
-        c.update(dt, mw, sv.wp, sv.wq, this.fig.spec.rest, this.caps, scale, carry);
+        c.update(dt, mw, sv.wp, sv.wq, this.fig.spec.rest, this.clothCaps, scale, carry);
       }
     }
     root.updateMatrixWorld(true);
   }
 
-  private readonly solveOpts: SolveOpts = { heldL: false, heldR: false, grip2: null, grip2Rot: null, pins: null, barrel: null, tips: null };
+  private readonly solveOpts: SolveOpts = { heldL: false, heldR: false, grip2: null, grip2Rot: null, pins: null, barrel: null, tips: null, ring: null };
   private readonly pinOut: Array<{ pos: THREE.Vector3; w: number } | null> = [null, null];
   private readonly pinSlots = [{ pos: new THREE.Vector3(), w: 0 }, { pos: new THREE.Vector3(), w: 0 }];
 
@@ -409,7 +411,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     const so = this.solveOpts, eq = this.equip;
     so.heldL = eq.heldL; so.heldR = eq.heldR;
     so.grip2 = eq.hasGrip2 ? eq.grip2 : null; so.grip2Rot = eq.hasGrip2 ? eq.grip2Rot : null;
-    so.barrel = eq.barrel; so.tips = eq.tips;
+    so.barrel = eq.barrel; so.tips = eq.tips; so.ring = eq.ring;
     so.pins = pins;
     return so;
   }

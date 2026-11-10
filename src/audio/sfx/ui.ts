@@ -8,15 +8,15 @@ import { crack, pure, struck, thump } from './parts';
 const UI = { bus: 'ui', send: 0.12, vary: 8, prio: 2 } as const;
 
 export const UI_SFX: RecipeTable = {
-  uiMove: sfx(-25, { ...UI, gap: 0.03 }, (k) => {
+  uiMove: sfx(-25, { ...UI, gap: 0.03, bake: 2 }, (k) => {
     k.osc('sine', [1760, 1560], { a: 0.002, d: 0.045, g: 1 });
     k.osc('sine', 3520, { a: 0.001, d: 0.02, g: 0.2 });
   }),
-  uiSelect: sfx(-19, UI, (k) => {
+  uiSelect: sfx(-19, { ...UI, bake: 2 }, (k) => {
     pure(k, 880, { a: 0.003, d: 0.28, g: 1 });
     pure(k, 1320, { a: 0.003, d: 0.34, g: 0.6 }, { at: 0.045 });
   }),
-  uiBack: sfx(-21, UI, (k) => {
+  uiBack: sfx(-21, { ...UI, bake: 2 }, (k) => {
     pure(k, 660, { a: 0.003, d: 0.2, g: 1 });
     pure(k, 495, { a: 0.003, d: 0.26, g: 0.7 }, { at: 0.05 });
   }),
@@ -59,7 +59,7 @@ export const FEEDBACK_SFX: RecipeTable = {
     struck(k, 'bar', 900, 0.09, 0.6, { at: 0.085 });
     thump(k, 160, 110, 0.05, 0.4, 0.085);
   }),
-  echoGain: sfx(-23, { gap: 0.08, max: 2, prio: 1, send: 0.2, vary: 60 }, (k) => {
+  echoGain: sfx(-23, { gap: 0.08, max: 2, prio: 1, send: 0.2, vary: 60, tail: 0.3, bake: 2 }, (k) => {
     k.fm([1320, 1760, 0.06], 2, [1.2, 0.2], { a: 0.003, d: 0.16, g: 1 });
     k.osc('sine', 2640, { a: 0.002, d: 0.07, g: 0.2 });
   }),
@@ -67,7 +67,7 @@ export const FEEDBACK_SFX: RecipeTable = {
     [293.7, 440, 587.3, 880].forEach((f, i) => pure(k, f, { a: 0.02 + i * 0.01, d: 0.9, g: 0.8 - i * 0.12 }, { at: i * 0.05, pan: (i % 2 ? 0.3 : -0.3) }));
     k.fm(1760, 3.5, [3, 0.3], { a: 0.002, d: 0.6, g: 0.3 }, { at: 0.2 });
   }),
-  playerHit: sfx(-8, { gap: 0.09, max: 2, prio: 3, send: 0.15 }, (k) => {
+  playerHit: sfx(-8, { gap: 0.09, max: 2, prio: 3, send: 0.15, tail: 0.2, bake: 2 }, (k) => {
     thump(k, 160, 66, 0.15, 0.7);
     crack(k, 0.8, 0, 700, 0.02);
     k.noise('pink', { a: 0.002, d: 0.1, g: 0.6 }, { bp: [1700, 600], q: 0.8 });
@@ -90,17 +90,17 @@ export const FEEDBACK_SFX: RecipeTable = {
     thump(k, 90, 30, 0.9, 1, 0.05);
     k.noise('brown', { a: 0.3, d: 1.6, g: 0.5 }, { lp: [900, 120, 1.6] });
   }),
-  hitConfirm: sfx(-20, { gap: 0.05, max: 2, prio: 1, send: 0.05 }, (k) => {
+  hitConfirm: sfx(-20, { gap: 0.05, max: 2, prio: 1, send: 0.05, tail: 0.1, bake: 2 }, (k) => {
     k.noise('white', { a: 0.0006, d: 0.016, g: 1 }, { bp: 2600, q: 2.5 });
     k.osc('sine', [1500, 1100], { a: 0.001, d: 0.03, g: 0.5 });
   }),
-  weakPointHit: sfx(-12, { gap: 0.06, max: 2, prio: 2, send: 0.3 }, (k) => {
+  weakPointHit: sfx(-12, { gap: 0.06, max: 2, prio: 2, send: 0.3, tail: 0.4, bake: 2 }, (k) => {
     crack(k, 0.7, 0, 3000, 0.008);
     struck(k, 'glass', 1760, 0.32, 0.9);
     k.osc('sine', [2640, 3520, 0.05], { a: 0.002, d: 0.14, g: 0.3 });
     thump(k, 220, 120, 0.05, 0.4);
   }),
-  staggerBreak: sfx(-8, { gap: 0.15, max: 2, prio: 2, send: 0.35 }, (k) => {
+  staggerBreak: sfx(-8, { gap: 0.15, max: 2, prio: 2, send: 0.35, tail: 0.6, bake: 2 }, (k) => {
     crack(k, 1, 0, 1200, 0.025);
     thump(k, 120, 42, 0.32, 1);
     k.noise('crackle', { a: 0.002, d: 0.2, g: 0.9 }, { bp: 1800, q: 0.9 });

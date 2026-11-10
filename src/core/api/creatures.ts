@@ -8,22 +8,62 @@
  *   v.play('groundSlam', { onEvent: (e) => e === 'hit' && shockwave() });   // see CREATURE_ACTIONS
  *   v.setExposed('joint', 1);  v.setFrozen(0.4);  v.setTelegraph(1, 0xff3b2a);  v.socket('joint')
  *   asWallrunner(v)?.setCling({ height: 5, wallYaw: Math.PI / 2 });         // typed extensions, null-safe
+ *   asCreature(v)?.revive();                                                 // pooled visual back to life
  *
  * CONVENTIONS
  *  - Model front is −Z (engine yaw convention). Ground creatures stand on the root origin; DRONES are centred
  *    on the root origin (the hover point — Actor.pos already includes hoverHeight).
- *  - Every visual accepts ANY action string: unknown actions warn once and play a short generic gesture.
+ *  - Every visual accepts ANY action string: unknown actions warn once and play a short generic gesture
+ *    (tracked under the name you passed: isPlaying('talk') is true, isPlaying('salute') is not).
  *  - `play()` returns ActionInfo; `hitTimes` are the seconds at which 'hit' (melee connects) or 'release'
- *    (projectile / pulse leaves) fire through PlayOpts.onEvent. Other event names: 'impact' (body or limb hits
- *    the ground), 'step' (elite footfall inside an action), 'launch' / 'land' (wallrunner pounce), 'end'.
- *  - Deaths hold their final pose. Eclipse bodies (wallrunner, weaver, elite, weaverAnchor) dissolve by
- *    themselves at the end of 'death'; machines and devices stay as wreckage until disposed.
- *  - `setFrozen(n)` arrests the animation clock as well as frosting the surface. On the elite the frost creeps
- *    outward from the regenerating joint, so n ≈ 0.3 reads as "joint arrested", n = 1 as a full stasis.
+ *    (projectile / pulse / roar leaves) fire through PlayOpts.onEvent. Other event names: 'impact' (body or
+ *    limb hits the ground), 'step' (elite footfall inside an action), 'launch' / 'land' (wallrunner pounce),
+ *    'end'. PlayOpts.upperOnly is ignored: creature actions are whole-body by design.
+ *
+ * ACTION MODEL (differs from "last play wins" — read this before writing AI)
+ *  - MAIN actions (attacks, stagger, spawn, death, loops) cross-fade: starting one fades the previous one out
+ *    and CANCELS its remaining events. An interrupted attack never delivers its hit.
+ *  - REACTIONS — `hitLight`, `hitHeavy` and unknown gestures — are ADDITIVE, exactly as for humanoids: they
+ *    layer over whatever is playing and never interrupt it. Chip damage cannot stun-lock the elite; only
+ *    `stagger`, `fracture`, `death` or another main action end an attack. isPlaying() with no argument reports
+ *    main actions only.
+ *  - `idle` (and aliases such as 'hover', 'frozen') is the ABSENCE of a main action, not a slot: play('idle')
+ *    blends the current action out; isPlaying('idle') is true while nothing else plays.
+ *  - `death` is TERMINAL. It holds its final pose (Eclipse bodies — wallrunner, weaver, elite, weaverAnchor —
+ *    then dissolve by themselves; machines and devices stay as wreckage). While dead, play() of anything but a
+ *    spawn, stop(), lookAt() and hit reactions are ignored, so late hits and AoE on a corpse are harmless.
+ *    Bring a pooled visual back with asCreature(v).revive() or by playing 'spawn'.
+ *  - Device `disabled` is a STATE, not just an action: play('disabled') ≡ setDisabled(true), and it persists
+ *    through stop(). Clear it with setDisabled(false) or stop('disabled').
+ *
+ * FREEZE
+ *  - `setFrozen(n)` frosts the surface and arrests the animation clock (fully at n ≥ 0.8; the elite's frost
+ *    creeps outward from the regenerating joint, so n ≈ 0.3 reads as "joint arrested" and only slows it).
+ *    ActionInfo times are in that clock: ordinary actions on a partly frozen body run proportionally late.
+ *  - `death`, `fracture` and the hit reactions IGNORE the freeze and run in real game time — a stasis kill dies
+ *    on schedule and the Thermal Fracture lands its 'impact' at 1.3 s whatever the joint's frost. Both also
+ *    shatter the frost themselves: the visual thaws within ~0.2 s and stays thawed until you call
+ *    setFrozen(0) (so keep calling setFrozen(n) every tick if you like — it is ignored until released).
+ *
+ * LOOK
  *  - `setCorruption(n)` ADDS to the creature's authored baseline (Eclipse bodies are already corrupted).
+ *  - Every creature carries an authored readability rim (faction blue on drones, cold pale violet on Eclipse
+ *    bodies); setRim(n, colour) layers over it and setRim(0) returns to it.
  *  - Eclipse-made things twitch / pulse on one shared cadence: game.ai.links.cadence when the link system is
  *    live, otherwise an internal clock of the same period (CADENCE_PERIOD in src/chars/creatures/core/cadence).
- *  - Cost: one draw call and one shared shader program per creature/device, no lights, no textures.
+ *  - CharacterCreateOpts.seed desynchronises idle phases and wreck trajectories; it does not vary geometry.
+ *  - Cost: one draw call and one shared shader program per creature/device, no lights, no textures (a skinned
+ *    elite: one draw call, the generated mesh's three 2K maps).
+ *  - A hidden visual (setVisible(false)) still runs its action clocks and events but is not posed.
+ *
+ * THE ELITE'S TWO BODIES
+ *  - The elite's animator can wear the generated hero mesh (public/models/elite.glb) as a skin. Skins are
+ *    optional: await preloadCreatureSkins() (src/chars/creatures) during loading; an elite created before
+ *    the file has arrived shows its procedural body and swaps when it does; with no file it stays procedural.
+ *    Actions, events, timings and sockets are identical on both bodies.
+ *  - The regenerating joint is the creature's RIGHT shoulder (+X in model space) on BOTH bodies. The generated
+ *    file has it on its left; it is mirrored on load. (manifest.json's `weakPoint` is in the file's own
+ *    space — use socket('joint'), never the manifest numbers.)
  */
 import type { CharacterVisual, CreatureArchetype, DeviceArchetype, CharacterCreateOpts } from './chars';
 import type { Vec3Like } from './common';
@@ -35,7 +75,8 @@ export type CreatureCreate = (archetype: CreatureArchetype | DeviceArchetype, op
  *  - drones: 'muzzle', 'eye', 'vent' (rear weak point), 'core'
  *  - wallrunner: 'head', 'core'
  *  - weaver: 'core' (link origin), 'head'
- *  - elite: 'joint' (regenerating joint / Resonance target), 'core', 'head', 'handL', 'handR'
+ *  - elite: 'joint' (regenerating joint / Resonance target — its RIGHT shoulder), 'core', 'head', 'handL', 'handR';
+ *    'weaponBase' / 'weaponMid' / 'weaponTip' run down the right (club) arm for vfx.trail()
  *  - commandEmitter / relayReceiver / scanHead / weaverAnchor / frostAnchor: 'core' (beam origin), 'top'
  */
 export const CREATURE_SOCKETS = ['muzzle', 'eye', 'vent', 'core', 'joint', 'head', 'top'] as const;
@@ -49,7 +90,7 @@ export const CREATURE_SOCKET_MAP: Readonly<Record<CreatureArchetype | DeviceArch
   contamDrone: ['core', 'eye', 'muzzle', 'vent', 'head', 'top'],
   wallrunner: ['core', 'head', 'eye', 'chest', 'hips', 'top'],
   weaver: ['core', 'head', 'eye', 'chest', 'handL', 'handR', 'top'],
-  elite: ['core', 'joint', 'head', 'eye', 'chest', 'hips', 'handL', 'handR', 'weaponTip', 'back', 'top'],
+  elite: ['core', 'joint', 'head', 'eye', 'chest', 'hips', 'handL', 'handR', 'weaponBase', 'weaponMid', 'weaponTip', 'back', 'top'],
   commandEmitter: ['core', 'top', 'prongL', 'prongR'],
   relayReceiver: ['core', 'top', 'dish'],
   scanHead: ['core', 'eye', 'top'],
@@ -66,8 +107,9 @@ export const CREATURE_SOCKET_MAP: Readonly<Record<CreatureArchetype | DeviceArch
  *    ceilingCling (looping watch pose), hitLight, hitHeavy, stagger, spawn, death
  *  - weaver: idle, weave (channel loop), pulse (bolt, 'release'), hitLight, hitHeavy, stagger (filaments go
  *    slack), spawn, death
- *  - elite: idle, sweep, groundSlam ('hit' = shockwave), charge, roar, pulse ('release' = pressure pulse),
- *    regenerate (loop), exposeJoint, fracture, hitLight, hitHeavy, stagger, spawn, death
+ *  - elite: idle, sweep, groundSlam ('hit' = shockwave), charge, roar ('release' = the roar leaves),
+ *    pulse ('release' = pressure pulse), regenerate (loop), exposeJoint, fracture, hitLight, hitHeavy, stagger,
+ *    spawn, death
  *  - devices: idle, hitLight, hitHeavy, stagger, disabled (held: lights out, slumped), death (break apart);
  *    frostAnchor adds 'activate' (held: ring lit, crystals risen)
  */
@@ -96,9 +138,46 @@ export const CREATURE_EXPOSABLE: Readonly<Partial<Record<CreatureArchetype | Dev
   weaverAnchor: ['core'],
 };
 
+/**
+ * Visual extents at bind, in metres along the model axes (front = −Z), for placing things AROUND a creature:
+ * spawn clearances, wall stand-off, markers, camera framing. `CharacterVisual.radius` / `.height` are the
+ * COLLISION suggestions and are deliberately smaller — legs, arms, tails and spines reach well outside them.
+ * Scale by CharacterCreateOpts.scale. `bottom` is negative only for drones (centred on the hover point).
+ */
+export interface CreatureBounds {
+  halfWidth: number;
+  front: number;
+  rear: number;
+  top: number;
+  bottom: number;
+}
+export const CREATURE_BOUNDS: Readonly<Record<CreatureArchetype | DeviceArchetype, CreatureBounds>> = {
+  secDrone: { halfWidth: 0.6, front: 0.45, rear: 0.36, top: 0.45, bottom: -0.2 },
+  contamDrone: { halfWidth: 0.6, front: 0.45, rear: 0.37, top: 0.45, bottom: -0.65 },
+  wallrunner: { halfWidth: 0.97, front: 1.2, rear: 1.47, top: 1.1, bottom: -0.05 },
+  weaver: { halfWidth: 1.6, front: 0.85, rear: 1.2, top: 2.78, bottom: -0.05 },
+  elite: { halfWidth: 1.78, front: 1.45, rear: 1.85, top: 4.1, bottom: -0.05 },
+  commandEmitter: { halfWidth: 1.06, front: 0.56, rear: 0.76, top: 2.02, bottom: 0 },
+  relayReceiver: { halfWidth: 0.8, front: 0.66, rear: 0.5, top: 2.8, bottom: 0 },
+  scanHead: { halfWidth: 0.9, front: 0.45, rear: 0.4, top: 2.02, bottom: 0 },
+  weaverAnchor: { halfWidth: 1.5, front: 1.05, rear: 1.16, top: 1.4, bottom: -0.02 },
+  frostAnchor: { halfWidth: 0.95, front: 0.8, rear: 1.02, top: 0.6, bottom: 0 },
+};
+
 // ---------------------------------------------------------------------------------------------------------
 // Extension interfaces. Obtain them with the as*() helpers below (null when the visual is another kind).
 // ---------------------------------------------------------------------------------------------------------
+
+/** every creature and device */
+export interface CreatureVisual extends CharacterVisual {
+  /** true from play('death') until revive() or a spawn action */
+  readonly dead: boolean;
+  /**
+   * Bring a dead (or dissolved) visual back to its living idle: clears every action, the death dissolve and
+   * the telegraph. For pooled visuals and checkpoint reloads. (setDissolve / setFrozen values YOU set stay.)
+   */
+  revive(): void;
+}
 
 /** secDrone / contamDrone */
 export interface DroneVisual extends CharacterVisual {
@@ -152,15 +231,22 @@ export interface EliteVisual extends CharacterVisual {
    */
   setFractured(fractured: boolean): void;
   readonly fractured: boolean;
-  /** Called on every planted footfall of the walk cycle and attack steps (camera shake / dust / audio). */
+  /**
+   * Called on every planted footfall: the walk cycle, turn-steps while it tracks a target in place, and the
+   * 'step' events inside actions (sweep, groundSlam, charge, roar, pulse, exposeJoint, fracture, stagger).
+   * `strength` 0..1 — camera shake / dust / audio.
+   */
   onFootfall: ((side: 'L' | 'R', strength: number) => void) | null;
+  /** true while the generated mesh is worn (see "THE ELITE'S TWO BODIES" above) */
+  readonly skinned: boolean;
 }
 
 /** all devices */
 export interface DeviceVisual extends CharacterVisual {
   /**
    * Powered-down state reached by a close-interaction disable: lights out, moving parts slumped, held until
-   * re-enabled. (play('death') is the destroyed state: the device breaks apart.)
+   * re-enabled — it survives stop() and other actions. (play('death') is the destroyed state: the device
+   * breaks apart and its wreckage comes to rest on the floor.)
    */
   setDisabled(disabled: boolean): void;
   readonly disabled: boolean;
@@ -191,6 +277,10 @@ function has(v: CharacterVisual | null | undefined, method: string): boolean {
   return !!v && typeof (v as unknown as Record<string, unknown>)[method] === 'function';
 }
 
+/** Typed access to the members every creature / device has (also true for null-object stubs, whose calls no-op). */
+export function asCreature(v: CharacterVisual | null | undefined): CreatureVisual | null {
+  return has(v, 'revive') ? (v as CreatureVisual) : null;
+}
 /** Typed access to drone extras (also true for null-object stubs, whose calls no-op). */
 export function asDrone(v: CharacterVisual | null | undefined): DroneVisual | null {
   return has(v, 'setHoverHeight') ? (v as DroneVisual) : null;

@@ -2,13 +2,14 @@
  * Enemy cues — three families that must never be confused by ear:
  *   Reformation drones: clean, tonal, servo. Exact pitches, tidy envelopes.
  *   Dominion Enforcers: heavy, brassy, electric. Plate + mains buzz + low brass.
- *   Eclipse: breathy and wrong, and *unnaturally identical* — `vary: 0`, no random anywhere, so every body
- *   makes exactly the same sound (the tell the plan asks for before any purple effect).
+ *   Eclipse: breathy and wrong, and *unnaturally identical* — `exact`: no pitch variation, no level jitter,
+ *   the same noise phase every time, so every body makes sample-for-sample the same sound (the tell the plan
+ *   asks for before any purple effect). A severed body switches to the varied `cadenceTickOff`.
  */
 import { sfx, type RecipeTable } from './recipe';
 import { blast, brass, breath, crack, debris, servo, struck, thump, whoosh, wrong, zap } from './parts';
 
-const ECLIPSE = { vary: 0, send: 0.45 } as const;
+const ECLIPSE = { vary: 0, send: 0.45, exact: true, bake: 1 } as const;
 
 function bolt(k: Parameters<typeof crack>[0], at: number, g: number): void {
   k.osc('sine', [2300, 520, 0.06], { a: 0.001, d: 0.09, g }, { at });
@@ -36,14 +37,14 @@ export const DRONE_SFX: RecipeTable = {
     k.fm([784, 3136, 0.8], 2, [0.3, 2.2], { a: 0.2, h: 0.54, d: 0.06, g: 0.25 }, { to: trem });
     k.noise('white', { a: 0.6, h: 0.16, d: 0.05, g: 0.12 }, { bp: [2000, 7000, 0.8], q: 4 });
   }),
-  droneVolley: sfx(-10, { gap: 0.2, max: 3, prio: 2, send: 0.4, ref: 5, vary: 15 }, (k) => {
+  droneVolley: sfx(-10, { gap: 0.2, max: 3, prio: 2, send: 0.4, ref: 5, vary: 15, tail: 0.3, bake: 2 }, (k) => {
     bolt(k, 0, 1);
     bolt(k, 0.1, 0.92);
     bolt(k, 0.2, 0.96);
     servo(k, 520, 430, 0.12, 0.15, 0.3); // recoil servo settling
   }),
-  droneBolt: sfx(-11, { gap: 0.045, max: 5, prio: 1, send: 0.4, ref: 5, vary: 30 }, (k) => bolt(k, 0, 1)),
-  droneDeath: sfx(-8, { gap: 0.15, max: 3, prio: 2, send: 0.5, ref: 6 }, (k) => {
+  droneBolt: sfx(-11, { gap: 0.045, max: 5, prio: 1, send: 0.4, ref: 5, vary: 30, tail: 0.2, bake: 3 }, (k) => bolt(k, 0, 1)),
+  droneDeath: sfx(-8, { gap: 0.15, max: 3, prio: 2, send: 0.5, ref: 6, bake: 2 }, (k) => {
     crack(k, 0.9, 0, 1500, 0.015);
     // rotors spin down, the tone stutters, then a small clean pop
     const st = k.gain(0.6);
@@ -69,7 +70,7 @@ export const ENFORCER_SFX: RecipeTable = {
     brass(k, 110, { a: 0.22, h: 0.05, d: 0.25, g: 0.4 }, 7, { at: 0.03 });
     zap(k, 0.25, 0.25, 0.06, 88);
   }),
-  shieldHit: sfx(-8, { gap: 0.06, max: 4, prio: 1, send: 0.45, ref: 5 }, (k) => {
+  shieldHit: sfx(-8, { gap: 0.06, max: 4, prio: 1, send: 0.45, ref: 5, tail: 0.3, bake: 3 }, (k) => {
     crack(k, 0.9, 0, 1500, 0.014);
     thump(k, 115, 56, 0.16, 0.8);
     struck(k, 'plate', k.rr(170, 200), 0.45, 0.6, { tilt: 0.7 });
@@ -86,13 +87,13 @@ export const ENFORCER_SFX: RecipeTable = {
     zap(k, 0.55, 0.6, 0.02, 80); // …and discharges
     debris(k, 6, 0.7, 0.3, 0.15, 500, 2200);
   }),
-  enforcerStep: sfx(-15, { gap: 0.12, max: 4, prio: 0, send: 0.35, ref: 5, vary: 60 }, (k) => {
+  enforcerStep: sfx(-15, { gap: 0.12, max: 4, prio: 0, send: 0.35, ref: 5, vary: 60, tail: 0.15, bake: 3 }, (k) => {
     thump(k, 92, 46, 0.16, 0.8);
     k.noise('pink', { a: 0.002, d: 0.09, g: 0.8 }, { lp: [1800, 400] });
     struck(k, 'plate', k.rr(240, 290), 0.14, 0.5, { tilt: 1.1 });
     struck(k, 'bar', k.rr(1700, 2300), 0.05, 0.3, { at: 0.03 });
   }),
-  batonZap: sfx(-10, { gap: 0.15, max: 3, prio: 2, send: 0.3, ref: 5 }, (k) => {
+  batonZap: sfx(-10, { gap: 0.15, max: 3, prio: 2, send: 0.3, ref: 5, tail: 0.4 }, (k) => {
     crack(k, 0.9, 0, 2600, 0.008);
     zap(k, 0.32, 1, 0, 92);
     thump(k, 140, 70, 0.08, 0.5);
@@ -108,7 +109,7 @@ export const ECLIPSE_SFX: RecipeTable = {
     breath(k, { ...e, g: 1 }, 0.35, { to: am });
     wrong(k, 92.5, { ...e, g: 0.16 }, { to: am, rate: 0.84 });
   }),
-  eclipseLunge: sfx(-10, { ...ECLIPSE, gap: 0.1, max: 4, prio: 2 }, (k) => {
+  eclipseLunge: sfx(-10, { ...ECLIPSE, gap: 0.1, max: 4, prio: 2, tail: 0.4 }, (k) => {
     // a hard intake cut off dead, a wrong chord, and the body landing
     breath(k, { a: 0.2, d: 0.012, g: 1 }, 0.9);
     k.noise('pink', { a: 0.2, d: 0.012, g: 0.5 }, { bp: [300, 2600, 0.2], q: 2.5 });
@@ -123,7 +124,7 @@ export const ECLIPSE_SFX: RecipeTable = {
     k.osc('sine', [277.2, 69.3, 0.8], { a: 0.01, d: 0.8, g: 0.3 }, { fixed: true });
     thump(k, 90, 40, 0.25, 0.6, 0.55);
   }),
-  wallrunnerSkitter: sfx(-15, { ...ECLIPSE, gap: 0.2, max: 2, prio: 1 }, (k) => {
+  wallrunnerSkitter: sfx(-15, { ...ECLIPSE, gap: 0.2, max: 2, prio: 1, tail: 0.3 }, (k) => {
     // nine contacts, spaced exactly evenly — no living thing moves like that
     for (let i = 0; i < 9; i++) {
       const at = i * 0.047;
@@ -214,12 +215,12 @@ export const ECLIPSE_SFX: RecipeTable = {
     k.osc('sine', 1661.2, { a: 0.01, h: 0.5, d: 0.8, g: 0.18 }, { at: 0.22, fixed: true });
   }),
   // Eclipse cadence clock (AudioSystem.cadenceTick): the regular one is stamped out, the irregular one stumbles
-  cadenceTick: sfx(-18, { ...ECLIPSE, gap: 0.08, max: 3, prio: 1 }, (k) => {
+  cadenceTick: sfx(-18, { ...ECLIPSE, gap: 0.08, max: 3, prio: 1, tail: 0.2 }, (k) => {
     k.noise('white', { a: 0.001, d: 0.035, g: 0.6 }, { bp: 1400, q: 6 });
     k.osc('sine', 207.65, { a: 0.002, d: 0.09, g: 0.5 }, { fixed: true });
     breath(k, { a: 0.004, d: 0.07, g: 0.6 }, 0.2);
   }),
-  cadenceTickOff: sfx(-21, { gap: 0.08, max: 3, prio: 1, send: 0.45, vary: 260 }, (k) => {
+  cadenceTickOff: sfx(-21, { gap: 0.08, max: 3, prio: 1, send: 0.45, vary: 260, tail: 0.2, bake: 4 }, (k) => {
     k.noise('white', { a: 0.001, d: k.rr(0.02, 0.05), g: 0.8 }, { bp: k.rr(1000, 1900), q: 4 });
     k.osc('sine', [k.rr(180, 240), k.rr(150, 200)], { a: 0.002, d: 0.08, g: 0.5 });
     breath(k, { a: 0.01, d: k.rr(0.06, 0.14), g: 0.5 }, k.rr(0.1, 0.6));

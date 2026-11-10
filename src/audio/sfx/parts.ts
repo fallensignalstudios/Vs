@@ -134,12 +134,14 @@ export function embers(k: Kit, d: number, g: number, at = 0, hp = 2200): void {
 
 /** A scatter of small impacts (debris, rubble, casings). */
 export function debris(k: Kit, count: number, span: number, g: number, at = 0, lo = 250, hi = 1400): void {
-  for (let i = 0; i < count; i++) {
+  // eight pieces read as "a scatter"; more only costs voices
+  const n = Math.min(count, 8);
+  for (let i = 0; i < n; i++) {
     const t = at + span * Math.pow(k.rnd(), 0.8);
     const f = k.rr(lo, hi);
     const a = g * k.rr(0.35, 1) * (1 - 0.5 * (t - at) / Math.max(span, 0.01));
     k.noise('brown', { a: 0.001, d: k.rr(0.03, 0.09), g: a }, { at: t, bp: f, q: 2.2, pan: k.jit(0.6) });
-    if (k.rnd() < 0.5) k.osc('sine', [f * 0.5, f * 0.3], { a: 0.001, d: 0.05, g: a * 0.6 }, { at: t });
+    if (i < 4 && k.rnd() < 0.5) k.osc('sine', [f * 0.5, f * 0.3], { a: 0.001, d: 0.05, g: a * 0.6 }, { at: t });
   }
 }
 

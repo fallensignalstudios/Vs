@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import type { CharacterCreateOpts, Game, Vec3Like } from '@/core/api';
 import type { WeaverVisual } from '@/core/api/creatures';
 import { clamp, clamp01, damp, smoothstep } from '@/core/mathx';
-import { impact, keys, noise1, rot, move } from './core/anim';
+import { finite3, impact, keys, noise1, rot, move } from './core/anim';
 import { CreatureBase, type ActionDef } from './core/base';
 import { along, band, blob, shard, sphere, T, torus, tube, type Pt3 } from './core/geo';
 import { P, tint } from './core/palette';
@@ -43,6 +43,15 @@ function skirtPts(k: number): Pt3[] {
   return [[c * 0.15, 0.94, 0.04 + s * 0.13], [c * 0.25, 0.52, s * 0.23], [c * 0.4, 0.13, s * 0.38], [c * reach, 0.025, s * reach]];
 }
 
+/** tabard blades: [yaw, length, width] — each hangs from its own hinge so it can splay when the body sinks */
+const TABARD: readonly (readonly [number, number, number])[] = [
+  [0, 0.8, 0.2], [0.8, 0.62, 0.17], [1.6, 0.74, 0.18], [2.4, 0.6, 0.17], [3.14, 0.86, 0.2], [-2.4, 0.64, 0.17], [-1.55, 0.72, 0.18], [-0.8, 0.58, 0.17],
+];
+const TABARD_Y = 1.0;
+/** blade outward lean at rest: sin / cos of the angle between the hanging blade and straight down */
+const TAB_N = 0.36 / Math.hypot(1, 0.36);
+const TAB_REST = Math.asin(TAB_N);
+
 function buildWeaver(): RigTemplate {
   const b = new RigBuilder();
   b.bone('base', null, [0, 0, 0]);
@@ -61,6 +70,7 @@ function buildWeaver(): RigTemplate {
     }
     return b.chain(`a${i}_`, 'chest', pts);
   });
+  TABARD.forEach(([yaw], i) => b.bone('tb' + i, 'pelvis', [Math.sin(yaw) * 0.2, TABARD_Y, 0.04 - Math.cos(yaw) * 0.18]));
   const skirtChains: string[][] = [];
   for (let k = 0; k < SKIRTS; k++) skirtChains.push(b.chain(`s${k}_`, 'pelvis', skirtPts(k).slice(0, SKIRT_BONES)));
 
@@ -137,13 +147,10 @@ function buildWeaver(): RigTemplate {
     const pts = skirtPts(k);
     b.tubeOn(chain, pts[3]!, k % 2 ? P.sinew : P.tissue, (t) => 0.055 * (1 - t * 0.8) + 0.007, 6, {}, 1, 3);
   });
-  const tabard: [number, number, number, Paint][] = [
-    [0, 0.8, 0.2, P.whiteGold], [0.8, 0.62, 0.17, P.ivoryWorn], [1.6, 0.74, 0.18, P.domOxblood], [2.4, 0.6, 0.17, P.whiteGold],
-    [3.14, 0.86, 0.2, P.ivoryWorn], [-2.4, 0.64, 0.17, P.domBlack], [-1.55, 0.72, 0.18, P.refNavy], [-0.8, 0.58, 0.17, P.whiteGold],
-  ];
-  tabard.forEach(([yaw, len, w, paint], i) => {
+  const tabPaint: Paint[] = [P.whiteGold, P.ivoryWorn, P.domOxblood, P.whiteGold, P.ivoryWorn, P.domBlack, P.refNavy, P.whiteGold];
+  TABARD.forEach(([yaw, len, w], i) => {
     const n: Pt3 = [Math.sin(yaw), 0.36, -Math.cos(yaw)];
-    addPlate(b, 'pelvis', paint, bladeOutline(w, len, 580 + i), facing([n[0] * 0.2, 1.0, 0.04 + n[2] * 0.18], n, [0, -1, 0], (i % 2 ? 0.06 : -0.05)), { thick: 0.024, rx: 0.24, lift: 0.05, trim: i === 0 ? tint(P.gold, { r: 0.42 }) : undefined });
+    addPlate(b, 'tb' + i, tabPaint[i]!, bladeOutline(w, len, 580 + i), facing([n[0] * 0.2, TABARD_Y, 0.04 + n[2] * 0.18], n, [0, -1, 0], (i % 2 ? 0.06 : -0.05)), { thick: 0.024, rx: 0.24, lift: 0.05, trim: i === 0 ? tint(P.gold, { r: 0.42 }) : undefined });
   });
   b.add('pelvis', P.domOxblood, torus(0.2, 0.028, 12, 5), T(0, 1.02, 0.04, 0.06, 0, 0, [1.05, 1, 0.92]), { crease: 180 });
   for (const n of [[0.09, 1.42, -0.1], [-0.11, 1.2, 0.02], [0.06, 1.05, -0.09]] as Pt3[]) b.add('spine', P.violetSoft, sphere(0.013, 1), T(n[0], n[1], n[2]), { group: G.nodes, crease: 180 });
@@ -165,13 +172,24 @@ const ACTIONS: Record<string, ActionDef> = {
   idle: { dur: 3, loop: true },
   weave: { dur: 3.2, loop: true, fade: 0.5, out: 0.5 },
   pulse: { dur: 1.5, hits: [0.75], hitName: 'release', fade: 0.15, out: 0.3 },
-  hitLight: { dur: 0.4, fade: 0.03 },
-  hitHeavy: { dur: 0.7, fade: 0.03 },
+  hitLight: { dur: 0.4, fade: 0.03, react: true, ignoreFreeze: true },
+  hitHeavy: { dur: 0.7, fade: 0.03, react: true, ignoreFreeze: true },
   stagger: { dur: 1.8, fade: 0.08, out: 0.5 },
-  spawn: { dur: 1.8, fade: 0 },
-  death: { dur: 3.2, hold: true, fade: 0.1, events: [[1.0, 'impact']] },
-  generic: { dur: 0.6 },
+  spawn: { dur: 1.8, fade: 0, revive: true, dissolveIn: 1.0 },
+  death: { dur: 3.2, hold: true, fade: 0.1, ignoreFreeze: true, thaw: true, events: [[1.0, 'impact']], dissolveOut: [1.6, 3.2] },
+  generic: { dur: 0.6, react: true, ignoreFreeze: true },
 };
+const K = {
+  puGather: [0, 0, 0.6, 1, 0.74, 1, 0.82, 0],
+  puFlare: [0.72, 0, 0.82, 1, 1.5, 0],
+  puCore: [0, 0, 0.7, 1, 0.8, 0],
+  stSlack: [0, 0, 0.2, 1, 1.2, 1, 1.8, 0],
+  stHunch: [0, 0, 0.25, 1, 1.1, 0.8, 1.8, 0],
+  spUnfurl: [0.2, 0, 1.5, 1],
+  deCurl: [0.1, 0, 1.2, 1],
+  deSink: [0.3, 0, 1.3, 1],
+  deCore: [0, 0, 1.2, 1],
+} as const;
 const ALIASES: Record<string, string> = {
   linkedSync: 'weave', roar: 'weave', attackLight1: 'pulse', attackLight2: 'pulse', attackLight3: 'pulse', attackLight4: 'pulse', attackHeavy: 'pulse',
   shoot: 'pulse', throw: 'pulse', guardBreak: 'stagger', knockdown: 'stagger', spawnBreach: 'spawn', spawnDrop: 'spawn', frozen: 'idle', hover: 'idle',
@@ -187,7 +205,7 @@ interface Arm {
   target: THREE.Vector3 | null;
 }
 
-const _d = new THREE.Vector3(), _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _qc = new THREE.Quaternion(), _m = new THREE.Matrix4();
+const _d = new THREE.Vector3(), _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _qc = new THREE.Quaternion(), _m = new THREE.Matrix4(), _ax = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
 
 export class Weaver extends CreatureBase implements WeaverVisual {
@@ -195,6 +213,7 @@ export class Weaver extends CreatureBase implements WeaverVisual {
   private slackNow = 0;
   private readonly arms: Arm[] = [];
   private readonly skirt: THREE.Bone[][] = [];
+  private readonly tabard: THREE.Bone[];
   private readonly pelvis: THREE.Bone; private readonly spine: THREE.Bone; private readonly chest: THREE.Bone;
   private readonly neck: THREE.Bone; private readonly head: THREE.Bone; private readonly halo: THREE.Bone;
 
@@ -202,6 +221,7 @@ export class Weaver extends CreatureBase implements WeaverVisual {
     super(game, {
       archetype: 'weaver', height: 2.3, radius: 0.45, template: getTemplate('weaver', buildWeaver),
       actions: ACTIONS, aliases: ALIASES, groups: G, frostOrigin: [0, 1.4, 0], frostRange: 1.9, eclipse: true, baseCorruption: 0.6,
+      rim: [0xb9a8e6, 0.24],
     }, opts);
     const r = this.rig;
     this.pelvis = r.b('pelvis'); this.spine = r.b('spine'); this.chest = r.b('chest');
@@ -220,12 +240,18 @@ export class Weaver extends CreatureBase implements WeaverVisual {
       for (let j = 0; j < SKIRT_BONES; j++) ch.push(r.b(`s${k}_${j}`));
       this.skirt.push(ch);
     }
+    this.tabard = TABARD.map((_, i) => r.b('tb' + i));
+  }
+
+  protected override heal(): void {
+    this.slackNow = 0;
+    for (const a of this.arms) { a.dir.copy(a.d0); a.target = null; }
   }
 
   setLinkTarget(index: number, target: Vec3Like | null): void {
     const arm = this.arms[index];
     if (!arm || index > 2 || index < 0) return;
-    if (!target || !Number.isFinite(target.x + target.y + target.z)) { arm.target = null; return; }
+    if (!finite3(target)) { arm.target = null; return; }
     (arm.target ??= new THREE.Vector3()).set(target.x, target.y, target.z);
   }
 
@@ -250,23 +276,22 @@ export class Weaver extends CreatureBase implements WeaverVisual {
       switch (s.name) {
         case 'weave': weave = Math.max(weave, w); coreGlow += 0.8 * w; break;
         case 'pulse':
-          gather = Math.max(gather, keys(st, [0, 0, 0.6, 1, 0.74, 1, 0.82, 0]) * w);
-          flareP = Math.max(flareP, keys(st, [0.72, 0, 0.82, 1, 1.5, 0]) * w);
+          gather = Math.max(gather, keys(st, K.puGather) * w);
+          flareP = Math.max(flareP, keys(st, K.puFlare) * w);
           recoil += impact(st, 0.75, 0.12) * w;
-          coreGlow += (2.6 * keys(st, [0, 0, 0.7, 1, 0.8, 0]) + 5 * impact(st, 0.75, 0.1)) * w;
+          coreGlow += (2.6 * keys(st, K.puCore) + 5 * impact(st, 0.75, 0.1)) * w;
           break;
         case 'hitLight': case 'hitHeavy': recoil += impact(st, 0, 0.14, 16) * w * (s.name === 'hitHeavy' ? 1.8 : 0.8); break;
         case 'stagger':
-          slack = Math.max(slack, keys(st, [0, 0, 0.2, 1, 1.2, 1, 1.8, 0]) * w);
-          hunch += keys(st, [0, 0, 0.25, 1, 1.1, 0.8, 1.8, 0]) * w;
+          slack = Math.max(slack, keys(st, K.stSlack) * w);
+          hunch += keys(st, K.stHunch) * w;
           coreGlow -= 0.6 * w;
           break;
-        case 'spawn': unfurl = Math.max(unfurl, (1 - keys(st, [0.2, 0, 1.5, 1])) * w); this.autoDissolve = (1 - keys(st, [0, 0, 1.0, 1])) * (s.state === 2 ? 0 : 1); break;
+        case 'spawn': unfurl = Math.max(unfurl, (1 - keys(st, K.spUnfurl)) * w); break;
         case 'death':
-          curlDeath = Math.max(curlDeath, keys(st, [0.1, 0, 1.2, 1]) * w);
-          sink = Math.max(sink, keys(st, [0.3, 0, 1.3, 1]) * w);
-          coreGlow -= 2 * keys(st, [0, 0, 1.2, 1]) * w;
-          this.autoDissolve = keys(st, [1.6, 0, 3.2, 1]);
+          curlDeath = Math.max(curlDeath, keys(st, K.deCurl) * w);
+          sink = Math.max(sink, keys(st, K.deSink) * w);
+          coreGlow -= 2 * keys(st, K.deCore) * w;
           break;
         case 'generic': recoil += impact(st, 0, 0.2, 12) * w * 0.5; break;
         default: break;
@@ -307,10 +332,8 @@ export class Weaver extends CreatureBase implements WeaverVisual {
         droop += (0.05 - droop) * weave; helix += 0.34 * weave; tw = th;
       }
       if (arm.target && i < 3 && alive) {
-        _v.copy(arm.target);
-        this.rig.group.worldToLocal(_v);
-        _v.sub(arm.root).normalize();
-        _d.lerp(_v, 0.92);
+        _v.copy(arm.target).applyMatrix4(this.rig.toModel).sub(arm.root);
+        if (_v.lengthSq() > 1e-6) _d.lerp(_v.normalize(), 0.92);
         droop *= 0.25; helix *= 0.2; wave = 0.03;
       }
       if (gather > 0.001) {
@@ -358,8 +381,18 @@ export class Weaver extends CreatureBase implements WeaverVisual {
         rot(ch[j]!, Math.sin(ph - j * 0.9) * (0.03 + 0.06 * mv) + this.velZ * 0.09 * (j + 0.5) - (j === 0 ? pelvis.rotation.x : 0),
           0, Math.cos(ph - j * 0.9) * (0.03 + 0.06 * mv) - this.velX * 0.09 * (j + 0.5) - (j === 0 ? pelvis.rotation.z : 0));
       }
-      // the skirt stays on the floor while the body sinks
-      move(ch[0]!, 0, (sink * 0.72 + unfurl * 0.5) * 0.85, 0);
+      // the skirt stays on the floor: its roots are anchored at their rest height whatever the body does
+      move(ch[0]!, 0, 0.95 - pelvis.position.y + 0.012, 0);
+    }
+
+    // ---- tabard: each blade hangs from its hinge and fans outward as the body comes down, so the tips rest
+    // on the floor instead of passing through it (the skirt of a collapsing tent)
+    const hinge = TABARD_Y + pelvis.position.y - 0.95;
+    for (let i = 0; i < this.tabard.length; i++) {
+      const tb = TABARD[i]!;
+      const need = Math.acos(clamp((hinge - 0.04) / tb[1], -1, 1));
+      const splay = Math.max(0, need - TAB_REST) + (0.03 * beat + 0.08 * mv + 0.05 * flareP) * alive;
+      if (splay > 1e-4) this.tabard[i]!.quaternion.setFromAxisAngle(_ax.set(Math.cos(tb[0]), 0, Math.sin(tb[0])), splay);
     }
 
     // ---- glow

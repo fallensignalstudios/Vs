@@ -76,7 +76,7 @@ export interface OverlayDef {
   with?: 'shield' | 'melee';
 }
 
-export interface Loadout { melee: boolean; ranged: boolean; shield: boolean; prop: 'case' | 'rifle' | 'none'; hideSheathed: boolean }
+export interface Loadout { melee: boolean; ranged: boolean; shield: boolean; prop: 'case' | 'rifle' | 'none'; hideSheathed?: boolean }
 
 export interface FigureDraft {
   items: { melee?: ItemDef; ranged?: ItemDef; shield?: ItemDef; case?: ItemDef };
@@ -94,6 +94,8 @@ export interface FigureDraft {
   radius: number;
   /** torso collision inflation for cloth (armour bulk) */
   girth: number;
+  /** camera distances (m) at which the figure drops to its lower levels of detail */
+  lodDist: readonly [number, number];
 }
 
 export interface BuildCtx {
@@ -114,7 +116,7 @@ export interface ArchetypeDef {
    * instance). Rank-and-file archetypes use a handful so squads vary without a geometry build per spawn.
    */
   seedBuckets?: number;
-  /** detail levels built below full (default [0.55, 0.3]); [] = single mesh */
+  /** detail levels built below full (default [0.5, 0.25]); [] = single mesh */
   lods?: readonly number[];
 }
 
@@ -136,14 +138,14 @@ const cache = new Map<string, FigureDef>();
 let clock = 0;
 /** unreferenced figures kept warm before the oldest is disposed */
 const KEEP_UNUSED = 14;
-const DEFAULT_LODS: readonly number[] = [0.55, 0.3];
+const DEFAULT_LODS: readonly number[] = [0.5, 0.25];
 
 function newDraft(): FigureDraft {
   return {
     items: {}, cloth: [], overlays: [], moveset: null,
     loadout: { melee: false, ranged: false, shield: false, prop: 'none', hideSheathed: false },
     ghost: false, luminous: 0, corruption: 0, rim: { color: 0xa9c6ff, amount: 0.22 },
-    headBias: [0, 0, 0], breath: 1, radius: 0.4, girth: 1,
+    headBias: [0, 0, 0], breath: 1, radius: 0.4, girth: 1, lodDist: [9, 20],
   };
 }
 

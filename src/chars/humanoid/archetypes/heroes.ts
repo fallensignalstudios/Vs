@@ -81,6 +81,7 @@ export const tarrik: ArchetypeDef = {
     draft.loadout = { melee: true, ranged: false, shield: false, prop: 'none' };
     draft.moveset = TARRIK_MOVES;
     draft.rim = { color: 0xffc890, amount: 0.2 };
+    draft.lodDist = [16, 32];
     draft.radius = 0.42;
     draft.girth = 1.25;
   },
@@ -153,6 +154,7 @@ export const selene: ArchetypeDef = {
     draft.loadout = { melee: true, ranged: false, shield: false, prop: 'none' };
     draft.moveset = SELENE_MOVES;
     draft.rim = { color: 0xa9d2ff, amount: 0.3 };
+    draft.lodDist = [16, 32];
     draft.radius = 0.38;
     draft.girth = 1.1;
   },

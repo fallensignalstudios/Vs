@@ -194,7 +194,12 @@ float cRidgeA = 0.0;
 float cRidgeB = 0.0;
 vec3 cCorrEmi = vec3(0.0);
 if (uCorruption > 0.001) {
+#ifdef CREATURE_SKIN
+  // a skin's baseline corruption is already painted into its texture: procedural threads only arrive on top
+  float cCorr = clamp((uCorruption - 0.5) * 2.0, 0.0, 1.0);
+#else
   float cCorr = clamp(uCorruption, 0.0, 1.0) * (1.0 - 0.8 * cKeep);
+#endif
   float cGateN = cNoise(cP * 1.7 + 5.0) * 0.45 + cTissue * 0.55 + cN1 * 0.08;
   cGate = smoothstep(1.02 - cCorr * 1.05, 1.16 - cCorr * 0.95, cGateN + cCorr * 0.25);
   vec3 cVp = cP * uVeinScale;
@@ -246,7 +251,7 @@ roughnessFactor = mix(roughnessFactor, 0.32, cGate * 0.6);
 
 const FRAG_METAL = /* glsl */ `
 #ifdef CREATURE_SKIN
-metalnessFactor = metalnessFactor * (1.0 - 0.75 * cFrost) * (1.0 - cChar);
+metalnessFactor = metalnessFactor * 0.55 * (1.0 - 0.75 * cFrost) * (1.0 - cChar);
 #else
 metalnessFactor = vSurf.y * (1.0 - 0.75 * cFrost) * (1.0 - 0.5 * cGate);
 #endif
@@ -277,15 +282,15 @@ const FRAG_EMISSIVE = /* glsl */ `
 #ifdef CREATURE_SKIN
   // painted violet seams become light; the joint, eye sockets and chest core are bind-space regions
   float cPulse = 0.75 + 0.25 * sin(uTime * 2.1 + cP.y * 3.0);
-  cE += vec3(0.5, 0.22, 1.0) * cViolet * uSkin.x * uGroup[4] * cPulse * (1.0 - cJoint);
+  cE += vec3(0.5, 0.22, 1.0) * cViolet * uSkin.x * (0.35 + 0.4 * uGroup[4]) * cPulse * (1.0 - cJoint);
   float cMot = 0.25 + 1.5 * smoothstep(0.3, 0.72, cNoise(cP * 9.0 + 4.0));
   vec3 cJc = mix(vec3(0.62, 0.36, 1.0), uHot.rgb, uHot.a);
   cE += cJc * cJoint * (0.3 + 1.7 * cViolet + 0.5 * cDark) * cMot * uGroup[3] * (1.0 - uSkin.w);
   float cEmber = smoothstep(0.62, 0.8, cNoise(cP * 14.0 + 2.0)) * cJoint;
   cE += vec3(1.0, 0.36, 0.08) * cEmber * uGroup[5];
   float cEye = max(cSphere(uEyeA, cP), cSphere(uEyeB, cP));
-  cE += vec3(0.78, 0.66, 1.0) * cEye * (0.35 + 0.65 * cDark) * uGroup[1] * 2.6;
-  cE += vec3(0.48, 0.2, 1.0) * cSphere(uCore, cP) * (0.15 + cViolet + 0.6 * cDark) * uGroup[2] * 0.9;
+  cE += vec3(0.6, 0.42, 1.0) * cEye * (0.3 + 0.7 * cDark) * uGroup[1] * 1.15;
+  cE += vec3(0.48, 0.2, 1.0) * cSphere(uCore, cP) * (cViolet * 0.8 + cDark * 0.4) * uGroup[2] * 0.6;
   cE *= uGlow * (1.0 - cFrost * 0.75);
   cLit = clamp(cViolet * uSkin.x + cEye + cJoint * 0.5, 0.0, 1.0);
 #else

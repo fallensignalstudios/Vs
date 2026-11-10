@@ -4,9 +4,12 @@
  */
 import type { Kit } from '../synth/kit';
 import { brass, breath, glass, pure, struck, thump, wrong } from '../sfx/parts';
-import { cadenceHit, hit } from './instruments';
+import { cadenceHit } from './instruments';
 import { mtof } from './theory';
-import type { Family } from './types';
+import type { Family, PercInst } from './types';
+
+/** Strike a drum of the stinger (`at` relative to the stinger's start). */
+export type Drum = (inst: PercInst, at: number, vel: number, tune?: number) => void;
 
 export type StingerKind = 'checkpoint' | 'encounterStart' | 'encounterClear' | 'sever' | 'resonance' | 'revelation' | 'choice' | 'death';
 
@@ -19,9 +22,9 @@ export const STINGER_DB: Readonly<Record<StingerKind, number>> = {
 
 /**
  * Build a stinger into `k` (kit start = now, output = stinger bus). `tonic` is the MIDI tonic of the current
- * state in the bass register; `family` picks the instrumentation.
+ * state in the bass register; `family` picks the instrumentation; `drum` strikes its percussion.
  */
-export function playStinger(kind: StingerKind, k: Kit, tonic: number, family: Family): void {
+export function playStinger(kind: StingerKind, k: Kit, tonic: number, family: Family, drum: Drum): void {
   const hz = (semis: number, oct = 0): number => mtof(tonic + semis + 12 * oct);
   switch (kind) {
     case 'checkpoint': {
@@ -35,29 +38,29 @@ export function playStinger(kind: StingerKind, k: Kit, tonic: number, family: Fa
     case 'encounterStart': {
       if (family === 'reformation') {
         // precise: a flam of clicks, a rising glass run, a clean low hit
-        [0, 0.06, 0.11].forEach((at, i) => hit('rim', k, at, 0.6 + i * 0.2));
+        [0, 0.06, 0.11].forEach((at, i) => drum('rim', at, 0.6 + i * 0.2));
         [0, 2, 7, 12, 14].forEach((s, i) => glass(k, hz(s, 3), { a: 0.003, d: 0.5, g: 0.5 }, { at: 0.12 + i * 0.07, pan: -0.5 + i * 0.25 }));
-        hit('kick', k, 0.5, 1);
+        drum('kick', 0.5, 1);
         k.osc('sine', hz(0, -1) * 2, { a: 0.01, d: 0.9, g: 0.7 }, { at: 0.5 });
       } else if (family === 'eclipse') {
         // an intake of breath, the wrong chord, and the cadence announcing itself
         breath(k, { a: 0.5, d: 0.03, g: 0.7 }, 0.8);
         wrong(k, hz(0, 1), { a: 0.45, d: 0.6, g: 0.6 }, { rate: 17 });
-        hit('odaiko', k, 0.52, 1, 46);
+        drum('odaiko', 0.52, 1, 46);
         [0.52, 0.82, 1.12].forEach((at) => cadenceHit(k, at, 1, 0));
       } else {
         // Dominion (and neutral): a rising brass fifth into one great drum
         brass(k, hz(0, 1), { a: 0.4, h: 0.05, d: 0.5, g: 0.6 }, 7);
         brass(k, hz(7, 1), { a: 0.3, h: 0.05, d: 0.6, g: 0.5 }, 8, { at: 0.18 });
-        hit('odaiko', k, 0.45, 1, 49);
-        hit('taiko', k, 0.45, 0.9, 73.4);
-        hit('taiko', k, 0.7, 0.6, 73.4);
+        drum('odaiko', 0.45, 1, 49);
+        drum('taiko', 0.45, 0.9, 73.4);
+        drum('taiko', 0.7, 0.6, 73.4);
       }
       return;
     }
     case 'encounterClear': {
       // the pressure comes off: one low breath out and an open chord left ringing
-      hit('boom', k, 0, 0.8, 36.7);
+      drum('boom', 0, 0.8, 36.7);
       const third = family === 'dominion' ? 3 : family === 'reformation' ? 2 : 7;
       pure(k, hz(0, 1), { a: 0.25, h: 0.3, d: 2.4, g: 0.6 }, { pan: -0.3 });
       pure(k, hz(7, 1), { a: 0.3, h: 0.3, d: 2.4, g: 0.5 }, { pan: 0.3 });
@@ -81,8 +84,8 @@ export function playStinger(kind: StingerKind, k: Kit, tonic: number, family: Fa
       glass(k, hz(7, 4), { a: 0.01, h: 0.4, d: 0.5, g: 0.5 }, { pan: 0.35 });
       glass(k, hz(14, 4), { a: 0.01, h: 0.4, d: 0.4, g: 0.3 }, { pan: 0.2 });
       const T = 0.5;
-      hit('odaiko', k, T, 1, 36.7);
-      hit('taiko', k, T, 1, 73.4);
+      drum('odaiko', T, 1, 36.7);
+      drum('taiko', T, 1, 73.4);
       brass(k, hz(0, 0), { a: 0.02, h: 0.2, d: 1.4, g: 0.7 }, 9, { at: T, to: k.pan(-0.35) });
       brass(k, hz(7, 0), { a: 0.03, h: 0.2, d: 1.4, g: 0.5 }, 8, { at: T, to: k.pan(-0.2) });
       [0, 7, 12, 16, 19].forEach((s, i) => pure(k, hz(s, 2), { a: 0.3, h: 0.5, d: 2.4, g: 0.4 - i * 0.04 }, { at: T + 0.45 + i * 0.06, pan: -0.4 + i * 0.2 }));
@@ -113,7 +116,7 @@ export function playStinger(kind: StingerKind, k: Kit, tonic: number, family: Fa
       brass(k, hz(1, 1), { a: 0.03, h: 0.5, d: 1.2, g: 0.5 }, 5);
       brass(k, hz(0, 1), { a: 0.2, h: 0.6, d: 2.0, g: 0.5 }, 3.5, { at: 0.7 });
       k.osc('sine', [hz(0, 0), hz(0, -1), 2.2], { a: 0.05, d: 3.0, g: 0.8 });
-      hit('boom', k, 0, 1, 34);
+      drum('boom', 0, 1, 34);
       k.noise('brown', { a: 0.4, d: 2.4, g: 0.3 }, { lp: [700, 90, 2.4] });
     }
   }

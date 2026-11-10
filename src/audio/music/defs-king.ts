@@ -36,7 +36,7 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
       { kind: 'strings', low: 38, n: 2, g: [0.24, 0.4], bright: [650, 1700], wet: 0.4 },
       { kind: 'pad', voice: 'air', low: 62, n: 2, g: 0.1, wet: 0.7 },
       { kind: 'motif', voice: 'bell', phrases: TOLL, every: 8, at: 2, base: 50, g: 0.2, wet: 0.9 },
-      { kind: 'perc', inst: 'boom', tiers: ['................', 'X...............'], mask: 'x...', g: [0, 0.3], th: [0.4, 0.9], wet: 0.6 },
+      { kind: 'perc', inst: 'boom', tiers: ['................', 'X...............'], mask: 'x...', g: [0, 0.3], th: [0.4, 0.9], room: 0.2, wet: 0.35 },
     ],
   },
 
@@ -72,11 +72,11 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
     layers: [
       { kind: 'sub', g: 0.45, follow: true },
       { kind: 'pad', voice: 'choir', low: 50, n: 3, g: [0.16, 0.22], bright: [1500, 2850], wet: 0.6 },
-      { kind: 'pulse', voice: 'clock', tiers: ['x.......x.......', 'x...x...x...x...', 'x.x.x.x.x.x.x.x.', 'x.xxx.x.x.xxx.x.'], notes: [0, 1, 2, 1, 3, 1, 2, 1], low: 74, g: [0.14, 0.3], wet: 0.5 },
+      { kind: 'pulse', voice: 'clock', tiers: ['x.......x.......', 'x...x...x...x...', 'x.x.x.x.x.x.x.x.', 'x.xxx.x.x.xxx.x.'], notes: [0, 1, 2, 1, 3, 1, 2, 1], low: 74, g: [0.16, 0.34], room: 0.25, wet: 0.3 },
       { kind: 'strings', low: 38, n: 2, g: [0.14, 0.26], bright: [750, 1900], wet: 0.35 },
       { kind: 'motif', voice: 'bell', phrases: KING, every: 4, base: 62, g: 0.3, wet: 0.8, when: 'unresolved' },
       { kind: 'motif', voice: 'bell', phrases: KING_RESOLVED, every: 4, base: 62, g: 0.32, wet: 0.8, when: 'resolved' },
-      { kind: 'perc', inst: 'metal', tiers: ['................', '........x.......'], g: [0, 0.1], th: [0.5, 1], wet: 0.6 },
+      { kind: 'perc', inst: 'metal', tiers: ['................', '........x.......'], g: [0, 0.12], th: [0.5, 1], room: 0.3, wet: 0.4 },
     ],
   },
 
@@ -116,8 +116,10 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
     chords: [ch(3, 'M7', 2), ch(0, 'm7', 2), ch(8, 'M7', 2), ch(10, 'sus2', 2)],
     layers: [
       { kind: 'sub', g: 0.22, follow: true },
-      { kind: 'pad', voice: 'felt', low: 53, n: 4, g: 0.4, wet: 0.4 },
+      { kind: 'pad', voice: 'felt', low: 53, n: 4, g: 0.4, bright: [2200, 3400], wet: 0.4 },
       { kind: 'pad', voice: 'warm', low: 50, n: 3, g: 0.1, bright: [750, 1350], wet: 0.4 },
+      // the room itself: a little moving air above the keyboard
+      { kind: 'pad', voice: 'air', low: 84, n: 2, g: 0.035, wet: 0.5 },
       { kind: 'motif', voice: 'felt', phrases: [[[4, 7, 8, 0.6], [14, 4, 10, 0.5]], [[6, 0, 8, 0.55], [16, 2, 6, 0.45], [22, 4, 10, 0.5]], [[8, 9, 12, 0.5]]], every: 4, at: 1, base: 65, g: 0.3, wet: 0.5 },
     ],
   },
@@ -144,9 +146,10 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
       { kind: 'strings', low: 38, n: 3, gate: ['X.......x.......'], legato: false, g: 0.36, bright: [1150, 2650], wet: 0.35 },
       { kind: 'pad', voice: 'glass', low: 62, n: 3, g: 0.16, wet: 0.6 },
       { kind: 'pad', voice: 'warm', low: 50, n: 2, g: 0.14, wet: 0.4 },
-      { kind: 'perc', inst: 'odaiko', tiers: ['X.........x.....'], g: 0.24, human: 0.01, wet: 0.5 },
-      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...'], g: 0.2, wet: 0.2 },
-      { kind: 'pulse', voice: 'pluck', tiers: ['x..x..x.x..x..x.'], notes: [0, 1, 2, 1, 3, 2, 1, 2], low: 62, g: 0.18, wet: 0.35 },
+      { kind: 'perc', inst: 'odaiko', tiers: ['X.........x.....'], g: 0.3, human: 0.01, room: 0.3, wet: 0.15 },
+      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...'], g: 0.24, room: 0.2 },
+      { kind: 'perc', inst: 'shime', tiers: ['x...x...x...x...'], g: 0.1, human: 0.004, room: 0.2 },
+      { kind: 'pulse', voice: 'pluck', tiers: ['x..x..x.x..x..x.'], notes: [0, 1, 2, 1, 3, 2, 1, 2], low: 62, g: 0.2, room: 0.15, wet: 0.15 },
       { kind: 'motif', voice: 'horn', phrases: TARRIK, every: 4, base: 50, g: 0.34, wet: 0.5 },
       { kind: 'motif', voice: 'glass', phrases: SELENE, every: 4, at: 2, base: 74, g: 0.3, wet: 0.65 },
     ],

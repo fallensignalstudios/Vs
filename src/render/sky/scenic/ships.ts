@@ -30,14 +30,14 @@ const FALLBACK: Record<Faction, Record<HullRole, { color: number; rough: number;
     dark: { color: PALETTE.domBlack, rough: 0.6, metal: 0.5 }, metal: { color: PALETTE.goldDeep, rough: 0.4, metal: 0.9 },
     glow: { color: 0x000000, rough: 0.5, metal: 0, emissive: PALETTE.domAmber, intensity: 2 },
     glass: { color: 0x0a0605, rough: 0.12, metal: 0.6 },
-    engine: { color: 0x000000, rough: 0.5, metal: 0, emissive: PALETTE.cinderHot, intensity: 0.9 },
+    engine: { color: 0x0a0503, rough: 0.5, metal: 0, emissive: PALETTE.cinderHot, intensity: 0.07 },
   },
   reformation: {
     hull: { color: PALETTE.refSlate, rough: 0.5, metal: 0.6 }, accent: { color: PALETTE.refNavy, rough: 0.5, metal: 0.4 },
     dark: { color: 0x0d1118, rough: 0.7, metal: 0.3 }, metal: { color: PALETTE.refSteel, rough: 0.32, metal: 0.9 },
     glow: { color: 0x000000, rough: 0.5, metal: 0, emissive: PALETTE.refBlue, intensity: 2 },
     glass: { color: 0x050a10, rough: 0.1, metal: 0.6 },
-    engine: { color: 0x000000, rough: 0.5, metal: 0, emissive: PALETTE.frost, intensity: 0.9 },
+    engine: { color: 0x03060a, rough: 0.5, metal: 0, emissive: PALETTE.frost, intensity: 0.07 },
   },
 };
 
@@ -97,11 +97,12 @@ export class ShipMaterials {
   }
 
   update(time: number): void {
-    for (const d of this.dying) {
-      // a failing strip: mostly dim, occasional slow surges, rare drop-outs — never a hard strobe
+    for (let i = 0; i < this.dying.length; i++) {
+      const d = this.dying[i];
+      // a failing strip: mostly dim, slow surges, an occasional soft sag — never a hard strobe
       const a = Math.sin(time * 1.9 + d.seed) * Math.sin(time * 0.73 + d.seed * 2.1);
-      const drop = Math.sin(time * 5.3 + d.seed * 3.0) > 0.92 ? 0.25 : 1;
-      d.m.emissiveIntensity = d.base * (0.35 + 0.45 * (0.5 + 0.5 * a)) * drop;
+      const sag = 1 - 0.6 * Math.max(0, Math.sin(time * 0.9 + d.seed * 3.0) - 0.8) * 5;
+      d.m.emissiveIntensity = d.base * (0.35 + 0.45 * (0.5 + 0.5 * a)) * sag;
     }
   }
 
@@ -116,7 +117,8 @@ export class ShipMaterials {
     if (!mats || isStub(mats)) return null;
     try {
       if (role === 'engine') {
-        const m = mats.emissive(faction === 'dominion' ? PALETTE.cinderHot : PALETTE.frost, 1);
+        // parked craft: the throats only smoulder
+        const m = mats.emissive(faction === 'dominion' ? PALETTE.cinderHot : PALETTE.frost, 0.12);
         return m && !isStub(m) && (m as THREE.Material).isMaterial ? m : null;
       }
       const id = ROLE_MATS[faction][role];

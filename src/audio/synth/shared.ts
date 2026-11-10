@@ -3,12 +3,15 @@
  * Built once per sample rate and reused by every voice.
  */
 import { ROOMS, fillNoise, makeCurve, makeHallIR, type CurveName, type NoiseColor, type RoomName } from './buffers';
+import { WaveBank } from './waves';
 
 export interface Shared {
   readonly noise: Readonly<Record<NoiseColor, AudioBuffer>>;
   readonly curves: Readonly<Record<CurveName, Float32Array<ArrayBuffer>>>;
   /** convolution impulses: three world spaces and the score's own stage */
   readonly rooms: Readonly<Record<RoomName, AudioBuffer>>;
+  /** rendered ensemble loops (filled asynchronously by the pre-render; a miss falls back to oscillators) */
+  readonly waves: WaveBank;
 }
 
 // distinct (mutually non-multiple) lengths so layered loops never phase-lock audibly
@@ -41,7 +44,7 @@ export function makeShared(ac: BaseAudioContext): Shared {
     buf.copyToChannel(r, 1);
     rooms[name] = buf;
   }
-  const shared: Shared = { noise, curves, rooms };
+  const shared: Shared = { noise, curves, rooms, waves: new WaveBank() };
   cache.set(sr, shared);
   return shared;
 }

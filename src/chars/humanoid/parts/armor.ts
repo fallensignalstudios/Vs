@@ -323,8 +323,8 @@ export function backpack(b: MeshBuilder, rig: RigView, pal: Pal, o: PackOpts): v
     b.surf({ ...pal.plate, zone: ZONE.back });
     b.scope(() => { b.translate(0, 1.47, zb + 0.04 * s); box(b, 0.2 * k * s, 0.05, 0.1 * s, { bevel: 0.014 }); });
     b.scope(() => { b.translate(0, 1.225, zb + 0.04 * s); box(b, 0.19 * k * s, 0.05, 0.085 * s, { bevel: 0.014 }); });
-    // amber heat slots
-    b.surf({ ...pal.glow, zone: ZONE.back });
+    // amber heat slots: a soft glow, well under the weapon edges (they must not outshine the blade)
+    b.surf({ ...pal.glow, zone: ZONE.back, glow: 1.2 });
     for (const sx of [-1, 1]) b.scope(() => { b.translate(sx * 0.055 * k * s, 1.35, zb + 0.102 * s); box(b, 0.022, 0.15 * s, 0.012, { bevel: 0.004, edge: 0 }); });
     // side canisters
     for (const sx of [-1, 1]) {

@@ -61,12 +61,12 @@ void main() {
   vec3 up = strip ? normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz) : vec3(0.0, 1.0, 0.0);
   vec3 right = strip ? normalize(cross(up, vec3(0.0, 0.0, 1.0))) : vec3(1.0, 0.0, 0.0);
   if (iSize.w > 1.5) {
-    // streak: lie along the on-screen velocity and stretch by the distance covered in a 1/20 s exposure
+    // streak: lie along the on-screen velocity and stretch by the distance covered in a 1/8 s exposure
     vec3 vv = (viewMatrix * modelMatrix * vec4(vel, 0.0)).xyz;
     float sp = length(vv.xy);
     up = sp > 1e-4 ? vec3(vv.xy / sp, 0.0) : vec3(0.0, 1.0, 0.0);
     right = vec3(up.y, -up.x, 0.0);
-    h = max(h, sp * 0.05);
+    h = max(h, sp * 0.125);
   }
   vec3 pv = vc.xyz + right * position.x * w * 0.5 + up * position.y * h * 0.5;
   gl_Position = projectionMatrix * vec4(pv, 1.0);

@@ -9,6 +9,7 @@
 import { clamp } from '@/core/mathx';
 import type { CurveName, NoiseColor } from './buffers';
 import type { Shared } from './shared';
+import { ENSEMBLES, type EnsembleName } from './waves';
 
 /** [time offset (s), value] */
 export type Pt = readonly [number, number];
@@ -245,6 +246,37 @@ export class Kit {
     src.start(t0, this.rnd() * Math.max(0.01, buf.duration - 0.05));
     this.finish(src, stop);
     return src;
+  }
+
+  /**
+   * A detuned ensemble note (synth/waves.ts): ONE looping buffer source when the loop for this register has
+   * been rendered, the same voices as live oscillators otherwise. Stereo placement belongs to the ensemble.
+   * Returns the sources — connect an LFO to their `.detune` for vibrato.
+   */
+  ens(name: EnsembleName, f: number, env: Env, o?: SrcOpts): Array<OscillatorNode | AudioBufferSourceNode> {
+    const mul = o?.fixed ? 1 : this.pitch;
+    const wave = this.res.waves.get(name, f * mul);
+    if (!wave) {
+      const g = env.g ?? 1;
+      return ENSEMBLES[name].map((v) => this.osc(v.type, f * v.ratio, { ...env, g: g * v.g }, { ...o, detune: v.cents, pan: v.pan }));
+    }
+    const t0 = this.t + (o?.at ?? 0);
+    const len = this.envLen(env);
+    const fin = Number.isFinite(len) ? len : 1;
+    const src = this.ac.createBufferSource();
+    src.buffer = wave.buffer;
+    src.loop = true;
+    const rate = (f * mul) / wave.baseHz;
+    src.playbackRate.value = rate;
+    const g = this.ac.createGain();
+    this.inline(src, t0, fin, mul, o).connect(g);
+    g.connect(o?.to ?? this.out);
+    const stop = this.applyEnv(g.gain, t0, env);
+    // a random point in the loop: the notes of a chord must not beat in step
+    src.start(t0, this.rnd() * Math.max(0.01, wave.buffer.duration - 0.05));
+    if (stop === Infinity) this.pitched.push({ p: src.playbackRate, base: rate });
+    this.finish(src, stop);
+    return [src];
   }
 
   /**

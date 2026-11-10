@@ -23,10 +23,24 @@ export function createHumanoid(_game: Game | null, archetype: HumanoidArchetype,
   const seed = Number.isFinite(opts?.seed) ? Math.floor(opts!.seed as number) : 0;
   const variant = Number.isFinite(opts?.variant) ? Math.floor(opts!.variant as number) : 0;
   const scale = opts?.scale && opts.scale > 0 ? opts.scale : 1;
-  const fig = getFigure(archetype, def, GENERIC, seed, variant);
-  const v = new HumanoidVisualImpl(fig, scale, seed);
+  const mask = opts?.driverOnly ? new Set<string>(Array.isArray(opts.keep) ? opts.keep : []) : null;
+  const fig = getFigure(archetype, def, GENERIC, seed, variant, mask);
+  const v = new HumanoidVisualImpl(fig, { scale, seed, vary: (def.seedBuckets ?? 1) > 1 });
   if (opts?.corruption !== undefined) v.setCorruption(opts.corruption);
   return v;
 }
 
+/**
+ * Build the figures for these archetypes (and seeds) ahead of time so spawning them later does not hitch.
+ * CharacterFactory.warm() covers seed 0; pass the seeds an encounter will use to cover squad variants too.
+ */
+export function warmHumanoids(archetypes: readonly HumanoidArchetype[], seeds: readonly number[] = [0]): void {
+  for (const a of archetypes) {
+    const def = ARCHETYPES[a];
+    if (def) for (const s of seeds) getFigure(a, def, GENERIC, Number.isFinite(s) ? Math.floor(s) : 0, 0);
+  }
+}
+
 export { listActions } from './debug';
+/** Free cached figure geometry no live humanoid uses (call when a zone unloads). */
+export { releaseUnusedFigures as releaseUnusedHumanoids, figureCacheStats as humanoidCacheStats } from './figure';

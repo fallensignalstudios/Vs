@@ -30,6 +30,22 @@
  * LOOPS: ids designed to sustain under loop(): droneHum, eclipseBreath, weaverChant, linkHum, eliteRegen,
  * emitterHum, relayHum, scanSweep, liftMove, stasisField. play() on those gives a ~1.5 s excerpt. Any other id
  * passed to loop() is re-triggered end to end.
+ * A loop you asked for is never dropped: at most 14 loops (and each id's own cap, e.g. 6 drone hums) SOUND at
+ * once — the nearest to the listener — and the rest wait silently and take over as voices free up or the
+ * listener moves. Keep calling setPosition() on moving sources so that ranking stays right. clear() (zone
+ * unload) stops them all; loops requested straight after clear() start normally.
+ *
+ * LEVELS: every sound has an authored level; volumes are balanced by measured loudness, not by peak, at the
+ * default settings (master 0.8 / music 0.7 / sfx 0.9). `SfxOpts.volume` scales a single play (1 = authored).
+ * The music and SFX sliders really reach zero: reverb tails and stingers follow their bus fader.
+ *
+ * SPACES: setAmbience() also selects the acoustic space SFX are heard in — one of three reverbs or a blend
+ * (a 24 m gallery, a 50 m hall, the 300 m atrium). Rapid cues (footsteps, combo hits, bolts) get only the
+ * early part of it so bursts stay articulate; single large events get the full tail.
+ *
+ * RECORDINGS: registerSample(id, AudioBuffer) makes a decoded recording stand in for a procedural id (or adds
+ * a brand-new id) through the same voice path. Frequent procedural one-shots, the score's percussion and its
+ * pad/string ensembles are themselves pre-rendered when audio starts and replayed as buffers.
  *
  * MUSIC IDENTITIES (so zone authors can pick states by meaning): Dominion/Tarrik = D minor, brass + taiko
  * (context, approachTarrik, combatTarrik). Reformation/Selene = A suspended, glass + precise clicks
@@ -99,10 +115,25 @@ export interface SfxOpts {
 }
 
 export interface LoopHandle {
+  /** Move the source. Only loops created WITH a `pos` are positional; on a non-positional loop this is a no-op. */
   setPosition(p: Vec3Like): void;
+  /** 0..4 relative to the authored level (non-finite values are ignored). */
   setVolume(v: number, fadeSeconds?: number): void;
+  /**
+   * Pitch multiplier 0.25..4. Follows the tonal layers of the sustaining ids (and the playback rate of a
+   * registered recording); filtered-noise layers keep their colour. On a re-triggered one-shot it applies
+   * from the next repetition.
+   */
   setPitch(p: number): void;
   stop(fadeSeconds?: number): void;
+}
+
+/** Options for AudioSystem.registerSample. */
+export interface AudioSampleOpts {
+  /** linear gain relative to the level the id is authored at (default 1; the recording is loudness-matched first) */
+  gain?: number;
+  /** loop the buffer when the id is used with loop() (default: true for the ids designed as loops) */
+  loop?: boolean;
 }
 
 export interface AudioSystem {
@@ -118,15 +149,19 @@ export interface AudioSystem {
   /**
    * sustained positional loop (drone hum, link hum, emitter). Safe to call before audio is unlocked: the handle
    * remembers position/volume/pitch and the voice starts when audio becomes available. clear() stops them all.
+   * `opts.delay` is ignored (loops start at once). See LOOPS in the header for the caps and what happens
+   * beyond them.
    */
   loop(id: SfxId, opts?: SfxOpts): LoopHandle;
 
   /**
-   * Cross-fade to a music state. The change lands on the next bar line of the current state (next beat when
-   * `fadeSeconds` < 0.35; never more than ~2.4 s away): the outgoing rhythm stops there and its tails fade
-   * under the incoming state over `fadeSeconds` (default 2). `'silence'` fades out.
+   * Change the music state. The change lands on the next bar line of the current state (next beat when
+   * `fadeSeconds` < 0.35; never more than ~2.6 s away): the incoming state starts there at full level — its
+   * first downbeat is heard — while the outgoing rhythm stops and its tails fade underneath over
+   * `fadeSeconds` (default 2). `'silence'` fades out. Unknown states warn once and mean `'silence'`.
    */
   setMusic(state: MusicState, fadeSeconds?: number): void;
+  /** the state actually playing (an unknown id reads back as `'silence'`) */
   readonly music: MusicState;
   setAmbience(id: AmbienceId, fadeSeconds?: number): void;
   /** 0..1 — combat layers of the current music state follow this */
@@ -136,12 +171,15 @@ export interface AudioSystem {
 
   /** short per-speaker comm tick when a subtitle line starts (no VO in this build) */
   speak(speaker: string, channel?: 'voice' | 'radio' | 'system' | 'narration'): void;
-  /** temporarily lower music/ambience under dialogue */
+  /**
+   * temporarily lower music (by `amount`, 0..0.95 of its level — reverb included) and ambience (by 60 % of that)
+   * for `seconds`, then recover. `dialogue:line` already does this with 0.4.
+   */
   duck(amount: number, seconds: number): void;
   /**
    * 0..1 low-pass "muffled pressure" on the world bus (also used for the quarantine strip and slow-mo).
-   * Affects SFX, ambience and reverb tails — never music or UI. Useful values: 0.2–0.35 pressure-muffled halls
-   * (Z00–Z04), ~0.6 slow-mo / stunned, 1 sealed (≈ 280 Hz).
+   * Affects SFX, ambience and their reverb — never the score (which has its own reverb), UI or dialogue.
+   * Useful values: 0.2–0.35 pressure-muffled halls (Z00–Z04), ~0.6 slow-mo / stunned, 1 sealed (≈ 280 Hz).
    */
   setMuffle(amount: number, fadeSeconds?: number): void;
   /**
@@ -161,7 +199,7 @@ export interface AudioSystem {
   clear(): void;
 
   // --- additions by the audio subsystem ---------------------------------------------------------
-  /** ambience bed currently requested */
+  /** ambience bed actually playing (an unknown id reads back as `'none'`) */
   readonly ambience: AmbienceId;
   /** 0..1 music intensity as currently heard (smoothed: quick to rise, slow to settle) */
   readonly intensity: number;
@@ -176,11 +214,23 @@ export interface AudioSystem {
   /**
    * Eclipse cadence in the score: 0 = stamped-out identical beats, 1 = stumbling. `stinger('sever')` sets 1 and
    * a new link resets 0 automatically; use this to hold a state by hand (e.g. keep it irregular after the last
-   * Weaver dies).
+   * Weaver dies). Non-finite values (0/0 links) are ignored. Remembered if called before audio is unlocked.
    */
   setCadenceIrregular(amount: number): void;
   /** live state for debug overlays / smoke tests */
   debugInfo(): AudioDebugInfo;
+  /**
+   * Make a decoded recording stand in for `id` wherever it is played or looped — same bus, panner, reverb
+   * sends, rate limits and authored level as the procedural sound, which remains the fallback for every id
+   * without a recording. An id that has no procedural recipe becomes playable (voice-over lines, one-off hero
+   * cues). Registering several buffers for one id rotates them. Safe before unlock() (applied when audio
+   * starts). The recording is loudness-matched to the id's level; `opts.gain` trims it from there.
+   */
+  registerSample(id: SfxId, buffer: AudioBuffer, opts?: AudioSampleOpts): void;
+  /** Forget the recordings for `id`: the procedural sound plays again. */
+  unregisterSample(id: SfxId): void;
+  /** Detach every listener, stop everything and close the AudioContext. The system stays silent afterwards. */
+  dispose(): void;
 }
 
 export interface AudioDebugInfo {
@@ -195,4 +245,14 @@ export interface AudioDebugInfo {
   intensity: number;
   muffle: number;
   meridianResolved: boolean;
+  /** loops currently sounding (at most 14) */
+  loops: number;
+  /** loops requested and not stopped, sounding or waiting for a voice */
+  loopsRequested: number;
+  /** Eclipse cadence irregularity 0..1 */
+  cadenceIrregular: number;
+  /** procedural sounds pre-rendered to buffers so far (0 until shortly after unlock) */
+  prerendered: number;
+  /** ids with a registered recording */
+  samples: number;
 }

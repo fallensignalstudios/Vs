@@ -69,10 +69,25 @@ export interface PlayOpts {
   /**
    * Named moments inside the action: 'hit' (strike connects), 'release' (projectile leaves hand/muzzle),
    * 'step', 'impact' (body/weapon hits ground), 'end'.
+   * Humanoids also send 'cancel' instead of 'end' when a one-shot is replaced by another play() or stopped
+   * before it finished — every one-shot ends with exactly one of the two.
    */
   onEvent?: (name: string) => void;
   /** upper-body only (legs keep locomotion) */
   upperOnly?: boolean;
+  /**
+   * Start a one-shot this many seconds into its clip (humanoids). The returned ActionInfo is shortened to match.
+   * Not needed for charged heavies: `attackHeavy` played while `attackHeavyCharge` is held starts at its coil
+   * automatically (see HumanoidVisual).
+   */
+  startAt?: number;
+  /**
+   * Direction of the resulting body motion, relative to facing and in the moveYaw convention (0 = forward,
+   * +PI/2 = to the figure's left, PI = backward). Humanoids use it for `dodge` (picks the forward / back / side
+   * roll; defaults to the last moveYaw passed to setLocomotion) and for `hitLight` / `hitHeavy` / `guardHit`
+   * (the way the blow shoves the body; default PI = struck from the front).
+   */
+  dir?: number;
 }
 
 export interface ActionInfo {
@@ -151,6 +166,14 @@ export interface CharacterCreateOpts {
   corruption?: number;
   /** scale multiplier */
   scale?: number;
+  /**
+   * Humanoids only: build an animation DRIVER instead of a figure — the full rig, animator, sockets and cloth
+   * simulation, but no body geometry (zero triangles, nothing to build or cache). Used to animate another mesh
+   * (a generated GLB) with the procedural moveset; copy bone transforms from the driver's skeleton each frame.
+   */
+  driverOnly?: boolean;
+  /** with `driverOnly`: procedural parts to keep as the only drawn geometry (e.g. the cape, a weapon fallback) */
+  keep?: Array<'cloth' | 'melee' | 'ranged' | 'shield' | 'case'>;
 }
 
 export interface CharacterFactory {
@@ -189,18 +212,52 @@ export const HUMANOID_SOCKETS = [
  *  - `shield` shows / hides the Enforcer tower shield (left forearm).
  *  - `prop: 'case'` puts the sealed case in the left hand; `prop: 'rifle'` is the same as `ranged: true` for
  *    archetypes whose ranged weapon is a long gun.
+ *  - `hideSheathed: true` removes sheathed weapons from the body altogether (seated scenes: a greatsword on the
+ *    back does not fit a chair).
  * Carry stance (idle / walk / run arm poses) follows the loadout automatically.
  *
- * Action notes: `hitLight`, `hitHeavy` and `guardHit` are ADDITIVE reactions — they never interrupt the action
- * in progress. `guard`, `aim`, `aimRifle` are looping upper-body poses that persist until stop(); they are also
- * applied automatically while setLocomotion(..., { guarding / aiming }) is set and no other looping pose plays.
- * `death`, `knockdown`, `lieInjured`, `sit*`, `kneel*`, `trapped` hold their final pose until stop() or the
- * next play(). Unknown action names play a small generic gesture and warn once.
+ * ACTION RULES (humanoids)
+ *  - Layers. A looping / held FULL-BODY pose (`sit`, `sitTalk`, `sitInjured`, `kneel`, `kneelTend`, `lieInjured`,
+ *    `trapped`, `cower`, `distress`, `grounding`, `tetherStop`, `liftPlate` once raised, …) stays until stop() or
+ *    another full-body pose. Looping UPPER-BODY poses (`talk`, `listen`, `guard`, `aim`, `aimRifle`,
+ *    `holdConsole`, `limp`, `walkAway`, a held `handOver` / `assent` / `turnAway`) layer on top of it — a seated
+ *    figure stays seated while it talks, nods, points, receives or hands over. One-shots play over both and the
+ *    poses return when they end. stop(name) removes one layer; stop() removes everything.
+ *  - `hitLight`, `hitHeavy`, `guardHit` are ADDITIVE reactions: they never interrupt, and take PlayOpts.dir.
+ *  - `guard`, `aim` also apply automatically while setLocomotion(..., { guarding / aiming }) is set and no other
+ *    upper-body pose plays (`aim` needs the ranged weapon drawn). Aiming also shortens the stride and lowers the
+ *    hips; setAimPitch() is closed-loop — the `muzzle` socket's −Z points at the requested pitch within ~1°.
+ *  - `death` is final: once started, later play() calls are ignored (their onEvent gets 'cancel') until stop().
+ *    The weapon in hand is let go and comes to rest on the floor; stop() puts it back. `death` and `knockdown`
+ *    play in real time even while the figure is frozen, so a stasis kill still reaches 'end'.
+ *  - `frozen` holds the current pose; ANY later non-additive play(), stop('frozen') or stop() releases it.
+ *    setFrozen(amount) is the stasis look and slows animation by (1 − amount); action clocks and events slow
+ *    with it (an arrested attack does not land). info('frozen') / play('idle') report duration 0.
+ *  - isPlaying() (no argument) is true only while a one-shot or reaction is in progress; held poses answer to
+ *    isPlaying(name).
+ *  - `attackHeavyCharge` is a held coil. Playing `attackHeavy` out of it skips the wind-up (the swing starts at the
+ *    coil key, the hit lands ≈ 0.14 s later) and releases the charge pose; info('attackHeavy') reports the
+ *    shortened timing while the charge is held.
+ *  - `dodge` is in place (the driver moves the actor); it picks a forward / back / left / right roll from
+ *    PlayOpts.dir or the last moveYaw.
+ *  - `liftPlate`, `carryStretcher`, `kneelTend`, `holdPlane`, `holdConsole` need both hands: held weapons are
+ *    sheathed while they play and return afterwards.
+ *  - Blades never go through the floor or the wielder: a stroke that reaches the ground stops on it ('impact'
+ *    marks the moment), and Verity's energy blades shorten where they would otherwise cut their owner.
+ *  - Unknown action names play a small generic gesture and warn once.
+ * Locomotion: the stride follows the distance the root really moved (feet do not slide on starts, stops, turns or
+ * against walls), planted feet stay put in world space, and a figure turned on the spot takes turn steps. Report
+ * the INTENDED planar speed to setLocomotion; displacement beyond it (knockback, dodges, platforms) is treated as
+ * being carried.
  */
+export type HumanoidLoadout = { melee?: boolean; ranged?: boolean; shield?: boolean; prop?: 'case' | 'rifle' | 'none'; hideSheathed?: boolean };
+
 export interface HumanoidVisual extends CharacterVisual {
   readonly archetype: HumanoidArchetype;
-  /** triangle count of the figure (budget checks) */
+  /** triangle count of the figure at full detail (budget checks); 0 for a mesh-less driver */
   readonly triangles: number;
+  /** As CharacterVisual.setLoadout, plus `hideSheathed` (see the loadout rules above). */
+  setLoadout(opts: HumanoidLoadout): void;
   /**
    * Footfall callback, fired at each heel strike while moving (audio footsteps, vfx `footDust`).
    * `world` is a scratch vector — copy it if you keep it.
@@ -226,7 +283,7 @@ export function isHumanoidVisual(v: CharacterVisual | null | undefined): v is Hu
 /** Every action a humanoid has an authored clip for (others fall back to a generic gesture). */
 export const HUMANOID_ACTIONS: readonly AnimAction[] = [
   'attackLight1', 'attackLight2', 'attackLight3', 'attackLight4', 'attackHeavy', 'attackHeavyCharge',
-  'counter', 'parry', 'deflect', 'dodge', 'shoot', 'throw', 'slam', 'dispatch',
+  'counter', 'parry', 'deflect', 'dodge', 'dodgeBack', 'dodgeLeft', 'dodgeRight', 'shoot', 'throw', 'slam', 'dispatch',
   'hitLight', 'hitHeavy', 'stagger', 'guardHit', 'guardBreak', 'knockdown', 'getUp', 'death',
   'shieldBash', 'batonStrike', 'lunge', 'roar', 'spawnBreach',
   'guard', 'aim', 'aimRifle', 'frozen', 'linkedSync',
