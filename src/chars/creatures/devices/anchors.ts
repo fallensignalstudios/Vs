@@ -273,7 +273,7 @@ export class FrostAnchor extends DeviceBase implements FrostAnchorVisual {
     }, opts);
     this.ring = this.rig.b('ring');
     this.cry = CLUSTERS.map((_, i) => this.rig.b('cry' + i));
-    for (let i = 0; i < this.cry.length; i++) this.addChunk(this.cry[i]!, [Math.cos(CLUSTERS[i]!.a) * 1.8, 0.4, Math.sin(CLUSTERS[i]!.a) * 1.8], i, 2.2);
+    for (let i = 0; i < this.cry.length; i++) this.addChunk(this.cry[i]!, [Math.cos(CLUSTERS[i]!.a) * 1.1, 0.4, Math.sin(CLUSTERS[i]!.a) * 1.1], i, 2.2);
     this.u.uDissolveColor.value.setHex(0xcfeeff);
   }
 

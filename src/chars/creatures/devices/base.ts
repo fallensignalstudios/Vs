@@ -275,7 +275,7 @@ export abstract class DeviceBase extends CreatureBase implements DeviceVisual {
       ch.qRest.setFromUnitVectors(_a.normalize(), _up).multiply(_qs);
     }
     // wreckage travels: widen the culling sphere around the whole debris field
-    this.rig.setBoundsCenter(0, 0.6, 0, 4.5);
+    this.rig.setBounds(0, 0.6, 0, 5.5);
   }
 
   /** throw the registered chunks; `t` = seconds since death started. Call after the live pose of the frame. */

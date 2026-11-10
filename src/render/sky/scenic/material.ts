@@ -275,7 +275,8 @@ void main() {
   float fres = 0.07 + 0.93 * pow(1.0 - max(dot(nr, v), 0.0), 5.0);
   vec3 rf = reflect(-v, nr);
   rf.y = abs(rf.y) * step(0.5, n.y) + rf.y * (1.0 - step(0.5, n.y)); // a floor cannot reflect what is below it
-  lit += skyLite(rf) * fres * polish * mix(0.25, 1.0, skyVis) + lamp * fres * polish * 0.6;
+  // (a surface only mirrors the sky it can see: gallery interiors must not pick up the red remnant through a wall)
+  lit += skyLite(rf) * fres * polish * skyVis * skyVis + lamp * fres * polish * 0.6;
 
   // --- haze: exponential with distance, thicker below the piece origin (the abyss)
   float low = uLowHaze * clamp((uLowStart - vLocal.y) / uLowDepth, 0.0, 1.0);

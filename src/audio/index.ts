@@ -395,6 +395,7 @@ class AudioSystemImpl implements AudioSystem {
     this.loops.clear();
     this.pendingSamples.length = 0;
     const ctx = this.ctx;
+    this.run('dispose', (e) => e.dispose());
     this.engine = null;
     this.ctx = null;
     if (ctx && typeof ctx.close === 'function') {

@@ -9,6 +9,8 @@ export interface SourceSpan {
   kind: 'osc' | 'buffer';
   start: number;
   stop: number;
+  /** buffer offset the source was started at (noise phase) */
+  offset: number;
 }
 
 export class FakeParam {
@@ -60,6 +62,7 @@ export class FakeNode {
   readonly outputs = new Set<FakeNode | FakeParam>();
   constructor(readonly ctx: FakeContext, readonly type: string) {
     ctx.nodes++;
+    ctx.all.push(this);
   }
 
   protected param(name: string, v: number): FakeParam {
@@ -77,7 +80,7 @@ export class FakeNode {
   }
 }
 
-class FakeSource extends FakeNode {
+export class FakeSource extends FakeNode {
   private started = false;
   private span: SourceSpan | null = null;
   onended: (() => void) | null = null;
@@ -87,7 +90,7 @@ class FakeSource extends FakeNode {
     if (!Number.isFinite(when) || when < 0) this.ctx.problem(`${this.type}.start: bad time ${when}`);
     if (!Number.isFinite(offset) || offset < 0) this.ctx.problem(`${this.type}.start: bad offset ${offset}`);
     this.started = true;
-    this.span = { kind: this.type === 'OscillatorNode' ? 'osc' : 'buffer', start: Math.max(when, this.ctx.currentTime), stop: Infinity };
+    this.span = { kind: this.type === 'OscillatorNode' ? 'osc' : 'buffer', start: Math.max(when, this.ctx.currentTime), stop: Infinity, offset };
     this.ctx.spans.push(this.span);
   }
 
@@ -101,7 +104,7 @@ class FakeSource extends FakeNode {
   }
 }
 
-class FakeBuffer {
+export class FakeBuffer {
   readonly duration: number;
   private readonly data: Float32Array[];
   constructor(readonly numberOfChannels: number, readonly length: number, readonly sampleRate: number) {
@@ -124,6 +127,8 @@ export class FakeContext {
   readonly sampleRate = 44100;
   state: 'running' | 'suspended' | 'closed' = 'running';
   nodes = 0;
+  /** every node ever created (graph inspection in tests) */
+  readonly all: FakeNode[] = [];
   readonly problems: string[] = [];
   readonly spans: SourceSpan[] = [];
   readonly destination: FakeNode;
@@ -166,7 +171,8 @@ export class FakeContext {
   createDelay(): FakeNode { return this.node('DelayNode', { delayTime: 0 }); }
   createWaveShaper(): FakeNode { return this.node('WaveShaperNode', {}, { curve: null, oversample: 'none' }); }
   createConvolver(): FakeNode { return this.node('ConvolverNode', {}, { buffer: null, normalize: true }); }
-  createDynamicsCompressor(): FakeNode { return this.node('DynamicsCompressorNode', { threshold: -24, knee: 30, ratio: 12, attack: 0.003, release: 0.25 }); }
+  createDynamicsCompressor(): FakeNode { return this.node('DynamicsCompressorNode', { threshold: -24, knee: 30, ratio: 12, attack: 0.003, release: 0.25 }, { reduction: 0 }); }
+  createAnalyser(): FakeNode { return this.node('AnalyserNode', {}, { fftSize: 2048, getFloatTimeDomainData: (a: Float32Array): void => void a.fill(0) }); }
   createBuffer(channels: number, length: number, sampleRate: number): FakeBuffer { return new FakeBuffer(channels, length, sampleRate); }
 
   /** Peak number of sources sounding at once between `from` and `to` (context seconds). */
@@ -195,6 +201,25 @@ export class FakeContext {
   suspend(): Promise<void> {
     this.state = 'suspended';
     return Promise.resolve();
+  }
+
+  close(): Promise<void> {
+    this.state = 'closed';
+    return Promise.resolve();
+  }
+
+  /** Can a signal leaving `from` reach the destination without passing any node in `blocked`? */
+  reaches(from: FakeNode, blocked: ReadonlySet<FakeNode>): boolean {
+    const seen = new Set<FakeNode>();
+    const todo: FakeNode[] = [from];
+    while (todo.length) {
+      const n = todo.pop() as FakeNode;
+      if (n === this.destination) return true;
+      if (seen.has(n) || blocked.has(n)) continue;
+      seen.add(n);
+      for (const o of n.outputs) if (o instanceof FakeNode) todo.push(o);
+    }
+    return false;
   }
 
   /** A typed view for code that expects a BaseAudioContext. */

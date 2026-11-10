@@ -18,7 +18,9 @@ const lengthCache = new Map<string, number>();
 export function sfxLength(id: string): number {
   let v = lengthCache.get(id);
   if (v === undefined) {
-    v = new AudioEngine(new OfflineAudioContext(2, 128, 44100), { seed: 7283, samples: false }).play(id);
+    const e = new AudioEngine(new OfflineAudioContext(2, 128, 44100), { seed: 7283, samples: false });
+    v = e.play(id);
+    e.dispose();
     lengthCache.set(id, v);
   }
   return v;

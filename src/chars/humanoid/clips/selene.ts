@@ -49,7 +49,12 @@ const CUT_LOW: PoseSpec = {
   armR: { p: [0.46, -0.33, 0.19], blade: [-0.17, -0.06, 0.98] }, armL: BACK, ...LUNGE,
 };
 /** the weapon upright beside her, forward blade down: where the wheel passes on its way back to ready */
-const UPRIGHT: PoseSpec['armR'] = { p: [0.34, -0.06, 0.19], blade: [-0.09, -0.99, -0.1] };
+const UPRIGHT: PoseSpec['armR'] = { p: [0.46, -0.06, -0.05], blade: [-0.22, -0.97, -0.09] };
+/** recovery: the wheel is brought forward and down the right side, clear of the lead leg, before settling */
+const RECOVER: PoseSpec = {
+  hips: [0, -0.05, 0.02], hipsR: [2, -12, 0], spine: [5, 0, 0], chest: [3, 0, 0], neck: [-2, 6, 0], head: [-3, 8, 0],
+  armR: { p: [0.34, 0.12, 0.37], blade: [-0.26, -0.88, 0.39] }, legL: { p: [-0.1, 0, 0.2], yaw: 2 }, legR: { p: [0.15, 0, -0.19], pitch: 0, yaw: 32 },
+};
 
 /** The wheel starts: the forward blade lifts, cocks high over the right shoulder and falls through the target. */
 const light1: ClipSpec = {
@@ -67,6 +72,9 @@ const light1: ClipSpec = {
   events: [[0.42, 'hit']],
 };
 
+/** light2's finish: the rear blade low ahead on the left, the forward blade trailing level behind the right hip */
+const SWEPT: PoseSpec['armR'] = { p: [0.28, -0.42, 0.13], blade: [0.03, -0.02, -1] };
+
 /** The same turn carries the REAR blade up, over and down the same line. */
 const light2: ClipSpec = {
   duration: 0.34, base: S_READY, fadeIn: 0.04, fadeOut: 0.16,
@@ -75,12 +83,14 @@ const light2: ClipSpec = {
     { t: 0, ...CUT_LOW },
     { t: 0.2, ease: 'out', hips: [-0.01, -0.06, 0.08], hipsR: [3, 4, 0], spine: [5, 2, 0], chest: [3, 0, 0], neck: [-2, 0, 0], head: [-3, 0, 0],
       armR: { p: [0.46, 0.12, 0.07], blade: [-0.09, -0.83, 0.54] } },
-    { t: 0.42, ease: 'in', hips: [0, -0.07, 0.12], hipsR: [3, 8, 0], spine: [6, 8, 0], chest: [4, 14, 0], neck: [-2, -10, 0], head: [-3, -14, 0],
-      armR: { p: [0.46, -0.24, 0.31], blade: [0.03, -0.61, -0.79] },
-      legR: { p: [0.14, 0, 0.06], yaw: 16, pitch: -10 } },
-    { t: 0.66, ease: 'out', hipsR: [3, 14, 0], chest: [4, 26, 0], neck: [-2, -18, 0], head: [-3, -24, 0],
-      armR: { p: [0.34, -0.42, 0.13], blade: [0.21, 0.04, -0.98] } },
-    { t: 0.84, ease: 'inOut', hips: [0, -0.05, 0.04], hipsR: [2, -6, 0], spine: [5, 2, 0], chest: [3, 6, 0], neck: [-2, 0, 0], head: [-3, 0, 0], armR: UPRIGHT },
+    { t: 0.31, ease: 'linear', hips: [0, -0.065, 0.1], hipsR: [3, 6, 0], spine: [5, 5, 0], chest: [3, 7, 0], neck: [-2, -5, 0], head: [-3, -7, 0],
+      armR: { p: [0.46, 0.03, 0.19], blade: [-0.03, -0.99, -0.11] } },
+    { t: 0.42, ease: 'linear', hips: [0, -0.07, 0.12], hipsR: [3, 8, 0], spine: [6, 8, 0], chest: [4, 14, 0], neck: [-2, -10, 0], head: [-3, -14, 0],
+      armR: { p: [0.46, -0.24, 0.31], blade: [0.03, -0.61, -0.79] } },
+    { t: 0.66, ease: 'out', hipsR: [3, 14, 0], chest: [4, 26, 0], neck: [-2, -18, 0], head: [-3, -24, 0], armR: SWEPT },
+    { t: 0.8, ease: 'inOut', hips: [0, -0.04, 0.06], hipsR: [0, 4, 0], spine: [2, 4, 0], chest: [0, 10, 0], neck: [0, -4, 0], head: [0, -6, 0], armR: UPRIGHT,
+      legL: { p: [-0.1, 0, 0.26], yaw: 0 }, legR: { p: [0.15, 0, -0.2], pitch: -12, yaw: 28 } },
+    { t: 0.9, ease: 'inOut', ...RECOVER },
     { t: 1, ease: 'inOut', ...S_READY },
   ],
   events: [[0.42, 'hit']],
@@ -91,12 +101,12 @@ const light3: ClipSpec = {
   duration: 0.38, base: S_READY, fadeIn: 0.04, fadeOut: 0.16,
   keys: [
     { t: 0, hips: [0, -0.07, 0.12], hipsR: [3, 14, 0], spine: [6, 8, 0], chest: [4, 26, 0], neck: [-2, -18, 0], head: [-3, -24, 0],
-      armR: { p: [0.34, -0.42, 0.13], blade: [0.21, 0.04, -0.98] }, armL: BACK,
-      legL: { p: [-0.1, 0, 0.3], yaw: 0 }, legR: { p: [0.14, 0, 0.06], yaw: 16, pitch: -10 } },
+      armR: SWEPT, armL: BACK, ...LUNGE },
     { t: 0.44, ease: 'in', hips: [0, -0.02, 0.1], hipsR: [-2, 8, 0], spine: [-2, 6, 0], chest: [-4, 12, 0], neck: [2, -8, 0], head: [4, -10, 0],
       armR: { p: [0.4, -0.33, 0.25], blade: [-0.03, -0.28, -0.96] },
       legL: { p: [-0.1, 0, 0.28], yaw: 0 }, legR: { p: [0.15, 0, -0.2], pitch: -30, yaw: 26 } },
     { t: 0.68, ease: 'out', chest: [-4, 20, 0], armR: UPRIGHT },
+    { t: 0.86, ease: 'inOut', ...RECOVER },
     { t: 1, ease: 'inOut', ...S_READY },
   ],
   events: [[0.44, 'hit']],

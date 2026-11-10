@@ -11,7 +11,7 @@ const REST: PoseSpec = {
 };
 
 const talk: ClipSpec = {
-  duration: 3.6, loop: true, upperOnly: true, fadeIn: 0.3,
+  duration: 3.6, emptyHands: true, loop: true, upperOnly: true, fadeIn: 0.3,
   keys: [
     { t: 0, chest: [1, 2, 0], head: [2, -2, 0], armR: { sh: [18, 10, 14], el: 62, wr: [0, 0, -30], fist: 0.15 }, armL: { sh: [4, 6, 0], el: 20 } },
     { t: 0.2, chest: [2, 4, 0], head: [-2, 2, 1], armR: { sh: [30, 14, 10], el: 74, wr: [-12, 0, -50], fist: 0.05 } },
@@ -39,7 +39,7 @@ const nod: ClipSpec = {
 };
 
 const point: ClipSpec = {
-  duration: 1.5, upperOnly: true, fadeIn: 0.15,
+  duration: 1.5, emptyHands: true, upperOnly: true, fadeIn: 0.15,
   keys: [
     { t: 0 },
     { t: 0.24, ease: 'out', chest: [2, 6, 0], head: [-2, -4, 0], armR: { p: [0.2, 0.16, 0.52], fingers: [0.05, 0.02, 1], palm: [-0.4, -0.9, 0], fist: 0.55, pole: [0.6, -0.75, -0.1] } },
@@ -51,7 +51,7 @@ const point: ClipSpec = {
 
 /** Dominion salute: closed fist to the heart. */
 const salute: ClipSpec = {
-  duration: 1.6, upperOnly: true, fadeIn: 0.15,
+  duration: 1.6, emptyHands: true, upperOnly: true, fadeIn: 0.15,
   keys: [
     { t: 0 },
     { t: 0.22, ease: 'out', chest: [-2, 0, 0], head: [-3, 0, 0], armR: { p: [-0.07, 0.07, 0.19], fingers: [-0.95, 0.2, 0.1], palm: [0, 0, -1], fist: 1, pole: [0.8, -0.4, 0.3] } },
@@ -74,7 +74,7 @@ const lookAround: ClipSpec = {
 };
 
 const interact: ClipSpec = {
-  duration: 0.9, upperOnly: true, fadeIn: 0.12,
+  duration: 0.9, emptyHands: true, upperOnly: true, fadeIn: 0.12,
   keys: [
     { t: 0 },
     { t: 0.4, ease: 'out', spine: [6, 0, 0], chest: [4, 6, 0], head: [8, -4, 0], armR: { p: [0.14, -0.12, 0.5], fingers: [0, -0.2, 1], palm: [0, -1, -0.2], fist: 0.25, pole: [0.7, -0.7, -0.1] } },
@@ -86,7 +86,7 @@ const interact: ClipSpec = {
 
 /** Both hands working a console at waist height. */
 const holdConsole: ClipSpec = {
-  duration: 3, loop: true, upperOnly: true, fadeIn: 0.3,
+  duration: 3, emptyHands: true, loop: true, upperOnly: true, fadeIn: 0.3,
   keys: [
     { t: 0, spine: [6, 0, 0], chest: [5, 0, 0], neck: [6, 0, 0], head: [12, 0, 0],
       armL: { p: [-0.17, -0.26, 0.4], fingers: [0.1, -0.25, 1], palm: [0, -1, -0.25], fist: 0.2, pole: [-0.7, -0.7, -0.1] },
@@ -99,7 +99,7 @@ const holdConsole: ClipSpec = {
 
 /** Assent at the Crownmark lectern: the right palm laid flat, held, the head inclined. */
 const assent: ClipSpec = {
-  duration: 2.2, hold: true, upperOnly: true, fadeIn: 0.4,
+  duration: 2.2, emptyHands: true, hold: true, upperOnly: true, fadeIn: 0.4,
   keys: [
     { t: 0 },
     { t: 0.3, ease: 'inOut', chest: [2, 4, 0], head: [4, -2, 0], armR: { p: [0.16, 0.0, 0.36], fingers: [0, 0.2, 1], palm: [0, -1, 0.1], fist: 0, pole: [0.7, -0.7, -0.1] } },
@@ -110,7 +110,7 @@ const assent: ClipSpec = {
 };
 
 const handOver: ClipSpec = {
-  duration: 1.4, hold: true, upperOnly: true, fadeIn: 0.25,
+  duration: 1.4, emptyHands: true, hold: true, upperOnly: true, fadeIn: 0.25,
   keys: [
     { t: 0 },
     { t: 0.36, ease: 'inOut', chest: [2, 6, 0], head: [4, -4, 0], armR: { p: [0.12, -0.08, 0.3], fingers: [-0.2, 0, 1], palm: [0, 1, 0], fist: 0.5, pole: [0.75, -0.6, -0.2] } },
@@ -121,7 +121,7 @@ const handOver: ClipSpec = {
 };
 
 const receive: ClipSpec = {
-  duration: 1.6, upperOnly: true, fadeIn: 0.25,
+  duration: 1.6, emptyHands: true, upperOnly: true, fadeIn: 0.25,
   keys: [
     { t: 0 },
     { t: 0.36, ease: 'inOut', chest: [3, 8, 0], head: [8, -4, 0], armR: { p: [0.1, -0.1, 0.5], fingers: [-0.1, 0, 1], palm: [0, 1, 0], fist: 0.05, pole: [0.75, -0.6, -0.2] } },
@@ -143,7 +143,7 @@ const kneel: ClipSpec = { duration: 1, hold: true, fadeIn: 0.45, keys: [{ t: 0, 
 
 /** Kneeling over a casualty, hands working low and forward. */
 const kneelTend: ClipSpec = {
-  duration: 3.2, loop: true, fadeIn: 0.45,
+  duration: 3.2, emptyHands: true, loop: true, fadeIn: 0.45,
   keys: [
     { t: 0, ...KNEEL, hips: [0, -0.46, 0.06], hipsR: [16, 0, 0], spine: [18, 0, 0], chest: [12, 0, 0], neck: [6, 0, 0], head: [10, 0, 0],
       armL: { p: [-0.14, -0.3, 0.46], fingers: [0.1, -0.5, 0.86], palm: [0, -0.86, -0.5], fist: 0.3, pole: [-0.8, -0.5, -0.2] },
@@ -164,12 +164,12 @@ const SIT: PoseSpec = {
 };
 
 const sit: ClipSpec = {
-  duration: 5, loop: true, fadeIn: 0.5,
+  duration: 5, emptyHands: true, seat: 0.46, loop: true, fadeIn: 0.5,
   keys: [{ t: 0, ...SIT }, { t: 0.5, spine: [5, 0, 0], head: [-1, 3, 0] }],
 };
 
 const sitTalk: ClipSpec = {
-  duration: 4, loop: true, fadeIn: 0.4,
+  duration: 4, emptyHands: true, seat: 0.46, loop: true, fadeIn: 0.4,
   keys: [
     { t: 0, ...SIT, spine: [8, 0, 0], chest: [4, 2, 0], head: [0, -2, 0], armR: { p: [0.14, -0.14, 0.38], fingers: [-0.2, 0.3, 0.93], palm: [-0.5, 0.8, -0.3], fist: 0.1 } },
     { t: 0.22, chest: [5, 4, 0], head: [-2, 3, 1], armR: { p: [0.2, -0.1, 0.4], fingers: [0, 0.4, 0.9], palm: [-0.8, 0.5, -0.2] } },
@@ -180,7 +180,7 @@ const sitTalk: ClipSpec = {
 
 /** Slumped on the floor against something, one hand pressed to the side. */
 const sitInjured: ClipSpec = {
-  duration: 3.4, loop: true, fadeIn: 0.5,
+  duration: 3.4, emptyHands: true, seat: 0.02, loop: true, fadeIn: 0.5,
   keys: [
     { t: 0, hips: [0, -0.8, -0.1], hipsR: [-24, 0, 4], spine: [14, 0, 4], chest: [10, 0, 2], neck: [6, 0, 0], head: [10, 8, 6],
       legL: { p: [-0.16, 0.0, 0.62], pitch: 40, yaw: 20, air: true, knee: [-0.3, 0.9, 0.3] },
@@ -192,7 +192,7 @@ const sitInjured: ClipSpec = {
 };
 
 const lieInjured: ClipSpec = {
-  duration: 3.6, loop: true, fadeIn: 0.5,
+  duration: 3.6, emptyHands: true, seat: 0.02, loop: true, fadeIn: 0.5,
   keys: [
     { t: 0, hips: [0, -0.85, -0.32], hipsR: [-86, 0, 0], spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [6, 0, 0], head: [6, 16, 0],
       armL: { p: [-0.04, -0.2, 0.2], fingers: [0.8, -0.5, 0], palm: [0, 0, -1], fist: 0.2, pole: [-1, 0, 0] }, armR: { sh: [-6, 30, 0], el: 30, fk: true, fist: 0.2 },
@@ -204,7 +204,7 @@ const lieInjured: ClipSpec = {
 
 /** Pinned face-down under the plate, one arm free and reaching. */
 const trapped: ClipSpec = {
-  duration: 2.6, loop: true, fadeIn: 0.5,
+  duration: 2.6, emptyHands: true, loop: true, fadeIn: 0.5,
   keys: [
     { t: 0, hips: [0, -0.84, 0.0], hipsR: [84, 0, 6], spine: [-10, 0, 0], chest: [-12, 10, 0], neck: [-16, 0, 0], head: [-22, 8, 0],
       armR: { sh: [150, 30, 0], el: 30, fk: true, fist: 0.1 }, armL: { sh: [60, 50, 0], el: 100, fk: true, fist: 0.6 },
@@ -217,7 +217,7 @@ const trapped: ClipSpec = {
 
 /** Dead-lift: squat, hands under the edge, drive up and hold. Use setHandTarget to pin the palms to the plate. */
 const liftPlate: ClipSpec = {
-  duration: 2.2, hold: true, fadeIn: 0.3,
+  duration: 2.2, emptyHands: true, hold: true, fadeIn: 0.3,
   keys: [
     { t: 0 },
     { t: 0.26, ease: 'inOut', hips: [0, -0.46, -0.04], hipsR: [30, 0, 0], spine: [14, 0, 0], chest: [6, 0, 0], neck: [-18, 0, 0], head: [-20, 0, 0],
@@ -235,7 +235,7 @@ const liftPlate: ClipSpec = {
 };
 
 const carryStretcher: ClipSpec = {
-  duration: 2, loop: true, upperOnly: true, fadeIn: 0.3,
+  duration: 2, emptyHands: true, loop: true, upperOnly: true, fadeIn: 0.3,
   keys: [
     { t: 0, spine: [4, 0, 0], chest: [2, 0, 0], armL: { p: [-0.25, -0.44, 0.02], fingers: [0, -0.2, 1], palm: [1, 0, 0], fist: 1, pole: [-0.7, -0.3, -0.6] }, armR: { p: [0.25, -0.44, 0.02], fingers: [0, -0.2, 1], palm: [-1, 0, 0], fist: 1, pole: [0.7, -0.3, -0.6] } },
     { t: 0.5, armL: { p: [-0.25, -0.445, 0.025] }, armR: { p: [0.25, -0.435, 0.015] } },
@@ -243,7 +243,7 @@ const carryStretcher: ClipSpec = {
 };
 
 const cower: ClipSpec = {
-  duration: 2.4, loop: true, fadeIn: 0.3,
+  duration: 2.4, emptyHands: true, loop: true, fadeIn: 0.3,
   keys: [
     { t: 0, hips: [0, -0.42, -0.02], hipsR: [20, 0, 0], spine: [26, 0, 0], chest: [18, 0, 0], neck: [10, 0, 0], head: [14, 0, 0],
       armL: { p: [-0.1, 0.36, 0.14], fingers: [0.6, 0.6, -0.5], palm: [0.3, -0.8, -0.5], fist: 0.4, pole: [-0.9, -0.2, 0.3] },
@@ -264,7 +264,7 @@ const limp: ClipSpec = {
 
 /** Eclipse pressure: hands to the head, folding inward. */
 const distress: ClipSpec = {
-  duration: 2.8, loop: true, fadeIn: 0.35,
+  duration: 2.8, emptyHands: true, loop: true, fadeIn: 0.35,
   keys: [
     { t: 0, hips: [0, -0.1, 0], hipsR: [6, 0, 0], spine: [16, 0, 0], chest: [12, 0, 0], neck: [10, 0, 0], head: [12, 0, 6],
       armL: { p: [-0.1, 0.36, 0.1], fingers: [0.5, 0.8, -0.2], palm: [0.9, -0.2, -0.3], fist: 0.35, pole: [-0.8, -0.5, 0.2] },
@@ -277,7 +277,7 @@ const distress: ClipSpec = {
 
 /** Grounding: down on one knee, palm flat to the floor, breath counted. */
 const grounding: ClipSpec = {
-  duration: 4, loop: true, fadeIn: 0.5,
+  duration: 4, emptyHands: true, loop: true, fadeIn: 0.5,
   keys: [
     { t: 0, ...KNEEL, hips: [0, -0.5, 0.06], hipsR: [18, 0, 0], spine: [20, 0, 0], chest: [12, 0, 0], neck: [8, 0, 0], head: [12, 0, 0],
       armR: { p: [0.22, -0.56, 0.36], fingers: [0, -0.1, 1], palm: [0, -1, -0.1], fist: 0, pole: [0.9, -0.2, -0.3] },

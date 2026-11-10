@@ -176,7 +176,9 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
   private headPitch = 0;
   private telegraph = 0;
   private readonly legs: Leg[] = [];
-  private readonly probes: GroundProbe[];
+  private readonly trunkProbes: GroundProbe[];
+  private readonly headProbes: GroundProbe[];
+  private readonly tailProbes: GroundProbe[];
   private readonly bCling: THREE.Bone; private readonly hips: THREE.Bone; private readonly spine: THREE.Bone; private readonly chest: THREE.Bone;
   private readonly neck: THREE.Bone; private readonly head: THREE.Bone; private readonly jaw: THREE.Bone; private readonly tail: THREE.Bone[];
 
@@ -204,14 +206,19 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
         });
       }
     }
-    // parts of the body that must stay on or above the surface it stands on
-    this.probes = [
+    // parts that must stay on or above the surface it stands on: the trunk lifts the whole body, the head and
+    // tail bend at the neck / tail root instead (a dead head RESTS on the floor)
+    this.trunkProbes = [
       probe(this.hips, W.hips, W.hips, 0.15),
       probe(this.chest, W.chest, [0, 0.52, -0.24], 0.17),
       probe(this.neck, W.neck, W.neck, 0.11),
+    ];
+    this.headProbes = [
       probe(this.head, W.head, [0, 0.6, -1.14], 0.05),
       probe(this.head, W.head, [0, 0.56, -0.78], 0.1),
-      probe(this.jaw, W.jaw, [0, 0.52, -1.02], 0.04),
+      probe(this.jaw, W.jaw, [0, 0.52, -1.02], 0.07),
+    ];
+    this.tailProbes = [
       probe(this.tail[3]!, W.tail[3]!, W.tailTip, 0.05),
       probe(this.tail[2]!, W.tail[2]!, W.tail[2]!, 0.06),
       probe(this.tail[3]!, W.tail[3]!, [0, 0.58, 1.44], 0.03),
@@ -460,7 +467,7 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
           rot(spine, 0, 0.3 * curl, 0);
           rot(neck, -0.06 * curl, 0.45 * curl, 0);
           rot(head, 0, 0.25 * curl, 0.5 * drop);
-          rot(jaw, -0.6 * drop, 0, 0);
+          rot(jaw, -0.2 * drop, 0, 0);
           for (const l of this.legs) {
             // it rolls onto its left side: those legs splay flat, the upper pair curls in off the ground
             if (l.side > 0) { l.off.x += 0.22 * drop - 0.4 * curl; l.off.y += 0.55 * curl; }
@@ -485,8 +492,12 @@ export class Wallrunner extends CreatureBase implements WallrunnerVisual {
     jaw.updateWorldMatrix(true, false);
     this.tail[3]!.updateWorldMatrix(true, false);
     _m.copy(this.bCling.matrixWorld).invert();
-    const deficit = groundDeficit(this.probes, _m);
-    if (deficit > 0) hips.position.y += deficit;
+    const lift = groundDeficit(this.trunkProbes, _m);
+    if (lift > 0) hips.position.y += lift;
+    const headLack = groundDeficit(this.headProbes, _m) - lift;
+    if (headLack > 0) rot(neck, Math.asin(Math.min(1, headLack / 0.62)), 0, 0);
+    const tailLack = groundDeficit(this.tailProbes, _m) - lift;
+    if (tailLack > 0) rot(this.tail[0]!, -Math.asin(Math.min(1, tailLack / 0.7)), 0, 0);
 
     // ---- turn-stepping (floor only): diagonal pairs re-plant together when the root has turned under them
     const onFloor = cb < 0.02 && alive > 0;

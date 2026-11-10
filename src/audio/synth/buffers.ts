@@ -137,14 +137,14 @@ export type RoomName = 'small' | 'hall' | 'vast' | 'stage';
  * that only the music uses:
  *   small  a 24 × 16 m gallery / a hushed bend: dense early reflections, half a second of tail
  *   hall   a 50 m combat hall: 1.6 s
- *   vast   the 300 m atrium and the Wound overlook: late, sparse first reflections and a 3.4 s tail
+ *   vast   the 300 m atrium and the Wound overlook: late, sparse first reflections and a 3.4 s RT60
  *   stage  the score's own room: brighter and smoother than any place in the fiction
  */
 export const ROOMS: Readonly<Record<RoomName, HallOpts>> = {
   small: { seconds: 0.62, rt60: 0.5, dampHz: 2600, preDelay: 0.005, taps: 9, erWindow: 0.032, build: 0.012 },
-  hall: { seconds: 1.9, rt60: 1.6, dampHz: 1500, preDelay: 0.016, taps: 11, erWindow: 0.085, build: 0.04 },
-  vast: { seconds: 3.6, rt60: 3.4, dampHz: 900, preDelay: 0.058, taps: 7, erWindow: 0.24, build: 0.13 },
-  stage: { seconds: 2.5, rt60: 2.1, dampHz: 2400, preDelay: 0.02, taps: 12, erWindow: 0.07, build: 0.05 },
+  hall: { seconds: 1.8, rt60: 1.6, dampHz: 1500, preDelay: 0.016, taps: 11, erWindow: 0.085, build: 0.04 },
+  vast: { seconds: 3.3, rt60: 3.4, dampHz: 900, preDelay: 0.058, taps: 7, erWindow: 0.24, build: 0.13 },
+  stage: { seconds: 2.2, rt60: 2.0, dampHz: 2400, preDelay: 0.02, taps: 12, erWindow: 0.07, build: 0.05 },
 };
 
 /** The largest space (kept under its original name for callers that want "the" stone hall). */

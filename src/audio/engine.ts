@@ -188,4 +188,9 @@ export class AudioEngine {
   clear(): void {
     this.voices.stopLoops();
   }
+
+  /** Release the heavy native resources of a context that is being discarded. The engine is dead afterwards. */
+  dispose(): void {
+    this.mixer.dispose();
+  }
 }

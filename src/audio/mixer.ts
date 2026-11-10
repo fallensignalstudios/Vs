@@ -9,7 +9,7 @@
  *   tonal score ─► music ─► tilt EQ ─► levelling ─┐                                       │
  *   drums/stabs/stingers/recordings ─► musicDirect ┤                                      │
  *   scoreSend ─► stage reverb ─────────────────────┼─► musicFader ─► side ─► duck ─► gate ─┼─► sum ─► master
- *   scoreRoom ─► short drum room ──────────────────┘                                      │    ─► 20 Hz guard
+ *   scoreRoom ─► early-reflection drum room ───────┘                                      │    ─► 20 Hz guard
  *   ui voices ─► ui (+ uiSend ─► halo) ─► uiFader ─────────────────────────────────────────┤    ─► glue ─► limiter
  *   dialogue ─► voice ─► voiceFader ───────────────────────────────────────────────────────┘    ─► ceiling ─► out
  *
@@ -95,7 +95,7 @@ export class Mixer {
   readonly room: GainNode;
   /** score reverb (returns into the music path) */
   readonly scoreSend: GainNode;
-  /** short drum room for the score (returns into the music path) */
+  /** short drum room for the score: a few early reflections, no tail (returns into the music path) */
   readonly scoreRoom: GainNode;
   /** UI halo: a soft stereo echo instead of a hall */
   readonly uiSend: GainNode;
@@ -114,7 +114,13 @@ export class Mixer {
   private readonly musicGate: GainNode;
   private readonly roomTone: BiquadFilterNode;
   private readonly blend: [GainNode, GainNode, GainNode];
+  private readonly spaces: [ConvolverNode, ConvolverNode, ConvolverNode];
+  private readonly spaceTail: [number, number, number];
+  /** per world space: is its blend gain wired to the convolver, and when may an unused one be unplugged */
+  private readonly spaceOn = [true, true, true];
+  private readonly spaceOffAt = [Infinity, Infinity, Infinity];
   private readonly musicComp: DynamicsCompressorNode;
+  private readonly convolvers: ConvolverNode[] = [];
   private readonly meter: AnalyserNode | null = null;
   private readonly meterData: Float32Array<ArrayBuffer> | null = null;
   private sideEnv = 0;
@@ -143,6 +149,7 @@ export class Mixer {
       const n = ac.createConvolver();
       n.normalize = false;
       n.buffer = buffer;
+      this.convolvers.push(n);
       return n;
     };
     const lowpass = (hz: number): BiquadFilterNode => {
@@ -165,6 +172,38 @@ export class Mixer {
       bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_SECONDS + 0.012);
       dyn.gain.setValueAtTime(0, t0 + PRIME_SECONDS);
       dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_SECONDS + 0.012);
+    };
+
+    /**
+     * Two cross-fed, low-passed delays panned apart: `from` → … → `to`. Short times make a small room's
+     * early reflections; long ones a soft ping-pong halo.
+     */
+    const echoes = (from: AudioNode, to: AudioNode, times: readonly [number, number], feedback: number, tone: readonly [number, number], width: number, level: number): void => {
+      const ret = g(level);
+      const dl = ac.createDelay(0.5);
+      dl.delayTime.value = times[0];
+      const dr = ac.createDelay(0.5);
+      dr.delayTime.value = times[1];
+      const fbL = g(feedback);
+      const fbR = g(feedback);
+      const toneL = lowpass(tone[0]);
+      const toneR = lowpass(tone[1]);
+      const panL = ac.createStereoPanner();
+      panL.pan.value = -width;
+      const panR = ac.createStereoPanner();
+      panR.pan.value = width;
+      from.connect(dl);
+      dl.connect(toneL);
+      toneL.connect(panL);
+      toneL.connect(fbL);
+      fbL.connect(dr);
+      dr.connect(toneR);
+      toneR.connect(panR);
+      toneR.connect(fbR);
+      fbR.connect(dl);
+      panL.connect(ret);
+      panR.connect(ret);
+      ret.connect(to);
     };
 
     // --- master: slider → subsonic guard → gentle glue → fast limiter → soft ceiling (never hard-clips) ---
@@ -218,13 +257,15 @@ export class Mixer {
     const hall = conv(res.rooms.hall);
     const vast = conv(res.rooms.vast);
     this.blend = [g(0.3), g(0.9), g(0.3)];
+    this.spaces = [small, hall, vast];
+    this.spaceTail = [res.rooms.small.duration, res.rooms.hall.duration, res.rooms.vast.duration];
     this.roomTone = lowpass(6500);
     const roomReturn = g(REVERB_RETURN);
-    [small, hall, vast].forEach((c, i) => {
+    for (let i = 0; i < 3; i++) {
       roomMix.connect(this.blend[i]);
-      this.blend[i].connect(c);
-      c.connect(this.roomTone);
-    });
+      this.blend[i].connect(this.spaces[i]);
+      this.spaces[i].connect(this.roomTone);
+    }
     this.near.connect(small);
     // rapid cues still excite the big space a little, or they would sound pasted on in the atrium
     const nearToRoom = g(0.2);
@@ -267,12 +308,9 @@ export class Mixer {
     this.scoreSend.connect(stage);
     stage.connect(scoreReturn);
     scoreReturn.connect(musicPre);
+    // percussion gets air from a pair of cross-fed delays (cheap, and nothing rings into the next beat)
     this.scoreRoom = g();
-    const drumRoom = conv(res.rooms.small);
-    const drumReturn = g(REVERB_RETURN);
-    this.scoreRoom.connect(drumRoom);
-    drumRoom.connect(drumReturn);
-    drumReturn.connect(musicPre);
+    echoes(this.scoreRoom, musicPre, [0.013, 0.021], 0.34, [5200, 4400], 0.5, 0.9);
 
     musicPre.connect(musicFader);
     musicFader.connect(this.musicSide);
@@ -286,31 +324,7 @@ export class Mixer {
     this.ui.connect(uiFader);
     uiFader.connect(sum);
     this.uiSend = g();
-    const haloReturn = g(0.55);
-    const dl = ac.createDelay(0.5);
-    dl.delayTime.value = 0.083;
-    const dr = ac.createDelay(0.5);
-    dr.delayTime.value = 0.127;
-    const fbL = g(0.42);
-    const fbR = g(0.42);
-    const toneL = lowpass(4200);
-    const toneR = lowpass(3600);
-    const panL = ac.createStereoPanner();
-    panL.pan.value = -0.6;
-    const panR = ac.createStereoPanner();
-    panR.pan.value = 0.6;
-    this.uiSend.connect(dl);
-    dl.connect(toneL);
-    toneL.connect(panL);
-    toneL.connect(fbL);
-    fbL.connect(dr);
-    dr.connect(toneR);
-    toneR.connect(panR);
-    toneR.connect(fbR);
-    fbR.connect(dl);
-    panL.connect(haloReturn);
-    panR.connect(haloReturn);
-    haloReturn.connect(this.ui);
+    echoes(this.uiSend, this.ui, [0.083, 0.127], 0.42, [4200, 3600], 0.6, 0.55);
 
     // --- dialogue ---
     this.voice = g();
@@ -366,7 +380,20 @@ export class Mixer {
     // the impulses are decorrelated and unit-energy: normalise the weights so `amount` alone sets the level
     const w = space.map((x) => (Number.isFinite(x) && x > 0 ? x : 0));
     const norm = Math.hypot(w[0], w[1], w[2]) || 1;
-    for (let i = 0; i < 3; i++) this.blend[i].gain.setTargetAtTime(w[i] / norm, now, tc);
+    for (let i = 0; i < 3; i++) {
+      this.blend[i].gain.setTargetAtTime(w[i] / norm, now, tc);
+      if (w[i] > 0) {
+        this.spaceOffAt[i] = Infinity;
+        if (!this.spaceOn[i]) {
+          this.blend[i].connect(this.spaces[i]);
+          this.spaceOn[i] = true;
+        }
+      } else if (this.spaceOn[i] && i > 0) {
+        // a convolver that is not part of this place is unplugged once its last tail has rung out, so it
+        // costs nothing (the small room always stays: `near` feeds it directly)
+        this.spaceOffAt[i] = now + Math.max(0.01, fade) * 1.5 + this.spaceTail[i];
+      }
+    }
   }
 
   /** 0..1 "muffled pressure" low-pass on the world bus (sfx, ambience, world reverb). */
@@ -407,10 +434,39 @@ export class Mixer {
   }
 
   /**
+   * Release the reverbs (each holds megabytes of impulse spectra) and silence the output. For a context that
+   * is being thrown away: an engine is not usable afterwards.
+   */
+  dispose(): void {
+    for (const c of this.convolvers) {
+      try {
+        c.disconnect();
+        c.buffer = null;
+      } catch {
+        /* a context that is already closed */
+      }
+    }
+    this.convolvers.length = 0;
+    try {
+      this.faders.master.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+  }
+
+  /**
    * Sidechain: follow the SFX bus level and lean the score back by up to 2.5 dB under impacts, recovering in
    * a quarter of a second. Called once per update(); costs one 1024-sample read.
    */
   update(dt: number): void {
+    const t = this.ac.currentTime;
+    for (let i = 1; i < 3; i++) {
+      if (this.spaceOn[i] && t >= this.spaceOffAt[i]) {
+        this.blend[i].disconnect();
+        this.spaceOn[i] = false;
+        this.spaceOffAt[i] = Infinity;
+      }
+    }
     const m = this.meter;
     const data = this.meterData;
     if (!m || !data || !(dt > 0)) return;

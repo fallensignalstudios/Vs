@@ -54,10 +54,17 @@ export interface Rendered {
 export async function prepare(): Promise<AudioEngine> {
   const e = new AudioEngine(new OfflineAudioContext(2, 128, SR), { seed: 7283 });
   await e.prerender();
+  e.dispose();
   return e;
 }
 
+/** engines whose render has finished but whose result is still being read (released by the next render) */
+const spent: AudioEngine[] = [];
+
 export async function renderFull(o: RenderOpts): Promise<Rendered> {
+  // Offline contexts are only freed by a major GC, which a small JS heap never triggers — and each one holds
+  // five convolution reverbs. Release the previous render's reverbs by hand.
+  for (const e of spent.splice(0)) e.dispose();
   const t0 = o.cold ? 0 : WARM;
   const total = t0 + o.seconds;
   const ctx = new OfflineAudioContext(2, Math.ceil(total * SR), SR);
@@ -95,6 +102,7 @@ export async function renderFull(o: RenderOpts): Promise<Rendered> {
     return { buf, t0, engine, wall: (performance.now() - started) / 1000 };
   } finally {
     waves.enabled = true;
+    spent.push(engine);
   }
 }
 

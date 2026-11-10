@@ -101,6 +101,10 @@ export class WaveBank {
   get size(): number {
     return this.map.size;
   }
+
+  clear(): void {
+    this.map.clear();
+  }
 }
 
 type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;

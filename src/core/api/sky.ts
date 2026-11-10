@@ -215,9 +215,10 @@ export interface ScenicFactory {
   /**
    * The ~300 m scenic atrium shell around Z05: arcaded gallery tiers, immense ribs, broken bridges, an open
    * ceiling lattice. Origin = centre of the playable platform floor. At floor level everything lies outside
-   * `shaftRadius` (the void around the playable platform) except four short broken stubs on the diagonals
-   * 22.5° + k·90° (they reach in to r ≈ 34); long broken spans cross the shaft on the other diagonals at
-   * gallery height (≥ one tier up). Includes the exterior spires seen through the ceiling — one of them is the
+   * `shaftRadius` (the void around the playable platform) except four short broken stubs at bearings
+   * 67.5° + k·90° (measured from +X toward −Z; they reach in to r ≈ 34). Four long broken spans reach over the
+   * shaft at 22.5° + k·90°, at gallery height (≥ one tier up, in to r ≈ 40). Keep zone bridges on the cardinals.
+   * Includes the exterior spires seen through the ceiling — one of them is the
    * tower the carrier clips (`sky.carrier.clipPoint`); the most recently built shell's needle is the one the
    * carrier shears. `radius` 80…260 (default 150), `height` 50…400 (140), `shaftRadius` ≥ 20 (60), `tiers` 1…7 (4).
    */

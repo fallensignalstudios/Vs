@@ -224,7 +224,7 @@ export class BodySolver {
       _pole.set(L ? -0.5 : 0.5, -0.7, 0.35).applyQuaternion(this.wq[chest]);
       this.ikArm(s, rest, ua, pin.pos, _qh, _pole, pin.w);
     }
-    if (ring && w > 0.5) this.ringGrip(s, rest, ua, fa, ha, ring);
+    if (ring) this.ringGrip(s, rest, ua, fa, ha, ring);
     this.floorArm(s, rest, ua, fa, ha, gripW > 0.5 ? null : tips, gripW > 0.5);
     this.wq[ua].copy(this.ua);
     this.wp[fa].copy(this.off[fa]).applyQuaternion(this.ua).add(this.wp[ua]);

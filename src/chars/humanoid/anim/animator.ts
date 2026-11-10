@@ -321,6 +321,15 @@ export class Animator {
     if (this.shot) { sampleClip(this.shot.clip, this.shot.time, this.tmp); cur.mix(this.tmp, 1, this.shot.upperOnly ? 0 : 1); }
     const out = this.out;
     if (this.xfade < 1) {
+      // a double blade looks the same turned end for end: never cross-fade the long way round
+      if (opts.ring && this.snap.armIk[1] > 0.5 && cur.armIk[1] > 0.5) {
+        const a = this.snap.hand, b = cur.hand;
+        _q.set(a[10], a[11], a[12], a[13]); _q2.set(b[10], b[11], b[12], b[13]);
+        if (_v.copy(opts.ring).applyQuaternion(_q).dot(_eye.copy(opts.ring).applyQuaternion(_q2)) < -0.2) {
+          _q.multiply(_q2.setFromAxisAngle(Y, Math.PI));
+          a[10] = _q.x; a[11] = _q.y; a[12] = _q.z; a[13] = _q.w;
+        }
+      }
       this.xfade = Math.min(1, this.xfade + adt / this.xfadeDur);
       const w = smooth(this.xfade);
       out.copy(this.snap).mix(cur, w, this.xfadeLower ? w : 1);

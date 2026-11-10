@@ -401,6 +401,14 @@ export class Rig {
     s.radius = this.template.radius * radiusScale;
   }
 
+  /** Culling sphere with an absolute radius (model units) — for debris that travels far from a small device. */
+  setBounds(x: number, y: number, z: number, radius: number): void {
+    const s = this.mesh.boundingSphere;
+    if (!s) return;
+    s.center.set(x, y, z);
+    s.radius = radius;
+  }
+
   dispose(): void {
     this.skeleton.dispose();
     this.group.removeFromParent();

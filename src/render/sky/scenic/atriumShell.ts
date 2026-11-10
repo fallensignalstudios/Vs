@@ -12,8 +12,8 @@
  * exterior; the arcades and soffits are lit by their own warm seams. Nothing is lit through a wall.
  *
  * Local frame: origin = centre of the playable platform floor. At floor level everything lies at radius
- * ≥ `shaftRadius` except four short broken stubs on the odd diagonals (22.5° + k·90°); the high broken spans sit
- * on the even diagonals at gallery height (≥ one tier up), so cardinal bridges built by the zone never collide.
+ * ≥ `shaftRadius` except four short broken stubs at 67.5° + k·90° (angles from +X toward −Z); the long broken
+ * spans sit at 22.5° + k·90° at gallery height (≥ one tier up), so cardinal bridges built by the zone never collide.
  */
 import * as THREE from 'three';
 import { mulberry32 } from '@/core/mathx';

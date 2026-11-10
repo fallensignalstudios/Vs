@@ -155,6 +155,8 @@ export abstract class CreatureBase implements CharacterVisual {
   private thawLatch = false;
   private lastYaw = Number.NaN;
   private dissolveOn = false;
+  /** dissolve owed to an (interrupted) spawn: follows the spawn, but can only ease away, never snap */
+  private spawnVeil = 0;
   private rimUser = 0;
   private readonly rimUserColor = new THREE.Color(1, 1, 1);
   private readonly rimBaseColor = new THREE.Color(1, 1, 1);
@@ -318,6 +320,7 @@ export abstract class CreatureBase implements CharacterVisual {
     this.slots.length = 0;
     this.thawLatch = false;
     this.thaw = 0;
+    this.spawnVeil = 0;
     this.u.uTelegraph.value.w = 0;
     this.onRevive();
   }
@@ -440,13 +443,14 @@ export abstract class CreatureBase implements CharacterVisual {
 
     // dissolve + program variant (kept current even while hidden, so a reveal never shows a stale state)
     const u = this.u;
-    let auto = 0;
+    let auto = 0, veil = 0;
     for (const s of this.slots) {
       const d = s.def;
       if (d.dissolveOut && this.isDead) auto = Math.max(auto, smoothstep(d.dissolveOut[0], d.dissolveOut[1], s.t));
-      if (d.dissolveIn) auto = Math.max(auto, (1 - smoothstep(0, d.dissolveIn, s.t)) * (s.state === 2 ? s.raw : 1));
+      if (d.dissolveIn && s.state !== 2) veil = Math.max(veil, 1 - smoothstep(0, d.dissolveIn, s.t));
     }
-    u.uDissolve.value = Math.max(this.extDissolve, auto);
+    this.spawnVeil = veil >= this.spawnVeil ? veil : Math.max(veil, this.spawnVeil - dt * 3);
+    u.uDissolve.value = Math.max(this.extDissolve, auto, this.spawnVeil);
     const cut = u.uDissolve.value > 0.0005;
     if (cut !== this.dissolveOn) {
       this.dissolveOn = cut;
