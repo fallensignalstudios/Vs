@@ -1,7 +1,13 @@
-/** STUB — replaced by the render-core agent. */
+/**
+ * Render core — renderer, HDR post chain, looks, quality, polished-floor reflections, environment lighting.
+ * Contract: src/core/api/render.ts. Zone authors: `import { LOOKS } from '@/render/looks'`.
+ */
 import type { Game, RenderSystem } from '@/core/api';
-import { nullObject } from '@/core/stub';
+import { RenderSystemImpl } from './system';
 
-export function createRenderSystem(_game: Game): RenderSystem {
-  return nullObject<RenderSystem>('render');
+export { LOOKS, DEFAULT_LOOK } from './looks';
+export { QUALITY_PRESETS } from './quality';
+
+export function createRenderSystem(game: Game): RenderSystem {
+  return new RenderSystemImpl(game);
 }

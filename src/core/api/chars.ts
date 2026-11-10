@@ -158,3 +158,80 @@ export interface CharacterFactory {
   /** Pre-build geometry/material caches for a list of archetypes during loading. */
   warm(archetypes: Archetype[]): void;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Humanoid extras (src/chars/humanoid). `game.chars.create(<HumanoidArchetype>)` returns a HumanoidVisual;
+// narrow with isHumanoidVisual() when you need the members below.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Sockets every humanoid exposes through CharacterVisual.socket():
+ *  - `root`, `hips`, `chest` (= `core`), `head`, `eye` (between the eyes, for look/aim rays), `back`
+ *  - `handR` / `handL`: palm grip points (attach carried objects here)
+ *  - `weaponBase` / `weaponMid` / `weaponTip`: along the melee weapon (Velkorran, Verity's forward blade, baton);
+ *    `weaponTip2`: Verity's rear blade tip. They follow the weapon whether held or sheathed — feed
+ *    `weaponBase`/`weaponTip` to `vfx.trail()`.
+ *  - `muzzle`: barrel end of the ranged weapon (falls back to the right palm if the archetype has none)
+ *  - `shield`: centre of the Enforcer's shield face
+ * Socket −Z is "forward / along the barrel or blade".
+ */
+export const HUMANOID_SOCKETS = [
+  'root', 'hips', 'chest', 'core', 'head', 'eye', 'back', 'handR', 'handL',
+  'weaponBase', 'weaponMid', 'weaponTip', 'weaponTip2', 'muzzle', 'shield',
+] as const;
+
+/**
+ * Loadout rules for humanoids (CharacterVisual.setLoadout):
+ *  - `melee: true` puts the melee weapon in the right hand; false sheathes it (Velkorran on the back, Verity's
+ *    blades retract and the hilt ring hangs on the hip, baton on the belt).
+ *  - `ranged: true` draws the ranged weapon into the right hand. While it is drawn the melee weapon is sheathed
+ *    even if `melee` is still true, so a driver can simply toggle `ranged` while aiming.
+ *  - `shield` shows / hides the Enforcer tower shield (left forearm).
+ *  - `prop: 'case'` puts the sealed case in the left hand; `prop: 'rifle'` is the same as `ranged: true` for
+ *    archetypes whose ranged weapon is a long gun.
+ * Carry stance (idle / walk / run arm poses) follows the loadout automatically.
+ *
+ * Action notes: `hitLight`, `hitHeavy` and `guardHit` are ADDITIVE reactions — they never interrupt the action
+ * in progress. `guard`, `aim`, `aimRifle` are looping upper-body poses that persist until stop(); they are also
+ * applied automatically while setLocomotion(..., { guarding / aiming }) is set and no other looping pose plays.
+ * `death`, `knockdown`, `lieInjured`, `sit*`, `kneel*`, `trapped` hold their final pose until stop() or the
+ * next play(). Unknown action names play a small generic gesture and warn once.
+ */
+export interface HumanoidVisual extends CharacterVisual {
+  readonly archetype: HumanoidArchetype;
+  /** triangle count of the figure (budget checks) */
+  readonly triangles: number;
+  /**
+   * Footfall callback, fired at each heel strike while moving (audio footsteps, vfx `footDust`).
+   * `world` is a scratch vector — copy it if you keep it.
+   */
+  onFootstep: ((foot: 'L' | 'R', world: THREE.Vector3) => void) | null;
+  /**
+   * Pin a palm to a WORLD-space point with IK (consoles, lifting the plate, taking an offered object).
+   * Blends in/out smoothly; null releases the hand. Reach is clamped to the arm's length.
+   */
+  setHandTarget(hand: 'L' | 'R', target: Vec3Like | null, weight?: number): void;
+  /**
+   * Call after moving the figure discontinuously (spawn, checkpoint reload, cinematic cut) so cloth and
+   * motion smoothing restart from rest instead of whipping. Jumps over 3 m are also detected automatically.
+   */
+  teleported(): void;
+}
+
+/** Narrowing helper: true for visuals created from a HumanoidArchetype. */
+export function isHumanoidVisual(v: CharacterVisual | null | undefined): v is HumanoidVisual {
+  return !!v && typeof (v as Partial<HumanoidVisual>).setHandTarget === 'function' && typeof (v as Partial<HumanoidVisual>).teleported === 'function';
+}
+
+/** Every action a humanoid has an authored clip for (others fall back to a generic gesture). */
+export const HUMANOID_ACTIONS: readonly AnimAction[] = [
+  'attackLight1', 'attackLight2', 'attackLight3', 'attackLight4', 'attackHeavy', 'attackHeavyCharge',
+  'counter', 'parry', 'deflect', 'dodge', 'shoot', 'throw', 'slam', 'dispatch',
+  'hitLight', 'hitHeavy', 'stagger', 'guardHit', 'guardBreak', 'knockdown', 'getUp', 'death',
+  'shieldBash', 'batonStrike', 'lunge', 'roar', 'spawnBreach',
+  'guard', 'aim', 'aimRifle', 'frozen', 'linkedSync',
+  'idle', 'talk', 'listen', 'point', 'kneel', 'kneelTend', 'sit', 'sitTalk', 'sitInjured', 'lieInjured',
+  'trapped', 'liftPlate', 'interact', 'holdConsole', 'holdPlane', 'assent', 'handOver', 'receive',
+  'salute', 'nod', 'lookAround', 'cower', 'carryStretcher', 'limp', 'distress', 'grounding',
+  'lowerWeapon', 'raiseWeapon', 'floorStrike', 'tetherStop', 'turnAway', 'walkAway',
+];

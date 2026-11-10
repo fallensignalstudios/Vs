@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sandbox · ui</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #07090d; }
+      #world { position: fixed; inset: 0; background-size: cover; background-position: 50% 50%; }
+      #ui { position: fixed; inset: 0; pointer-events: none; }
+      #bar { position: fixed; left: 0; right: 0; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px;
+        font: 11px/1 system-ui, sans-serif; background: rgba(0, 0, 0, 0.55); }
+      #bar button { font: inherit; padding: 3px 6px; background: #1b2633; color: #cfd8e3; border: 1px solid #33455a; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="world"></div>
+    <div id="ui"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

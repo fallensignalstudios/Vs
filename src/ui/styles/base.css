@@ -1,0 +1,224 @@
+/*
+ * AURELION UI — base tokens, typography and shared atoms.
+ * Scale: 1u = 1 CSS px at 1080p; clamps keep type legible at 720p and bounded at 4K.
+ * Tone: slate + parchment + aged gold; thin rules; small caps with generous tracking.
+ */
+.aur {
+  --u: calc(clamp(13.6px, min(1.4815vh, 0.8334vw), 32px) / 16);
+  --ink: #0b0f16;
+  --slate: #14202e;
+  --parchment: #f6f2ea;
+  --parchment-dim: rgba(246, 242, 234, 0.62);
+  --parchment-faint: rgba(246, 242, 234, 0.28);
+  --gold: #b08a4a;
+  --gold-l: #e6cf9a;
+  --teal: #2f6f8a;
+  --teal-l: #7fb6cc;
+  --amber: #ffa033;
+  --blue: #a8d8ff;
+  --violet: #9a6bff;
+  --cinder: #ff6a1a;
+  --frost: #cfeeff;
+  --danger: #e2543a;
+  /* protagonist accent — swapped by [data-prot] */
+  --accent: var(--amber);
+  --power: var(--cinder);
+  --power-l: #ffb347;
+
+  --safe-x: max(calc(var(--u) * 52), env(safe-area-inset-left, 0px));
+  --safe-y: max(calc(var(--u) * 40), env(safe-area-inset-bottom, 0px));
+  --hair: max(1px, calc(var(--u) * 1));
+  --f-title: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  --f-body: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  --f-label: 'Barlow Condensed', 'Barlow', 'Arial Narrow', sans-serif;
+  --shadow-text: 0 0 calc(var(--u) * 1.5) #000, 0 0 calc(var(--u) * 4) rgba(0, 0, 0, 0.92), 0 calc(var(--u) * 1) calc(var(--u) * 9) rgba(0, 0, 0, 0.75);
+  --shadow-soft: 0 calc(var(--u) * 1) calc(var(--u) * 5) rgba(0, 0, 0, 0.55);
+  --k: 0;
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  font-family: var(--f-body);
+  font-size: calc(var(--u) * 16);
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--parchment);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  contain: strict;
+}
+
+.aur[data-prot='selene'] {
+  --accent: var(--blue);
+  --power: var(--frost);
+  --power-l: #ffffff;
+}
+
+.aur *,
+.aur *::before,
+.aur *::after {
+  box-sizing: border-box;
+}
+
+.aur-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.aur-interactive {
+  pointer-events: auto;
+}
+
+/* ---------------------------------------------------------------- type atoms */
+.aur-label {
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: calc(var(--u) * 12);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.aur-title {
+  font-family: var(--f-title);
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.aur-num {
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+.aur-ico {
+  width: calc(var(--u) * 14);
+  height: calc(var(--u) * 14);
+  flex: none;
+  display: block;
+  overflow: visible;
+}
+
+/* thin gold rule that fades at both ends */
+.aur-rule {
+  height: var(--hair);
+  background: linear-gradient(90deg, transparent, var(--gold) 18%, var(--gold) 82%, transparent);
+  opacity: 0.8;
+}
+
+.aur-rule-l {
+  height: var(--hair);
+  background: linear-gradient(90deg, var(--gold), rgba(176, 138, 74, 0));
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------- key-cap glyph */
+.aur-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--u) * 26);
+  height: calc(var(--u) * 26);
+  padding: 0 calc(var(--u) * 5) calc(var(--u) * 1);
+  border: var(--hair) solid rgba(246, 242, 234, 0.78);
+  border-radius: calc(var(--u) * 4);
+  background: linear-gradient(180deg, rgba(20, 32, 46, 0.86), rgba(11, 15, 22, 0.9));
+  box-shadow: inset 0 calc(var(--u) * -2) 0 rgba(246, 242, 234, 0.14), var(--shadow-soft);
+  color: var(--parchment);
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: calc(var(--u) * 15);
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+  vertical-align: middle;
+  text-shadow: none;
+}
+
+.aur-key.is-wide {
+  padding: 0 calc(var(--u) * 8) calc(var(--u) * 1);
+  font-size: calc(var(--u) * 13);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.aur-key.is-round {
+  border-radius: 50%;
+  padding: 0;
+  width: calc(var(--u) * 26);
+}
+
+.aur-key.is-lg {
+  min-width: calc(var(--u) * 44);
+  height: calc(var(--u) * 44);
+  font-size: calc(var(--u) * 24);
+  border-radius: calc(var(--u) * 6);
+}
+
+.aur-key.is-lg.is-wide {
+  font-size: calc(var(--u) * 17);
+  padding: 0 calc(var(--u) * 11) calc(var(--u) * 1);
+}
+
+.aur-key.is-lg.is-round {
+  width: calc(var(--u) * 44);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.aur-key.is-sm {
+  min-width: calc(var(--u) * 20);
+  height: calc(var(--u) * 20);
+  font-size: calc(var(--u) * 12);
+  border-radius: calc(var(--u) * 3);
+  padding: 0 calc(var(--u) * 4) calc(var(--u) * 1);
+}
+
+/* ---------------------------------------------------------------- debug + fps */
+.aur-debug {
+  position: absolute;
+  left: var(--safe-x);
+  top: 34%;
+  max-width: 46%;
+  padding: calc(var(--u) * 8) calc(var(--u) * 10);
+  background: rgba(6, 9, 14, 0.72);
+  border-left: var(--hair) solid var(--teal);
+  font: 500 calc(var(--u) * 12) / 1.45 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  color: #cfe3ec;
+  white-space: pre-wrap;
+  display: none;
+}
+
+.aur-fps {
+  position: absolute;
+  right: calc(var(--u) * 10);
+  top: calc(var(--u) * 8);
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: calc(var(--u) * 12);
+  letter-spacing: 0.14em;
+  color: var(--parchment-dim);
+  text-shadow: var(--shadow-text);
+  font-variant-numeric: tabular-nums;
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aur *,
+  .aur *::before,
+  .aur *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

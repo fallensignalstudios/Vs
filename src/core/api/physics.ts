@@ -1,5 +1,7 @@
 /**
  * Physics + navigation contract — OWNER: physics-nav (src/world/{physics,nav}.ts).
+ * Implementation: src/world/physics/ (pure TypeScript; fixtures of Z04 / Z08 / Z05 in fixtures.ts show how a
+ * zone is expressed as surfaces + solids).
  *
  * A deliberately simple, deterministic 2.5D world:
  *  - WALKABLE SURFACES define where characters may stand (flat rects/discs or linear ramps). Characters are
@@ -95,9 +97,21 @@ export interface MoveOpts {
   maxDrop?: number;
   /** character height for vertical overlap tests (default 1.8) */
   height?: number;
-  /** flying actors ignore surfaces and only collide with solids at their altitude */
+  /**
+   * flying actors ignore surfaces and only collide with solids at their altitude: `from.y` is the BOTTOM of the
+   * body (its real altitude, e.g. 1.5 for a hovering drone) and `height` its vertical size, so a drone at 1.5 m
+   * passes over 1.2 m low cover but is stopped by 2.2 m high cover and walls. y is returned unchanged.
+   */
   flying?: boolean;
+  /**
+   * ADDED (physics-nav): optional result object to fill instead of allocating a new MoveResult. Pass one
+   * long-lived object per actor to keep the per-frame movement path allocation-free.
+   */
+  out?: MoveResult;
 }
+
+/** ADDED (physics-nav): the defaults used by moveCharacter / canStand / the nav grid. */
+export const MOVE_DEFAULTS = { stepUp: 0.45, maxDrop: 0.7, height: 1.8 } as const;
 
 export type TriggerShape =
   | { kind: 'box'; x: number; z: number; hx: number; hz: number; yaw?: number; yMin?: number; yMax?: number }
@@ -108,6 +122,11 @@ export interface TriggerHandle {
   enabled: boolean;
   /** true while the tracked point (player by default) is inside */
   readonly inside: boolean;
+  /**
+   * ADDED (physics-nav): pure test of an arbitrary point against this trigger volume (ignores `enabled`, fires
+   * nothing) — e.g. "has the escorted NPC reached the exit volume?".
+   */
+  contains(point: Vec3Like): boolean;
   remove(): void;
 }
 
@@ -117,7 +136,17 @@ export const RAY_SHOT = 4;
 export const RAY_GROUND = 8;
 
 export interface PhysicsWorld {
+  /**
+   * Register a solid. The description is copied (later edits go through the handle: `enabled`, `setPose`,
+   * `remove`; the `blocks*` / `cover` flags of `handle.desc` may be changed live). Never throws: non-finite
+   * numbers are sanitised with a single console warning.
+   */
   addCollider(desc: ColliderDesc): ColliderHandle;
+  /**
+   * Register a walkable surface. Characters stand on the HIGHEST surface within step-up of their feet, so a
+   * balcony over a floor is simply two surfaces. Surfaces carry no thickness: put a solid under anything a
+   * character could otherwise walk beneath and through (decks, the tall end of ramps).
+   */
   addSurface(desc: SurfaceDesc): SurfaceHandle;
   /**
    * Trigger tested against the player's feet position each tick (Game supplies the position through
@@ -133,19 +162,46 @@ export interface PhysicsWorld {
   /**
    * Move a grounded character circle from `from` by (dx,dz) with wall sliding, step-up, ramp following and fall
    * protection. Returns the resolved position (y snapped to ground).
+   *
+   * Behaviour notes (physics-nav):
+   *  - Solids only block when they overlap the band (y + stepUp, y + height): anything ≤ stepUp tall is stepped
+   *    over, anything starting above head height is walked under.
+   *  - Fall protection tests the FEET POINT (circle centre): it must stay on a surface and never drop more than
+   *    maxDrop in one step. At an edge the move slides along it (straight, curved or rotated edges alike).
+   *  - Long moves are sub-stepped (≤ radius/2), so fast dodges and 20 m/s knock-backs cannot tunnel.
+   *  - A character that starts inside a solid (door closed on it) is pushed out; one that starts off every
+   *    surface moves freely until it reaches ground again. Use nearestStandable for hard un-sticking.
+   *  - A new MoveResult is returned per call unless `opts.out` is supplied.
    */
   moveCharacter(from: Vec3Like, radius: number, dx: number, dz: number, opts?: MoveOpts): MoveResult;
 
-  /** Nearest valid standing point to (x,z) near yRef within maxDist, or null. Used to un-stick actors. */
+  /**
+   * Nearest valid standing point to (x,z) near yRef within maxDist (default 4), or null. Used to un-stick
+   * actors. Prefers ground at the reference level; falls back to any level if none is in range.
+   */
   nearestStandable(x: number, y: number, z: number, radius: number, maxDist?: number): Vec3Like | null;
 
-  /** Ray vs solids (filtered by mask: RAY_MOVE | RAY_SIGHT | RAY_SHOT) and optionally floors (RAY_GROUND). */
+  /**
+   * Ray vs solids (filtered by mask: RAY_MOVE | RAY_SIGHT | RAY_SHOT) and optionally floors (RAY_GROUND).
+   * `dir` need not be normalised; `distance` is in metres. A collider is tested when it blocks ANY of the
+   * masked categories. Default mask = RAY_SIGHT | RAY_SHOT ("anything physical" — skips invisible move-only
+   * blockers). A ray that starts inside a solid hits it at distance 0 with normal = −dir. Floors are two-sided.
+   */
   raycast(origin: Vec3Like, dir: Vec3Like, maxDist: number, mask?: number): RayHit | null;
-  /** Unobstructed sight line between two points (uses RAY_SIGHT). */
+  /**
+   * Unobstructed sight line between two points (uses RAY_SIGHT). Solids that CONTAIN either endpoint are
+   * ignored, so aiming at the centre of a device (or looking out of a scanner housing) is not blocked by that
+   * device's own collider.
+   */
   lineOfSight(a: Vec3Like, b: Vec3Like): boolean;
-  /** Unobstructed firing line (uses RAY_SHOT). */
+  /** Unobstructed firing line (uses RAY_SHOT). Same endpoint rule as lineOfSight. */
   lineOfFire(a: Vec3Like, b: Vec3Like): boolean;
-  /** Push a sphere out of solids (camera collision). Returns the allowed fraction 0..1 along from→to. */
+  /**
+   * Push a sphere out of solids (camera collision). Returns the allowed fraction 0..1 along from→to.
+   * Default mask = RAY_SIGHT (opaque geometry; glass, rails, energy barriers and invisible blockers are ignored);
+   * add RAY_GROUND to also stop at floors/ramps. Returns 0 when `from` already overlaps a solid. The sphere
+   * stops 1 cm short of contact so consecutive sweeps never start inside.
+   */
   sweepSphere(from: Vec3Like, to: Vec3Like, radius: number, mask?: number): number;
   /** Colliders overlapping a circle (xz) within the y range */
   queryColliders(x: number, z: number, radius: number, yMin: number, yMax: number): ColliderHandle[];
@@ -154,15 +210,31 @@ export interface PhysicsWorld {
 
   readonly nav: NavGrid;
 
-  /** Evaluate triggers for the tracked point. Called by Game each tick with the player's feet position. */
+  /**
+   * Evaluate triggers for the tracked point. Called by Game each tick with the player's feet position.
+   * A null point (no live player) leaves every trigger state untouched — dying inside a volume does not fire
+   * its exit callback. Callbacks may add/remove triggers or clear the world; a throwing callback is logged
+   * and does not stop the others.
+   */
   updateTriggers(point: Vec3Like | null): void;
 
   /** Remove everything (zone unload). */
   clear(): void;
 
-  /** Debug wireframes of surfaces/colliders/nav as a THREE.Object3D (lazily rebuilt). */
+  /**
+   * Debug wireframes of surfaces/colliders/nav as a THREE.Object3D (lazily rebuilt). The same THREE.Group is
+   * returned every call and refreshes itself whenever the world changes while it is visible in a scene:
+   * surfaces green (ramps lighter), solids red, cover blue (low light / high dark), sight-through solids orange,
+   * triggers yellow, nav nodes as dots.
+   */
   debugObject(): unknown;
   readonly counts: { colliders: number; surfaces: number; triggers: number };
+
+  /**
+   * ADDED (physics-nav): bumped on every structural change (collider/surface added, removed, moved or
+   * enabled/disabled). Cheap way to cache anything derived from the collision world.
+   */
+  readonly revision: number;
 }
 
 export interface NavPath {
@@ -171,17 +243,38 @@ export interface NavPath {
 }
 
 export interface NavGrid {
-  /** (Re)build from current surfaces + colliders. Cheap enough to call when a door/barrier toggles. */
+  /**
+   * (Re)build from current surfaces + colliders. Cheap enough to call when a door/barrier toggles.
+   * Defaults: cell 0.5 m, agentRadius 0.45 m (options persist for later calls). When only a few
+   * colliders/surfaces changed since the last build, only the cells they touch are re-evaluated (≈ 0.1 ms for a
+   * door); with no changes it is a no-op. The first query on an unbuilt grid builds it automatically.
+   */
   rebuild(opts?: { cell?: number; agentRadius?: number }): void;
-  /** Smoothed path, or null when unreachable. */
+  /**
+   * Smoothed path, or null when unreachable. `points[0]` is `from`; the last point is `to` (or the nearest nav
+   * point to it when `to` itself is off the grid). Endpoints up to 3 m off the grid are snapped to it. The
+   * polyline keeps agentRadius clearance from solids and follows the ground within 0.3 m (waypoints are kept at
+   * ramp ends), so it can be drawn as a guide line as well as followed.
+   */
   findPath(from: Vec3Like, to: Vec3Like): NavPath | null;
   /** Is the point on walkable, unobstructed nav? */
   isWalkable(x: number, y: number, z: number): boolean;
-  /** Nearest walkable nav point */
+  /** Nearest walkable nav point (default maxDist 4) */
   nearest(x: number, y: number, z: number, maxDist?: number): Vec3Like | null;
   /** Deterministic pseudo-random reachable point within radius of centre (seeded by `seed`). */
   randomPoint(center: Vec3Like, radius: number, seed: number): Vec3Like | null;
-  /** Straight walk possible between two points without leaving nav / hitting solids? */
+  /**
+   * Straight walk possible between two points without leaving nav / hitting solids? Conservative: true means
+   * an agentRadius circle clears every solid along the line and the line never crosses a walkable edge or a
+   * step higher than step-up.
+   */
   walkable(a: Vec3Like, b: Vec3Like): boolean;
   readonly built: boolean;
+
+  /** ADDED (physics-nav): true when colliders/surfaces changed since the last rebuild (call rebuild()). */
+  readonly stale: boolean;
+  /** ADDED (physics-nav): number of nav nodes in the current build (0 before the first build). */
+  readonly nodeCount: number;
+  /** ADDED (physics-nav): cell size of the current build in metres. */
+  readonly cellSize: number;
 }
