@@ -138,8 +138,8 @@ export interface CharacterVisual {
   /**
    * Brief hit-confirm flash: an edge (fresnel) tint plus a lift of the surface's own albedo in `color` — the
    * figure's design stays readable at the peak; it is never a flat fill. `seconds` default 0.12 (linear decay).
-   * ADDED: `strength` 0..1.5, default 1 (a punchy enemy confirm). Use ~0.35 on the protagonist (a hurt flash
-   * must not read as a damage state or hide the character), ~0.5 for block/charge cues.
+   * ADDED: `strength` 0..1.5, default 1 (a punchy enemy confirm). Use ~0.5 on the protagonist (a hurt flash
+   * must not read as a damage state or hide the character), ~0.4–0.6 for block/charge cues.
    */
   flash(color: number, seconds?: number, strength?: number): void;
   /** 0..1 frozen/arrested look (frost shell, desaturate, pose hold) */

@@ -16,7 +16,7 @@ import type { Actor, DeviceHandle, Encounter, Interactable, Routine, SayOpts, Zo
 import { angleDelta, smoothstep, yawTo } from '@/core/mathx';
 import { barker, onZoneEvent, sustainDrops, tutorialHint, waitOr } from '../shared';
 import {
-  E2_CAP, NET, NOTICE_DRONE, NOTICE_ENFORCER, RX_HOLD, SCAN_ARC, SCAN_FAST, SCAN_PERIOD, SCAN_RANGE,
+  E2_CAP, NET, NETWORK_FINDS, NOTICE_DRONE, NOTICE_ENFORCER, RX_HOLD, SCAN_ARC, SCAN_FAST, SCAN_PERIOD, SCAN_RANGE,
 } from './layout';
 import { S } from './state';
 
@@ -92,8 +92,13 @@ export function setupE2(z: ZoneRuntime): Encounter {
   return enc;
 }
 
+/** The fight begins: an unseen lead has until the relay network's scanning finds her. */
+export function startNetworkClock(z: ZoneRuntime): void {
+  if (S.unseen && S.seenAt === Infinity) S.seenAt = z.time + NETWORK_FINDS;
+}
+
 /** The lead is noticed: from now on she is a target like anyone else. */
-export function notice(z: ZoneRuntime, why: 'scan' | 'struck' | 'close' | 'z03'): void {
+export function notice(z: ZoneRuntime, why: 'scan' | 'struck' | 'close' | 'network' | 'z03'): void {
   if (!S.unseen) return;
   S.unseen = false;
   z.player.targetable = true;
@@ -111,6 +116,10 @@ export function updateE2(z: ZoneRuntime, dt: number): void {
   const p = z.player;
   if (!p || !p.alive) return;
   p.targetable = false;
+  if (z.time >= S.seenAt) {
+    notice(z, 'network');
+    return;
+  }
   for (const a of enc.alive) {
     const lim = String(a.archetype) === 'enforcer' ? NOTICE_ENFORCER : NOTICE_DRONE;
     if (Math.hypot(a.pos.x - p.pos.x, a.pos.z - p.pos.z) < lim) {
@@ -169,8 +178,14 @@ export function armReceivers(z: ZoneRuntime): void {
       S.ixB?.remove();
       game.ui.marker('z04-ixB', null);
     }
-    // the network is the sensor installation: when it goes down the scan head goes dark with it
-    if (receiversDown() && S.scan && !S.scan.disabled) S.scan.disable(null);
+    // the network is the sensor installation: when it goes down the scan head goes dark with it, and its scanning
+    // no longer hunts an unseen lead; one receiver down interrupts the search and it starts over
+    if (receiversDown()) {
+      if (S.scan && !S.scan.disabled) S.scan.disable(null);
+      S.seenAt = Infinity;
+    } else if (S.unseen && (id === RX_A_ID || id === RX_B_ID)) {
+      S.seenAt = z.time + NETWORK_FINDS;
+    }
   });
 }
 
@@ -248,7 +263,7 @@ export function* e2Barks(z: ZoneRuntime, enc: Encounter): Routine {
 /** Teach through play (plan order): receivers by shot or by hand → one / both down → the shield front. HUD only. */
 export function* teachE2(z: ZoneRuntime, enc: Encounter): Routine {
   yield 1.5;
-  if (S.unseen) tutorialHint(z, 'z04Unseen', 'They have not seen you. The scan sweep, an attack or close range will.', undefined, 7); // NEW
+  if (S.unseen) tutorialHint(z, 'z04Unseen', 'Not seen yet. A scan sweep, an attack or getting close will give you away.', undefined, 7); // NEW
   if (S.unseen) yield 7.5;
   if (!receiversDown()) tutorialHint(z, 'z04Receivers', 'Shoot a receiver, or disable it by hand at close range.', 'interact', 8); // NEW
   yield waitOr(z, () => down(S.rxA) || down(S.rxB) || e2Done(), 35);

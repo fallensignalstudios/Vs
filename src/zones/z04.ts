@@ -16,13 +16,14 @@
  * SCRIPT: SCRIPT_SOURCE.md § Z04. The author's lines are exact (curly quotes and apostrophes are the book's); every
  * line and UI string written for the game is tagged `// NEW`.
  */
-import type { Beat, CineCtx, Companion, Routine, ZoneDef, ZoneRuntime } from '@/core/api';
+import * as THREE from 'three';
+import type { Actor, Beat, CamPose, CineCtx, Companion, Routine, ZoneDef, ZoneRuntime } from '@/core/api';
 import {
   atPost, conversation, encounterMusic, feet, setDoor, standardExit, waitOr, walkTo,
 } from './shared';
 import {
   armReceivers, detected, e2Barks, e2Done, e2Objective, e2Sustain, notice, quietDevices, restoreAfterE2, setupE2,
-  startTurn, stepTurn, teachE2, updateE2,
+  startNetworkClock, startTurn, stepTurn, teachE2, updateE2,
 } from './z04/fight';
 import { build } from './z04/space';
 import { S, resetState } from './z04/state';
@@ -61,6 +62,37 @@ function kneelAt(z: ZoneRuntime, c: Companion, marker: string): void {
   c.play('kneel');
 }
 
+/** centroid (world) of some bodies */
+function centre(list: readonly Actor[]): THREE.Vector3 {
+  const v = new THREE.Vector3();
+  for (const a of list) v.add(a.pos);
+  return list.length ? v.multiplyScalar(1 / list.length) : v;
+}
+
+/** where the shield line stands now (its posts before it has moved) */
+function shieldCentre(z: ZoneRuntime): THREE.Vector3 {
+  const shields = S.enc ? S.enc.alive.filter((a) => String(a.archetype) === 'enforcer') : [];
+  return shields.length ? centre(shields) : z.m('enf1').lerp(z.m('enf2'), 0.5);
+}
+
+/**
+ * The crossfire shot, framed on the live positions: from just behind and beside the drone nearest the shield
+ * line, looking along its lane at the shields (the two groups move while they fight).
+ */
+function crossfireShot(z: ZoneRuntime): { from: CamPose; to: CamPose } {
+  const line = shieldCentre(z);
+  const drones = S.enc ? S.enc.alive.filter((a) => String(a.archetype) === 'contamDrone') : [];
+  let d = drones[0]?.pos ?? z.m('droneB');
+  for (const a of drones) if (a.pos.distanceTo(line) < d.distanceTo(line)) d = a.pos;
+  const away = new THREE.Vector3(d.x - line.x, 0, d.z - line.z);
+  if (away.lengthSq() < 1) away.set(0, 0, 1);
+  away.normalize();
+  const side = new THREE.Vector3(-away.z, 0, away.x);
+  const look = line.clone().setY(line.y + 1.3);
+  const at = (back: number, off: number, h: number) => new THREE.Vector3(d.x + away.x * back + side.x * off, d.y + h, d.z + away.z * back + side.z * off);
+  return { from: { pos: at(3.4, 1.6, 0.9), look, fov: 40 }, to: { pos: at(2.6, 1.2, 0.7), look, fov: 34 } };
+}
+
 // =====================================================================================================================
 // Beats
 // =====================================================================================================================
@@ -77,19 +109,22 @@ function* overlook(z: ZoneRuntime): Routine {
 
   yield* z.cinematic('z04-crossfire', function* (c: CineCtx): Routine {
     // the whole hall from the entry: the shield angle small under the gold ring, bolts crossing the floor
-    c.cut({ pos: z.P(32.4, 1.0, 2.0), look: z.P(24.5, 33, 2.6), fov: 50 });
-    c.moveAsync({ pos: z.P(31.6, 3.4, 1.85), look: z.P(23.5, 33, 2.2), fov: 42 }, 5.5, 'inOut');
+    const line = shieldCentre(z);
+    c.cut({ pos: z.P(32.4, 1.0, 2.0), look: line.clone().setY(2.6), fov: 50 });
+    c.moveAsync({ pos: z.P(31.6, 3.4, 1.85), look: line.clone().setY(1.8), fov: 34 }, 5.5, 'inOut');
     yield 3;
-    // the shield front from the drones' side: violet lanes on amber shields, sidearms answering
-    c.cut({ pos: z.P(25.8, 23.2, 1.5), look: z.P(22.8, 33.2, 1.5), fov: 40 });
-    c.moveAsync({ pos: z.P(24.6, 24.6, 1.35), look: z.P(22.6, 33.2, 1.45), fov: 36 }, 4, 'out');
+    // the shield front from over a drone's shoulder: violet lanes on amber shields, sidearms answering
+    const front = crossfireShot(z);
+    c.cut(front.from);
+    c.moveAsync(front.to, 4, 'out');
     yield 1.2;
     yield* z.say('Enforcer', 'Drones, left! Hold the line!', { offscreen: true }); // NEW (Dominion drill call)
     yield 0.6;
     if (alerted) {
       // Z03 gave them away: the two drones break off and turn on the entry together
       const drones = enc.alive.filter((a) => String(a.archetype) === 'contamDrone');
-      c.cut({ pos: z.P(33.6, 4.2, 1.6), look: z.P(29, 19, 2.2), fov: 38 });
+      const mid = drones.length ? centre(drones) : z.P(29, 19, 0);
+      c.cut({ pos: z.P(33.6, 4.2, 1.6), look: mid.setY(2.0), fov: 30 });
       yield 0.6;
       game.ai.setCeasefire(true);
       startTurn(drones, z.player.pos, 0.7);
@@ -97,15 +132,17 @@ function* overlook(z: ZoneRuntime): Routine {
       game.ai.setCeasefire(false);
     }
     // the three of them behind the entry cover
+    // they kneel facing the hall: the camera sits low over the barricade top, looking back at their faces
     const sel = feet(z, z.player);
-    c.twoShot(feet(z, tharne), sel, { side: -1, distance: 1.9, fov: 38 });
+    c.shot(feet(z, tharne), { yawDeg: 20, distance: 1.45, height: 1.42, lookHeight: 1.0, fov: 44 });
     yield* z.say('Tharne', alerted
       ? 'Four Dominion enforcers, two contaminated drones firing on them, and tracking us.' // NEW (Z03 detection variant)
       : 'Four Dominion enforcers and two contaminated drones, firing on each other.', // NEW
     { actor: tharne });
-    c.twoShot(feet(z, lyric), sel, { side: 1, distance: 1.9, fov: 38 });
+    c.shot(feet(z, lyric), { yawDeg: 345, distance: 1.45, height: 1.42, lookHeight: 1.0, fov: 44 });
     yield* z.say('Lyric', 'They will hold that doorway until it apologizes.', { actor: lyric }); // NEW
-    c.shot(sel, { yawDeg: 20, distance: 2.4, height: 1.5, lookHeight: 1.5, fov: 36 });
+    // low, from the hall side: her face, the ribs climbing the entry wall behind her
+    c.shot(sel, { yawDeg: 335, distance: 2.5, height: 1.2, lookHeight: 1.62, fov: 36 });
     yield* z.say('Selene', 'Receivers first.', { actor: z.player }); // NEW
     // end state — identical watched or skipped
     stepTurn(Infinity);
@@ -119,6 +156,7 @@ function* e2(z: ZoneRuntime): Routine {
   const enc = setupE2(z);
   armReceivers(z);
   e2Sustain(z);
+  startNetworkClock(z);
   // forked in the beat that needs them, so a debug entry at `e2` gets them too
   z.fork(encounterMusic(z, enc, 'combatSelene', 'approachSelene', { begin: () => !S.unseen }), 'music');
   z.fork(e2Objective(z, enc), 'objective');

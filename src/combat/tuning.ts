@@ -203,7 +203,7 @@ export const TUNING = {
     flashStrengthHit: 1,
     flashStrengthWeak: 1.25,
     flashStrengthBlock: 0.6,
-    flashStrengthHurt: 0.35,
+    flashStrengthHurt: 0.55,
     flashStrengthPlayerBlock: 0.4,
     /** seconds of the protagonist's hurt flash */
     flashHurtSeconds: 0.09,

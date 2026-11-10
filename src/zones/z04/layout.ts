@@ -17,7 +17,7 @@
 export const W = 62;
 export const D = 38;
 /** wall height and rib apex: the colonnade and ribs carry the eye far above the fight */
-export const WALL_H = 13;
+export const WALL_H = 21.5;
 export const RIB_H = 21;
 /** entry (south wall) and exit (north wall) door centres */
 export const ENTRY_X = 31;
@@ -67,5 +67,7 @@ export const ENFORCER_POSTS: ReadonlyArray<readonly [number, number, number]> = 
 /** how close the lead may come to an unseen Enforcer / drone before it notices her (horizontal metres) */
 export const NOTICE_ENFORCER = 9;
 export const NOTICE_DRONE = 6.5;
+/** seconds the relay network's scanning takes to find an unseen lead (reset by each receiver taken down) */
+export const NETWORK_FINDS = 25;
 /** close-interaction disable of a receiver (seconds held) */
 export const RX_HOLD = 1.4;

@@ -7,7 +7,7 @@
  * on the megastructure through a glass wall, a distant Dominion shield line in front of a great gold ring.
  */
 import * as THREE from 'three';
-import type { ZoneBuilder } from '@/core/api';
+import type { DeepPartial, Look, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { AMBER, BLUE, FACE, IVORY } from '../shared';
 import {
@@ -16,12 +16,24 @@ import {
 } from './layout';
 import { S, resetState } from './state';
 
+/**
+ * LOOKS.relay with more haze and a little less fill: the far end recedes into silver air and the key, the shafts
+ * and the strips carry the room (the shared preset reads as an evenly lit white box at this scale).
+ */
+const Z04_LOOK: DeepPartial<Look> = {
+  ...LOOKS.relay,
+  exposure: 1.0,
+  fog: { color: 0xa4adba, density: 0.012 },
+  grade: { ...LOOKS.relay.grade, contrast: 1.12 },
+  ambient: { ...LOOKS.relay.ambient, intensity: 0.66 },
+};
+
 export function build(b: ZoneBuilder): void {
   resetState();
   // the exterior glow comes through the east glass: put the Wound's bearing out there, north of east
   b.game.sky.setHeading(-Math.PI / 3);
   b.setEnv({
-    sky: 'frozenInterior', look: LOOKS.relay, ambience: 'relayOverlook', music: 'approachSelene',
+    sky: 'frozenInterior', look: Z04_LOOK, ambience: 'relayOverlook', music: 'approachSelene',
     // high from the east, through the glass wall: column shadows fall west across the floor (≥ 40° over the mirror floor)
     key: { dirFrom: [30, 6, 34], intensity: 2.4, color: 0xf4f6ff },
   });
@@ -42,7 +54,11 @@ function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
   const door = (at: number) => [{ at, width: DOOR_W, height: DOOR_H }];
   b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed', doors: door(ENTRY_X) });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'panelled', doors: door(EXIT_X) });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'ribbed', doors: door(EXIT_X) });
+  // paired gold conduits climb the north wall either side of the ring (concept: the pipes framing the far door)
+  for (const x of [EXIT_X - 7.4, EXIT_X + 7.4]) {
+    for (const dx of [-0.36, 0.36]) b.conduit([[x + dx, D - 0.5, 0.2], [x + dx, D - 0.5, WALL_H - 1]], { r: 0.1 });
+  }
   b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'conduit' });
   // the right side is open to the megastructure: glass from floor to vault
   b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'glass' });
@@ -115,9 +131,9 @@ function buildHighRoute(b: ZoneBuilder): void {
  */
 function buildServicePath(b: ZoneBuilder): void {
   for (const n of COL_N) {
-    b.column({ x: COL_X, n, r: COL_R, height: WALL_H, style: 'faceted', lit: true });
+    b.column({ x: COL_X, n, r: COL_R, height: RIB_H, style: 'faceted', lit: true });
     // paired gold conduits up the room face of every column
-    for (const dn of [-0.42, 0.42]) b.conduit([[COL_X + COL_R + 0.12, n + dn, 0.2], [COL_X + COL_R + 0.12, n + dn, WALL_H - 0.6]], { r: 0.09 });
+    for (const dn of [-0.42, 0.42]) b.conduit([[COL_X + COL_R + 0.12, n + dn, 0.2], [COL_X + COL_R + 0.12, n + dn, RIB_H - 1]], { r: 0.09 });
   }
   const screen = (n0: number, n1: number) => b.wall({ from: [COL_X, n0], to: [COL_X, n1], height: SCREEN_H, thickness: 0.5, style: 'panelled' });
   screen(COL_N[0] + COL_R, COL_N[1] - COL_R);
@@ -132,7 +148,7 @@ function buildCover(b: ZoneBuilder): void {
   // low
   b.coverLow({ x: 15.5, n: 34, w: 3, d: 2, yawDeg: FACE.east, style: 'ancient' });
   b.coverLow({ x: 26.5, n: 27.5, w: 3, d: 3, yawDeg: FACE.east, style: 'ancient' });
-  b.coverLow({ x: 30.5, n: 7.5, w: 3, d: 3, yawDeg: FACE.east, style: 'reformation' }); // Tharne and Lyric hold here
+  b.coverLow({ x: 30.5, n: 7.2, w: 3.4, d: 1.3, yawDeg: FACE.north, style: 'reformation' }); // Tharne and Lyric hold here
   b.coverLow({ x: 39.5, n: 10.5, w: 3, d: 3, yawDeg: FACE.east, style: 'ancient' });
   // high
   b.coverHigh({ x: 12.5, n: 20.5, w: 3, d: 3, yawDeg: FACE.east, style: 'ancient' });

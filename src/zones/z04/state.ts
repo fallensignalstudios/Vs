@@ -36,6 +36,12 @@ export interface Z04State {
    * head sweeps her, she strikes anything in the encounter, or she walks up close. Z03 detection skips this.
    */
   unseen: boolean;
+  /**
+   * Zone time at which the relay network's own scanning finds an unseen lead (it stops the two groups wearing
+   * each other down while she waits). Pushed back each time a receiver goes down; Infinity once the network is
+   * down or before the fight begins.
+   */
+  seenAt: number;
   /** the drones' authored turn toward the lead (overlook, `z03Detected`) */
   turn: UnisonTurn | null;
 }
@@ -45,7 +51,7 @@ export let S: Z04State = blank();
 function blank(): Z04State {
   return {
     entry: null, exit: null, holo: null, holoProgress: 0, holoVisible: 0,
-    enc: null, rxA: null, rxB: null, scan: null, ixA: null, ixB: null, unseen: false, turn: null,
+    enc: null, rxA: null, rxB: null, scan: null, ixA: null, ixB: null, unseen: false, seenAt: Infinity, turn: null,
   };
 }
 

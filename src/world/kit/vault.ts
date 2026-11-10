@@ -1,8 +1,8 @@
 /**
  * The enclosed King-era vault (`ceiling({ style: 'vaultClosed' })`): a thick barrel shell that springs from the
- * wall tops, carried by transverse ribs. Between each pair of ribs two narrow seams high on the shell open onto
- * bright warm haze — light boxes, so no sky or stars ever show — and soft sheets of light fall from them along
- * the key light. Both gable ends are closed, each with a vertical light seam.
+ * wall tops, carried by transverse ribs. Between each pair of ribs three narrow gold-edged seams — one along the
+ * crown, one high on each shoulder — open onto bright warm haze (light boxes, so no sky or stars ever show), and
+ * soft sheets of light fall from them along the key light. Both gable ends are closed, each with a vertical seam.
  *
  * Draw calls: the shell (one material), ribs and trim (merged with the zone's white-gold / gold), the haze (one
  * mesh for every seam) and the light sheets (one mesh, hidden without volumetrics). The shell casts no shadow:
@@ -63,16 +63,17 @@ void main() {
   gl_FragColor = vec4( uColor * a, a );
 }`;
 
-interface Seam { t0: number; t1: number; z0: number; z1: number }
+interface Seam { t0: number; t1: number; z0: number; z1: number; crown: boolean }
 
 /** Emit an enclosed vault into `part` (already placed and turned so local Z runs along the long side). */
 export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: number, d: number, springH: number): void {
   const hw = w / 2, hd = d / 2;
   const R = ctx.num(o.rise, Math.max(2, w * 0.24), 0.5, w);
-  const bays = Math.max(1, Math.round(d / ctx.num(o.bay, 7, 2, 40)));
-  const glow = ctx.num(o.glow, 3, 0, 20);
+  const glow = ctx.num(o.glow, 1.8, 0, 20);
+  const hazeColor = ctx.num(o.hazeColor, 0xffe6bf);
   const fam = familyOf(o.mat);
-  const shellMat = ctx.variant(o.mat ?? 'whiteGoldPanel', fam.dark ? {} : { emissive: 0x3a3226, emissiveIntensity: 0.55 });
+  // the shell is lit from below by the hall itself: a faint warm bounce keeps it ivory rather than grey
+  const shellMat = ctx.variant(o.mat ?? 'whiteGold', fam.dark ? {} : { emissive: 0x6b5c46, emissiveIntensity: 0.45 });
   const shell = part.g(shellMat), rib = part.g(fam.frame), trim = part.g('goldTrim');
 
   // ---- the arch: t = 0 left springing → π/2 crown → π right springing -----------------------------------
@@ -93,18 +94,19 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
   };
   const inward = (t: number): V3 => { const n = nrm(t); return [-n[0], -n[1], 0]; };
 
-  // ---- seams: two narrow slits either side of the crown in every bay ----------------------------------------
-  const xs = Math.min(3, Math.max(1.2, hw * 0.2)), ws = Math.min(1, Math.max(0.45, w * 0.034));
+  // ---- ribs and seams: a narrow slit along the crown and one high on each shoulder, in every bay ------------
+  const cw = Math.min(0.6, Math.max(0.3, w * 0.017)), sx = hw * 0.5, sw = Math.min(0.8, Math.max(0.36, w * 0.024));
   const tOf = (x: number): number => Math.acos(Math.max(-1, Math.min(1, -x / hw)));
-  const slitsT: Array<[number, number]> = [[tOf(-xs - ws / 2), tOf(-xs + ws / 2)], [tOf(xs - ws / 2), tOf(xs + ws / 2)]];
-  const zb: number[] = [];
-  for (let k = 0; k <= bays; k++) zb.push(-hd + (d * k) / bays);
-  const margin = RIB_HALF + 0.45;
+  const slitsT: Array<[number, number, boolean]> = [
+    [tOf(-sx - sw / 2), tOf(-sx + sw / 2), false], [tOf(-cw / 2), tOf(cw / 2), true], [tOf(sx - sw / 2), tOf(sx + sw / 2), false],
+  ];
+  const zb = ribStations(ctx, o, d);
+  const margin = RIB_HALF + 0.4;
   const seams: Seam[] = [];
-  for (let k = 0; k < bays; k++) {
+  for (let k = 0; k + 1 < zb.length; k++) {
     const z0 = zb[k] + margin, z1 = zb[k + 1] - margin;
     if (z1 - z0 < 0.8) continue;
-    for (const [t0, t1] of slitsT) seams.push({ t0, t1, z0, z1 });
+    for (const [t0, t1, crown] of slitsT) seams.push({ t0, t1, z0, z1, crown });
   }
 
   // ---- shell: a (t, z) grid with the seams left open ---------------------------------------------------------
@@ -150,17 +152,17 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
       trim.ribbon([g0, g1], 0.09, gn);
     }
   }
-  // the crown between the seams: a raised spine with a gold line
-  const crown = at(Math.PI / 2, 0, 0);
-  rib.box(Math.max(0.5, xs * 0.5), 0.22, d, 0, crown[1] - 0.11, 0);
-  trim.box(0.12, 0.02, d, 0, crown[1] - 0.225, 0);
+  // every seam is edged in gold on the room side
+  for (const s of seams) {
+    for (const t of [s.t0, s.t1]) trim.ribbon([at(t, -0.012, s.z0 - 0.06), at(t, -0.012, s.z1 + 0.06)], 0.07, inward(t));
+  }
   for (const s of [-1, 1]) {
     rib.box(0.7, 0.42, d, s * (hw - 0.3), 0.04, 0);
     trim.box(0.74, 0.03, d + 0.02, s * (hw - 0.3), -0.18, 0);
   }
 
   // ---- haze: light boxes behind the seams, a lit lip on every reveal, a vertical seam in each gable -----------
-  const hz = new HazeWriter(ctx.num(o.hazeColor, 0xfff0d6));
+  const hz = new HazeWriter(hazeColor);
   const deep = SHELL + BOX;
   for (const s of seams) {
     const zm = 0.35;
@@ -192,11 +194,47 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
     const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     return [(b[0] - a[0]) / l, (b[1] - a[1]) / l, 0];
   }
-  const haze = hz.mesh(ctx, glow);
-  part.group.add(haze);
+  part.group.add(hz.mesh(ctx, glow, false));
+
+  // ---- spill: the haze lights the shell around each seam (additive, fades out ~1 m from the opening) ----------
+  const sp = new HazeWriter(hazeColor);
+  const SPILL = 1.1, FADE = 0.5, k0 = 0.16, inner = -0.015;
+  for (const s of seams) {
+    const tm = (s.t0 + s.t1) / 2, a = base(tm - 0.01), b = base(tm + 0.01);
+    const dt = SPILL / (Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.02 || 1);
+    const ta = Math.max(0, s.t0 - dt), tb = Math.min(Math.PI, s.t1 + dt);
+    for (const [e, f] of [[s.t0, ta], [s.t1, tb]] as const) {
+      const n0 = inward(e), z0 = s.z0 - FADE, z1 = s.z1 + FADE;
+      sp.quad(at(e, inner, s.z0), at(f, inner, s.z0), at(f, inner, s.z1), at(e, inner, s.z1), n0, [k0, 0, 0, k0]);
+      sp.quad(at(e, inner, z0), at(f, inner, z0), at(f, inner, s.z0), at(e, inner, s.z0), n0, [0, 0, 0, k0]);
+      sp.quad(at(e, inner, s.z1), at(f, inner, s.z1), at(f, inner, z1), at(e, inner, z1), n0, [k0, 0, 0, 0]);
+    }
+    for (const [z, zf] of [[s.z0, s.z0 - FADE], [s.z1, s.z1 + FADE]] as const) {
+      sp.quad(at(s.t0, inner, z), at(s.t1, inner, z), at(s.t1, inner, zf), at(s.t0, inner, zf), inward(tm), [k0, k0, 0, 0]);
+    }
+  }
+  part.group.add(sp.mesh(ctx, glow, true));
 
   // ---- light sheets from the seams, along the key light -------------------------------------------------------
-  if (o.shafts !== false && seams.length) part.group.add(lightSheets(ctx, part, seams, at, springH, ctx.num(o.hazeColor, 0xfff0d6)));
+  if (o.shafts !== false && seams.length) part.group.add(lightSheets(ctx, part, seams.filter((s) => s.crown), at, springH, hazeColor));
+}
+
+/**
+ * Rib stations along the vault (local Z, both gable ends included): evenly fitted bays by default, or exactly
+ * `bay` apart from `bayPhase` metres after the start when a phase is given (to sit on an existing rib row).
+ */
+function ribStations(ctx: KitCtx, o: CeilingOpts, d: number): number[] {
+  const hd = d / 2, bay = ctx.num(o.bay, 7, 2, 40);
+  const out = [-hd];
+  if (o.bayPhase !== undefined && Number.isFinite(o.bayPhase)) {
+    const phase = ((o.bayPhase % bay) + bay) % bay;
+    for (let z = -hd + phase; z < hd - 1; z += bay) if (z > -hd + 1) out.push(z);
+  } else {
+    const n = Math.max(1, Math.round(d / bay));
+    for (let k = 1; k < n; k++) out.push(-hd + (d * k) / n);
+  }
+  out.push(hd);
+  return out;
 }
 
 /** vertex-coloured unlit quads (HDR via the material colour), fogged like the rest of the hall */
@@ -220,22 +258,26 @@ class HazeWriter {
     }
   }
 
-  mesh(ctx: KitCtx, glow: number): THREE.Mesh {
+  /** `additive`: a glow laid over other surfaces (unfogged — fog would add its colour — and not reflected) */
+  mesh(ctx: KitCtx, glow: number, additive: boolean): THREE.Mesh {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.pos), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(this.nor), 3));
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(this.col), 3));
     g.computeBoundingSphere();
-    const m = new THREE.MeshBasicMaterial({ vertexColors: true, fog: true });
+    const m = additive
+      ? new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
+      : new THREE.MeshBasicMaterial({ vertexColors: true, fog: true });
     m.color.setScalar(glow);
-    m.name = 'kit-vault-haze';
+    m.name = additive ? 'kit-vault-spill' : 'kit-vault-haze';
     const mesh = new THREE.Mesh(ctx.own(g), ctx.own(m));
-    mesh.name = 'vault-haze';
+    mesh.name = additive ? 'vault-spill' : 'vault-haze';
+    if (additive) { mesh.layers.set(RENDER_LAYERS.noReflect); mesh.renderOrder = 7; }
     return mesh;
   }
 }
 
-/** one additive mesh: a pair of faces per seam, falling along the key light to the floor */
+/** one additive mesh: a sheet per seam, falling along the key light to the floor */
 function lightSheets(ctx: KitCtx, part: Part, seams: Seam[], at: (t: number, off: number, z: number) => V3, springH: number, color: number): THREE.Mesh {
   // the key light in the part's frame (falls back to a steep light from one side)
   const key = ctx.lights.find((l) => l.name === 'kit-key');
@@ -268,7 +310,7 @@ function lightSheets(ctx: KitCtx, part: Part, seams: Seam[], at: (t: number, off
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
   g.setAttribute('aSheet', new THREE.BufferAttribute(new Float32Array(uv), 2));
   g.computeBoundingSphere();
-  const uniforms = { uColor: { value: new THREE.Color(color) }, uStrength: { value: 0.16 }, uTime: { value: 0 } };
+  const uniforms = { uColor: { value: new THREE.Color(color) }, uStrength: { value: 0.24 }, uTime: { value: 0 } };
   const m = new THREE.ShaderMaterial({
     vertexShader: SHEET_VERT, fragmentShader: SHEET_FRAG, uniforms, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: true,

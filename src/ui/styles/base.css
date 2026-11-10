@@ -195,7 +195,7 @@
 .aur-key.is-letter {
   font-family: var(--f-title);
   font-weight: 600;
-  font-size: calc(var(--u) * 15);
+  font-size: calc(var(--u) * 14.5);
   padding-bottom: 0;
 }
 
@@ -206,7 +206,7 @@
 .aur-key.is-sm.is-letter {
   min-width: calc(var(--u) * 21);
   height: calc(var(--u) * 21);
-  font-size: calc(var(--u) * 13);
+  font-size: calc(var(--u) * 12);
 }
 
 /* ---------------------------------------------------------------- debug + fps */

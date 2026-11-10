@@ -20,13 +20,16 @@ export function flashStrength(strength: number | undefined): number {
 
 /**
  * GLSL: `aurHitFlash(uFlash, albedo, fres)` → emissive to add. `albedo` is the shaded surface's diffuse colour,
- * `fres` a pow(1 − n·v, 3) fresnel term. At strength 1 a white flash lifts mid-grey plate by ~0.5 and puts a
- * blooming outline on the silhouette; at the protagonist's 0.35 it is a thin edge tint and a faint warm lift.
+ * `fres` a pow(1 − n·v, 3) fresnel term. At strength 1 a white flash adds 1.25 × the albedo (so plate brightens
+ * but keeps its pattern) and a blooming outline on the silhouette; at the protagonist's 0.55 it is an edge tint
+ * and a faint lift.
  */
 export const HIT_FLASH_GLSL = /* glsl */ `
 vec3 aurHitFlash( vec4 f, vec3 albedo, float fres ) {
   float a = clamp( f.a, 0.0, ${FLASH_MAX_STRENGTH.toFixed(2)} );
-  // edge: an outline that blooms on the silhouette; body: the surface's own colour brightened, never a fill
-  return f.rgb * a * ( fres * 1.4 + 0.025 ) + max( albedo, vec3( 0.0 ) ) * f.rgb * a * 1.25;
+  // edge: a soft fresnel band, (1 - n.v)^2, that outlines the silhouette; body: the surface's own colour
+  // brightened in the flash colour, never a fill
+  float edge = pow( clamp( fres, 0.0, 1.0 ), 0.6667 );
+  return f.rgb * a * ( edge * 1.6 + 0.025 ) + max( albedo, vec3( 0.0 ) ) * f.rgb * a * 1.25;
 }
 `;

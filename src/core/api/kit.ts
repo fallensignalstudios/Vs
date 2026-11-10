@@ -110,14 +110,17 @@ export interface RampOpts {
  * Options of `ceiling()`. Styles: `'flat'` (default) coffered slab with light strips · `'vault'` low barrel vault
  * with ribs and an apex seam · `'lattice'` open beam grid (the sky shows through) · `'glass'` glazed lattice ·
  * ADDED (kit) `'vaultClosed'` — an ENCLOSED barrel vault for upper white-gold halls: a thick shell springing from
- * the wall tops (`h` = the wall height), transverse ribs every `bay` metres, and in every bay two narrow seams high
- * either side of the crown that open onto bright warm haze (light boxes: no sky, no stars). Both gable ends are
+ * the wall tops (`h` = the wall height), transverse ribs every `bay` metres, and in every bay three narrow gold-edged
+ * seams (along the crown and high on each shoulder) that open onto bright warm haze (light boxes: no sky, no
+ * stars). Both gable ends are
  * closed, each with a vertical light seam; soft sheets of light fall from the seams along the zone's key light
  * (`shafts`, hidden when the quality profile has no volumetrics). The shell casts no shadow, so the key light
- * still lands on the floor as the light that enters through the seams. Cost: ~3 draw calls, ~3k triangles.
+ * still lands on the floor as the light that enters through the seams; light the hall with a warm `look.ambient.ground`
+ * (bounce from the floor) and a little more fog than an open hall. Cost: ~4 draw calls, ~6k triangles.
  *
- *   // Z01: a 56 × 26 m hall with 10 m walls and 15.5 m ribs → the vault springs from the wall tops, crown at 16.3
- *   b.ceiling({ x: 28, n: 13, w: 56, d: 26, h: 10, style: 'vaultClosed', rise: 6.3, bay: 8 });
+ *   // Z01: a 56 × 26 m hall, 10 m walls, a rib row at x = 4, 12 … 52 → the vault springs from the wall tops and
+ *   // its ribs sit on the rib row (the first one 4 m from the west end)
+ *   b.ceiling({ x: 28, n: 13, w: 56, d: 26, h: 10, style: 'vaultClosed', rise: 6.6, bay: 8, bayPhase: 4 });
  *
  * The vault spans the SHORT side of the rect and runs along the long one; `h` is its springing height. For the
  * lower terminal pass `mat: 'blackStone'` (dark shell, gold-framed seams).
@@ -128,9 +131,15 @@ export interface CeilingOpts extends RectOpts {
   rise?: number;
   /** vaultClosed: rib spacing along the vault (default 7 m; rounded so the bays divide the length evenly) */
   bay?: number;
-  /** vaultClosed: brightness of the seam haze (default 3; above 1 it blooms) */
+  /**
+   * vaultClosed: put the ribs exactly `bay` apart, the first `bayPhase` m from the WEST end of an east–west vault
+   * (the NORTH end of a north–south one; before `yawDeg`) — to line them up with a `ribRow`. Default: bays fitted
+   * evenly to the length.
+   */
+  bayPhase?: number;
+  /** vaultClosed: brightness of the seam haze (default 1.8; above 1 it blooms) */
   glow?: number;
-  /** vaultClosed: haze / light-sheet colour (default 0xfff0d6, warm white) */
+  /** vaultClosed: haze / light-sheet colour (default 0xffe6bf, warm white) */
   hazeColor?: number;
   /** vaultClosed: soft sheets of light from the seams (default true) */
   shafts?: boolean;

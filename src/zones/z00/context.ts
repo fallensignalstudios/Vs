@@ -53,12 +53,9 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
     sky.setBattleIntensity(0.3);
     sky.setWoundActivity(0.15);
 
-    // S1 — inside the fractured rib, looking out over the burning wreck (slow push)
-    const s1a = z.P(rib[0] - 4.5, rib[1] - 9.5, 5.2);
-    const s1b = z.P(rib[0] - 3, rib[1] - 6, 4.4);
-    const wreckAt = z.P(wreck[0], wreck[1], 3.2);
-    c.cut({ pos: s1a, look: wreckAt, fov: 46 });
-    c.moveAsync({ pos: s1b, look: z.P(wreck[0] + 1, wreck[1], 2.6), fov: 43 }, 15, 'inOut');
+    // S1 — inside, under the fractured rib, looking out over the burning wreck (slow push toward the breach)
+    c.cut({ pos: z.P(rib[0] - 1.6, rib[1] - 9, 4.6), look: z.P(wreck[0], wreck[1], 9), fov: 48 });
+    c.moveAsync({ pos: z.P(rib[0] - 0.6, rib[1] - 5.2, 3.6), look: z.P(wreck[0] + 1, wreck[1], 8), fov: 44 }, 15, 'inOut');
 
     const steps: Step[] = [
       {
@@ -71,9 +68,10 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         text: 'REMOTE ANCHORS: 4 / 4 RELEASE-READY\nTERMINAL ANCHOR: SEALED\nPRIMARY CONTAINMENT: CLOSED\nBOUNDARY PRESSURE: RISING',
         hold: 6.2,
         begin: () => {
-          const p = z.P(rib[0] + 1.5, rib[1] - 3.2, 1.4);
-          c.cut({ pos: p, look: woundLook(z, p, 34), fov: 52 });
-          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0, 0.5, -0.8)), look: woundLook(z, p, 22), fov: 48 }, 11, 'inOut');
+          // S2 — at the rubble edge, up at the sky: red remnant, the Wound, the white remnant
+          const p = z.P(rib[0] - 0.5, rib[1] - 3.4, 1.3);
+          c.cut({ pos: p, look: woundLook(z, p, 4), fov: 54 });
+          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0.4, 0.3, -0.6)), look: woundLook(z, p, 1), fov: 50 }, 11, 'inOut');
         },
       },
       { text: 'Four lights. One dark.', hold: 4.2 },
@@ -85,8 +83,8 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         at: 1.4,
         lines: [['Caelus', 'Then arrive first.']],
         begin: () => {
-          c.cut({ pos: z.P(wreck[0] - 10, wreck[1] - 8, 2.4), look: z.P(wreck[0] - 1, wreck[1] + 1, 2.8), fov: 40 });
-          c.moveAsync({ pos: z.P(wreck[0] - 8.5, wreck[1] - 9.5, 2.0), look: z.P(wreck[0] + 1, wreck[1] + 1, 2.6), fov: 38 }, 16, 'inOut');
+          c.cut({ pos: z.P(wreck[0] - 12, wreck[1] - 11, 3.4), look: z.P(wreck[0] - 1, wreck[1], 3.4), fov: 42 });
+          c.moveAsync({ pos: z.P(wreck[0] - 9.5, wreck[1] - 13, 2.8), look: z.P(wreck[0] + 1, wreck[1], 3.2), fov: 40 }, 16, 'inOut');
         },
       },
       {
@@ -97,7 +95,8 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         lines: [['Sol', 'Then arrive first.']],
       },
       {
-        text: 'CROWNMARK V: NO ACTIVATION WITHOUT SOVEREIGN AUTHORITY\nCROWNMARK V: NO ACTIVATION WITHOUT COUNCIL AUTHORITY',
+        // the two orders set as a parallel pair, each broken where it reads (the strings are the book's, whole)
+        text: 'CROWNMARK V: NO ACTIVATION\nWITHOUT SOVEREIGN AUTHORITY\n\nCROWNMARK V: NO ACTIVATION\nWITHOUT COUNCIL AUTHORITY',
         hold: 5.4,
       },
       {
@@ -111,10 +110,11 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
           ['Tharne', 'Seven-point-three kilometers at Mapping Group Three.'],
         ],
         begin: () => {
+          // S4 — low at the breach, the fleets' fire across the sky beyond the fractured rib
           sky.setBattleIntensity(0.85);
-          const p = z.P(wreck[0] + 7, wreck[1] - 12, 1.1);
-          c.cut({ pos: p, look: woundLook(z, p, 30).add(new THREE.Vector3(18, 0, 0)), fov: 50 });
-          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(-1.2, 0.3, 0)), look: woundLook(z, p, 26).add(new THREE.Vector3(6, 0, 0)), fov: 47 }, 18, 'inOut');
+          const p = z.P(rib[0] + 4, rib[1] - 2.6, 0.9);
+          c.cut({ pos: p, look: woundLook(z, p, 12).add(new THREE.Vector3(22, 0, 0)), fov: 56 });
+          c.moveAsync({ pos: p.clone().add(new THREE.Vector3(-1.4, 0.2, 0)), look: woundLook(z, p, 10).add(new THREE.Vector3(8, 0, 0)), fov: 52 }, 18, 'inOut');
         },
       },
       {
@@ -133,8 +133,8 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
           sky.setWoundActivity(0.95);
           const p0 = z.P(rib[0], rib[1] - 13, 2.0);
           const p1 = z.P(rib[0], rib[1] - 7.5, 2.5);
-          c.cut({ pos: p0, look: woundLook(z, p0, 9), fov: 40 });
-          c.moveAsync({ pos: p1, look: woundLook(z, p1, 8), fov: 34 }, 14, 'inOut');
+          c.cut({ pos: p0, look: woundLook(z, p0, 0), fov: 44 });
+          c.moveAsync({ pos: p1, look: woundLook(z, p1, 0), fov: 36 }, 14, 'inOut');
         },
       },
       {

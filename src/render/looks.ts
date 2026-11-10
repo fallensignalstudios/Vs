@@ -51,15 +51,16 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
 
   // Z01 — long ivory hall: bright, clean, a touch cool so the cold security light and warm strips both read.
   pressureHall: look({
-    // Z01 integration pass: exposure and fill lowered so the key, the shafts and the light strips carry the
-    // hall (it read as an evenly lit white box); a little more warm haze so the far end recedes
-    exposure: 0.92,
-    bloom: { intensity: 0.62, threshold: 1.0, radius: 0.66 },
-    fog: { color: 0x5a554c, density: 0.013 },
-    grade: { tint: 0xf2f6ff, saturation: 1.0, contrast: 1.1, lift: 0.002, shadowsTint: 0xbdd0ff, highlightsTint: 0xfff4e0 },
+    // Z01 under its ENCLOSED vault (kit 'vaultClosed'): light enters through high seams and bounces off the pale
+    // floor, so the ground ambient is a warm bounce rather than dark earth; a pale warm haze makes the far end
+    // recede into light (relay-route painting) instead of into grey; the key, shafts and seams still carry it
+    exposure: 0.9,
+    bloom: { intensity: 0.7, threshold: 1.0, radius: 0.74 },
+    fog: { color: 0xb3a792, density: 0.017 },
+    grade: { tint: 0xf4f6fb, saturation: 0.96, contrast: 1.06, lift: 0.006, shadowsTint: 0xc4d0e8, highlightsTint: 0xfff2dc },
     vignette: 0.34, grain: 0.26, chromaticAberration: 0.16,
     ao: { intensity: 3.0, radius: 1.4 },
-    ambient: { sky: 0xbdb9b0, ground: 0x3a332b, intensity: 0.5 },
+    ambient: { sky: 0xc9c2b4, ground: 0x8a7b64, intensity: 0.6 },
     envIntensity: 1.0,
   }),
 
