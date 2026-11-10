@@ -14,6 +14,8 @@
  * geometry, so a distant figure's shadow is as cheap as its body.
  */
 import * as THREE from 'three';
+import type { Game } from '@/core/api';
+import { isStub } from '@/core/stub';
 
 /** One mesh under level control: `levels[0]` is the full geometry. */
 export interface LodEntry {
@@ -95,6 +97,25 @@ export interface LodSwitchOpts {
   quality: () => string;
 }
 
+/** Switch options reading a running game's main camera and quality level (null-safe under stubs and tests). */
+export function gameLodOpts(game: Game | null, height: () => number): LodSwitchOpts {
+  return {
+    height,
+    mainCamera: () => {
+      try {
+        const c = game?.camera?.camera as THREE.Camera | undefined;
+        return c && !isStub(c) && c.isCamera === true ? c : null;
+      } catch { return null; }
+    },
+    quality: () => {
+      try {
+        const l = game?.render?.quality?.level;
+        return typeof l === 'string' ? l : 'high';
+      } catch { return 'high'; }
+    },
+  };
+}
+
 /**
  * Per-character level switch. Add it to the character's root BEFORE the meshes it governs (it is an
  * Object3D with no geometry of its own); it swaps `mesh.geometry` of every entry to the chosen level.
@@ -117,6 +138,14 @@ export class LodSwitch extends THREE.LOD {
   }
 
   get governed(): number { return this.entries.length; }
+
+  /** add as `parent`'s FIRST child: three.js then asks it for a level before it reaches any mesh of the figure */
+  mountFirst(parent: THREE.Object3D): void {
+    parent.add(this);
+    const kids = parent.children;
+    kids.splice(kids.indexOf(this), 1);
+    kids.unshift(this);
+  }
 
   /** triangles drawn by the governed meshes at the current level */
   get triangles(): number {

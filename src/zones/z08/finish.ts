@@ -63,9 +63,9 @@ function holder(): THREE.Group | null {
 
 /** the officer's figure inside a fresh rig (rig → holder → figure root), added to the zone */
 function makeOfficer(z: ZoneRuntime): { rig: THREE.Group; hold: THREE.Group; fig: CharacterVisual } {
-  // a bare face (the book: “his face protruding from the creature’s chest”) — the infantry models are helmeted —
-  // with what is left of his Dominion plate on him: a bronze gorget and an oxblood breast plate
-  const fig = z.game.chars.create('survivor', { seed: 8080 });
+  // a bare face (the book: “his face protruding from the creature’s chest”) on a Dominion soldier's body: the
+  // generated infantry model without its helmet (chars `bareHead`), its own matte collar and plate still on him
+  const fig = z.game.chars.create('dominionSoldier', { seed: 8080, bareHead: true });
   const rig = new THREE.Group();
   rig.name = 'z08-officer';
   const hold = new THREE.Group();
@@ -74,24 +74,10 @@ function makeOfficer(z: ZoneRuntime): { rig: THREE.Group; hold: THREE.Group; fig
   hold.add(fig.root);
   z.builder.add(rig);
   if (isHumanoidVisual(fig)) fig.setLoadout({ melee: false, ranged: false, hideSheathed: true });
-  const mats = z.game.mats;
-  const plate = new THREE.Group();
-  plate.name = 'officer-plate-dominion';
-  const geos: THREE.BufferGeometry[] = [new THREE.TorusGeometry(0.088, 0.013, 6, 18, Math.PI * 1.3), new THREE.BoxGeometry(0.16, 0.12, 0.025)];
-  const gorget = new THREE.Mesh(geos[0], mats.get('domBronze'));
-  gorget.position.set(0, 0.2, -0.01);
-  gorget.rotation.set(Math.PI / 2, 0, Math.PI * 0.8);
-  plate.add(gorget);
-  const crest = new THREE.Mesh(geos[1], mats.get('domOxblood'));
-  crest.position.set(0, 0.04, -0.13);
-  plate.add(crest);
-  fig.socket('chest').add(plate);
   S.officer = fig;
   S.officerRig = rig;
   z.onDispose(() => {
-    plate.removeFromParent();
     fig.dispose();
-    for (const g of geos) g.dispose();
   });
   return { rig, hold, fig };
 }

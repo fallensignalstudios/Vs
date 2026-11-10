@@ -152,3 +152,28 @@ export function generatedProp(lib: ModelLibrary, name: string, slot: ItemSlot, s
     dispose() { holder.removeFromParent(); for (const m of materials) m.dispose(); },
   };
 }
+
+/** the slice of the retargeter an extra needs */
+interface Mountable {
+  restPos(role: string, out: THREE.Vector3): THREE.Vector3;
+  attachSocket(role: string, at: THREE.Vector3, o: THREE.Object3D): boolean;
+}
+
+/** A medic's side bag on the left hip (its strap implied by the jacket). Null when there is no hip to hang it on. */
+export function satchel(rt: Mountable, hipHalfWidth: number, shared: SharedUniforms, g: number): { dispose(): void } | null {
+  const gm = createGlbMaterial(new THREE.MeshStandardMaterial({ color: 0xb9b3a4, roughness: 0.82, metalness: 0.02 }), shared, { mask: MASK_NONE });
+  const geo = new THREE.BoxGeometry(0.1 * g, 0.2 * g, 0.26 * g, 2, 2, 2);
+  const bag = new THREE.Mesh(geo, gm.material);
+  bag.name = 'satchel';
+  bag.castShadow = true;
+  bag.customDepthMaterial = gm.depth;
+  const cross = new THREE.Mesh(new THREE.BoxGeometry(0.104 * g, 0.03 * g, 0.12 * g), gm.material);
+  cross.position.y = 0.02 * g;
+  bag.add(cross);
+  const mid = rt.restPos('thighL', new THREE.Vector3());
+  const holder = new THREE.Object3D();
+  const free = (): void => { geo.dispose(); cross.geometry.dispose(); gm.dispose(); };
+  if (!rt.attachSocket('hips', new THREE.Vector3(-(hipHalfWidth + 0.055) * g, mid.y - 0.04 * g, mid.z + 0.02 * g), holder)) { free(); return null; }
+  holder.add(bag);
+  return { dispose() { holder.removeFromParent(); free(); } };
+}

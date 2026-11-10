@@ -20,6 +20,7 @@ import { getCreatureSkin, loadCreatureSkin, skinQuality, skinsEnabled } from '..
 import { applyEliteAction, ELITE_ACTIONS, ELITE_ALIASES, ELITE_STEPS, type ElitePose } from './actions';
 import { buildElite, ELITE_GROUPS, ELITE_MODEL_SCALE, eliteWarp, EW as E, TENDRIL_BONES, TENDRIL_COUNT } from './build';
 import { ELITE_SKIN_SIZE, EliteSkin } from './skin';
+import { gameLodOpts } from '@/chars/glb/lod';
 import { measureTendril, solveTendrils, type Tendril, type TendrilDrive } from './tendrils';
 
 const STRIDE_DUTY = 0.64;
@@ -161,8 +162,9 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
 
   private wear(tpl: NonNullable<ReturnType<typeof getCreatureSkin>>): void {
     try {
-      const skin = new EliteSkin(tpl, this.u, this.rig.sockets);
-      skin.group.scale.setScalar((this.scale / ELITE_MODEL_SCALE) * ELITE_SKIN_SIZE);
+      const size = (this.scale / ELITE_MODEL_SCALE) * ELITE_SKIN_SIZE;
+      const skin = new EliteSkin(tpl, this.u, this.rig.sockets, gameLodOpts(this.game, () => 3.6 * size));
+      skin.group.scale.setScalar(size);
       this.root.add(skin.group);
       this.adoptMaterial(skin.material);
       this.adoptMaterial(skin.wreath.material);

@@ -21,6 +21,7 @@ import { SkinInstance, type SkinTemplate } from '../core/skinlib';
 import { EW } from './build';
 import type { TendrilDrive } from './tendrils';
 import { Wreath } from './wreath';
+import { LodSwitch, type LodSwitchOpts } from '@/chars/glb/lod';
 
 /** driver hips bind position (model units) — the reference the driver's hips motion is measured from */
 const HIPS_REST = EW.hips;
@@ -77,6 +78,8 @@ export class EliteSkin {
   readonly material: THREE.MeshStandardMaterial;
   /** the tendril wreath worn over the back (a second, procedural draw call) */
   readonly wreath: Wreath;
+  /** distance levels of detail of the body (null: none were baked) */
+  readonly lod: LodSwitch | null = null;
   private readonly iSpine: number;
   private readonly inst: SkinInstance;
   private readonly bones: THREE.Bone[];
@@ -93,12 +96,18 @@ export class EliteSkin {
   private readonly iHips: number;
   private readonly k: number;
 
-  constructor(tpl: SkinTemplate, private readonly u: StateUniforms, sockets: Map<string, THREE.Object3D>) {
+  constructor(tpl: SkinTemplate, private readonly u: StateUniforms, sockets: Map<string, THREE.Object3D>, lodOpts?: LodSwitchOpts) {
     this.material = createSkinMaterial(tpl.material, u);
     this.material.envMapIntensity = 0.7;
     this.inst = new SkinInstance(tpl, this.material);
     this.group = this.inst.group;
     this.mesh = this.inst.mesh;
+    if (lodOpts && tpl.lods?.length) {
+      const lod = new LodSwitch(lodOpts);
+      lod.govern(this.mesh, tpl.lods);
+      lod.mountFirst(this.group);
+      this.lod = lod;
+    }
     this.bones = this.inst.bones;
     const n = this.bones.length, I = (name: string): number => this.inst.index(name);
     const rp = this.inst.restPos, rq = this.inst.restQuat;
@@ -318,6 +327,7 @@ export class EliteSkin {
   }
 
   dispose(): void {
+    this.lod?.release();
     this.wreath.dispose();
     this.inst.dispose();
   }

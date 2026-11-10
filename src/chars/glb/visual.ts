@@ -18,15 +18,14 @@ import { ARCHETYPES } from '../humanoid/archetypes';
 import { getFigure, mountQuat, releaseFigure, retainFigure, type FigureDef, type ItemDef, type Mount } from '../humanoid/figure';
 import { GENERIC } from '../humanoid/clips/generic';
 import { createFigureMaterial, type FigureMaterial } from '../humanoid/material';
-import { bareHeadFor, ITEM_SLOTS, MASK_NONE, type GlbArchetype, type ItemSlot } from './config';
+import { bareHeadFor, ITEM_SLOTS, type GlbArchetype, type ItemSlot } from './config';
 import { mountBareHead, type BareHeadLook } from './head';
-import { LodSwitch } from './lod';
+import { gameLodOpts, LodSwitch } from './lod';
 import type { ModelInstance, ModelLibrary } from './library';
 import { createGlbMaterial, createSharedUniforms, type GlbMaterial, type SharedUniforms } from './material';
-import { generatedProp, proceduralProp, type PropRig } from './props';
+import { generatedProp, proceduralProp, satchel, type PropRig } from './props';
 import { Retargeter } from './retarget';
 import { flashStrength } from '@/chars/flash';
-import { isStub } from '@/core/stub';
 import type { RigInfo } from './analyze';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -210,18 +209,12 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     this.buildExtras(body);
     this.root.add(inst.root, attach);
     // levels of detail: one switch for the body (and its grafted head) and every generated prop
-    const lod = new LodSwitch({ height: () => this.height, mainCamera: () => this.mainCamera(), quality: () => this.qualityLevel() });
+    const lod = new LodSwitch(gameLodOpts(this.game, () => this.height));
     const main = inst.meshes[tpl.lodMesh];
     if (main) lod.govern(main, bodyLods);
     if (head) lod.govern(head.mesh, head.lods);
     for (const p of body.props) if (p.rig.lod) lod.govern(p.rig.lod.mesh, p.rig.lod.levels.slice(1));
-    if (lod.governed) {
-      // first child: three.js asks it for a level before it reaches any mesh of this figure
-      this.root.add(lod);
-      this.root.children.splice(this.root.children.indexOf(lod), 1);
-      this.root.children.unshift(lod);
-      body.lod = lod;
-    }
+    if (lod.governed) { lod.mountFirst(this.root); body.lod = lod; }
     this.body = body;
     if (this.exposed) this.setExposed(this.exposed.part, this.exposed.amount);
   }
@@ -233,21 +226,6 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const head = mountBareHead(inst.mesh, inst.template, donor, look, this.shared, this.cfg.env);
     if (!head) warnOnce(`${this.archetype}: no bare head could be grafted from "${look.donor}" — helmet kept`);
     return head;
-  }
-
-  /** the camera whose view picks levels of detail (the game's main camera; null in a bare harness) */
-  private mainCamera(): THREE.Camera | null {
-    try {
-      const c = this.game?.camera?.camera as THREE.Camera | undefined;
-      return c && !isStub(c) && c.isCamera === true ? c : null;
-    } catch { return null; }
-  }
-
-  private qualityLevel(): string {
-    try {
-      const l = this.game?.render?.quality?.level;
-      return typeof l === 'string' ? l : 'high';
-    } catch { return 'high'; }
   }
 
   private buildSockets(body: Body): void {
@@ -342,25 +320,10 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   }
 
   private buildExtras(body: Body): void {
-    const rt = body.retarget, rig = body.inst.template.rig!, g = this.scale;
-    if (this.cfg.extra === 'satchel') {
-      // a medic's side bag on the left hip, its strap implied by the jacket
-      const gm = createGlbMaterial(new THREE.MeshStandardMaterial({ color: 0xb9b3a4, roughness: 0.82, metalness: 0.02 }), this.shared, { mask: MASK_NONE });
-      const geo = new THREE.BoxGeometry(0.1 * g, 0.2 * g, 0.26 * g, 2, 2, 2);
-      const bag = new THREE.Mesh(geo, gm.material);
-      bag.name = 'satchel';
-      bag.castShadow = true;
-      bag.customDepthMaterial = gm.depth;
-      const cross = new THREE.Mesh(new THREE.BoxGeometry(0.104 * g, 0.03 * g, 0.12 * g), gm.material);
-      cross.position.y = 0.02 * g;
-      bag.add(cross);
-      const mid = rt.restPos('thighL', new THREE.Vector3());
-      const holder = new THREE.Object3D();
-      if (rt.attachSocket('hips', new THREE.Vector3(-(rig.metrics.hipHalfWidth + 0.055) * g, mid.y - 0.04 * g, mid.z + 0.02 * g), holder)) {
-        holder.add(bag);
-        body.extras.push({ dispose() { holder.removeFromParent(); geo.dispose(); cross.geometry.dispose(); gm.dispose(); } });
-      } else { geo.dispose(); cross.geometry.dispose(); gm.dispose(); }
-    }
+    if (this.cfg.extra !== 'satchel') return;
+    const rig = body.inst.template.rig!;
+    const extra = satchel(body.retarget, rig.metrics.hipHalfWidth, this.shared, this.scale);
+    if (extra) body.extras.push(extra);
   }
 
   // ---- delegation: animation ----------------------------------------------------------------------------------

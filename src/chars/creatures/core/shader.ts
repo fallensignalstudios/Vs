@@ -151,10 +151,22 @@ float cN1 = cNoise(cP * 7.0);
 #ifdef CREATURE_SKIN
 float cN2 = 0.5;
 float cLum0 = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
-// Eclipse tissue on a generated mesh = the violet / blue-dominant texels plus the darkest crevices
-float cViolet = clamp((diffuseColor.b - max(diffuseColor.r, diffuseColor.g) * 0.92) * 9.0, 0.0, 1.0) * smoothstep(0.004, 0.03, diffuseColor.b);
+// painted violet veins: blue-dominant AND redder than green (navy-steel plate is blue-dominant but greener)
+float cViolet = clamp((diffuseColor.b - max(diffuseColor.r, diffuseColor.g) * 0.92) * 9.0, 0.0, 1.0) * smoothstep(0.004, 0.03, diffuseColor.b)
+  * smoothstep(-0.004, 0.02, diffuseColor.r - diffuseColor.g);
 float cDark = 1.0 - smoothstep(0.012, 0.07, cLum0);
-float cTissue = clamp(cViolet + cDark * 0.55, 0.0, 1.0);
+// the texture's mauve flesh (red and blue both above green) is Eclipse tissue: violet-black, the veins lit in it
+float cMx = max(max(diffuseColor.r, diffuseColor.b), 1e-3);
+float cMauve = smoothstep(0.02, 0.15, (min(diffuseColor.r, diffuseColor.b) - diffuseColor.g) / cMx) * smoothstep(0.004, 0.02, cMx);
+float cFlesh = clamp(max(cMauve, cDark * 0.6) * (1.0 - cViolet), 0.0, 1.0);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012, 0.007, 0.022) + diffuseColor.rgb * vec3(0.12, 0.08, 0.17), cFlesh * 0.93);
+// scavenged plate: the salmon of the bronze-red pieces goes to Dominion bronze / oxblood; navy-steel stays
+float cRed = smoothstep(0.3, 0.55, (diffuseColor.r - max(diffuseColor.g, diffuseColor.b)) / cMx) * (1.0 - cFlesh);
+diffuseColor.rgb *= mix(vec3(1.0), vec3(0.78, 0.66, 0.46), cRed);
+// pale shards: aged ivory that never blooms white under a hall's lights
+float cL1 = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+diffuseColor.rgb *= cL1 > 0.25 ? (0.25 + (cL1 - 0.25) * 0.3) / cL1 : 1.0;
+float cTissue = clamp(cViolet + cFlesh, 0.0, 1.0);
 float cEmi = 0.0;
 float cWear = 0.0;
 float cRnd = 0.37;
@@ -294,7 +306,11 @@ const FRAG_EMISSIVE = /* glsl */ `
   cE += vec3(0.6, 0.42, 1.0) * cEye * (0.3 + 0.7 * cDark) * uGroup[1] * 1.15;
   cE += vec3(0.48, 0.2, 1.0) * cSphere(uCore, cP) * (cViolet * 0.8 + cDark * 0.4) * uGroup[2] * 0.6;
   cE *= uGlow * (1.0 - cFrost * 0.75);
-  cLit = clamp(cViolet * uSkin.x + cEye, 0.0, 1.0);
+  // a wind-up flares the body's own violet light and eyes; the telegraph colour only rims it (below) — painted
+  // tissue is not a lamp, and tinting it would flood the whole body with the warning colour
+  cE *= 1.0 + uTelegraph.a * (0.72 + 0.28 * sin(uTime * 17.0)) * 0.9;
+  cLit = clamp(cEye, 0.0, 1.0);
+  float cTelRim = cFres * cFres * 1.1;
 #else
   float cHotMask = vPart.x > 0.5 ? uHot.a * clamp(cGroup - 1.0, 0.0, 1.0) : 0.0;
   vec3 cBase = mix(vColor.rgb, uHot.rgb, cHotMask);
@@ -304,12 +320,13 @@ const FRAG_EMISSIVE = /* glsl */ `
   cLit = clamp(cEmi, 0.0, 1.0);
   // near-black tissue keeps a faint violet edge so limbs do not vanish against black stone
   cE += vec3(0.2, 0.1, 0.5) * cFres * cTissue * (1.0 - cLit) * 0.16 * clamp(uCorruption * 2.0, 0.0, 1.0);
+  float cTelRim = cFres * 0.75;
 #endif
   cE += cCorrEmi * (1.0 - cFrost);
   cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.3 + cCrack * 0.1);
   cE += uDissolveColor * cDEdge * 3.0;
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
-  cE += uTelegraph.rgb * uTelegraph.a * cTp * (cFres * 0.75 + cLit * 2.2 + 0.012);
+  cE += uTelegraph.rgb * uTelegraph.a * cTp * (cTelRim + cLit * 2.2 + 0.012);
   cE += uRim.rgb * uRim.a * cFres * 1.4;
   // hit flash: edge tint + albedo lift (src/chars/flash.ts), never a flat fill
   cE += aurHitFlash(uFlash, diffuseColor.rgb, cFres);

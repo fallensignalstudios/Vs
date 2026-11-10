@@ -195,7 +195,8 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   portalInner.position.set(0, ph / 2, -0.02);
   portal.add(portalInner);
   const sheen = new THREE.Mesh(own(new THREE.PlaneGeometry(pw * 1.9, ph * 1.4)), own(new THREE.MeshBasicMaterial({ map: own(glowTexture()), color: new THREE.Color(1, 0.86, 0.6).multiplyScalar(1.4), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })));
-  sheen.position.set(0, ph / 2, 0.05);
+  // the glow sits behind the opening: the dark panel hides its middle, so only the frame's halo shows
+  sheen.position.set(0, ph / 2, -0.12);
   portal.add(sheen);
   portal.scale.set(1, 0.001, 1);
   portal.visible = false;

@@ -59,6 +59,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   // a Dominion soldier sheltering on the refuge with them; the marine under the plate (or out of it)
   z.npc('dominionSoldier', 'soldierRefuge', 'sitInjured', 'soldier');
   z.npc('reformationMarine', after ? 'marineSafe' : 'marine', after ? 'sitInjured' : 'trapped', 'marine');
+  // the entry: shut behind Tarrik and Lyessa until the others come through
+  setDoor(S.entry, stage !== 'breach', stage !== 'breach' ? 'open' : 'ready');
   if (after) {
     burstBreachB(z, false);
     z.story('marineRescued');

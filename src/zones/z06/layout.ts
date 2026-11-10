@@ -94,10 +94,11 @@ function buildShell(b: ZoneBuilder): void {
   b.channel([[BREACH_A.x + 3, D - 0.34], [W - 0.4, D - 0.34]], { h: 1.1, vertical: true, width: 0.05, color: IVORY, intensity: 2 });
 }
 
-/** the corridor stub the party comes down (west of the entry door) — dark black stone, open into the junction */
+/** the corridor stub the party comes down (west of the entry door): dark black stone. The door has just shut behind Tarrik
+ * and Lyessa; it opens again for Selene, Tharne and Lyric (spawnCast / arrival). */
 function buildEntry(b: ZoneBuilder): void {
-  S.entry = b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east, open: true });
-  S.entry.setState('open');
+  S.entry = b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east });
+  S.entry.setState('ready');
   b.floor({ x: -4, n: ENTRY_N, w: 8, d: 3.6, inlay: 'channels', mat: 'blackStoneFloor' });
   b.wall({ from: [-8, ENTRY_N - 1.8], to: [0, ENTRY_N - 1.8], height: 5, mat: 'blackStone', style: 'plain' });
   b.wall({ from: [-8, ENTRY_N + 1.8], to: [0, ENTRY_N + 1.8], height: 5, mat: 'blackStone', style: 'plain' });
@@ -118,6 +119,13 @@ function buildExit(b: ZoneBuilder): void {
   b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3, intensity: 1.8 });
   b.column({ x: W - 0.9, n: EXIT_N - 3.4, height: 8.5, style: 'pylon', lit: true });
   b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8.5, style: 'pylon', lit: true });
+  // the ground round the plate: one angular gold ring (the King-era floor marks the place, not the fight)
+  const ring: Array<[number, number]> = [];
+  for (let i = 0; i <= 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    ring.push([PLATE.x + Math.cos(a) * 7.2, PLATE.n + Math.sin(a) * 7.2]);
+  }
+  b.channel(ring, { width: 0.06, intensity: 2.4 });
   // the route continues: a gold channel from the plate ground to the exit threshold
   b.channel([[31, 10.5], [43, 10.5], [49.5, 17], [W - 0.4, 17], [W - 0.4, EXIT_N - 1.2]], { width: 0.07 });
 }
@@ -184,7 +192,6 @@ function buildBreaches(b: ZoneBuilder): void {
   b.conduit([[BREACH_A.x - 2.6, an - 0.35, 0.55], [BREACH_A.x - 11, an - 0.35, 0.55]], { r: 0.1, glow: false });
   b.corruption({ x: BREACH_A.x - 2.5, n: an - 0.3, h: 2.2, r: 1.4, onWall: true, yawDeg: FACE.south, intensity: 0.5 });
   b.corruption({ x: BREACH_A.x - 5.6, n: an - 0.3, h: 0.7, r: 0.9, onWall: true, yawDeg: FACE.south, intensity: 0.35 });
-  b.corruption({ x: BREACH_A.x + 1.2, n: an - 1.2, r: 1.5, intensity: 0.4 });
   b.point({ x: BREACH_A.x, n: an + 1.4, h: 2.4, color: VIOLET, intensity: 6, distance: 9 });
   b.prop('rubblePile', { x: BREACH_A.x + 2.9, n: an - 1.3, yawDeg: 30 });
   b.prop('debrisSmall', { x: BREACH_A.x - 1.6, n: an - 2.4, yawDeg: 200 });
@@ -290,8 +297,7 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: 12, n: 14, h: 5, color: 0xa9b8d8, intensity: 30, distance: 20 });
   // the refuge reads warm and held: amber from the soldier's lamp
   b.point({ x: 3, n: 6, h: REFUGE.h + 2.2, color: 0xffb060, intensity: 14, distance: 8 });
-  // the marines' post: cold blue-white equipment light (the refLamp owns one too); the trapped man's suit lamp
-  b.point({ x: 27.5, n: 10, h: 1.6, color: BLUE, intensity: 10, distance: 8 });
+  // the marines' post is lit by its own lamp (refLamp); the trapped man's suit lamp under the plate's edge
   b.point({ x: PLATE.x - 1.5, n: PLATE.n - 1.5, h: 0.35, color: BLUE, intensity: 5, distance: 3.2 });
 }
 
@@ -333,13 +339,15 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('sustainLoop', 26.5, 4, 0);
   b.marker('sustainEast', 44, 21, 0);
   // --- grounding (after the fight, at the foot of the refuge ramp) ---
-  b.marker('gLyric', 10.6, 6.6, 0, FACE.east);
-  b.marker('gTharne', 10.4, 7.7, 0, 120);
-  b.marker('gTharneBlock', 11.5, 6.5, 0, FACE.east);
-  b.marker('gSelene', 11.7, 6.7, 0, FACE.west);
-  b.marker('gSeleneStand', 12.2, 8.4, 0, 230);
-  b.marker('gLyessa', 12.4, 9.2, 0, 235);
-  b.marker('gTarrik', 13.4, 6.1, 0, 290);
+  b.marker('gLyricFrom', 10.4, 6.4, 0, FACE.east);
+  b.marker('gTharneFrom', 9.8, 7.4, 0, FACE.east);
+  b.marker('gLyric', 12.5, 7, 0, FACE.east);
+  b.marker('gTharne', 12.3, 8.05, 0, 150);
+  b.marker('gTharneBlock', 13.35, 6.7, 0, 110);
+  b.marker('gSelene', 13.5, 7.05, 0, FACE.west);
+  b.marker('gSeleneStand', 14.1, 8.3, 0, 240);
+  b.marker('gLyessa', 14.7, 9.1, 0, 230);
+  b.marker('gTarrik', 15.1, 6, 0, 290);
   b.marker('impactBelow', 20, 2, 0);
   // --- exit ---
   b.marker('exit', W - 1.9, EXIT_N, 0, FACE.east);

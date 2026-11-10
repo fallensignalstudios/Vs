@@ -261,7 +261,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   z.spawnPlayer('tarrik', after ? (stage === 'cut' ? 'cutAt' : 'bendStart') : 'start');
   const lyessa = z.companion('lyessa', after ? 'lyessaUp' : 'lyessaStart', 'hold');
   lyessa.holdAt(z.m(after ? 'lyessaUp' : 'lyessaStart'), z.myaw('lyessaStart'));
-  const malik = z.npc('dominionSoldier', after ? 'varoUp' : 'varo', after ? 'idle' : 'sitInjured', 'malik');
+  const malik = z.npc('malik', after ? 'varoUp' : 'varo', after ? 'idle' : 'sitInjured', 'malik');
   z.npc('dominionSoldier', after ? 'helpR' : 'soldierA', 'idle', 'soldierA');
   z.npc('dominionSoldier', after ? 'helpL' : 'soldierB', 'idle', 'soldierB');
   z.npc('dominionSoldier', 'cas0', 'lieInjured', 'cas0');
@@ -427,7 +427,7 @@ const Z02_DEF: ZoneDef = {
   id: 'Z02',
   title: 'Survivor Bend',
   art: 'relay-route',
-  cast: ['dominionSoldier', 'reformationMarine', 'lyessa'],
+  cast: ['dominionSoldier', 'malik', 'reformationMarine', 'lyessa'],
   build,
   beats,
   update,

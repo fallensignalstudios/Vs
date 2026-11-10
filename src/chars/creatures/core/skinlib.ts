@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import type { Game } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { warnOnce } from './rig';
+import { parseLodFile } from '@/chars/glb/lod';
 
 export interface SkinBone {
   name: string;
@@ -33,6 +34,11 @@ export interface SkinTemplate {
   bones: SkinBone[];
   height: number;
   triangles: number;
+  /**
+   * Coarser levels of the geometry (level 1 first; empty when none were baked): index buffers over the same
+   * vertices, see src/chars/glb/lod.ts. Optional so hand-made templates (tests) need not carry them.
+   */
+  lods?: THREE.BufferGeometry[];
 }
 
 /** archetype → model file and standing height (metres) */
@@ -126,9 +132,32 @@ async function fetchSkin(archetype: string, file: string, height: number, qualit
       map.anisotropy = Math.max(1, Math.min(8, quality?.anisotropy ?? 4));
       fitTexture(map, limit);
     }
+    tpl.lods = await fetchLods(`${base}models/${file.replace(/\.glb$/, '.lod.bin')}`, tpl.geometry);
     cache.set(archetype, tpl);
   }
   return tpl;
+}
+
+/**
+ * Baked levels of detail (public/models/<name>.lod.bin) for a converted skin. The levels index the file's own
+ * vertex order, which convertSkin keeps; it mirrors the mesh, so each triangle's winding is turned the same way.
+ */
+async function fetchLods(url: string, geometry: THREE.BufferGeometry): Promise<THREE.BufferGeometry[]> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const lods = parseLodFile(await r.arrayBuffer(), geometry) ?? [];
+    for (const g of lods) {
+      const idx = g.index;
+      if (!idx) continue;
+      const a = idx.array as Uint16Array | Uint32Array;
+      for (let i = 0; i + 2 < a.length; i += 3) { const t = a[i + 1]; a[i + 1] = a[i + 2]; a[i + 2] = t; }
+      g.boundingSphere = geometry.boundingSphere;
+    }
+    return lods;
+  } catch {
+    return [];
+  }
 }
 
 /** downscale a texture's image to the quality profile's budget (2048² is for hero surfaces at ultra only) */
