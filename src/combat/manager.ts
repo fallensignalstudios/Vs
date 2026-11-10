@@ -305,7 +305,8 @@ export class ActorManagerImpl implements ActorManager {
     for (let i = 0; i < this.list.length; i++) {
       const a = this.list[i] as ActorImpl;
       if (!a.alive) continue;
-      const d = Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z) - a.radius;
+      // 3D, so a body on the balcony overhead is not "nearest" to someone on the floor below it
+      const d = Math.hypot(a.pos.x - pos.x, a.bottom - fin(pos.y, a.bottom), a.pos.z - pos.z) - a.radius;
       if (d > bestD || (filter && !filter(a))) continue;
       bestD = d;
       best = a;
