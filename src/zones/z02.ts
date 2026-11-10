@@ -218,11 +218,13 @@ function buildMarkers(b: ZoneBuilder): void {
   // --- O1 ---
   b.marker('o1Log', LOG_X, LOG_N + 1.1, 0, FACE.south);
   b.marker('o1Tarrik', LOG_X, LOG_N + 1.9, 0, FACE.south);
-  b.marker('o1Lyessa', LOG_X + 1.9, LOG_N + 2.1, 0, 225);
+  b.marker('o1Lyessa', LOG_X + 2.0, LOG_N + 1.5, 0, FACE.west);
   // --- the cut ---
   b.marker('cutTarrik', EXIT_X, D - 2.2, 0, FACE.north);
   b.marker('lyessaCut', EXIT_X - 2.3, D - 4.4, 0, 20);
   b.marker('varoCut', EXIT_X + 1.6, D - 5.4, 0, FACE.north);
+  b.marker('helpCutR', EXIT_X + 2.25, D - 5.5, 0, FACE.north);
+  b.marker('helpCutL', EXIT_X + 0.95, D - 5.5, 0, FACE.north);
   b.marker('exit', EXIT_X, D - 1.4, 0, FACE.north);
   // --- the casualties behind the glass ---
   b.marker('cas0', 8.4, 10.2, 0, FACE.east);
@@ -356,12 +358,17 @@ function* cut(z: ZoneRuntime): Routine {
     game.player.teleport(z.m('cutTarrik'), z.myaw('cutTarrik'));
     walkTo(z, malik, 'varoCut');
     walkTo(z, lyessa, 'lyessaCut');
-    if (lyessa && !z.skipping && lyessa.actor.distanceTo(z.m('lyessaCut')) > 7) lyessa.teleport(z.m('lyessaCut'), z.myaw('lyessaCut'));
-    if (malik && !z.skipping && malik.actor.distanceTo(z.m('varoCut')) > 7) malik.teleport(z.m('varoCut'), z.myaw('varoCut'));
+    walkTo(z, z.cast('soldierA'), 'helpCutR');
+    walkTo(z, z.cast('soldierB'), 'helpCutL');
+    // anyone still far behind (the side loop, a slow follower) is brought up under the cut
+    for (const [cm, mk] of [[lyessa, 'lyessaCut'], [malik, 'varoCut'], [z.cast('soldierA'), 'helpCutR'], [z.cast('soldierB'), 'helpCutL']] as const) {
+      if (cm && cm.actor.distanceTo(z.m(mk)) > 7) cm.teleport(z.m(mk), z.myaw(mk));
+    }
     // behind him at the threshold: the atrium beyond, the light wall holding
     const t = z.m('cutTarrik');
-    c.cut({ pos: t.clone().add(new THREE.Vector3(1.45, 1.8, 1.9)), look: z.P(EXIT_X - 0.6, D + 40, 6), fov: 46 });
-    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(1.2, 1.72, 1.4)), look: z.P(EXIT_X - 0.4, D + 40, 7), fov: 42 }, 4.5, 'inOut');
+    // his right profile on the left third; the threshold's light and the atrium beyond it
+    c.cut({ pos: t.clone().add(new THREE.Vector3(2.6, 1.6, -0.3)), look: t.clone().add(new THREE.Vector3(-0.7, 1.75, -3.2)), fov: 48 });
+    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(2.3, 1.64, -0.6)), look: t.clone().add(new THREE.Vector3(-0.6, 1.85, -3.4)), fov: 44 }, 4.5, 'inOut');
     yield 1.2;
     // Neon Veil brightens faintly as they near it
     const chest = z.player.visual?.socket('chest');
@@ -387,7 +394,10 @@ function* cut(z: ZoneRuntime): Routine {
     yield 2.2;
     // the screen goes dark under the card while the camera is still travelling
     yield* z.fadeOut(1.4, 'black');
-    // end state
+    // end state — the squad stands where the scene put it, watched or skipped
+    for (const [cm, mk] of [[lyessa, 'lyessaCut'], [malik, 'varoCut'], [z.cast('soldierA'), 'helpCutR'], [z.cast('soldierB'), 'helpCutL']] as const) {
+      if (cm && !atPost(z, cm, mk, 0.35)) cm.teleport(z.m(mk), z.myaw(mk));
+    }
     if (S.veil) S.veil.intensity = 0;
   }, { blendOut: 0 });
   yield* z.exit('Z03', { fade: 'black', seconds: 0.6 });

@@ -103,7 +103,8 @@ export function attachInfection(z: ZoneRuntime, who: Companion | null): void {
   const g = new THREE.Group();
   g.name = 'z02-infection';
   const lit = mats.emissive(VIOLET, 3.2);
-  const vein = mats.get('eclipseVein');
+  // the veins glow from under the surface: dimmer than the crack
+  const vein = mats.emissive(VIOLET, 1.6);
   const tissue = mats.get('eclipseTissue');
   // the crack: three angular segments across the back of the plate, just above the knuckles
   const crackAt = hand.clone().addScaledVector(along, 0.03).addScaledVector(up, 0.045);
@@ -123,7 +124,7 @@ export function attachInfection(z: ZoneRuntime, who: Companion | null): void {
     I.tissue.push(m);
   }
   // veins: from the crack along the top and both flanks of the forearm toward the elbow
-  const radius = 0.058;
+  const radius = 0.05;
   for (const [ang, wob] of [[0, 0.012], [1.1, 0.016], [-1.0, 0.014]] as const) {
     const pts: THREE.Vector3[] = [];
     for (let i = 0; i <= 8; i++) {
@@ -132,7 +133,7 @@ export function attachInfection(z: ZoneRuntime, who: Companion | null): void {
       const off = side.clone().multiplyScalar(Math.sin(a) * radius).addScaledVector(up, Math.cos(a) * radius);
       pts.push(crackAt.clone().addScaledVector(along, t * len * 0.92).add(off).addScaledVector(side, Math.sin(t * 17) * wob * t));
     }
-    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.0032, 4, false);
+    const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.0022, 4, false);
     geo.setDrawRange(0, 0);
     I.veins.push(geo);
     I.veinCount.push(geo.index ? geo.index.count : 0);
@@ -152,6 +153,7 @@ export function attachInfection(z: ZoneRuntime, who: Companion | null): void {
     g.removeFromParent();
     for (const c of g.children) (c as THREE.Mesh).geometry.dispose();
     lit.dispose();
+    vein.dispose();
   });
 }
 

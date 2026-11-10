@@ -5,8 +5,7 @@
  */
 import * as THREE from 'three';
 import type {
-  CeilingOpts,
-  BarrierHandle, ColliderDesc, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
+  BarrierHandle, CeilingOpts, ColliderDesc, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
   MatId, MaterialLibrary, PhysicsWorld, PropKind, PropOpts, RampOpts, RectOpts, RibOpts, ScriptHandle, SurfaceDesc, SurfaceHandle,
   WallOpts, ZoneBuilder, ZoneEnvOpts,
 } from '@/core/api';

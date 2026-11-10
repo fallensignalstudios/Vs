@@ -201,7 +201,7 @@ export function* varoScene(z: ZoneRuntime): Routine {
     if (isHumanoidVisual(tv)) tv.setHandTarget('L', null);
     z.player.visual?.stop();
     for (const [cm, mk] of [[malik, 'varoUp'], [lyessa, 'lyessaUp'], [a, 'helpR'], [bb, 'helpL']] as const) {
-      if (cm && !atPost(z, cm, mk, 1.2)) {
+      if (cm && !atPost(z, cm, mk, 0.35)) {
         cm.stopAction();
         cm.teleport(z.m(mk), z.myaw(mk));
       }

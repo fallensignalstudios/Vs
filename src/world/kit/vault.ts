@@ -21,7 +21,7 @@ const SHELL = 0.32;
 const RIB_DROP = 0.46;
 const RIB_HALF = 0.38;
 /** depth of a seam's light box beyond the shell's outer face (m) */
-const BOX = 0.55;
+const BOX = 0.3;
 /** profile fullness: < 1 gives the vault full shoulders and a broad crown */
 const FULL = 0.78;
 
@@ -95,7 +95,7 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
   const inward = (t: number): V3 => { const n = nrm(t); return [-n[0], -n[1], 0]; };
 
   // ---- ribs and seams: a narrow slit along the crown and one high on each shoulder, in every bay ------------
-  const cw = Math.min(0.6, Math.max(0.3, w * 0.017)), sx = hw * 0.5, sw = Math.min(0.8, Math.max(0.36, w * 0.024));
+  const cw = Math.min(0.7, Math.max(0.36, w * 0.02)), sx = hw * 0.5, sw = Math.min(0.9, Math.max(0.42, w * 0.029));
   const tOf = (x: number): number => Math.acos(Math.max(-1, Math.min(1, -x / hw)));
   const slitsT: Array<[number, number, boolean]> = [
     [tOf(-sx - sw / 2), tOf(-sx + sw / 2), false], [tOf(-cw / 2), tOf(cw / 2), true], [tOf(sx - sw / 2), tOf(sx + sw / 2), false],
@@ -152,9 +152,11 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
       trim.ribbon([g0, g1], 0.09, gn);
     }
   }
-  // every seam is edged in gold on the room side
+  // every seam is edged in gold on the room side, just outside the opening
   for (const s of seams) {
-    for (const t of [s.t0, s.t1]) trim.ribbon([at(t, -0.012, s.z0 - 0.06), at(t, -0.012, s.z1 + 0.06)], 0.07, inward(t));
+    const tm = (s.t0 + s.t1) / 2, a = base(tm - 0.01), b = base(tm + 0.01);
+    const lip = 0.035 / (Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.02 || 1);
+    for (const t of [s.t0 - lip, s.t1 + lip]) trim.ribbon([at(t, -0.012, s.z0 - 0.08), at(t, -0.012, s.z1 + 0.08)], 0.05, inward(t));
   }
   for (const s of [-1, 1]) {
     rib.box(0.7, 0.42, d, s * (hw - 0.3), 0.04, 0);
@@ -173,8 +175,8 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
       const ka = 1 - zm * Math.abs((2 * k) / bands - 1), kc = 1 - zm * Math.abs((2 * (k + 1)) / bands - 1);
       hz.quad(at(s.t0, deep, za), at(s.t1, deep, za), at(s.t1, deep, zc), at(s.t0, deep, zc), inward((s.t0 + s.t1) / 2), [ka, ka, kc, kc]);
     }
-    // reveals: bright where they meet the haze, dimmer at the room edge
-    const lo = 0.32, hi = 0.85, ends = 1 - zm;
+    // reveals: lit by the haze, a little dimmer at the room edge (narrow seams are mostly seen through them)
+    const lo = 0.62, hi = 0.95, ends = 1 - zm * 0.5;
     for (const t of [s.t0, s.t1]) {
       const n = t === s.t0 ? nrmAlong(s.t1, s.t0) : nrmAlong(s.t0, s.t1);
       hz.quad(at(t, 0, s.z0), at(t, deep, s.z0), at(t, deep, s.z1), at(t, 0, s.z1), n, [lo * ends, hi * ends, hi * ends, lo * ends]);

@@ -6,7 +6,8 @@
  */
 import * as THREE from 'three';
 import type { CineCtx, HologramProp, Interactable, Routine, ZoneBuilder, ZoneRuntime } from '@/core/api';
-import { conversation, type ConvLine } from '../shared';
+import type { Companion } from '@/core/api';
+import type { ConvLine } from '../shared';
 
 interface O1State {
   log: HologramProp | null;
@@ -63,6 +64,26 @@ export function* o1(z: ZoneRuntime): Routine {
   z.optionalDone('O1');
 }
 
+/**
+ * Front three-quarter singles from the glass side of the passage (over-the-shoulder coverage would sit behind
+ * Tarrik's sheathed greatsword in this narrow loop). A line by the same speaker holds the shot.
+ */
+function* singles(z: ZoneRuntime, c: CineCtx, lines: ConvLine[], lyessa: Companion | null): Routine {
+  let prev = '';
+  for (const [who, text, opts] of lines) {
+    const self = who === 'Tarrik' ? z.player.pos : lyessa ? lyessa.actor.pos : z.m('o1Lyessa');
+    const other = who === 'Tarrik' ? (lyessa ? lyessa.actor.pos : z.m('o1Lyessa')) : z.player.pos;
+    if (who !== prev) {
+      const toOther = THREE.MathUtils.radToDeg(Math.atan2(other.x - self.x, -(other.z - self.z)));
+      // turn toward the glass (south) side of the line between them
+      const side = Math.sin(THREE.MathUtils.degToRad(toOther)) >= 0 ? 1 : -1;
+      c.shot(self, { yawDeg: toOther + 42 * side, distance: 2.1, height: 1.62, lookHeight: 1.58, fov: 34 });
+      prev = who;
+    }
+    yield* z.say(who, text, { ...opts, actor: who === 'Tarrik' ? z.player : lyessa });
+  }
+}
+
 function* scene(z: ZoneRuntime): Routine {
   const lyessa = z.cast('lyessa');
   const log = L.log;
@@ -76,8 +97,9 @@ function* scene(z: ZoneRuntime): Routine {
     // over his shoulder: the rows, and through them the casualties behind the glass
     const t = z.m('o1Tarrik');
     const logAt = z.m('o1Log');
-    c.cut({ pos: t.clone().add(new THREE.Vector3(0.55, 1.75, 0.9)), look: logAt.clone().setY(1.45), fov: 38 });
-    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(0.4, 1.72, 0.6)), look: logAt.clone().setY(1.4), fov: 34 }, 9, 'inOut');
+    // from his left: his profile, the rows, and through them the casualties behind the glass
+    c.cut({ pos: t.clone().add(new THREE.Vector3(-1.75, 1.62, -0.25)), look: logAt.clone().setY(1.4), fov: 42 });
+    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(-1.5, 1.6, -0.15)), look: logAt.clone().setY(1.38), fov: 38 }, 9, 'inOut');
     if (log) log.params.progress = 0.4;
     yield 1.8;
     // he starts to read the list, and stops
@@ -86,11 +108,16 @@ function* scene(z: ZoneRuntime): Routine {
     yield* z.say('Tarrik', 'Legionary. Fourth squad.', { actor: z.player }); // NEW
     if (log) log.params.progress = 0.66;
     yield 1.6;
+    // he turns from the list to her; the passage runs east–west, so the coverage has room
+    if (lyessa) {
+      z.game.player.playScripted('idle', { faceTo: lyessa.actor.pos });
+      lyessa.face(z.player.pos);
+    }
     const lines: ConvLine[] = [
       ['Lyessa', 'Have you counted them?'], // NEW
       ['Tarrik', 'Not yet.'], // NEW
     ];
-    yield* conversation(z, c, lines, { Tarrik: z.player, Lyessa: lyessa }, { distance: 1.8, fov: 36 });
+    yield* singles(z, c, lines, lyessa);
     // she waits
     yield 1.4;
     if (log) log.params.progress = 1;
@@ -108,9 +135,9 @@ function* scene(z: ZoneRuntime): Routine {
       ['Lyessa', 'Then what?'],
       ['Tarrik', 'Keep anyone from touching it.'],
     ];
-    yield* conversation(z, c, mission, { Tarrik: z.player, Lyessa: lyessa }, { distance: 1.8, fov: 36 });
+    yield* singles(z, c, mission, lyessa);
     yield 1.2;
-    c.shot(z.player.pos, { yawDeg: 215, distance: 2.2, height: 1.6, lookHeight: 1.55, fov: 34 });
+    c.shot(z.player.pos, { yawDeg: 125, distance: 2.4, height: 1.6, lookHeight: 1.55, fov: 34 });
     yield* z.say('Lyessa', 'And if Caelus orders you to take Crownmark Five?', { actor: lyessa }); // RELOCATED (ch23, the observation deck)
     yield 0.8;
     yield* z.say('Tarrik', 'I don’t know.', { actor: z.player });

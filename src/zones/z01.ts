@@ -278,10 +278,7 @@ function buildMarkers(b: ZoneBuilder): void {
 /** far field: the hall is one bay of a much larger nave (megastructure ribs beyond the vault), dust in the shafts */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
-  const nave = game.sky.scenic.megaRibs({ count: 7, span: 170, height: 120, spacing: 90, seed: 101 });
-  nave.position.copy(b.P(-60, D / 2, -6));
-  nave.rotation.y = -Math.PI / 2; // march east, like the hall
-  b.add(nave);
+  // (no far-field structure: the enclosed vault hides the sky; the hall's haze, dust and motes carry the depth)
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 5), { x: W, y: 10, z: D }, 0.5);
   game.vfx.ambient('goldMotes', b.P(22, 11, 4), { x: 26, y: 8, z: 14 }, 0.25);
 }

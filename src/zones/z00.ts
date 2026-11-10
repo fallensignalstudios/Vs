@@ -437,7 +437,10 @@ function* opening(z: ZoneRuntime, lyessa: Companion | null, wounded: Companion |
     // end state — identical watched or skipped
     S.shipT = 1;
     S.shipActive = true;
-    if (lyessa) lyessa.holdAt(z.m('lyessa'), z.myaw('lyessa'));
+    if (lyessa) {
+      if (!atPost(z, lyessa, 'lyessa', 0.3)) lyessa.teleport(z.m('lyessa'), z.myaw('lyessa'));
+      lyessa.holdAt(z.m('lyessa'), z.myaw('lyessa'));
+    }
     wounded?.play('sitInjured', { loop: true });
   }, { blendOut: 0.8 });
 }
