@@ -164,12 +164,4 @@ export class EnvironmentBaker {
       scene.remove(this.fill);
     }
   }
-
-  dispose(): void {
-    if (this.target) this.target.dispose();
-    this.target = null;
-    this.pmrem.dispose();
-    this.fill.geometry.dispose();
-    this.fill.material.dispose();
-  }
 }

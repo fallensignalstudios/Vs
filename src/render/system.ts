@@ -213,6 +213,9 @@ export class RenderSystemImpl implements RenderSystem {
   private applyQuality(): void {
     const q = this.quality;
     const renderer = this.renderer;
+    // never promise more than the device has
+    q.anisotropy = Math.max(1, Math.min(q.anisotropy, renderer.capabilities.getMaxAnisotropy()));
+    q.shadowMapSize = Math.min(q.shadowMapSize, renderer.capabilities.maxTextureSize);
     renderer.shadowMap.enabled = q.shadows;
     // Lights that already exist adopt the new shadow resolution (zones read quality.shadowMapSize when built).
     this.scene.traverse((o) => {

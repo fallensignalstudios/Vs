@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { band, blob, box, computeNormals, cyl, lathe, plate, prism, shard, sphere, subdivide, T, torus, tube, xform, type Soup } from './geo';
+import { band, blob, box, computeNormals, cyl, lathe, plate, prism, shard, sphere, subdivide, subdivideAxis, T, torus, tube, xform, type Soup } from './geo';
 
 /** signed volume of a closed, outward-wound triangle soup (positive when the winding faces out) */
 function volume(s: Soup): number {
@@ -67,6 +67,13 @@ describe('creature modelling primitives', () => {
     const sub = subdivide(flat, 0.2);
     expect(sub.p.length).toBeGreaterThan(flat.p.length);
     expect(volume(sub)).toBeCloseTo(volume(flat), 5);
+    const ax = subdivideAxis(flat, 0, 0.2);
+    expect(volume(ax)).toBeCloseTo(volume(flat), 5);
+    expect(ax.p.length).toBeLessThan(sub.p.length); // one-axis cuts are cheaper
+    for (let i = 0; i < ax.p.length; i += 9) {
+      const xs = [ax.p[i]!, ax.p[i + 3]!, ax.p[i + 6]!];
+      expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(0.2 + 1e-6);
+    }
     const bent = plate([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], 0.1, 0.02, 0.8, 1.2);
     wellFormed(bent);
     expect(volume(bent)).toBeGreaterThan(0.05);

@@ -101,7 +101,7 @@ vec3 aurHex( vec2 p ) {
 	vec3 sHex = aurHex( sUv / shieldA.x );
 	float sFoot = fwidth( sUv.x ) / shieldA.x;
 	float sEdge = mix( smoothstep( 0.09, 0.0, sHex.x ), 0.25, saturate( sFoot * 2.0 - 0.4 ) );
-	float sCell = aurHash22( sHex.yz ).x;
+	float sCell = aurHash22( sHex.yz * 2.0 ).x; // cell centres sit on half-integers
 	float sFlow = 0.5 + 0.5 * sin( aurTime * ( 1.2 + sCell * 2.0 ) + sCell * 40.0 );
 	float sFres = pow( 1.0 - mxNdotV, shieldA.w );
 	float sAge = aurTime - shieldHit.w;

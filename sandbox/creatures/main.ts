@@ -215,6 +215,36 @@ if (view === 'lineup') {
   label('live', -8.4, 1.2, 0);
   label('disabled', -8.4, 1.2, 3.6);
   h.setCam([1.5, 4.6, -11.5], [0, 0.9, 1.6], 38);
+} else if (view === 'cling') {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x8f8a7e, roughness: 0.6 });
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(11, 6, 0.4), mat);
+  wall.position.set(-1.2, 3, 1.0);
+  wall.receiveShadow = true;
+  h.scene.add(wall);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.3, 3.2), mat);
+  slab.position.set(5.6, 4.2, -0.6);
+  h.scene.add(slab);
+  human(1.2, -0.6);
+  const cling = (x: number, yaw: number, height: number, lbl: string): CharacterVisual => {
+    const v = spawn('wallrunner', x, 0.8, { yaw });
+    asWallrunner(v)?.setCling({ height, wallYaw: 0 }, 0.01);
+    v.setLocomotion(2.5, 0);
+    for (let i = 0; i < 40; i++) v.update(1 / 60);
+    label(lbl, x, height - 0.9, 0.2);
+    return v;
+  };
+  cling(-0.6, Math.PI / 2, 2.4, 'wall · running along');
+  cling(-3.4, 0, 3.3, 'wall · head-down watch');
+  const p = cling(-5.6, 0, 3.0, 'wall pounce · 0.66 s');
+  p.setLocomotion(0);
+  seek(p, 'pounce', 0.66);
+  const c = spawn('wallrunner', 5.6, -0.6, { yaw: 0.4 });
+  asWallrunner(c)?.setCling({ height: 4.05 }, 0.01);
+  seek(c, 'ceilingCling', 1.0);
+  label('ceiling', 5.6, 2.8, -0.6);
+  spawn('wallrunner', 3.0, -0.8, { yaw: 0.5 });
+  label('floor', 3.0, -0.08, -0.8);
+  h.setCam([0.6, 2.7, -11.8], [0.4, 2.2, 0], 40);
 } else if (view === 'states') {
   const states = ['base', 'flash', 'frozen', 'corrupt', 'dissolve', 'telegraph', 'rim'];
   const span = who === 'elite' ? 4.6 : 2.4;

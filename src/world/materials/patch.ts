@@ -93,15 +93,18 @@ function inject(src: string, anchor: string, code: string, before = false): stri
 
 const COMMON_FRAG = /* glsl */ `
 uniform float aurTime;
+// integer-lattice hashes (exact, device independent): inputs are floored to integers first
 vec2 aurHash22( vec2 p ) {
-	vec3 p3 = fract( vec3( p.xyx ) * vec3( 0.1031, 0.1030, 0.0973 ) );
-	p3 += dot( p3, p3.yzx + 33.33 );
-	return fract( ( p3.xx + p3.yz ) * p3.zy );
+	uvec2 q = uvec2( ivec2( floor( p ) ) ) * uvec2( 1597334673u, 3812015801u );
+	uvec2 r = uvec2( q.x ^ q.y ) * uvec2( 1597334673u, 2798796415u );
+	r ^= r >> 15u; r *= 2246822519u; r ^= r >> 13u;
+	return vec2( r ) * ( 1.0 / 4294967296.0 );
 }
 float aurHash31( vec3 p ) {
-	p = fract( p * 0.1031 );
-	p += dot( p, p.zyx + 31.32 );
-	return fract( ( p.x + p.y ) * p.z );
+	uvec3 q = uvec3( ivec3( floor( p ) ) ) * uvec3( 1597334673u, 3812015801u, 2798796415u );
+	uint n = ( q.x ^ q.y ^ q.z ) * 1597334673u;
+	n ^= n >> 15u; n *= 2246822519u; n ^= n >> 13u;
+	return float( n ) * ( 1.0 / 4294967296.0 );
 }
 vec3 aurTriWeights( vec3 n ) {
 	vec3 w = max( abs( n ) - 0.2, 0.0 );

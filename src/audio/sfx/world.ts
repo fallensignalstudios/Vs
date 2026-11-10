@@ -100,11 +100,11 @@ export const DEVICE_SFX: RecipeTable = {
   }),
   fireControlFire: sfx(-4.5, { gap: 0.6, max: 1, prio: 3, send: 0.65, ref: 16 }, (k) => {
     crack(k, 1, 0, 800, 0.03);
-    thump(k, 118, 34, 0.8, 1);
+    thump(k, 150, 54, 0.7, 0.85);
     brass(k, 73.4, { a: 0.005, h: 0.05, d: 0.7, g: 0.8 }, 22);
     roar(k, { a: 0.005, h: 0.1, d: 1.1, g: 0.9 }, 520);
     k.noise('white', { a: 0.002, d: 0.25, g: 0.6 }, { bp: [3000, 700], q: 0.7 });
-    k.osc('sine', 42, { a: 0.02, d: 1.3, g: 0.45 }, { at: 0.03 });
+    k.osc('sine', 42, { a: 0.02, d: 0.7, g: 0.3 }, { at: 0.03 });
     zap(k, 0.4, 0.35, 0.02, 70);
     embers(k, 1.0, 0.3, 0.1);
   }),

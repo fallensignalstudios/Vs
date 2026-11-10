@@ -146,13 +146,14 @@ export function debris(k: Kit, count: number, span: number, g: number, at = 0, l
 /** Explosion core: crack + body + noise bloom + sub. `size` 0.5 small … 2 huge. */
 export function blast(k: Kit, size: number, g: number, at = 0): void {
   const len = 0.5 * size + 0.25;
+  const r = Math.sqrt(size);
   crack(k, g, at, 900, 0.022);
-  thump(k, 140 / Math.sqrt(size), 38 / Math.sqrt(size), len, g * 0.85, at);
+  // the punch sits at 60–90 Hz where speakers can deliver it; the true sub underneath is short
+  thump(k, 190 / r, 66 / r, len * 0.8, g * 0.7, at);
   const sh = k.shaper('soft', 2.5);
-  // the body of the bang lives in the low mids; the sub is there to be felt, not to carry it
-  k.noise('brown', { a: 0.004, d: len * 1.3, g: g * 0.9 }, { at, to: sh, lp: [3600 / size, 380], q: 0.8 });
-  k.noise('white', { a: 0.002, d: len * 0.55, g: g * 0.6 }, { at, to: sh, bp: [2600, 600], q: 0.7 });
-  k.noise('pink', { a: 0.003, d: len * 0.35, g: g * 0.5 }, { at, hp: 700, lp: [6500, 1800] }); // air shock
-  k.osc('square', [150 / Math.sqrt(size), 52 / Math.sqrt(size), len * 0.4], { a: 0.003, d: len * 0.6, g: g * 0.3 }, { at, to: sh, lp: 1700 });
-  k.osc('sine', 48 / Math.sqrt(size), { a: 0.02, d: len * 1.4, g: g * 0.45 }, { at: at + 0.02 });
+  k.noise('brown', { a: 0.004, d: len * 1.4, g: g * 0.9 }, { at, to: sh, lp: [3600 / size, 420], q: 0.8 });
+  k.noise('white', { a: 0.002, d: len * 0.7, g: g * 0.7 }, { at, to: sh, bp: [2600, 600], q: 0.7 });
+  k.noise('pink', { a: 0.003, d: len * 0.4, g: g * 0.4 }, { at, hp: 700, lp: [6500, 1800] }); // air shock
+  k.osc('square', [170 / r, 60 / r, len * 0.4], { a: 0.003, d: len * 0.6, g: g * 0.35 }, { at, to: sh, lp: 1700 });
+  k.osc('sine', 46 / r, { a: 0.02, d: len * 0.7, g: g * 0.3 }, { at: at + 0.02 });
 }

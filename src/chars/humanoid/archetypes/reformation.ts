@@ -55,7 +55,7 @@ export const lyric: ArchetypeDef = {
     const pal: Pal = { ...REF_PAL, suit: { color: 0x27303c, rough: 0.8, part: PART.suit } };
     const skin: Surf = { color: 0xd0a68a };
     buildBody(b, rig, { suit: pal.suit, legs: { color: 0x1a2028, rough: 0.8, part: PART.suit }, skin, glove: { color: 0x1a1d24 }, boot: pal.leather });
-    buildHead(b, rig, { skin, hair: { color: 0x5a3d28 }, style: 'tail', jaw: 0.86, eye: 0x4a3a5a });
+    buildHead(b, rig, { skin, hair: { color: 0x5a3d28 }, style: 'tail', jaw: 0.84, eye: 0x4a3a5a, fem: 1 });
     // padded field jacket with a light chest plate, hood down
     torsoWrap(b, rig, 1.49, 1.04, 0.012, { color: 0x34404e, zone: ZONE.chest }, torsoSkin(rig));
     cuirass(b, rig, pal, { faction: 'ref', heft: 0.02, lames: 0, keel: 0.01 });
@@ -126,14 +126,14 @@ export const medic: ArchetypeDef = {
     const { b, rig, draft, rng } = ctx;
     const pal: Pal = {
       ...REF_PAL,
-      plate: { color: 0xa9b2bb, metal: 0.5, rough: 0.42 },
+      plate: { color: 0x8a939c, metal: 0.5, rough: 0.46 },
       plate2: { color: 0x596573, metal: 0.6, rough: 0.46 },
       suit: { color: 0x2c3541, rough: 0.8, part: PART.suit },
       glow: { color: 0x0a1a1c, rough: 0.4, part: PART.glow, emissive: 0x9ff0e0, glow: 2.6 },
     };
     const skin: Surf = { color: pick(rng, SKINS) };
     buildBody(b, rig, { suit: pal.suit, legs: { color: 0x202731, rough: 0.8, part: PART.suit }, skin, glove: { color: 0xb8c0c6, rough: 0.5 }, boot: pal.leather });
-    buildHead(b, rig, { skin, hair: { color: pick(rng, [0x1a120d, 0x3a2a1c, 0x6a5a48] as const) }, style: rng() > 0.5 ? 'tied' : 'crop', jaw: 0.92 });
+    buildHead(b, rig, { skin, hair: { color: pick(rng, [0x1a120d, 0x3a2a1c, 0x6a5a48] as const) }, style: rng() > 0.5 ? 'tied' : 'crop', jaw: 0.92, fem: rig.prop.fem });
     helmet(b, rig, pal, 'medic');
     torsoWrap(b, rig, 1.49, 1.04, 0.012, { color: 0x3c4856, zone: ZONE.chest }, torsoSkin(rig));
     cuirass(b, rig, pal, { faction: 'ref', heft: 0.02, lames: 0, keel: 0.01 });
@@ -163,7 +163,7 @@ export const sol: ArchetypeDef = {
     const coat: Surf = { color: 0x17233a, rough: 0.82, part: PART.cloth };
     const skin: Surf = { color: 0xcfa88e };
     buildBody(b, rig, { suit: { color: 0x141b28, rough: 0.8, part: PART.suit }, skin, glove: { color: 0x10141c }, boot: pal.leather });
-    buildHead(b, rig, { skin, hair: { color: 0xc9c2b4 }, style: 'bob', jaw: 0.88, eye: 0x5a7a9a });
+    buildHead(b, rig, { skin, hair: { color: 0xc9c2b4 }, style: 'bob', jaw: 0.86, eye: 0x5a7a9a, fem: 0.85 });
     // long greatcoat: fitted body, high collar, skirt to the calf, open at the front
     torsoWrap(b, rig, 1.5, 1.02, 0.014, { ...coat, zone: ZONE.chest }, torsoSkin(rig));
     skirt(b, rig, { arc: [12, 348], top: 1.04, bottom: 0.34, flare: 0.3, out: 0.03, surf: { ...coat, zone: ZONE.leg }, trim: { color: 0x8e99a6, rough: 0.4, metal: 0.6 }, follow: 0.6, rows: 6 });

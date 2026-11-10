@@ -126,6 +126,53 @@ W.__turnaround = (who: string, opts: Record<string, unknown> = {}, spacing = 1.7
   h.setCam([0, 1.15, 7.4], [0, 0.98, 0], 35);
   h.render();
 };
+/** observation-table vignette: two figures seated opposite each other, hands on the table */
+W.__tableScene = (a = 'tarrik', c = 'selene') => {
+  clear();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x2a1c12, roughness: 0.5, metalness: 0.1 });
+  const leather = new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 0.6 });
+  const add = (w: number, hgt: number, d: number, x: number, y: number, z: number, m: THREE.Material): void => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), m);
+    mesh.position.set(x, y, z); mesh.castShadow = true; mesh.receiveShadow = true; h.scene.add(mesh);
+  };
+  add(1.5, 0.06, 0.9, 0, 0.74, 0, wood);
+  for (const sx of [-0.65, 0.65]) for (const sz of [-0.36, 0.36]) add(0.07, 0.72, 0.07, sx, 0.36, sz, wood);
+  for (const sz of [-1, 1]) { add(0.5, 0.06, 0.48, 0, 0.44, sz * 0.86, leather); add(0.5, 0.6, 0.06, 0, 0.76, sz * 1.1, leather); }
+  const f1 = spawn(a, 0, -0.86, 180), f2 = spawn(c, 0, 0.86, 0);
+  f1.setLoadout({ melee: false, ranged: false }); f2.setLoadout({ melee: false, ranged: false });
+  f1.play('sitTalk'); f2.play('sit');
+  f2.setHandTarget('L', { x: 0.16, y: 0.79, z: 0.3 }); f2.setHandTarget('R', { x: -0.16, y: 0.79, z: 0.3 });
+  f1.lookAt({ x: 0, y: 1.25, z: 0.86 }); f2.lookAt({ x: 0, y: 1.3, z: -0.86 });
+  for (let k = 0; k < 120; k++) { f1.update(1 / 60); f2.update(1 / 60); }
+  h.setCam([2.6, 1.5, 0.4], [0, 0.85, 0], 35);
+  h.render();
+};
+/** wind-up / hit / recovery for each action: three figures per action, posed at the clip's own hit time */
+W.__phases = (who: string, actions: string[], spacing = 1.7, yawDeg = 150, loadout?: Record<string, unknown>) => {
+  clear();
+  const out: Record<string, number[]> = {};
+  const total = actions.length * 3;
+  actions.forEach((a, ai) => {
+    const probe = createHumanoid(null, who as HumanoidArchetype);
+    const info = probe.info(a);
+    probe.dispose();
+    const dur = Number.isFinite(info.duration) && info.duration > 0 ? info.duration : 1;
+    const hit = info.hitTimes.length ? info.hitTimes[0] : dur * 0.45;
+    const times = [hit * 0.55, hit + 0.012, hit + (dur - hit) * 0.5];
+    out[a] = times.map((t) => +t.toFixed(3));
+    times.forEach((t, ti) => {
+      const i = ai * 3 + ti;
+      const f = spawn(who, (i - (total - 1) / 2) * spacing + ai * 0.5 - (actions.length - 1) * 0.25, 0, yawDeg);
+      if (loadout) f.setLoadout(loadout);
+      for (let k = 0; k < 20; k++) f.update(1 / 60);
+      f.play(a);
+      for (let k = 0, n = Math.round(t * 240); k < n; k++) f.update(1 / 240);
+      f.play('frozen');
+    });
+  });
+  h.render();
+  return out;
+};
 /** run-cycle sheet: n copies at evenly spaced stride phases */
 W.__gait = (who: string, speed: number, n = 4, spacing = 1.5, yawDeg = 90, moveYawDeg = 0, flags?: Record<string, boolean>) => {
   clear();

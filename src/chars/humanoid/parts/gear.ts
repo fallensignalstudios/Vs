@@ -97,9 +97,9 @@ export function helmet(b: MeshBuilder, rig: RigView, pal: Pal, kind: HelmetKind,
         }
       } else {
         // medic: clear half-visor and a pale band
-        b.surf({ color: 0x9fd8e8, rough: 0.1, metal: 0.3, part: PART.glass, ...H, emissive: 0xa8d8ff, glow: 0.35 });
+        b.surf({ color: 0x5f98a8, rough: 0.1, metal: 0.3, part: PART.glass, ...H, emissive: 0xa8d8ff, glow: 0.15 });
         loft(b, shellAt(skull, [0.085, 0.13], 0.02, () => ({ a0: -68, a1: 68 })), { seg: 12, thick: 0.004 });
-        b.surf({ color: 0xd8dde2, rough: 0.5, metal: 0.2, ...H });
+        b.surf({ color: 0xaab2ba, rough: 0.5, metal: 0.2, ...H });
         loft(b, shellAt(skull, [0.15, 0.172], inf + 0.004, () => ({ n: 2.7 })), { seg: 22, thick: 0.006 });
       }
     }

@@ -74,10 +74,10 @@ export const TARRIK_SFX: RecipeTable = {
   }),
   cinderSlam: sfx(-4.5, { gap: 0.4, max: 1, prio: 3, send: 0.5, ref: 9, vary: 25 }, (k) => {
     crack(k, 1, 0, 700, 0.03);
-    thump(k, 112, 36, 0.65, 1);
-    k.osc('sine', 44, { a: 0.03, d: 0.95, g: 0.5 }, { at: 0.02 });
-    roar(k, { a: 0.01, h: 0.08, d: 1.0, g: 0.95 }, 460);
-    k.noise('white', { a: 0.003, d: 0.22, g: 0.7 }, { bp: [2800, 700], q: 0.7 });
+    thump(k, 150, 58, 0.55, 0.8);
+    k.osc('sine', 44, { a: 0.03, d: 0.6, g: 0.35 }, { at: 0.02 });
+    roar(k, { a: 0.01, h: 0.08, d: 1.0, g: 1 }, 520);
+    k.noise('white', { a: 0.003, d: 0.26, g: 0.8 }, { bp: [2800, 700], q: 0.7 });
     // stone giving way: a distorted low-mid crunch that reads on any speaker
     k.osc('square', [130, 55, 0.3], { a: 0.003, d: 0.4, g: 0.4 }, { to: k.shaper('hard', 3), lp: 1800 });
     embers(k, 1.2, 0.6, 0.06);
@@ -86,10 +86,10 @@ export const TARRIK_SFX: RecipeTable = {
   cinderlineShot: sfx(-6, { gap: 0.12, max: 2, prio: 2, send: 0.45, ref: 6 }, (k) => {
     // heavy sidearm: a bark with a chest thump, then heat hissing off the barrel
     crack(k, 1, 0, 1100, 0.014);
-    thump(k, 170, 52, 0.14, 0.8);
+    thump(k, 180, 62, 0.13, 0.6);
     k.osc('square', [230, 82, 0.06], { a: 0.001, d: 0.09, g: 0.6 }, { to: k.shaper('hard', 2.5), lp: 2800 });
-    k.noise('white', { a: 0.001, d: 0.09, g: 0.9 }, { bp: [2400, 800], q: 0.8 });
-    k.noise('white', { a: 0.001, d: 0.05, g: 0.6 }, { bp: [4200, 1600], q: 1 });
+    k.noise('white', { a: 0.001, d: 0.1, g: 1.5 }, { bp: [2400, 800], q: 0.8 });
+    k.noise('white', { a: 0.001, d: 0.06, g: 1.1 }, { bp: [4200, 1600], q: 1 });
     k.noise('pink', { a: 0.02, d: 0.3, g: 0.2 }, { at: 0.04, bp: 3200, q: 1.2 });
     embers(k, 0.28, 0.22, 0.05, 3200);
     crack(k, 0.3, 0.11, 2600, 0.005); // action cycling

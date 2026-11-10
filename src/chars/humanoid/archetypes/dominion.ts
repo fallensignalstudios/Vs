@@ -59,7 +59,7 @@ export const lyessa: ArchetypeDef = {
     const pal: Pal = { ...DOM_PAL, plate: { color: 0x5a402b, metal: 0.9, rough: 0.42 } };
     const skin: Surf = { color: 0xb98a66 };
     buildBody(b, rig, { suit: pal.suit, skin, glove: pal.leather, boot: pal.leather, noBoots: true });
-    buildHead(b, rig, { skin, hair: { color: 0x3a1f14 }, style: 'tied', jaw: 0.9, eye: 0x3a2a1a });
+    buildHead(b, rig, { skin, hair: { color: 0x3a1f14 }, style: 'tied', jaw: 0.88, eye: 0x3a2a1a, fem: 0.9 });
     circlet(b, rig, pal);
     cuirass(b, rig, pal, { faction: 'dom', heft: 0.018, lames: 2, keel: 0.04 });
     gorget(b, rig, pal, { faction: 'dom', height: 0.055, scarf: pal.cloth });

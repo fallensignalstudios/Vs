@@ -6,7 +6,7 @@
  *   ToneMapEffect — filmic tone map + sRGB encode (everything after it works on display-referred values)
  *   FinishEffect  — film grain + triangular dither (kills banding in fog gradients; blacks stay black)
  */
-import { Color, Uniform, Vector3 } from 'three';
+import { Uniform, Vector3 } from 'three';
 import { BlendFunction, Effect } from 'postprocessing';
 
 // ---------------------------------------------------------------------------------------------------------
@@ -85,8 +85,6 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   outputColor = vec4(c, inputColor.a);
 }`;
 
-const luma = (c: Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-
 /** Scene-referred colour grade (runs in linear HDR before the tone map, so nothing clips). */
 export class GradeEffect extends Effect {
   constructor() {
@@ -137,9 +135,6 @@ export class GradeEffect extends Effect {
     this.num('gradeVignette', Math.min(1.5, Math.max(0, g.vignette)));
   }
 }
-
-/** Luminance of a linear colour (exported for callers that normalise tints themselves). */
-export const linearLuma = luma;
 
 // ---------------------------------------------------------------------------------------------------------
 

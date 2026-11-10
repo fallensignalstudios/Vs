@@ -103,7 +103,7 @@ export const selene: ArchetypeDef = {
     const pal = SELENE_PAL;
     const skin: Surf = { color: 0xc59a7c };
     buildBody(b, rig, { suit: pal.suit, skin, glove: pal.leather, boot: pal.leather, noBoots: true });
-    buildHead(b, rig, { skin, hair: { color: 0x15110f }, style: 'bun', jaw: 0.9, eye: 0x2c3a4a });
+    buildHead(b, rig, { skin, hair: { color: 0x15110f }, style: 'bun', jaw: 0.86, eye: 0x2c3a4a, fem: 1 });
 
     cuirass(b, rig, pal, { faction: 'ref', heft: 0.014, lames: 3, keel: 0.03 });
     gorget(b, rig, pal, { faction: 'ref', height: 0.045 });

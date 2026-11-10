@@ -31,7 +31,7 @@ export const survivor: ArchetypeDef = {
     const skin: Surf = { color: pick(rng, SKIN) };
     const hoodUp = rng() > 0.55;
     buildBody(b, rig, { suit: { ...tunic, color: dust(tunic.color, 0.85) }, legs: { color: pick(rng, TROUSERS), rough: 0.9, part: PART.cloth }, skin, boot: { color: 0x241c16, rough: 0.8 }, bareArms: rng() > 0.6 });
-    buildHead(b, rig, { skin, hair: { color: pick(rng, HAIR) }, style: hoodUp ? 'buzz' : pick(rng, STYLES), beard: rig.prop.fem < 0.5 && rng() > 0.6, jaw: rig.prop.fem > 0.5 ? 0.88 : 1 });
+    buildHead(b, rig, { skin, hair: { color: pick(rng, HAIR) }, style: hoodUp ? 'buzz' : pick(rng, STYLES), beard: rig.prop.fem < 0.5 && rng() > 0.6, jaw: rig.prop.fem > 0.5 ? 0.88 : 1, fem: rig.prop.fem });
     // layered, dusty, improvised: tunic, long over-shirt, wrap or blanket, satchel
     torsoWrap(b, rig, 1.49, 1.0, 0.012, { ...tunic, zone: ZONE.chest }, torsoSkin(rig));
     skirt(b, rig, { arc: [8, 352], top: 1.03, bottom: 0.7 - rng() * 0.12, flare: 0.14, out: 0.022, surf: { ...tunic, zone: ZONE.leg }, follow: 0.6, rows: 4 });

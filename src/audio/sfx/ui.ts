@@ -68,9 +68,10 @@ export const FEEDBACK_SFX: RecipeTable = {
     k.fm(1760, 3.5, [3, 0.3], { a: 0.002, d: 0.6, g: 0.3 }, { at: 0.2 });
   }),
   playerHit: sfx(-8, { gap: 0.09, max: 2, prio: 3, send: 0.15 }, (k) => {
-    thump(k, 150, 58, 0.16, 0.9);
+    thump(k, 160, 66, 0.15, 0.7);
     crack(k, 0.8, 0, 700, 0.02);
-    k.noise('pink', { a: 0.002, d: 0.12, g: 0.8 }, { lp: [3200, 500] });
+    k.noise('pink', { a: 0.002, d: 0.1, g: 0.6 }, { bp: [1700, 600], q: 0.8 });
+    k.noise('pink', { a: 0.002, d: 0.12, g: 0.5 }, { lp: [3200, 500] });
     // a thin ring left in the ear
     k.osc('sine', 3150, { a: 0.01, d: 0.45, g: 0.05 }, { fixed: true });
   }),

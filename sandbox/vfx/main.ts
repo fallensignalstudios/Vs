@@ -184,7 +184,7 @@ function placeLabels(): void {
 }
 
 // ---------------------------------------------------------------------------------------------- scenes
-const SPACING = 6;
+const SPACING = 5.5;
 const galleryIds = (family?: string): string[] => (family && EFFECT_FAMILIES[family] ? [...EFFECT_FAMILIES[family]] : Object.values(EFFECT_FAMILIES).flat());
 
 /** lay a family (or everything) out on a grid, spawn each once, frame the camera */
@@ -199,7 +199,9 @@ function gallery(family?: string): string[] {
     label(id, off.clone().add(new THREE.Vector3(0, -0.15, 1.8)));
   });
   const w = cols * SPACING, d = rows * SPACING;
-  h.setCam([0, 3.2 + d * 0.45, w * 0.42 + d * 0.75 + 3], [0, 0.9, 0], 50);
+  if (family) h.setCam([0, 2.8, w * 0.5 + 4], [0, 1.0, 0], 50);
+  else h.setCam([0, 6 + d * 0.62, d * 0.8 + 6], [0, 0, -d * 0.02], 55);
+  labelRoot.style.fontSize = family ? '12px' : '9px';
   return ids;
 }
 

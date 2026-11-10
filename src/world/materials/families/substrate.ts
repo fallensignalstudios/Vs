@@ -21,13 +21,13 @@ export function ceramic(size: number): PbrLayers {
   const smudge = fbm(size, { freq: 5, octaves: 4, gain: 0.6, seed: 14 }).data;
   const web = fbm(size, { freq: 9, octaves: 4, gain: 0.6, seed: 19, mode: 'ridged' }).data;
   const vf = veinFields(size, 15);
-  const v1 = veins(size, { freq: 3, seed: 15, warp: 0.22, width: 0.02, breakup: 0.85, swell: 0.9, flow: [1, 2], amp: 0.9 }, vf).data;
+  const v1 = veins(size, { freq: 3, seed: 15, warp: 0.22, width: 0.014, breakup: 0.6, swell: 0.85, flow: [1, 2], amp: 0.9 }, vf).data;
   const v2 = veins(size, { freq: 5, seed: 16, warp: 0.14, width: 0.0022, breakup: 0.9, swell: 0.7, flow: [2, -1], amp: 1.2 }, vf).data;
   const wear = fbm(size, { freq: 9, octaves: 5, gain: 0.62, seed: 18 }).data;
   for (let i = 0; i < L.r.length; i++) {
     const c = cloud[i] - 0.5, f = fine[i] - 0.5, d = drift[i] - 0.5;
     // broad veins are soft smoky bands eroded by the fine noise; a hairline web shows only in cloudier regions
-    const band = v1[i] * v1[i] * (0.55 + fine[i] * 0.9);
+    const band = v1[i] * (0.55 + fine[i] * 0.9);
     const w = Math.pow(web[i], 9) * sstep(0.45, 0.75, cloud[i]);
     const vein = Math.min(1, band * 0.3 + v2[i] * 0.34 + w * 0.4);
     const lum = 1 + c * 0.15 + f * 0.05;
@@ -57,15 +57,15 @@ export function ceramicFloor(size: number): PbrLayers {
   const scuff = fbm(size, { freq: 6, freqY: 26, octaves: 3, gain: 0.6, seed: 24 }).data;
   const web = fbm(size, { freq: 8, octaves: 4, gain: 0.6, seed: 28, mode: 'ridged' }).data;
   const vf = veinFields(size, 25);
-  const v1 = veins(size, { freq: 3, seed: 25, warp: 0.24, width: 0.026, breakup: 0.75, swell: 0.9, flow: [2, 1], amp: 0.9 }, vf).data;
+  const v1 = veins(size, { freq: 3, seed: 25, warp: 0.24, width: 0.014, breakup: 0.45, swell: 0.8, flow: [2, 1], amp: 0.9 }, vf).data;
   const v2 = veins(size, { freq: 6, seed: 26, warp: 0.14, width: 0.003, breakup: 0.8, swell: 0.7, flow: [1, -2], amp: 1.2 }, vf).data;
   const v3 = veins(size, { freq: 4, seed: 27, warp: 0.26, width: 0.0018, breakup: 0.85, flow: [3, 2], amp: 1.5 }, vf).data;
   const scr = scratches(size, { count: Math.round(size * 0.22), minLen: size * 0.02, maxLen: size * 0.22, seed: 29 }).data;
   for (let i = 0; i < L.r.length; i++) {
     const c = cloud[i] - 0.5, f = fine[i] - 0.5;
-    const band = v1[i] * v1[i] * (0.5 + fine[i]);
+    const band = v1[i] * (0.5 + fine[i]);
     const w = Math.pow(web[i], 8) * sstep(0.4, 0.7, cloud[i]);
-    const vein = Math.min(1, band * 0.7 + v2[i] * 0.65 + v3[i] * 0.6 + w * 0.55);
+    const vein = Math.min(1, band * 0.5 + v2[i] * 0.65 + v3[i] * 0.6 + w * 0.55);
     const lum = 1 + c * 0.28 + f * 0.06 - scr[i] * 0.05;
     L.r[i] = br * lum * (1 - vein * 0.52);
     L.g[i] = bg * lum * (1 - vein * 0.52);

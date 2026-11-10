@@ -98,11 +98,6 @@ const MAIN = /void\s+main\s*\(\s*\)\s*\{/;
 const patched = new WeakMap<THREE.Material, ReflectionLocals>();
 let warnedAnchor = false;
 
-/** Uniform holders of a material that was already patched (undefined otherwise). */
-export function reflectionLocals(material: THREE.Material): ReflectionLocals | undefined {
-  return patched.get(material);
-}
-
 /**
  * Patch `material` once (later calls return the same uniform holders). Returns null when the material is not
  * a standard/physical material — callers fall back to the env map.

@@ -9,7 +9,7 @@
  *   /sandbox/materials/?scene=moving                   object-space mapping on moving, instanced and skinned meshes
  *   /sandbox/materials/?scene=maps&id=blackStone       the raw baked maps of one material, tiled 2 × 2
  *
- * Globals for tools/shot.cjs: __mats, __ids, __focus(id, dist?, grazing?), __corrupt(amount), __view(name),
+ * Globals for tools/shot.cjs: __mats, __ids, __focus(id, dist?, grazing?), __row(row, half), __corrupt(amount), __view(name),
  * __stats() (bake time, texture memory), plus the harness __h / __step.
  */
 import * as THREE from 'three';
@@ -25,7 +25,23 @@ const q = new URLSearchParams(location.search);
 const scene = q.get('scene') ?? 'gallery';
 const env = q.get('env') === 'dark' ? 'dark' : 'studio';
 
-const h = createHarness({ bloom: true, env, lights: scene !== 'corridor', background: env === 'dark' ? 0x05070a : 0x0c1016, exposure: 1 });
+const h = createHarness({ bloom: true, env, lights: false, background: env === 'dark' ? 0x05070a : 0x0c1016, exposure: 1 });
+// The harness bloom is a plain threshold bloom: keep diffuse white-gold below it so only emissives glow.
+h.scene.environmentIntensity = env === 'dark' ? 0.22 : 0.5;
+if (scene !== 'corridor') {
+  h.scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x1a1410, env === 'dark' ? 0.12 : 0.3));
+  const key = new THREE.DirectionalLight(0xfff1dc, env === 'dark' ? 0.9 : 1.35);
+  key.position.set(6, 12, 7);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.0005;
+  key.shadow.normalBias = 0.02;
+  const sc = key.shadow.camera;
+  sc.left = -18; sc.right = 18; sc.top = 18; sc.bottom = -18; sc.far = 60;
+  key.target.position.set(scene === 'gallery' ? 11 : 0, 0, scene === 'gallery' ? 6 : scene === 'hall' ? -20 : 0);
+  key.position.add(key.target.position);
+  h.scene.add(key, key.target);
+}
 const quality: QualityProfile = { ...SANDBOX_QUALITY, textureSize: (Number(q.get('size')) || SANDBOX_QUALITY.textureSize) as QualityProfile['textureSize'] };
 const game = miniGame(h);
 (game.render as unknown as { quality: QualityProfile }).quality = quality;
@@ -42,7 +58,9 @@ const cells = new Map<string, THREE.Vector3>();
 
 function buildGallery(): void {
   const only = q.get('only')?.split(',').filter(Boolean);
-  const ids = (only && only.length ? only : MAT_IDS) as MatId[];
+  // light-emitting materials share the far row so their bloom does not wash over the surface materials
+  const glows: MatId[] = ['goldChannel', 'whiteLight', 'domAmberGlow', 'refBlueGlow', 'eclipseVein', 'hologram', 'shieldEnergy', 'quarantineBarrier'];
+  const ids = (only && only.length ? only : [...glows, ...MAT_IDS.filter((id) => !glows.includes(id))]) as MatId[];
   const cols = Math.min(COLS, ids.length);
   const rows = Math.ceil(ids.length / cols);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(cols * CELL + 16, rows * CELL + 16), mats.get('blackStoneFloor'));
@@ -70,7 +88,7 @@ function buildGallery(): void {
       glow.position.set(cx + 0.2, 0.75, cz - 0.6); h.scene.add(glow);
     }
   });
-  h.setCam([((cols - 1) * CELL) / 2, 11, rows * CELL + 6], [((cols - 1) * CELL) / 2, 0, ((rows - 1) * CELL) / 2 - 1], 42);
+  h.setCam([((cols - 1) * CELL) / 2, 15, rows * CELL + 7.5], [((cols - 1) * CELL) / 2, 0, ((rows - 1) * CELL) / 2 - 0.4], 44);
 }
 
 /** Aim the camera at one gallery cell. `grazing` drops it near the floor to judge the specular response. */
@@ -80,6 +98,13 @@ w.__focus = (id: string, dist = 4.2, grazing = false): string => {
   if (grazing) h.setCam([c.x - dist * 0.5, 0.35, c.z + dist], [c.x + 0.1, 0.45, c.z], 38);
   else h.setCam([c.x - dist * 0.25, dist * 0.42, c.z + dist], [c.x, 0.6, c.z - 0.1], 38);
   return id;
+};
+
+/** Frame four neighbouring cells of one gallery row (row 0…, half 0 = left four, 1 = right four). */
+w.__row = (row: number, half = 0): string => {
+  const cx = (half * 4 + 1.5) * CELL, cz = row * CELL;
+  h.setCam([cx, 4.6, cz + 9.2], [cx, 0.5, cz - 0.2], 44);
+  return `row ${row}.${half}`;
 };
 
 w.__stats = (): Record<string, number> => ({

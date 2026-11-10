@@ -96,8 +96,8 @@ export function flame(o: Over = {}): ParticleDef {
 export function tongues(o: Over = {}): ParticleDef {
   return {
     layer: 'add', sprite: ['wisp0', 'wisp1'], life: [0.22, 0.42], size: [0.25, 0.55, 0.7], aspect: 1.7, sizeMid: 0.4,
-    color: [[C.heat, 3.2 * FLAME_GAIN], [C.cinder, 3.4 * FLAME_GAIN], [C.cinderDeep, 0.4 * FLAME_GAIN]], colorMid: 0.3, alpha: 0.9,
-    fadeIn: 0.15, fadeOut: 0.4, gravity: -5, drag: 2.5, rot: [-0.5, 0.5], spin: [-0.6, 0.6], facing: 'upright', ...o,
+    color: [[C.cinderHot, 2.6 * FLAME_GAIN], [C.cinder, 3.2 * FLAME_GAIN], [C.cinderDeep, 0.4 * FLAME_GAIN]], colorMid: 0.3, alpha: 0.85,
+    fadeIn: 0.25, fadeOut: 0.4, gravity: -5, drag: 2.5, rot: [-0.5, 0.5], spin: [-0.6, 0.6], facing: 'upright', ...o,
   };
 }
 

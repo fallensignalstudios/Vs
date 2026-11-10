@@ -471,11 +471,54 @@ export function bendY(s: Soup, radius: number): Soup {
   });
 }
 
+/**
+ * Split edges (1 → 2 at the midpoint) until no edge spans more than maxLen along one axis (0 = x, 1 = y,
+ * 2 = z). Far cheaper than `subdivide` when a plate only bends one way; shared edges are always cut at the
+ * same midpoint, so the result stays watertight.
+ */
+export function subdivideAxis(s: Soup, axis: 0 | 1 | 2, maxLen: number, maxPasses = 12): Soup {
+  let cur = s;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const out: Soup = { p: [], e: [], u: cur.u ? [] : undefined };
+    let split = false;
+    const P = cur.p, E = cur.e, U = cur.u;
+    for (let i = 0; i < P.length; i += 9) {
+      const vi = i / 3;
+      const v: Pt3[] = [[P[i]!, P[i + 1]!, P[i + 2]!], [P[i + 3]!, P[i + 4]!, P[i + 5]!], [P[i + 6]!, P[i + 7]!, P[i + 8]!]];
+      const e = [E[vi]!, E[vi + 1]!, E[vi + 2]!];
+      const u = U ? [U[vi]!, U[vi + 1]!, U[vi + 2]!] : null;
+      let best = -1, span = maxLen;
+      for (let k = 0; k < 3; k++) {
+        const d = Math.abs(v[k]![axis] - v[(k + 1) % 3]![axis]);
+        if (d > span + 1e-9) { span = d; best = k; }
+      }
+      if (best < 0) {
+        tri(out, v[0]!, v[1]!, v[2]!, e[0], e[1], e[2]);
+        if (out.u && u) out.u.push(u[0]!, u[1]!, u[2]!);
+        continue;
+      }
+      split = true;
+      const a = best, b = (best + 1) % 3, c = (best + 2) % 3;
+      const m = mid(v[a]!, v[b]!), em = (e[a]! + e[b]!) / 2;
+      tri(out, v[a]!, m, v[c]!, e[a], em, e[c]);
+      tri(out, m, v[b]!, v[c]!, em, e[b], e[c]);
+      if (out.u && u) {
+        const um = (u[a]! + u[b]!) / 2;
+        out.u.push(u[a]!, um, u[c]!, um, u[b]!, u[c]!);
+      }
+    }
+    cur = out;
+    if (!split) break;
+  }
+  return cur;
+}
+
 /** Curved armour plate: polygon outline in XY, bulging toward +Z. radiusX/radiusY = 0 keeps that axis flat. */
 export function plate(outline: readonly Pt2[], thick: number, bevel: number, radiusX = 0, radiusY = 0, backBevel = 0): Soup {
   let s = prism(outline, thick, bevel, backBevel);
-  const r = Math.min(Math.abs(radiusX) || Infinity, Math.abs(radiusY) || Infinity);
-  if (isFinite(r)) s = subdivide(s, Math.max(0.03, r * 0.35));
+  // just enough cuts for the curvature: about 0.4 rad of arc per facet, along the bent axis only
+  if (radiusX) s = subdivideAxis(s, 0, Math.max(0.03, Math.abs(radiusX) * 0.4));
+  if (radiusY) s = subdivideAxis(s, 1, Math.max(0.03, Math.abs(radiusY) * 0.4));
   if (radiusX) bendX(s, radiusX);
   if (radiusY) bendY(s, radiusY);
   return s;

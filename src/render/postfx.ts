@@ -110,6 +110,12 @@ export class PostChain {
     // MSAA on the HDR scene buffer at high / ultra: SMAA alone cannot rebuild sub-pixel geometry, and the art
     // direction is full of it (narrow gold channels, light seams) — without it they break into crawling dots.
     composer.multisampling = q.level === 'high' || q.level === 'ultra' ? 4 : 0;
+    // Only the buffer the scene is drawn into needs samples; the ping-pong partner would just pay for an extra
+    // resolve (and ~4× the memory) every time a fullscreen pass writes to it.
+    if (composer.outputBuffer.samples !== 0) {
+      composer.outputBuffer.samples = 0;
+      composer.outputBuffer.dispose();
+    }
 
     const { scene, camera } = this;
     const scenePass = new ScenePass(scene, camera);
@@ -278,10 +284,6 @@ export class PostChain {
     this.applyDof(dt);
     this.finish?.tick();
     this.composer.render(dt);
-  }
-
-  dispose(): void {
-    this.composer.dispose();
   }
 }
 

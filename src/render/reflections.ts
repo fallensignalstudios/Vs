@@ -228,11 +228,6 @@ export class PlanarReflections {
     return true;
   }
 
-  dispose(): void {
-    this.release();
-    this.floors.clear();
-  }
-
   // -----------------------------------------------------------------------------------------------------
 
   /** Height of the nearest registered plane below the camera that is inside the frustum, or null. */

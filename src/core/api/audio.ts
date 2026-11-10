@@ -110,10 +110,22 @@ export interface AudioSystem {
   unlock(): void;
   readonly unlocked: boolean;
 
+  /**
+   * Play a one-shot. Every id has a per-id rate limit and instance cap, and there is a global budget of 28
+   * voices with priority stealing — calling this as often as gameplay likes is safe; excess plays are dropped.
+   */
   play(id: SfxId, opts?: SfxOpts): void;
-  /** sustained positional loop (drone hum, link hum, emitter) */
+  /**
+   * sustained positional loop (drone hum, link hum, emitter). Safe to call before audio is unlocked: the handle
+   * remembers position/volume/pitch and the voice starts when audio becomes available. clear() stops them all.
+   */
   loop(id: SfxId, opts?: SfxOpts): LoopHandle;
 
+  /**
+   * Cross-fade to a music state. The change lands on the next bar line of the current state (next beat when
+   * `fadeSeconds` < 0.35; never more than ~2.4 s away): the outgoing rhythm stops there and its tails fade
+   * under the incoming state over `fadeSeconds` (default 2). `'silence'` fades out.
+   */
   setMusic(state: MusicState, fadeSeconds?: number): void;
   readonly music: MusicState;
   setAmbience(id: AmbienceId, fadeSeconds?: number): void;
@@ -126,7 +138,11 @@ export interface AudioSystem {
   speak(speaker: string, channel?: 'voice' | 'radio' | 'system' | 'narration'): void;
   /** temporarily lower music/ambience under dialogue */
   duck(amount: number, seconds: number): void;
-  /** 0..1 low-pass "muffled pressure" on the world bus (also used for the quarantine strip and slow-mo) */
+  /**
+   * 0..1 low-pass "muffled pressure" on the world bus (also used for the quarantine strip and slow-mo).
+   * Affects SFX, ambience and reverb tails — never music or UI. Useful values: 0.2–0.35 pressure-muffled halls
+   * (Z00–Z04), ~0.6 slow-mo / stunned, 1 sealed (≈ 280 Hz).
+   */
   setMuffle(amount: number, fadeSeconds?: number): void;
   /**
    * Eclipse cadence clock so identical timing can be heard: call on each beat (once per beat is enough; calls

@@ -66,7 +66,7 @@ export function armArmor(b: MeshBuilder, rig: RigView, side: number, pal: Pal, o
         b.at((s.cx ?? 0) + s.rx * 0.6, s.y, (s.cz ?? 0) - s.rz * 0.8, 0, -40, 0);
         b.surf({ ...pal.dark, zone: ZONE.arm });
         box(b, 0.062, 0.1, 0.014, { bevel: 0.004 });
-        b.surf({ ...pal.glow, zone: ZONE.arm, glow: 2.2 });
+        b.surf({ ...pal.glow, zone: ZONE.arm, glow: 1.1 });
         b.translate(0, 0, -0.008);
         box(b, 0.05, 0.085, 0.004, { bevel: 0.001, edge: 0 });
       });

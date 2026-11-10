@@ -4,7 +4,7 @@
  *   sfx voices ─► sfx ─┐
  *   ambience ─► amb ─► ambDuck ─┤► world ─► muffle (LP) ─► worldGate ─┐
  *   reverb return ◄─ convolver ◄─ reverbIn ─────────────────┘        │
- *   music decks ─► music ─► musicDuck ───────────────────────────────┼─► sum ─► master ─► glue comp
+ *   music decks ─► music ─► tilt EQ ─► peak comp ─► musicDuck ───────┼─► sum ─► master ─► glue comp
  *   ui voices ─► ui ──────────────────────────────────────────────────┘        ─► limiter ─► ceiling ─► out
  *
  * Reverb sends: every SFX voice has its own send into `sfxSend` (scaled by the room amount of the current
@@ -31,6 +31,26 @@ export const sliderGain = (v: number): number => {
 export const REFERENCE_VOLUMES: Volumes = { master: 0.8, music: 0.7, sfx: 0.9 };
 
 const dB = (d: number): number => Math.pow(10, d / 20);
+
+/** Reverb return level (the impulse has unit energy). */
+const REVERB_RETURN = 0.5;
+
+export interface CompParams {
+  threshold: number;
+  knee: number;
+  ratio: number;
+  attack: number;
+  release: number;
+  /** the node's built-in make-up gain for these settings (dB), measured by the sandbox "chain" report */
+  makeupDb: number;
+}
+
+/** Dynamics stages: the score's own peak control, then the master glue compressor into a fast limiter. */
+export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
+  music: { threshold: -17, knee: 8, ratio: 4, attack: 0.003, release: 0.14, makeupDb: 6.1 },
+  glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
+  limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
+};
 
 export class Mixer {
   readonly sfx: GainNode;
@@ -223,22 +243,3 @@ export class Mixer {
     this.musicGate.gain.setTargetAtTime(paused ? 0.45 : 1, now, 0.2);
   }
 }
-
-/** Reverb return level (the impulse has unit energy). */
-const REVERB_RETURN = 0.5;
-export interface CompParams {
-  threshold: number;
-  knee: number;
-  ratio: number;
-  attack: number;
-  release: number;
-  /** the node's built-in make-up gain for these settings (dB), measured by the sandbox "chain" report */
-  makeupDb: number;
-}
-
-/** Dynamics stages: the score's own peak control, then the master glue compressor into a fast limiter. */
-export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
-  music: { threshold: -17, knee: 8, ratio: 4, attack: 0.003, release: 0.14, makeupDb: 6.1 },
-  glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
-  limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
-};

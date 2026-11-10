@@ -70,10 +70,11 @@ export const ENFORCER_SFX: RecipeTable = {
     zap(k, 0.25, 0.25, 0.06, 88);
   }),
   shieldHit: sfx(-8, { gap: 0.06, max: 4, prio: 1, send: 0.45, ref: 5 }, (k) => {
-    crack(k, 0.8, 0, 1500, 0.012);
-    thump(k, 105, 50, 0.18, 0.9);
-    struck(k, 'plate', k.rr(170, 200), 0.45, 0.6, { tilt: 0.9 });
-    zap(k, 0.16, 0.4, 0.005, 96);
+    crack(k, 0.9, 0, 1500, 0.014);
+    thump(k, 115, 56, 0.16, 0.8);
+    struck(k, 'plate', k.rr(170, 200), 0.45, 0.6, { tilt: 0.7 });
+    struck(k, 'bar', k.rr(880, 1040), 0.12, 0.3); // the rim rings where the blow landed
+    zap(k, 0.18, 0.7, 0.005, 96);
   }),
   shieldBreak: sfx(-5.5, { gap: 0.3, max: 2, prio: 3, send: 0.55, ref: 8 }, (k) => {
     crack(k, 1, 0, 900, 0.03);
@@ -170,8 +171,8 @@ export const ECLIPSE_SFX: RecipeTable = {
     k.noise('brown', { a: 0.8, d: 0.1, g: 0.7 }, { lp: [180, 900, 0.85] });
     breath(k, { a: 0.8, d: 0.1, g: 0.7 }, 0.7);
     wrong(k, 69.3, { a: 0.75, d: 0.15, g: 0.5 }, { rate: 11 });
-    thump(k, 80, 26, 0.7, 1, 0.9);
-    k.noise('brown', { a: 0.01, d: 0.8, g: 0.8 }, { at: 0.9, lp: [1200, 120, 0.7] });
+    thump(k, 120, 46, 0.6, 0.9, 0.9);
+    k.noise('brown', { a: 0.01, d: 0.8, g: 0.9 }, { at: 0.9, lp: [1800, 240, 0.7] });
     wrong(k, 138.6, { a: 0.01, d: 0.5, g: 0.3 }, { at: 0.9, rate: 31 });
   }),
   eliteRoar: sfx(-4.5, { ...ECLIPSE, gap: 1.2, max: 1, prio: 3, send: 0.65, ref: 16 }, (k) => {
@@ -186,8 +187,8 @@ export const ECLIPSE_SFX: RecipeTable = {
   }),
   eliteSlam: sfx(-4, { ...ECLIPSE, gap: 0.6, max: 1, prio: 3, send: 0.6, ref: 16 }, (k) => {
     crack(k, 1, 0, 500, 0.04);
-    thump(k, 92, 30, 0.9, 1);
-    k.osc('sine', 38, { a: 0.03, d: 1.2, g: 0.5 }, { at: 0.03, fixed: true });
+    thump(k, 130, 48, 0.8, 0.85);
+    k.osc('sine', 40, { a: 0.03, d: 0.7, g: 0.35 }, { at: 0.03, fixed: true });
     k.noise('brown', { a: 0.005, d: 1.1, g: 1 }, { to: k.shaper('soft', 2.4), lp: [2600, 300, 0.9] });
     k.noise('white', { a: 0.003, d: 0.3, g: 0.6 }, { bp: [2400, 600], q: 0.7 });
     k.osc('square', [120, 48, 0.35], { a: 0.003, d: 0.5, g: 0.4 }, { to: k.shaper('hard', 3), lp: 1600, fixed: true });
