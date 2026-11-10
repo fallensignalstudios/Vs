@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
  * Full-mission smoke test: boots the real game headless, starts a new game and lets the autoplay bot run it
- * (`__aurelion.runTo`) once per Z07 choice. Prints one JSON report and exits 0 only when every run reached its
- * target with `stuck: null` and no page errors. With no zones registered it reports "no zones" and exits 0.
+ * (`__aurelion.runTo`) once per Z07 choice, pairing each with a Z08 officer option (run i takes officers[i], so
+ * the defaults cover West + killed and East + spared). Prints one JSON report and exits 0 only when every run
+ * reached its target with `stuck: null`, no page errors and — for a run to CP9 — both recorded choices saved as
+ * asked. With no zones registered it reports "no zones" and exits 0.
  *
  *   node tests/smoke.cjs [--url "/?debug=1&manual=1&mute=1&quality=low"] [--choices WestStretchers,EastWalkers]
+ *                        [--officers killed,spared]
  *                        [--until CP9] [--max 3600] [--stall 90] [--out report.json] [--timeout 1800000]
  *
  * Same Chromium launch flags as tools/shot.cjs (software WebGL). The run never renders, so sim time is fast.
@@ -18,12 +21,13 @@ const ROOT = path.resolve(__dirname, '..');
 const BASE = process.env.AURELION_BASE || 'http://127.0.0.1:5173';
 
 function parseArgs(argv) {
-  const o = { url: '/?debug=1&manual=1&mute=1&quality=low', choices: ['WestStretchers', 'EastWalkers'], until: 'CP9', max: 3600, stall: 90, out: null, timeout: 1800000 };
+  const o = { url: '/?debug=1&manual=1&mute=1&quality=low', choices: ['WestStretchers', 'EastWalkers'], officers: ['killed', 'spared'], until: 'CP9', max: 3600, stall: 90, out: null, timeout: 1800000 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const v = argv[i + 1];
     if (a === '--url') { o.url = v; i++; }
     else if (a === '--choices') { o.choices = String(v).split(',').map((s) => s.trim()).filter(Boolean); i++; }
+    else if (a === '--officers') { o.officers = String(v).split(',').map((s) => s.trim()).filter(Boolean); i++; }
     else if (a === '--until') { o.until = v; i++; }
     else if (a === '--max') { o.max = Number(v) || o.max; i++; }
     else if (a === '--stall') { o.stall = Number(v) || o.stall; i++; }
@@ -56,13 +60,13 @@ async function ensureServer() {
 }
 
 /** One fresh page (fresh localStorage) per run. */
-async function runOnce(browser, opts, choice) {
+async function runOnce(browser, opts, choice, officer) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const consoleErrors = [];
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().split('\n')[0].slice(0, 300)); });
   page.on('pageerror', (e) => consoleErrors.push('pageerror: ' + String(e.message).slice(0, 300)));
-  const run = { choice, status: 'error', ok: false, stuck: null, reached: [], beats: [], simSeconds: 0, teleports: 0, forcedInteractions: [], errors: [], wallSeconds: 0 };
+  const run = { choice, officer, status: 'error', ok: false, stuck: null, reached: [], beats: [], simSeconds: 0, teleports: 0, forcedInteractions: [], errors: [], wallSeconds: 0 };
   const t0 = Date.now();
   try {
     await page.goto(BASE + opts.url, { waitUntil: 'load', timeout: opts.timeout });
@@ -75,19 +79,24 @@ async function runOnce(browser, opts, choice) {
       return run;
     }
     const result = await page.evaluate(
-      async ([c, until, max, stall]) => {
+      async ([c, o, until, max, stall]) => {
         const d = window.__aurelion;
         await d.newGame();
-        const r = await d.runTo({ choice: c, untilCheckpoint: until, maxSimSeconds: max, stallSeconds: stall });
+        const r = await d.runTo({ choice: c, officer: o, untilCheckpoint: until, maxSimSeconds: max, stallSeconds: stall });
         const s = d.snapshot();
         return { r, final: { zone: s.zone, beat: s.beat, checkpoint: s.checkpoint, rescuePriority: s.rescuePriority, flags: s.flags, phase: s.phase }, log: d.autoplay.log.slice(-40), pageErrors: d.errors.map((e) => String(e).split('\n')[0].slice(0, 300)) };
       },
-      [choice, opts.until, opts.max, opts.stall],
+      [choice, officer, opts.until, opts.max, opts.stall],
     );
     Object.assign(run, result.r);
     run.final = result.final;
     run.botLog = result.log;
     run.errors = [...new Set([...(result.r.errors || []), ...result.pageErrors, ...consoleErrors])];
+    // a full run must have recorded both choices exactly as the bot was asked
+    const f = result.final;
+    if (result.r.ok && opts.until === 'CP9' && (f.rescuePriority !== choice || (f.flags || {}).officerFate !== officer)) {
+      run.errors.push(`recorded choices ${f.rescuePriority} / ${(f.flags || {}).officerFate}, expected ${choice} / ${officer}`);
+    }
     run.status = result.r.ok && !result.r.stuck && run.errors.length === 0 ? 'ok' : result.r.ok ? 'completed with problems' : 'stuck';
     run.ok = run.status === 'ok';
   } catch (err) {
@@ -111,8 +120,9 @@ async function runOnce(browser, opts, choice) {
     browser = await chromium.launch({
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-vsync', '--autoplay-policy=no-user-gesture-required'],
     });
-    for (const choice of opts.choices) {
-      const run = await runOnce(browser, opts, choice);
+    for (const [i, choice] of opts.choices.entries()) {
+      const officer = opts.officers[i % Math.max(1, opts.officers.length)] || 'killed';
+      const run = await runOnce(browser, opts, choice, officer);
       report.runs.push(run);
       if (run.status === 'no zones') break;
     }

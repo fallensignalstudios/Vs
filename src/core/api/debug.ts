@@ -90,7 +90,8 @@ export interface DebugApi {
   physics(visible: boolean): void;
   /** autoplay bot */
   autoplay: {
-    start(opts?: { choice?: 'WestStretchers' | 'EastWalkers'; skipCinematics?: boolean; god?: boolean }): void;
+    /** `choice` = the Z07 priority (default West), `officer` = the Z08 officer (default 'killed') */
+    start(opts?: { choice?: 'WestStretchers' | 'EastWalkers'; officer?: 'killed' | 'spared'; skipCinematics?: boolean; god?: boolean }): void;
     stop(): void;
     readonly running: boolean;
     /** human-readable log of what the bot did / is stuck on */
@@ -106,6 +107,8 @@ export interface DebugApi {
    */
   runTo(opts?: {
     untilCheckpoint?: CheckpointId; maxSimSeconds?: number; choice?: 'WestStretchers' | 'EastWalkers';
+    /** ADDED. the Z08 officer choice the bot commits (default 'killed') */
+    officer?: 'killed' | 'spared';
     /** ADDED. sim seconds without any progress before the run is declared stuck (default 90) */
     stallSeconds?: number;
     /** ADDED. false = watch every cinematic at full length (default true: skip) */

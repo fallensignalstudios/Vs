@@ -12,6 +12,7 @@ export interface RunToOptions {
   untilCheckpoint?: CheckpointId;
   maxSimSeconds?: number;
   choice?: 'WestStretchers' | 'EastWalkers';
+  officer?: 'killed' | 'spared';
   stallSeconds?: number;
   skipCinematics?: boolean;
 }
@@ -81,7 +82,7 @@ export async function runTo(game: Game, bot: AutoplayBot, opts: RunToOptions = {
       result.beats.push({ zone: cur.id, beat: last.beat, t: 0 });
     }
 
-    bot.start({ choice: opts.choice, skipCinematics: opts.skipCinematics !== false, god: true });
+    bot.start({ choice: opts.choice, officer: opts.officer, skipCinematics: opts.skipCinematics !== false, god: true });
 
     let lastHard = hard;
     let lastSoft = soft + bot.progress;

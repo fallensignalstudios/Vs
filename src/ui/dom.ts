@@ -161,12 +161,14 @@ export class Fader {
 
   show(on: boolean, instant = false): void {
     const target = on ? 1 : 0;
-    if (this.interactive && target !== this.target) this.el.style.pointerEvents = on ? '' : 'none';
+    const changed = target !== this.target;
+    if (this.interactive && changed) this.el.style.pointerEvents = on ? '' : 'none';
     this.target = target;
     if (instant) {
       this.level = this.target;
       this.apply();
-    } else if (on && !this.shown) {
+    } else if (changed) {
+      // re-evaluate at once: a show(true) → show(false) pair with no update() between must not leave it shown
       this.apply();
     }
   }

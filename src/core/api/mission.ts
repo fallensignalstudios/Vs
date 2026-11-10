@@ -285,6 +285,12 @@ export interface ZoneRuntime {
    * present the local decision; resolves with the chosen option id. The answer is recorded in the mission state
    * (flag `choice:<id>`): asking the same choice again — a checkpoint retry — returns the recorded answer at
    * once without showing the panel or emitting `choice:made` a second time.
+   *
+   * A choice is never answered for the player: a cinematic skip STOPS at an open panel (the fast-forward ends
+   * there, the rest of the scene plays normally and may be skipped again after the commit), the skip input does
+   * nothing while it is open, and `settings.autoPrompts` (which confirms duel / Resonance context prompts) never
+   * applies to it. Commit the answer and save right after it (`commitRescuePriority`, or `z.setFlag` +
+   * `z.checkpoint` for the officer) — both recorded choices must survive a reload without being asked again.
    */
   choice(opts: ChoiceOpts): Routine<string>;
   /**
@@ -395,7 +401,7 @@ export interface MissionSystem {
   /** reload the last saved checkpoint (death / pause menu) */
   reloadCheckpoint(): Promise<void>;
   saveCheckpoint(id: CheckpointId): void;
-  /** request skip of the active skippable cinematic */
+  /** request skip of the active skippable cinematic (ignored while a choice panel is open) */
   skipCinematic(): void;
   clearSave(): void;
   update(dt: number): void;
@@ -407,6 +413,6 @@ export interface MissionSystem {
   readonly beatLog: readonly BeatLogEntry[];
   /** `z.log()` lines and mission-system notes, oldest first (capped at 300 lines) */
   readonly journal: readonly string[];
-  /** true while a cinematic is running that the player may skip */
+  /** true while a cinematic is running that the player may skip (false while a choice panel is open) */
   readonly cinematicSkippable: boolean;
 }

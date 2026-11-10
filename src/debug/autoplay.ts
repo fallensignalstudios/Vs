@@ -4,7 +4,7 @@
  * detector, so it never fakes progress: every last-resort teleport and every interaction it had to force is
  * recorded (`teleports`, `forced`, `log`) and surfaces in `DebugApi.runTo()`.
  *
- * Priority each frame: cinematic (skip) → open choice → hostile actors (objective-tagged first) → nearest
+ * Priority each frame: open choice → cinematic (skip) → hostile actors (objective-tagged first) → nearest
  * enabled required interaction → objective marker → idle.
  */
 import * as THREE from 'three';
@@ -13,7 +13,10 @@ import { angleDelta } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 
 export interface BotOptions {
+  /** the Z07 local priority to commit (default 'WestStretchers') */
   choice?: 'WestStretchers' | 'EastWalkers';
+  /** the Z08 officer choice to commit (default 'killed') */
+  officer?: 'killed' | 'spared';
   skipCinematics?: boolean;
   god?: boolean;
 }
@@ -45,7 +48,7 @@ export class AutoplayBot {
   readonly log: string[] = [];
   readonly forced: string[] = [];
 
-  private opts: Required<Pick<BotOptions, 'skipCinematics' | 'god'>> & { choice: string } = { choice: 'WestStretchers', skipCinematics: true, god: true };
+  private opts: Required<BotOptions> = { choice: 'WestStretchers', officer: 'killed', skipCinematics: true, god: true };
   private prevGod = false;
 
   private goalKey = '';
@@ -87,7 +90,12 @@ export class AutoplayBot {
 
   start(opts?: BotOptions): void {
     const g = this.game;
-    this.opts = { choice: opts?.choice ?? 'WestStretchers', skipCinematics: opts?.skipCinematics !== false, god: opts?.god !== false };
+    this.opts = {
+      choice: opts?.choice === 'EastWalkers' ? 'EastWalkers' : 'WestStretchers',
+      officer: opts?.officer === 'spared' ? 'spared' : 'killed',
+      skipCinematics: opts?.skipCinematics !== false,
+      god: opts?.god !== false,
+    };
     if (!this.running) this.prevGod = g.player.godMode === true;
     this.running = true;
     this.teleports = 0;
@@ -96,7 +104,7 @@ export class AutoplayBot {
     this.lastNow = g.time.now;
     g.player.godMode = this.opts.god;
     g.input.virtual.active = true;
-    this.say(`autoplay started (choice ${this.opts.choice}, skip ${this.opts.skipCinematics}, god ${this.opts.god})`);
+    this.say(`autoplay started (choice ${this.opts.choice}, officer ${this.opts.officer}, skip ${this.opts.skipCinematics}, god ${this.opts.god})`);
   }
 
   stop(): void {
@@ -130,21 +138,24 @@ export class AutoplayBot {
     if (isStub(player)) return this.rest('no player controller');
     if (player.godMode !== this.opts.god) player.godMode = this.opts.god;
 
+    // an open choice first: a choice can sit inside a cinematic (a skip stops at it and never answers it)
+    const choice = mission.activeChoice;
+    if (choice && !isStub(choice)) {
+      // each recorded choice takes its own option: the Z07 priority, the Z08 officer; anything else its first
+      const wanted = choice.id === 'officerFate' ? this.opts.officer : this.opts.choice;
+      const pick = choice.options.includes(wanted) ? wanted : choice.options[0];
+      this.rest(`choosing ${pick}`);
+      choice.select(pick);
+      this.progress++;
+      this.say(`choice "${choice.id}" → ${pick}`);
+      return;
+    }
     if (mission.cinematicActive === true) {
       this.rest('cinematic');
       if (this.opts.skipCinematics && mission.cinematicSkippable === true) {
         mission.skipCinematic();
         this.progress++;
       }
-      return;
-    }
-    const choice = mission.activeChoice;
-    if (choice && !isStub(choice)) {
-      const pick = choice.options.includes(this.opts.choice) ? this.opts.choice : choice.options[0];
-      this.rest(`choosing ${pick}`);
-      choice.select(pick);
-      this.progress++;
-      this.say(`choice "${choice.id}" → ${pick}`);
       return;
     }
     const actor = player.actor;
@@ -289,7 +300,10 @@ export class AutoplayBot {
     v.hold('aim', true);
     this.resetStall();
     const aligned = this.steerAim(aim);
-    if (aligned && this.attackTimer <= 0) {
+    // fire only once the lead is really aiming: `attack` pressed before the aim hold takes effect is a MELEE
+    // swing, and a chain of swings at the air (each one stepping forward) keeps aim from ever engaging
+    const aiming = isStub(hud) || hud.aiming === true;
+    if (aligned && aiming && this.attackTimer <= 0) {
       this.attackTimer = 0.5;
       v.press('attack');
     }

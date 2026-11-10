@@ -51,13 +51,15 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
 
   // Z01 — long ivory hall: bright, clean, a touch cool so the cold security light and warm strips both read.
   pressureHall: look({
-    exposure: 1.1,
+    // Z01 integration pass: exposure and fill lowered so the key, the shafts and the light strips carry the
+    // hall (it read as an evenly lit white box); a little more warm haze so the far end recedes
+    exposure: 0.92,
     bloom: { intensity: 0.62, threshold: 1.0, radius: 0.66 },
-    fog: { color: 0x4a4c50, density: 0.008 },
-    grade: { tint: 0xf2f6ff, saturation: 1.0, contrast: 1.06, lift: 0.002, shadowsTint: 0xbdd0ff, highlightsTint: 0xfff4e0 },
-    vignette: 0.3, grain: 0.26, chromaticAberration: 0.16,
+    fog: { color: 0x5a554c, density: 0.013 },
+    grade: { tint: 0xf2f6ff, saturation: 1.0, contrast: 1.1, lift: 0.002, shadowsTint: 0xbdd0ff, highlightsTint: 0xfff4e0 },
+    vignette: 0.34, grain: 0.26, chromaticAberration: 0.16,
     ao: { intensity: 3.0, radius: 1.4 },
-    ambient: { sky: 0xbdb9b0, ground: 0x3a332b, intensity: 0.68 },
+    ambient: { sky: 0xbdb9b0, ground: 0x3a332b, intensity: 0.5 },
     envIntensity: 1.0,
   }),
 

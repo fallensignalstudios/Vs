@@ -7,7 +7,7 @@
  *   flow        standardExit(z, door, to)           objective → open door → wait at the threshold → z.exit
  *               waitOr(z, pred, seconds)            predicate wait with a sim-time timeout (never soft-locks)
  *   cast        spawnTarrikSquad / spawnSeleneSquad the companions a lead travels with
- *               walkTo(c, pos) / allArrived(cs)     scripted moves that survive a skip
+ *               walkTo(c, pos) / atPost / allArrived scripted moves that survive a skip
  *   dialogue    conversation(z, c, lines, shots)    lines with alternating over-the-shoulder shots
  *               barker(z)                           once-per-key combat barks with a minimum gap
  *   teaching    tutorialHint(z, id, text, button)   a hint that shows once per save
@@ -225,14 +225,27 @@ export function spawnPartner(z: ZoneRuntime, who: 'tarrik' | 'selene', at: strin
 
 /**
  * Send a body somewhere as part of a scene. When the scene is being skipped the body is teleported instead, so
- * the world ends in the same state either way.
+ * the world ends in the same state either way (a held pose — knockdown, kneel… — is released in both cases, as
+ * `moveTo` does). Pair it with `atPost` when you wait for the arrival: a teleported body may not report `arrived`.
  */
 export function walkTo(z: ZoneRuntime, c: Companion | null, at: string | Vec3Like, opts?: { run?: boolean; yaw?: number }): void {
   if (!c) return;
   const pos = typeof at === 'string' ? z.m(at) : at;
   const yaw = opts?.yaw ?? (typeof at === 'string' ? z.myaw(at) : undefined);
-  if (z.skipping) c.teleport(pos, yaw);
-  else c.moveTo(pos, { run: opts?.run, yaw });
+  if (z.skipping) {
+    c.stopAction();
+    c.teleport(pos, yaw);
+  } else {
+    c.moveTo(pos, { run: opts?.run, yaw });
+  }
+}
+
+/** true when the body has arrived at (or was teleported onto) `at` — use it in waits after `walkTo` */
+export function atPost(z: ZoneRuntime, c: Companion | null, at: string | Vec3Like, within = 0.8): boolean {
+  if (!c) return true;
+  if (c.arrived) return true;
+  const p = typeof at === 'string' ? z.m(at) : at;
+  return Math.hypot(c.actor.pos.x - p.x, c.actor.pos.z - p.z) <= within;
 }
 
 /** true once every listed body has arrived (missing bodies count as arrived) */
@@ -312,8 +325,9 @@ export function barker(z: ZoneRuntime, gap = 4): (key: string, speaker: SpeakerI
 // ---------------------------------------------------------------------------------------------------------
 
 /**
- * A tutorial hint that is shown once per save (flag `hint:<id>`), so a checkpoint retry does not repeat it.
- * Mechanics are taught here, never in dialogue. Returns true when it was shown.
+ * A tutorial hint that is shown once (flag `hint:<id>`). The flag lives in the mission state, so it is saved
+ * with the NEXT checkpoint: a retry from a checkpoint saved before the hint shows it again (useful after a
+ * death), one saved after it does not. Mechanics are taught here, never in dialogue. Returns true when shown.
  */
 export function tutorialHint(z: ZoneRuntime, id: string, text: string, button?: ButtonAction, seconds = 7): boolean {
   const key = `hint:${id}`;

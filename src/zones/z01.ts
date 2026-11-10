@@ -11,6 +11,9 @@
  *
  * SCRIPT: SCRIPT_SOURCE.md § Z01. The author's lines are exact (curly apostrophes are the book's); every line
  * and UI string written for the game is tagged `// NEW`.
+ *
+ * FILES: this module stays under ~600 lines; the self-contained fixed beat on the right rib (the gauntlet
+ * insert) lives in ./z01/gauntlet.ts — a zone's own helper folder is `src/zones/zNN/`.
  */
 import * as THREE from 'three';
 import type {
@@ -18,9 +21,10 @@ import type {
 } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import {
-  AMBER, BLUE, FACE, GOLD, IVORY, VIOLET, barker, encounterMusic, onZoneEvent, setDoor, standardExit, sustainDrops,
-  tutorialHint, waitOr, walkTo,
+  AMBER, BLUE, FACE, IVORY, barker, encounterMusic, onZoneEvent, setDoor, standardExit, sustainDrops, tutorialHint,
+  walkTo, waitOr,
 } from './shared';
+import { attachCrack, gauntletBeat, resetGauntlet, updateGauntlet } from './z01/gauntlet';
 
 // =====================================================================================================================
 // Constants — every number the layout and the encounter depend on
@@ -57,7 +61,7 @@ const E1_CAP = 4;
 /** Lyessa's suppressing bursts: seconds between them */
 const SUPPRESS_EVERY = 6.5;
 
-/** speaker label for the soldier who is nameless until Z02 */
+/** speaker label for the soldier who is nameless until Z02 (also in ./z01/gauntlet.ts) */
 const MALIK = 'Soldier';
 
 // =====================================================================================================================
@@ -70,16 +74,10 @@ interface Z01 {
   hatchLight: THREE.PointLight | null;
   enc: Encounter | null;
   emitter: DeviceHandle | null;
-  /** the tissue that closes on the gauntlet during the insert (scaled by `grip`) */
-  tissue: THREE.Object3D | null;
-  grip: number;
-  gripTarget: number;
-  /** the violet-lit crack on the soldier's gauntlet */
-  crack: THREE.Object3D | null;
 }
 let S: Z01 = blank();
 function blank(): Z01 {
-  return { exit: null, hatch: null, hatchLight: null, enc: null, emitter: null, tissue: null, grip: 0, gripTarget: 0, crack: null };
+  return { exit: null, hatch: null, hatchLight: null, enc: null, emitter: null };
 }
 
 // =====================================================================================================================
@@ -133,7 +131,10 @@ function buildShell(b: ZoneBuilder): void {
   b.wall({ from: [W + 6, EXIT_N - 2.2], to: [W + 6, EXIT_N + 2.2], height: 5, style: 'panelled' });
   b.ceiling({ x: W + 3, n: EXIT_N, w: 6, d: 4.4, h: 5, style: 'flat' });
   b.panelLight({ x: W + 5.6, n: EXIT_N, w: 2.2, d: 2.6, h: 0.9, facing: 'west', intensity: 2.2 });
-  b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3 });
+  // the white point is the brightest thing at the east end; two lit pylons lead the eye up to it
+  b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3, intensity: 1.8 });
+  b.column({ x: W - 0.9, n: EXIT_N - 3.4, height: 8.5, style: 'pylon', lit: true });
+  b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8.5, style: 'pylon', lit: true });
 
   // the service aperture: a hatch high in the east wall with a dark Reformation duct behind it
   S.hatch = b.door({ x: W, n: APERTURE_N, h: APERTURE_H, yawDeg: FACE.east, width: 3.6, height: 2.2, style: 'service' });
@@ -180,8 +181,9 @@ function buildRibPocket(b: ZoneBuilder): void {
   const face = RIB_X - 0.65; // the sheltered west face
   b.conduit([[face - 0.12, 0.5, 0.32], [face - 0.12, 3.9, 0.32]], { r: 0.1, glow: false });
   b.prop('conduitJunction', { x: face - 0.5, n: 0.9, collider: true });
-  b.corruption({ x: face - 0.02, n: 2.4, h: 0.55, r: 1.15, onWall: true, yawDeg: FACE.west, intensity: 0.8 });
-  b.corruption({ x: face - 0.45, n: 2.5, r: 0.8, intensity: 0.6 });
+  // faint: a real source may show violet at its edge, but it must not light the pocket
+  b.corruption({ x: face - 0.02, n: 2.4, h: 0.55, r: 1.15, onWall: true, yawDeg: FACE.west, intensity: 0.5 });
+  b.corruption({ x: face - 0.45, n: 2.5, r: 0.8, intensity: 0.4 });
   b.blocker({ x: face - 0.4, n: 2.5, w: 0.8, d: 2.4, height: 1.2 });
   b.prop('debrisSmall', { x: face - 1.3, n: 0.8, yawDeg: 40 });
 }
@@ -308,67 +310,6 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   }
 }
 
-/**
- * The cracked gauntlet: a split in the plate lit violet from inside, a thread of black in it. It rides on the
- * soldier's left hand from the insert onward (Z02 picks the story up).
- */
-function attachCrack(z: ZoneRuntime): void {
-  if (S.crack) return;
-  const malik = z.cast('malik');
-  const visual = malik?.actor.visual;
-  if (!visual) return;
-  const mats = z.game.mats;
-  const g = new THREE.Group();
-  g.name = 'gauntlet-crack';
-  const lit = mats.emissive(VIOLET, 3.2);
-  const tissue = mats.get('eclipseTissue');
-  // the split runs along the back of the hand in three short angular segments
-  const segs: Array<[number, number, number, number]> = [[-0.035, 0, 0.5, 0.05], [0.004, 0.012, -0.35, 0.045], [0.04, 0.002, 0.3, 0.04]];
-  for (const [x, zz, rot, len] of segs) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(len, 0.006, 0.009), lit);
-    m.position.set(x, 0.034, zz);
-    m.rotation.y = rot;
-    g.add(m);
-  }
-  const thread = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), tissue);
-  thread.scale.set(1.8, 0.5, 0.8);
-  thread.position.set(0.004, 0.036, 0.008);
-  g.add(thread);
-  visual.socket('handL').add(g);
-  S.crack = g;
-  z.onDispose(() => {
-    g.removeFromParent();
-    for (const c of g.children) (c as THREE.Mesh).geometry.dispose();
-  });
-}
-
-/** the tissue on the rib that closes over the gauntlet for the two-second insert */
-function makeTissue(z: ZoneRuntime, at: THREE.Vector3): void {
-  if (S.tissue) return;
-  const mat = z.game.mats.get('eclipseTissue');
-  const vein = z.game.mats.get('eclipseVein');
-  const g = new THREE.Group();
-  g.name = 'gauntlet-tissue';
-  const lobes: Array<[number, number, number, number]> = [
-    [-0.07, 0.01, 0.03, 0.075], [0.06, 0.0, -0.04, 0.07], [0.0, 0.03, 0.07, 0.06], [0.02, -0.01, -0.08, 0.065], [-0.05, 0.035, -0.05, 0.05],
-  ];
-  for (const [x, y, zz, r] of lobes) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat);
-    m.position.set(x, y, zz);
-    m.scale.set(1.25, 0.7, 1);
-    g.add(m);
-  }
-  const strand = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.008, 6, 14, Math.PI * 1.3), vein);
-  strand.rotation.x = Math.PI / 2;
-  g.add(strand);
-  g.position.copy(at);
-  g.scale.setScalar(0.001);
-  z.builder.add(g);
-  S.tissue = g;
-  S.grip = 0;
-  S.gripTarget = 0;
-}
-
 // =====================================================================================================================
 // Encounter E1
 // =====================================================================================================================
@@ -445,7 +386,6 @@ function wakeFormation(z: ZoneRuntime): void {
 /** `threshold` → CP1. First sight of the formation already holding the hall; walk to the first cover band. */
 function* threshold(z: ZoneRuntime): Routine {
   const enc = setupE1(z);
-  z.fork(encounterMusic(z, enc, 'combatTarrik', 'approachTarrik', { begin: () => z.flag('z01Awake') === true }), 'music');
   const lyessa = z.cast('lyessa');
 
   yield* z.cinematic('z01-first-sight', function* (c: CineCtx): Routine {
@@ -474,9 +414,11 @@ function* e1(z: ZoneRuntime): Routine {
   const lyessa = z.cast('lyessa');
   const say = barker(z, 4.5);
 
-  yield* gauntletBeat(z, enc);
+  yield* gauntletBeat(z, enc, RIB_X);
 
   wakeFormation(z);
+  // forked in the beat that needs it, so a debug entry at `e1` gets the score too
+  z.fork(encounterMusic(z, enc, 'combatTarrik', 'approachTarrik'), 'music');
   z.objective('Break the drone formation'); // NEW
   sustainDrops(z, ['sustainPocket', 'sustainGallery', 'sustainEast']);
   say('down', 'Lyessa', 'Man down, right side.'); // NEW
@@ -513,105 +455,6 @@ function* e1(z: ZoneRuntime): Routine {
   });
 
   yield z.until(() => enc.cleared);
-}
-
-/**
- * The fixed beat (SCRIPT_SOURCE Z01, the author's ruling 2). The soldier on the right advances along the rib;
- * the first synchronised volley takes him on the guard and the chest plate — sparks, no wound — and throws him
- * against the rib's base, where his gauntlet hand goes into the growth. A two-second insert: the tissue closes
- * on the gauntlet and the plate splits along a line lit violet from inside. He tears the hand free and two
- * soldiers pull him behind cover. No character sees what touched him.
- * Every state change is applied whether the scene is watched or skipped.
- */
-function* gauntletBeat(z: ZoneRuntime, enc: Encounter): Routine {
-  const game = z.game;
-  const malik = z.cast('malik');
-  const a = z.cast('soldierA');
-  const bb = z.cast('soldierB');
-  if (!malik) return;
-  const fall = z.m('malikFall');
-  const hand = new THREE.Vector3();
-
-  yield* z.cinematic('z01-gauntlet', function* (c: CineCtx): Routine {
-    // (1) he advances along the right rib
-    malik.stopAction();
-    malik.teleport(z.P(21.4, 3.3), z.myaw('malikAdvance'));
-    walkTo(z, malik, 'malikAdvance', { run: true });
-    c.cut({ pos: z.P(17.2, 1.5, 1.35), look: z.P(26.5, 3.6, 1.5), fov: 40 });
-    c.moveAsync({ pos: z.P(18.6, 1.7, 1.4), look: z.P(26.8, 3.2, 1.3), fov: 38 }, 2.2, 'out');
-    // (2) the paired drones light him up, then fire as one
-    const paired = enc.alive.filter((d) => d.tags.has('lane0') || d.tags.has('lane2'));
-    const chest = new THREE.Vector3();
-    const beams = z.skipping ? [] : paired.map((d) => game.vfx.beam(d.aimPoint(new THREE.Vector3()), malik.actor.aimPoint(chest).clone(), 'laser'));
-    if (!z.skipping) {
-      game.audio.play('droneCharge', { pos: z.m('drone0') });
-      game.events.emit('caption', { text: 'Volley lane locking', kind: 'alert', pos: malik.actor.pos }); // NEW
-    }
-    yield 1.25;
-    for (const beam of beams) beam.remove(0.1);
-    if (!z.skipping) {
-      malik.actor.aimPoint(chest);
-      for (const d of paired) {
-        const from = d.aimPoint(new THREE.Vector3());
-        for (let i = 0; i < 3; i++) game.vfx.tracer(from, chest, 'drone');
-      }
-      game.audio.play('droneVolley', { pos: z.m('drone0') });
-      game.vfx.spawn('sparkHeavy', chest, { dir: { x: 1, y: 0.2, z: 0 } });
-      game.vfx.spawn('droneBoltHit', chest);
-      game.audio.play('guardBlock', { pos: chest });
-      game.camera.shake(0.35, 0.3);
-      malik.play('hitHeavy');
-    }
-    yield 0.28;
-    // thrown down against the rib's base — the cut covers the throw
-    malik.teleport(fall, z.myaw('malikFall'));
-    malik.play('knockdown');
-    c.cut({ pos: z.P(RIB_X - 3.3, 4.6, 0.75), look: z.P(RIB_X - 0.9, 2.5, 0.35), fov: 36 });
-    if (!z.skipping) game.audio.play('armorRattle', { pos: fall });
-    yield 0.75;
-    // (3) the insert: tissue closes on the gauntlet; the plate splits along a violet-lit line. No impact light.
-    const visual = malik.actor.visual;
-    if (visual) visual.socket('handL').getWorldPosition(hand);
-    else hand.copy(fall).setY(0.2);
-    makeTissue(z, hand);
-    S.gripTarget = 1;
-    c.cut({ pos: new THREE.Vector3(hand.x - 0.62, hand.y + 0.34, hand.z + 0.5), look: hand.clone(), fov: 26 });
-    c.moveAsync({ pos: new THREE.Vector3(hand.x - 0.5, hand.y + 0.28, hand.z + 0.42), look: hand.clone(), fov: 24 }, 2, 'inOut');
-    c.dof(0.75, 0.7);
-    if (!z.skipping) game.audio.play('eclipseBreath', { pos: hand, volume: 0.5 });
-    yield 0.95;
-    attachCrack(z);
-    if (!z.skipping) game.audio.play('breachCrack', { pos: hand, volume: 0.35, pitch: 1.7 });
-    yield 1.1;
-    // (4) he tears the hand free; two of the squad take hold of him
-    S.gripTarget = 0.25;
-    c.dof(null);
-    malik.play('getUp');
-    walkTo(z, a, 'helpL', { run: true });
-    walkTo(z, bb, 'helpR', { run: true });
-    c.cut({ pos: z.P(RIB_X - 6.4, 5.4, 1.45), look: z.P(RIB_X - 1.4, 2.6, 1.0), fov: 40 });
-    yield* z.say('Soldier', 'Got him. Pulling him back.', { duration: 1.9, actor: a }); // NEW
-    // end state — identical watched or skipped
-    walkTo(z, malik, 'malikCover');
-    walkTo(z, a, 'soldierACover');
-    walkTo(z, bb, 'soldierBCover');
-    attachCrack(z);
-    z.setFlag('z01GauntletCracked', true);
-  }, { blendOut: 0.4 });
-
-  // hurt, not maimed: he keeps the hand and stays in the fight from cover
-  z.fork((function* (): Routine {
-    yield waitOr(z, () => malik.arrived, 14);
-    malik.play('aimRifle', { loop: true });
-    if (a) {
-      yield waitOr(z, () => a.arrived, 6);
-      a.play('aimRifle', { loop: true });
-    }
-    if (bb) {
-      yield waitOr(z, () => bb.arrived, 6);
-      bb.play('aimRifle', { loop: true });
-    }
-  })(), 'settle');
 }
 
 /** Tutorialise through play (plan order): guard → counter → the emitter → spending Echo. HUD text only. */
@@ -749,18 +592,13 @@ const Z01_DEF: ZoneDef = {
   cast: ['secDrone', 'commandEmitter', 'dominionSoldier', 'lyessa'],
   build,
   beats,
-  /** the tissue's grip eases toward its target on the sim clock (the insert animates it; a skip snaps it) */
-  update(z, dt) {
-    if (!S.tissue) return;
-    S.grip = z.skipping ? S.gripTarget : S.grip + (S.gripTarget - S.grip) * Math.min(1, dt * 3.2);
-    S.tissue.scale.setScalar(Math.max(0.001, S.grip));
-  },
+  /** per-frame zone animation on the sim clock: the tissue's grip during the insert */
+  update: updateGauntlet,
   dispose() {
     S = blank();
+    resetGauntlet();
   },
 };
 
 export default Z01_DEF;
 
-// re-exported for the unit test
-export const Z01_LAYOUT = { W, D, LANE_N, THRESHOLD_X, E1_CAP, DECK_H, GOLD } as const;

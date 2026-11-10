@@ -181,6 +181,60 @@ describe('choice', () => {
     expect(w.mission.state.flags.acknowledged).toBe('WestStretchers');
   });
 
+  it('a cinematic skip stops at an open choice, never answers it, and the scene resumes at normal speed', async () => {
+    const zone = zoneOf('Z08', [{
+      id: 'phaseB',
+      enter: spawnAtStart,
+      *run(z: ZoneRuntime): Routine {
+        yield* z.cinematic('officer', function* (): Routine {
+          yield* z.say('Tarrik', 'A line before the panel.', { duration: 4 });
+          yield 6;
+          const pick = yield* z.choice({ id: 'officerFate', title: 'The officer', prompt: '…', options: [{ id: 'killed', label: 'K', detail: '' }, { id: 'spared', label: 'S', detail: '' }] });
+          z.setFlag('afterPick', pick);
+          z.setFlag('skippingAfter', z.skipping);
+          yield 3;
+          z.setFlag('tail', true);
+        });
+      },
+    }]);
+    const w = createTestWorld({ zones: [zone] });
+    await w.mission.gotoZone('Z08');
+    w.tick(0.5);
+    w.mission.skipCinematic();
+    w.tick(30);
+    // the skip ran up to the panel and stopped there: still in the scene, nothing answered
+    expect(w.mission.cinematicActive).toBe(true);
+    expect(w.mission.activeChoice).toMatchObject({ id: 'officerFate' });
+    expect(w.mission.cinematicSkippable).toBe(false);
+    w.input.held.skip = 2; // holding skip does nothing while the panel is open
+    w.mission.skipCinematic();
+    w.tick(1);
+    w.input.held.skip = 0;
+    expect(w.mission.activeChoice).not.toBeNull();
+    expect(w.mission.state.flags.afterPick).toBeUndefined();
+    w.mission.activeChoice!.select('spared');
+    w.tick(0.2);
+    // the rest of the scene plays normally (it can be skipped again)
+    expect(w.mission.state.flags).toMatchObject({ afterPick: 'spared', skippingAfter: false, 'choice:officerFate': 'spared' });
+    expect(w.mission.state.flags.tail).toBeUndefined();
+    expect(w.mission.cinematicSkippable).toBe(true);
+    w.tick(3.5);
+    expect(w.mission.state.flags.tail).toBe(true);
+    expect(w.mission.cinematicActive).toBe(false);
+    expect(w.eventsOf('choice:made')).toEqual([{ id: 'officerFate', option: 'spared' }]);
+  });
+
+  it('automatic prompts never answer a choice', async () => {
+    const w = createTestWorld({ zones: [choiceZone()] });
+    const get = w.game.settings.get.bind(w.game.settings);
+    (w.game.settings as { get: (k: string) => unknown }).get = (k: string) => (k === 'autoPrompts' ? true : get(k as never));
+    await w.mission.gotoZone('Z07');
+    w.tick(60);
+    expect(w.mission.activeChoice).toMatchObject({ id: 'rescue' });
+    expect(w.mission.state.rescuePriority).toBe('pending');
+    expect(w.eventsOf('choice:made')).toHaveLength(0);
+  });
+
   it('story() accepts only fixed story flags; setFlag cannot forge a recorded choice', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const w = createTestWorld({

@@ -147,6 +147,30 @@ describe('autoplay bot', () => {
     expect(bot.log.some((l) => l.includes('choice "rescue" → EastWalkers'))).toBe(true);
   });
 
+  it('answers the officer choice with its own option, also when the panel opens inside a skipped scene', async () => {
+    const zone = zoneOf('Z08', [{
+      id: 'phaseB',
+      enter: spawnAtStart,
+      *run(z: ZoneRuntime): Routine {
+        yield* z.cinematic('officer', function* (): Routine {
+          yield 4;
+          const pick = yield* z.choice({ id: 'officerFate', title: 't', prompt: 'p', options: [{ id: 'killed', label: 'K', detail: '' }, { id: 'spared', label: 'S', detail: '' }] });
+          z.setFlag('officerFate', pick);
+          yield 20;
+        });
+        z.setFlag('done', true);
+      },
+    }]);
+    for (const officer of ['killed', 'spared'] as const) {
+      const { w, bot, frames } = botWorld([zone]);
+      await w.mission.gotoZone('Z08');
+      bot.start({ choice: 'EastWalkers', officer });
+      frames(3);
+      expect(w.mission.state.flags.officerFate).toBe(officer);
+      expect(w.mission.state.flags.done).toBe(true);
+    }
+  });
+
   it('does nothing while a zone is loading or the game is not in play', async () => {
     const { w, bot, virtual, frames } = botWorld([errands()]);
     await w.mission.gotoZone('Z00');

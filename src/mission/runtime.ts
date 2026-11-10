@@ -255,7 +255,7 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
   }
 
   get cinematicSkippable(): boolean {
-    return this.cine !== null && this.cine.skippable && !this.cine.handle.fastForward;
+    return this.cine !== null && this.cine.skippable && !this.cine.handle.fastForward && this.activeChoice === null;
   }
 
   *cinematic(
@@ -322,7 +322,8 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
   /** Fast-forward the active skippable cinematic (identical state, zero waits). */
   skipCinematic(): void {
     const c = this.cine;
-    if (!c || !c.skippable || c.handle.fastForward || c.handle.done) return;
+    // never while a choice panel is open: a skip must not carry past (or answer) a recorded choice
+    if (!c || !c.skippable || c.handle.fastForward || c.handle.done || this.activeChoice) return;
     c.handle.fastForward = true;
     c.skipped = true;
     this.dialogue.interrupt();
@@ -349,6 +350,13 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
       return prior;
     }
     const { player, ui } = g;
+    // a cinematic skip STOPS here: the fast-forward ends at the open panel (it never answers a choice) and the
+    // rest of the scene plays at normal speed; the player may skip again once the choice is committed
+    const cine = this.cine;
+    if (cine && cine.handle.fastForward) {
+      cine.handle.fastForward = false;
+      this.log(`cinematic "${cine.id}": skip stopped at choice "${opts.id}"`);
+    }
     const actor = this.livePlayer();
     const prevEnabled = player.enabled !== false;
     const prevInvulnerable = actor ? actor.invulnerable === true : false;
@@ -533,7 +541,7 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     const c = this.cine;
     if (c) {
       c.elapsed += dt;
-      if (c.skippable && !c.handle.fastForward) {
+      if (c.skippable && !c.handle.fastForward && !this.activeChoice) {
         const held = Number(g.input.heldTime('skip')) || 0;
         const p = clamp(held / SKIP_HOLD_SECONDS, 0, 1);
         const show = held > 0.12 || c.elapsed < SKIP_HINT_INTRO;
@@ -543,6 +551,9 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
           g.ui.skipHint(show, p);
         }
         if (p >= 1) this.skipCinematic();
+      } else if (this.activeChoice && c.hint !== -1) {
+        c.hint = -1;
+        g.ui.skipHint(false);
       }
     }
   }
