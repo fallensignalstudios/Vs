@@ -43,7 +43,9 @@ export class ObservationSet extends PropBase<Record<string, number>> {
         // a chair's own front is local −Z; chairs on the front side are turned to face the table
         const yaw = (side < 0 ? Math.PI : 0) + (rnd() - 0.5) * 0.14;
         const c = Math.cos(yaw), s = Math.sin(yaw);
-        const at = (lx: number, ly: number, lz: number, rx = 0, rz = 0): Xf => ({ p: [x + lx * c + lz * s, ly, z - lx * s + lz * c], r: [rx, yaw, rz] });
+        // tilts are given in the chair's frame; the euler applies them in the world's, so they flip for turned chairs
+        const flip = side < 0 ? -1 : 1;
+        const at = (lx: number, ly: number, lz: number, rx = 0): Xf => ({ p: [x + lx * c + lz * s, ly, z - lx * s + lz * c], r: [rx * flip, yaw, 0] });
         const lean = 0.14;
         for (const sx of [-1, 1]) {
           P.bevel('wood', 0.05, SEAT_H - 0.03, 0.05, 0.008, at(sx * 0.225, (SEAT_H - 0.03) / 2, -0.2));
@@ -52,7 +54,7 @@ export class ObservationSet extends PropBase<Record<string, number>> {
           P.bevel('wood', 0.055, 0.035, 0.42, 0.008, at(sx * 0.255, 0.68, 0.02));
           P.bevel('wood', 0.045, 0.22, 0.045, 0.008, at(sx * 0.255, 0.565, -0.17));
           P.bevel('leather', 0.06, 0.02, 0.26, 0.008, at(sx * 0.255, 0.704, 0.02), 0xdadada);
-          for (const lz of [-0.2, 0.2]) P.bevel('metal', 0.056, 0.03, 0.056, 0.006, at(sx * 0.225, 0.015, lz + (lz > 0 ? 0.0 : 0)));
+          for (const lz of [-0.2, 0.2]) P.bevel('metal', 0.056, 0.03, 0.056, 0.006, at(sx * 0.225, 0.015, lz));
         }
         P.bevel('wood', 0.5, 0.05, 0.47, 0.012, at(0, SEAT_H - 0.045, 0));
         P.bevel('leather', 0.44, 0.06, 0.42, 0.024, at(0, SEAT_H, -0.005));
