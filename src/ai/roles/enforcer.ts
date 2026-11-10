@@ -92,8 +92,13 @@ export class EnforcerBrain extends Brain {
     if (isHumanoidVisual(v)) v.onFootstep = null;
   }
 
-  /** the wall advances on what walks; what flies is only worth a sidearm round */
+  /**
+   * The wall advances on what walks; what flies is only worth a sidearm round. A front that holds against
+   * everything but the player's side turns to her the moment she can be targeted (noticed), whatever it was
+   * trading fire with.
+   */
   protected override targetWeight(_a: Actor, t: Actor): number {
+    if (!this.front.anyTarget && t.team === 'player') return 0.3;
     return t.flying ? 3 : 1;
   }
 
@@ -181,14 +186,19 @@ export class EnforcerBrain extends Brain {
     this.frontYaw = lead ? yawTo(cx / n, cz / n, lead.pos.x, lead.pos.z) : NaN;
   }
 
-  /** may this member step out of the line now? (the front's peel budget and its gap between peels) */
+  /**
+   * May this member step out of the line now? The front's peel budget counts every member still out of its slot
+   * (peeling, or walking back from a peel), and peels are spaced by a front-wide gap.
+   */
   private canPeel(): boolean {
     if (this.front.maxPeel <= 0) return false;
     const now = this.now;
     let out = 0;
     let lastEnd = this.peelEndedAt;
-    for (const b of this.mates) {
-      if (b.peelUntil > now) out++;
+    for (const o of this.nb) {
+      const b = this.core.brainOf(o);
+      if (!(b instanceof EnforcerBrain) || !this.mates.includes(b)) continue;
+      if (b.peelUntil > now || Math.hypot(o.pos.x - b.post.x, o.pos.z - b.post.z) > 1.5) out++;
       lastEnd = Math.max(lastEnd, b.peelEndedAt);
     }
     return out < this.front.maxPeel && now >= lastEnd + AI.enforcer.peelGap;
