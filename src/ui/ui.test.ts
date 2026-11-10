@@ -358,6 +358,24 @@ describe('HUD visibility borrowing', () => {
     r.step(1);
     expect(r.root.find('aur-hud')!.style.display).toBe('none');
   });
+  it('shows a context prompt (duel / Resonance beat) while the HUD stays hidden, and hides it under the pause screen', () => {
+    const r = rig();
+    r.ui.setHudVisible(false);
+    r.step(1);
+    r.hud.context = { id: 'deflect', prompt: 'Deflect', button: 'guard', window: 2.4, onConfirm() {} };
+    r.step(0.5);
+    const ctx = r.root.find('aur-ctx')!;
+    expect(r.root.find('aur-hud')!.style.display).toBe('none'); // vitals, ammo: still hidden
+    expect(ctx.style.display).toBe('flex');
+    expect(Number(ctx.style.opacity)).toBeGreaterThan(0.9);
+    r.ui.showPause({ onResume() {}, onRestartCheckpoint() {}, onQuitToTitle() {} });
+    r.step(0.6);
+    expect(ctx.style.display).toBe('none');
+    r.ui.hidePause();
+    r.hud.context = null;
+    r.step(0.6);
+    expect(ctx.style.display).toBe('none');
+  });
 });
 
 describe('added API members', () => {

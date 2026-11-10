@@ -115,8 +115,18 @@ export interface SayOpts {
   duration?: number;
   offscreen?: boolean;
   channel?: DialogueLine['channel'];
-  /** make the speaking companion/actor face + gesture */
+  /**
+   * make the speaking companion/actor face its listener (the protagonist, else the nearest same-side figure),
+   * look at the listener's eyes (its `eye` / `head` socket — right for seated, kneeling or lying listeners) and
+   * play the talk gesture for the length of the line
+   */
   actor?: Actor | Companion | null;
+  /**
+   * ADDED. false = no talk gesture: the speaker still faces and looks at the listener and its mouth moves
+   * (`setSpeaking`), but no body clip plays — so a drawn weapon stays drawn (the talk gesture sheathes it) and a
+   * held pose is not interrupted. Default true. Only meaningful with `actor`.
+   */
+  gesture?: boolean;
 }
 
 /**

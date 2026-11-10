@@ -61,17 +61,15 @@ export function selAct(z: ZoneRuntime, action: string, faceTo?: Vec3Like): void 
 }
 
 /**
- * One duel prompt: a familiar input in a wide window, auto-confirmed by the accessibility setting. Input is
- * switched to the game context for the window (a cinematic only reads skip) and the HUD shows only while the
- * prompt is up. Returns whether it was answered. A skip answers nothing and counts as answered: it is
- * choreography only — the outcome never depends on it.
+ * One duel prompt: a familiar input in a wide window, auto-confirmed by the accessibility setting. It stays a
+ * scene: the context prompt draws by itself over the hidden HUD and its button is read in the cinematic input
+ * context (the player's context actions opt it in). Returns whether it was answered. A skip answers nothing and
+ * counts as answered: it is choreography only — the outcome never depends on it.
  */
 export function* duelPrompt(z: ZoneRuntime, id: string, prompt: string, button: ButtonAction, window: number): Routine<boolean> {
   if (z.skipping) return true;
   const game = z.game;
   const r: { answered: boolean | null } = { answered: null };
-  game.input.setContext('game');
-  game.ui.setHudVisible(true);
   game.time.slowMo(0.42, 0.7);
   game.player.setContextAction({
     id, prompt, button, window, autoConfirmable: true,
@@ -80,8 +78,6 @@ export function* duelPrompt(z: ZoneRuntime, id: string, prompt: string, button: 
   });
   yield () => r.answered !== null || z.skipping;
   game.player.setContextAction(null);
-  game.ui.setHudVisible(false);
-  if (game.input.context === 'game') game.input.setContext('cinematic');
   return r.answered !== false;
 }
 

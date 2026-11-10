@@ -105,7 +105,7 @@ class UiSystemImpl implements UiSystem {
     // paint order, bottom → top
     this.root.append(
       this.hud.worldEl, this.hud.edgeEl, this.hud.panelEl, this.hud.noticeEl,
-      this.letterboxW.el, this.fadeW.el, this.cardW.el, this.flashW.el, this.board.el, this.talk.el, this.skip.el,
+      this.letterboxW.el, this.fadeW.el, this.cardW.el, this.flashW.el, this.board.el, this.hud.ctxEl, this.talk.el, this.skip.el,
       this.choiceW.el, this.loading.el, this.death.el, this.complete.el, this.title.el, this.pause.el, this.settings.el,
       this.hud.diagnostics.fpsEl, this.hud.diagnostics.debugEl,
     );
@@ -330,7 +330,7 @@ class UiSystemImpl implements UiSystem {
     });
     this.run('hud', () => {
       const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
-      this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open, !screen);
+      this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open, !screen, !screen && !this.choiceW.open);
       this.talk.setCovered(this.death.shown || this.pause.shown);
     });
     this.run('narrative', () => {

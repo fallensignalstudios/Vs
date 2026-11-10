@@ -2,7 +2,7 @@
  * HUD composition: polls `game.player.getHudState()` once per frame and fans the snapshot out to the widgets,
  * each of which only touches the DOM when its values change.
  */
-import type { Actor, Game, PlayerHudState, ProtagonistId, Vec3Like, WorldMarkerOpts } from '@/core/api';
+import type { Actor, ContextAction, Game, PlayerHudState, ProtagonistId, Vec3Like, WorldMarkerOpts } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { Num, h, reducedMotion, warnOnce } from '../dom';
 import { clamp01, num } from '../logic';
@@ -25,6 +25,8 @@ export class Hud {
   readonly panelEl: HTMLElement;
   /** elements that outlive HUD visibility (zone card, toasts) */
   readonly noticeEl: HTMLElement;
+  /** ADDED. layer of the context prompt — painted above the letterbox, shown whether or not the HUD is */
+  readonly ctxEl: HTMLElement;
   readonly diagnostics: Diagnostics;
 
   private readonly vitals: Vitals;
@@ -73,7 +75,9 @@ export class Hud {
 
     this.worldEl = h('div', 'aur-layer aur-hud-world', this.world.el, this.reticle.lockEl);
     this.edgeEl = h('div', 'aur-layer aur-lowhp');
-    this.playerEl = h('div', 'aur-layer aur-hud-player', this.reticle.el, this.vitals.el, this.arsenal.el, this.ctx.el);
+    this.playerEl = h('div', 'aur-layer aur-hud-player', this.reticle.el, this.vitals.el, this.arsenal.el);
+    // the context prompt has its own layer: a duel / Resonance beat inside a scene shows it with the HUD hidden
+    this.ctxEl = h('div', 'aur-layer aur-hud-ctx', this.ctx.el);
     this.panelEl = h('div', 'aur-layer aur-hud', this.playerEl, this.objectiveW.el, this.readoutW.el, this.elite.el, this.hintW.el, this.promptW.el);
     this.noticeEl = h('div', 'aur-layer aur-notices', this.zone.el, this.toasts.el);
     this.worldEl.style.display = 'none';
@@ -131,6 +135,12 @@ export class Hud {
   hitMarker(kind?: HitKind): void { this.reticle.hitMarker(kind); }
   focusActor(actor: Actor | null): void { this.world.focusActor(actor); }
 
+  /** the context action on offer (with its widened window), read even while the rest of the HUD is hidden */
+  private readContext(s: PlayerHudState | null): ContextAction | null {
+    const st = s ?? this.readState();
+    return st?.context ?? null;
+  }
+
   private readState(): PlayerHudState | null {
     const player = this.game.player;
     if (isStub(player)) return null;
@@ -147,8 +157,10 @@ export class Hud {
   /**
    * @param on effective HUD visibility (requested visibility and no covering screen)
    * @param notices false while a full-screen menu is up (toasts / zone card wait underneath, unseen)
+   * @param prompts false while a screen or a choice panel covers play: the context prompt (which otherwise shows
+   *   with or without the HUD — scripted beats inside scenes) waits
    */
-  update(dt: number, on: boolean, notices = true): void {
+  update(dt: number, on: boolean, notices = true, prompts = notices): void {
     if (notices !== this.noticesOn) {
       this.noticesOn = notices;
       this.noticeEl.style.visibility = notices ? 'visible' : 'hidden';
@@ -194,7 +206,7 @@ export class Hud {
     this.hintW.update(dt);
     this.promptW.update(dt);
     this.reticle.update(f);
-    this.ctx.update(f, on);
+    this.ctx.update(f, prompts ? this.readContext(s) : null);
     this.world.update(f, on);
     if (this.vis <= 0) {
       this.edgeOpacity.set(0);

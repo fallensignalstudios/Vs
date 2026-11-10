@@ -339,10 +339,11 @@ export interface Companion {
  * rises while the player stands in the field (≈ 9 m) AND a link still feeds the elite; leaving the field or
  * cutting the links relieves it. At full threat the player takes one bounded violet hit and the meter drops.
  * Phase B: isolated. It regenerates slowly on its own and its plates still turn part of every blow (damage taken
- * × 0.6); after each heavy attack (slam, charge) it EXPOSES THE JOINT (weak point 'joint', ×3) for a window.
+ * × 0.5); after each heavy attack (slam, charge) it EXPOSES THE JOINT (weak point 'joint', ×3) for a window.
  * While a Resonance window is held (requested / arrested) the joint stays open but frost-sealed: no ×3, the
- * confirm is the blow that counts. `fracture()` ends all regeneration, breaks most of the plates (damage taken
- * × 0.5 — with the core open (×2) about face value at the core), so the rest is a short stretch of real fighting.
+ * confirm is the blow that counts. `fracture()` ends all regeneration and breaks the plates' hold (damage taken
+ * × 0.3, the core open ×2) and the wounded organism presses harder (shorter gaps between attacks): the rest is a
+ * short stretch of real fighting (≈ 20 s for a human-paced player at Standard), not a few free swings.
  * A Weaver that is still alive re-links the elite six seconds after a cut: phase B only lasts once the Weaver
  * (or its anchor) is gone — hand off / start the Resonance setup on that condition, not on the first cut.
  */

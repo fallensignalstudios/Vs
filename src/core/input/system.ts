@@ -248,6 +248,19 @@ export class InputSystemImpl implements InputSystem {
     saveKeymap(this.keymap, this.env.storage);
   }
 
+  allowInCinematic(actions: readonly ButtonAction[] | null): void {
+    const slots = this.allowScratch;
+    slots.length = 0;
+    if (Array.isArray(actions)) {
+      for (const a of actions) {
+        const i = actionIndex(a);
+        if (i >= 0) slots.push(i);
+      }
+    }
+    this.mergePhysical();
+    this.states.allowInCinematic(slots);
+  }
+
   allowInGame(actions: readonly ButtonAction[] | null): void {
     const slots = this.allowScratch;
     slots.length = 0;

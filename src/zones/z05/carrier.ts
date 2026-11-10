@@ -302,9 +302,8 @@ function* passScene(z: ZoneRuntime): Routine {
     // it scrapes across a white-gold tower, breaking it in a shower of pale debris
     c.cut({ pos: z.P(CX - 22, CN - 2, 1.7), look: carrier.clipPoint.clone(), fov: 36 });
     yield waitOr(z, () => z.skipping || carrier.progress >= 0.88, 6);
-    // … then continues past the complex and falls into the distortion below: a locked frame on the rim of the
-    // ceiling the hull goes down through and does not come back over
-    S.sinkTarget = 1;
+    // … then continues past the complex and falls into the distortion below (the sky's pass descends after the
+    // clip): a locked frame on the rim of the ceiling the hull goes down through and does not come back over
     const eye = z.P(CX - 22, CN - 2, 1.7);
     const dir = carrier.position.clone().sub(eye).setY(0).normalize();
     c.cut({ pos: eye, look: eye.clone().addScaledVector(dir, 100).setY(eye.y + 72), fov: 56 });
@@ -330,8 +329,6 @@ function* passScene(z: ZoneRuntime): Routine {
     carrier.onClip = null;
     carrier.setProgress(1);
     S.carrierTarget = 1;
-    S.sinkTarget = 1;
-    S.sink = 1;
     carrier.visible = false;
     if (S.stab) {
       S.stab.params.plane = 0;

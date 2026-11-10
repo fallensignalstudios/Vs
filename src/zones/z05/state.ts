@@ -1,6 +1,6 @@
 /**
  * Z05 per-load state and the zone's per-frame animation (ZoneDef.update): carried body moves for the duel, the
- * carrier's pass and sink, the stabilizer's plane, the key light under the hull's shadow and the battle light
+ * carrier's pass (the sky takes it down after the clip), the stabilizer's plane, the key light under the hull's shadow and the battle light
  * through the ceiling. Scripts only set TARGETS here; a cinematic skip snaps every target (skip = fast-forward).
  */
 import * as THREE from 'three';
@@ -33,9 +33,6 @@ export interface Z05State {
   /** carrier pass: progress target and the rate it is approached at (per second) */
   carrierTarget: number;
   carrierRate: number;
-  /** 0..1: how far the hull has gone down into the distortion after the clip */
-  sinkTarget: number;
-  sink: number;
   /** stabilised jets (Tharne's push) */
   jetsTarget: number;
   /** presentation handles (cosmetic; never state) */
@@ -50,7 +47,7 @@ export let S: Z05State = blank();
 export function blank(): Z05State {
   return {
     centre: new THREE.Vector3(), entry: null, north: null, exit: null, key: null, keyBase: 2, battle: null,
-    stab: null, holo: null, holoHold: false, glides: [], carrierTarget: 0, carrierRate: 0.02, sinkTarget: 0, sink: 0, jetsTarget: 0,
+    stab: null, holo: null, holoHold: false, glides: [], carrierTarget: 0, carrierRate: 0.02, jetsTarget: 0,
     embers: null, plane: null, tether: null, dust: null,
   };
 }
@@ -66,9 +63,6 @@ export function disposeState(): void {
   S.holo?.dispose();
   S = blank();
 }
-
-/** how far below the pass the hull ends up once it has gone into the distortion (m) */
-const SINK_DEPTH = 640;
 
 /**
  * Carry `actor` to `to` over `seconds` (a lunge, a dodge, a throw — the feet do not walk it). Skipping: the body
@@ -123,7 +117,8 @@ export function updateZone(z: ZoneRuntime, dt: number): void {
     });
   }
 
-  // the carrier: progress eases toward its target (≤ 0.05 per tick, so the clip is PLAYED), then sinks
+  // the carrier: progress eases toward its target (≤ 0.05 per tick, so the clip is PLAYED); past the clip the sky's
+  // own pass takes it down into the distortion
   const carrier = game.sky.carrier;
   if (carrier && carrier.visible) {
     const p = carrier.progress;
@@ -132,13 +127,6 @@ export function updateZone(z: ZoneRuntime, dt: number): void {
     const jets = carrier.stabilized;
     const jn = z.skipping ? S.jetsTarget : jets + (S.jetsTarget - jets) * Math.min(1, dt * 1.6);
     if (Math.abs(jn - jets) > 1e-4) carrier.setStabilized(jn);
-    S.sink = z.skipping ? S.sinkTarget : S.sink + (S.sinkTarget - S.sink) * Math.min(1, dt * 0.3);
-    if (S.sink > 1e-4) {
-      // the pass is authored level after the clip; the zone takes the hull down into the distortion
-      _anchor.copy(S.centre);
-      _anchor.y -= SINK_DEPTH * S.sink * S.sink;
-      carrier.setAnchor(_anchor, 0);
-    }
   }
 
   // the key light dims under the hull (its threat is its shadow); the battle light flickers through the ceiling
@@ -156,5 +144,3 @@ export function updateZone(z: ZoneRuntime, dt: number): void {
     S.holo?.snap();
   }
 }
-
-const _anchor = new THREE.Vector3();

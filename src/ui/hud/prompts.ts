@@ -38,8 +38,8 @@ export class ContextPrompt {
     this.fader = new Fader(this.el, { in: 0.16, out: 0.22, display: 'flex' });
   }
 
-  update(f: HudFrame, hudOn: boolean): void {
-    const ctx = hudOn ? (f.state?.context ?? null) : null;
+  /** `ctx` = the action on offer (null hides the prompt); drawn whether or not the rest of the HUD is visible */
+  update(f: HudFrame, ctx: ContextAction | null): void {
     if (ctx && typeof ctx.prompt === 'string') {
       const id = String(ctx.id ?? ctx.prompt);
       if (ctx !== this.current || id !== this.currentId) {

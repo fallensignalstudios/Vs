@@ -551,7 +551,9 @@ export class EliteBrain extends Brain implements EliteController {
 
   /** after an attack: phase B answers every heavy attack by opening the joint */
   private afterAttack(a: Actor, heavy: boolean): void {
-    this.cd = this.rand(AI.elite.cooldown[0], AI.elite.cooldown[1]) * cooldownScale(this.game) * (this.now < this.lowPressureUntil ? 1.5 : 1);
+    const E = AI.elite;
+    const pace = this.now < this.lowPressureUntil ? 1.5 : this.fractured ? E.fracturedCooldown : 1;
+    this.cd = this.rand(E.cooldown[0], E.cooldown[1]) * cooldownScale(this.game) * pace;
     this.hitOnce.clear();
     if ((heavy || this.resonance > 0) && this.phase === 'B' && !this.fractured && this.exposeLeft <= 0) this.startExpose(a);
     else this.state = 'hunt';

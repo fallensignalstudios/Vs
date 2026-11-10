@@ -183,6 +183,30 @@ describe('key edge cases', () => {
     r.tick();
     expect(r.input.pressed('confirm')).toBe(false);
   });
+
+  it('allowInCinematic: a scripted prompt reads its button inside a scene; a context switch clears it', () => {
+    const r = rig();
+    r.input.setContext('cinematic');
+    r.keyDown('KeyF');
+    r.tick();
+    expect(r.input.pressed('heavy')).toBe(false); // a scene reads skip / pause only
+    r.input.allowInCinematic?.(['heavy']);
+    r.tick();
+    expect(r.input.down('heavy')).toBe(false); // already held when it opted in: release first
+    r.keyUp('KeyF');
+    r.tick();
+    r.keyDown('KeyF');
+    r.tick();
+    expect(r.input.pressed('heavy')).toBe(true);
+    expect(r.input.pressed('attack')).toBe(false); // only what was asked for
+    r.keyUp('KeyF');
+    r.input.setContext('game');
+    r.input.setContext('cinematic'); // the opt-in belongs to the prompt: it never survives a switch
+    r.tick();
+    r.keyDown('KeyF');
+    r.tick();
+    expect(r.input.pressed('heavy')).toBe(false);
+  });
 });
 
 describe('browser integration', () => {

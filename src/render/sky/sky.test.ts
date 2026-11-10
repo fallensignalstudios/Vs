@@ -442,8 +442,15 @@ describe('carrier', () => {
     expect(flat).toBeLessThan(c.length / 2 + 12);
     expect(Math.abs(c.forward.y)).toBeLessThan(0.01);
     expect(c.forward.length()).toBeCloseTo(1, 6);
+    // after the clip it goes down into the distortion, nose-down — barely at first, steeply by the end
+    const atClip = c.position.y;
+    c.setProgress(0.86);
+    expect(atClip - c.position.y).toBeLessThan(15);
+    c.setProgress(0.97);
+    expect(c.forward.y).toBeLessThan(-0.5);
     c.setProgress(5);
     expect(c.progress).toBe(1);
+    expect(atClip - c.position.y).toBeGreaterThan(500);
     const far = c.position.clone();
     c.setProgress(0.2);
     expect(c.position.distanceTo(far)).toBeGreaterThan(800);

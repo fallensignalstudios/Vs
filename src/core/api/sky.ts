@@ -44,6 +44,11 @@ export type SkyPreset =
  * per call) fires `onClip` and spawns the flash, sparks, masonry and dust; these and the falling needle run on
  * the sim clock, so they keep going if the script holds progress. A skip / load past 0.8 lands with the needle
  * simply gone and no effects; progress below 0.8 restores it.
+ *
+ * THE DESCENT. The hull never recovers: once the ram has dragged clear of the stump (≈ 0.83) the pass bends down
+ * into the distortion below the complex, nose-down, ≈ 560 m below the level pass by progress 1 (ease-in: barely
+ * lower at 0.88, most of the drop in the last tenth). Drive progress to 1 and hide the carrier after the shot —
+ * no anchor lowering needed.
  */
 export interface CarrierActor {
   readonly object: THREE.Object3D;

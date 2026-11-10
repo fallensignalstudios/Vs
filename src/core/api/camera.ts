@@ -165,7 +165,7 @@ export interface InputSystem {
    *  - 'menu': only confirm / cancel / menuUp|Down|Left|Right / pause; `move`, `look` and gameplay actions read 0.
    *    Held menu directions re-fire `pressed` (0.42 s delay, then every 0.13 s). Tab is left to the browser so
    *    DOM menus keep keyboard focus traversal.
-   *  - 'cinematic': only skip / pause.
+   *  - 'cinematic': only skip / pause (plus what `allowInCinematic` opts in — a context action's button).
    * Pointer lock follows the context: entering 'menu' gives the cursor back, returning to 'game' quietly takes
    * the lock again if it was held (callers need not pair exitPointerLock / requestPointerLock, and an extra
    * exitPointerLock() from a menu changes nothing); 'cinematic' keeps it. exitPointerLock() during play is a
@@ -187,6 +187,14 @@ export interface InputSystem {
    * default; any context switch clears it.
    */
   allowInGame(actions: readonly ButtonAction[] | null): void;
+  /**
+   * ADDED. While in the 'cinematic' context, also report these gameplay actions (besides skip / pause) — for a
+   * scripted prompt inside a scene. The player's context actions (`player.setContextAction`) opt their button in
+   * by themselves, so zones need not switch to 'game' for a duel or Resonance prompt. Same rules as
+   * `allowInGame`: a key already held must be released first; `null` / `[]` restores the default; any context
+   * switch clears it. Optional so hand-built input stand-ins stay valid.
+   */
+  allowInCinematic?(actions: readonly ButtonAction[] | null): void;
   /**
    * Pointer lock is requested on canvas click while in 'game' context; falls back to drag-look if denied.
    * (The click that captures the mouse is not reported as 'attack'. A denied request never throws; see `lookMode`.

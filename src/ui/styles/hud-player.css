@@ -3,6 +3,7 @@
 .aur-hud,
 .aur-hud-world,
 .aur-hud-player,
+.aur-hud-ctx,
 .aur-notices {
   text-shadow: var(--shadow-text);
 }

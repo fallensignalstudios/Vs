@@ -139,15 +139,17 @@ export const AI = {
     threatHit: 18,
     /** phase B: seconds the joint stays open after a heavy attack / hp per second it regenerates on its own */
     exposeSeconds: 4.5,
-    selfRegen: 8,
+    selfRegen: 10,
     /**
      * damage-taken scale of the body: link armour in phase A, regenerating plates in phase B, and what is left of
      * the plates once fractured — with the core exposed (×2) a fractured organism takes about face value at the
      * core, so the finish after the fracture is a short stretch of real fighting, not a few free swings
      */
     armorLinked: 0.4,
-    armorIsolated: 0.6,
-    armorFractured: 0.5,
+    armorIsolated: 0.5,
+    armorFractured: 0.3,
+    /** fractured, it presses harder: attack cooldowns × this (the exposed core is earned between its blows) */
+    fracturedCooldown: 0.7,
     resonanceSeconds: 7,
     lowPressure: 3,
     /** the fracture's shriek: long enough to read and to land a blow or two, not to finish it in */

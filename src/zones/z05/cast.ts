@@ -54,8 +54,6 @@ export function spawnCast(z: ZoneRuntime, stage: Stage): void {
   const carrier = game.sky.carrier;
   S.carrierTarget = 0;
   S.jetsTarget = 0;
-  S.sinkTarget = 0;
-  S.sink = 0;
   carrier.setAnchor(S.centre, 0);
   carrier.visible = false;
   carrier.setProgress(after ? 1 : 0);

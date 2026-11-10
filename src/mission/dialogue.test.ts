@@ -1,7 +1,8 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { BARK_STALE_SECONDS, barkIsFresh, lineDuration } from './dialogue';
+import { BARK_STALE_SECONDS, barkIsFresh, gazePoint, lineDuration } from './dialogue';
 import { createTestWorld, idle, spawnAtStart, zoneOf } from './testkit';
-import type { Routine, ZoneRuntime } from '@/core/api';
+import type { Actor, CharacterVisual, Routine, Vec3Like, ZoneRuntime } from '@/core/api';
 
 describe('dialogue duration', () => {
   it('is clamp(1.6 + 0.055 × chars, 2, 8)', () => {
@@ -127,5 +128,62 @@ describe('voice-over hand-off', () => {
     w.tick(0.2);
     expect(calls).toEqual(['voice:Selene:Hold the plane.:radio', 'stop:0.15']);
     expect(w.mission.state.flags.said).toBe(true);
+  });
+});
+
+describe('speaker gestures', () => {
+  /** a humanoid-looking visual that records what the dialogue director asks of it; sockets sit `up` above `at` */
+  function fakeVisual(calls: string[], at: Vec3Like, up: Record<string, number> = {}): CharacterVisual {
+    return {
+      play: (a: string) => { calls.push(`play:${a}`); return 1; },
+      stop: (a?: string) => { calls.push(`stop:${a ?? ''}`); },
+      lookAt: (p: Vec3Like | null) => { calls.push(p ? `look:${p.y.toFixed(2)}` : 'look:null'); },
+      setSpeaking: (k: number) => { calls.push(`speak:${k}`); },
+      setHandTarget: () => {},
+      teleported: () => {},
+      socket: (n: string) => ({ getWorldPosition: (o: THREE.Vector3) => o.set(at.x, at.y + (up[n] ?? 0), at.z) }),
+    } as unknown as CharacterVisual;
+  }
+
+  it("looks at the listener's eye socket (a seated listener's face, not over its head)", () => {
+    const pos = new THREE.Vector3(2, 0, -3);
+    const seated = { pos, height: 1.8, visual: fakeVisual([], pos, { eye: 1.12, head: 1.2 }) } as unknown as Actor;
+    expect(gazePoint(seated, { x: 0, y: 0, z: 0 }).y).toBeCloseTo(1.12, 6);
+    // no believable socket (the root comes back for unknown names): eye height of a standing figure
+    const bare = { pos, height: 1.8, visual: fakeVisual([], pos) } as unknown as Actor;
+    expect(gazePoint(bare, { x: 0, y: 0, z: 0 }).y).toBeCloseTo(1.8 * 0.93, 6);
+  });
+
+  it('gesture: false keeps a drawn weapon out — no talk clip, the mouth moves, the gaze still meets the listener', async () => {
+    const calls: string[] = [];
+    const speakerPos = new THREE.Vector3(0, 0, 2);
+    const speaker = { id: 9, pos: speakerPos, height: 1.9, alive: true, team: 'player', visual: fakeVisual(calls, speakerPos) } as unknown as Actor;
+    const z = zoneOf('Z00', [{
+      id: 'a',
+      enter: spawnAtStart,
+      *run(rt: ZoneRuntime): Routine {
+        yield* rt.say('Tarrik', 'Hold.', { actor: speaker, gesture: false, duration: 1 });
+        rt.setFlag('first', true);
+        yield* rt.say('Tarrik', 'Go.', { actor: speaker, duration: 1 });
+        rt.setFlag('second', true);
+      },
+    }, { id: 'b', run: idle }]);
+    const w = createTestWorld({ zones: [z] });
+    await w.mission.gotoZone('Z00');
+    const lead = w.player.actor as Actor;
+    (lead as { visual: CharacterVisual | null }).visual = fakeVisual([], lead.pos, { eye: 1.16 });
+    w.tick(1.2);
+    expect(w.mission.state.flags.first).toBe(true);
+    // the first line, up to its end (the second line starts on the same tick)
+    const first = calls.splice(0, calls.indexOf('speak:0') + 1);
+    expect(first).not.toContain('play:talk');
+    expect(first).toContain('speak:0.7');
+    expect(first).toContain('speak:0');
+    expect(first.some((c) => c.startsWith('look:') && c !== 'look:null')).toBe(true);
+    w.tick(1.2);
+    expect(w.mission.state.flags.second).toBe(true);
+    expect(calls).toContain('play:talk'); // the default still gestures
+    expect(calls).toContain('stop:talk');
+    expect(calls).toContain(`look:${(lead.pos.y + 1.16).toFixed(2)}`);
   });
 });

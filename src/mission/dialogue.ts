@@ -2,7 +2,9 @@
  * Dialogue: blocking `say` lines, the non-blocking `bark` queue, speaker gestures, voice-over hand-off.
  * One line is on screen at a time: a `say` takes the stage from a bark; barks wait for the stage to be free.
  */
+import * as THREE from 'three';
 import type { Actor, Companion, DialogueLine, Game, Routine, SayOpts, SpeakerId, Vec3Like } from '@/core/api';
+import { isHumanoidVisual } from '@/core/api';
 import { clamp } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 
@@ -43,8 +45,45 @@ interface Stage {
   line: DialogueLine;
   actor: Actor | null;
   companion: Companion | null;
+  /** false: no talk gesture (a drawn weapon stays out) — only the gaze and the moving mouth */
+  gesture: boolean;
   started: number;
   duration: number;
+}
+
+const _eye = new THREE.Vector3();
+const GAZE_SOCKETS = ['eye', 'head'] as const;
+
+/**
+ * Where a speaker looks at a listener: the listener's `eye` socket (else `head`), so the gaze meets a seated,
+ * kneeling or lying listener's face; a figure without a believable socket falls back to 0.93 × its height.
+ */
+export function gazePoint(listener: Actor, out: Vec3Like): Vec3Like {
+  const v = listener.visual;
+  const h = listener.height || 1.8;
+  if (v && !isStub(v)) {
+    for (const name of GAZE_SOCKETS) {
+      try {
+        const s = v.socket(name);
+        if (!s || isStub(s) || typeof s.getWorldPosition !== 'function') continue;
+        s.getWorldPosition(_eye);
+        // an unknown socket returns the root: only accept a point above the feet and within the figure's reach
+        const up = _eye.y - listener.pos.y;
+        if (Number.isFinite(_eye.x + _eye.y + _eye.z) && up > 0.25 && up < h + 0.6 && Math.hypot(_eye.x - listener.pos.x, _eye.z - listener.pos.z) < 1.5) {
+          out.x = _eye.x;
+          out.y = _eye.y;
+          out.z = _eye.z;
+          return out;
+        }
+      } catch {
+        /* a visual without sockets: fall back */
+      }
+    }
+  }
+  out.x = listener.pos.x;
+  out.y = listener.pos.y + h * 0.93;
+  out.z = listener.pos.z;
+  return out;
 }
 
 const asActor = (a: Actor | Companion | null | undefined): Actor | null => {
@@ -146,7 +185,9 @@ export class DialogueDirector {
     if (voiced <= 0) audio.speak(String(speaker), channel);
     line.duration = voiced > 0 ? Math.max(voiced + VOICE_TAIL, opts?.duration ?? 0) : opts?.duration && opts.duration > 0 ? opts.duration : lineDuration(text);
 
-    const stage: Stage = { line, actor, companion: asCompanion(opts?.actor), started: time.now, duration: line.duration };
+    const stage: Stage = {
+      line, actor, companion: asCompanion(opts?.actor), gesture: opts?.gesture !== false, started: time.now, duration: line.duration,
+    };
     this.stage = stage;
     this.blocking = blocking;
     ui.subtitle(line);
@@ -169,7 +210,10 @@ export class DialogueDirector {
     events.emit('dialogue:clear', {});
   }
 
-  /** speaking actor looks at / turns to its listener and plays the talk gesture for the length of the line */
+  /**
+   * Speaking actor looks at the listener's eyes / turns to them and plays the talk gesture for the length of the
+   * line — or, with `gesture: false`, only moves its mouth (the gesture would sheathe a drawn weapon).
+   */
   private gesture(stage: Stage, on: boolean): void {
     const actor = stage.actor;
     if (!actor) return;
@@ -177,7 +221,8 @@ export class DialogueDirector {
     const hasVisual = !!visual && !isStub(visual);
     if (!on) {
       if (hasVisual) {
-        visual!.stop('talk');
+        if (stage.gesture) visual!.stop('talk');
+        else if (isHumanoidVisual(visual)) visual.setSpeaking(0);
         visual!.lookAt(null);
       }
       stage.companion?.face(null);
@@ -185,13 +230,13 @@ export class DialogueDirector {
     }
     const listener = this.listenerFor(actor);
     if (listener) {
-      this.eye.x = listener.pos.x;
-      this.eye.y = listener.pos.y + (listener.height || 1.8) * 0.9;
-      this.eye.z = listener.pos.z;
+      gazePoint(listener, this.eye);
       if (hasVisual) visual!.lookAt(this.eye);
       stage.companion?.face(listener.pos);
     }
-    if (hasVisual) visual!.play('talk', { loop: true });
+    if (!hasVisual) return;
+    if (stage.gesture) visual!.play('talk', { loop: true });
+    else if (isHumanoidVisual(visual)) visual.setSpeaking(0.7);
   }
 
   private listenerFor(speaker: Actor): Actor | null {

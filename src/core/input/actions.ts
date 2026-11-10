@@ -96,6 +96,8 @@ export class ActionStates {
   private readonly latched = new Uint8Array(ACTION_COUNT);
   /** the 'game' mask of this instance: CONTEXT_MASK.game plus whatever a HUD prompt opted in */
   private readonly gameMask = Uint8Array.from(CONTEXT_MASK.game);
+  /** the 'cinematic' mask of this instance: CONTEXT_MASK.cinematic plus a scripted prompt's button */
+  private readonly cineMask = Uint8Array.from(CONTEXT_MASK.cinematic);
   private allow: Uint8Array = this.gameMask;
   private ctx: InputContext = 'game';
 
@@ -170,7 +172,8 @@ export class ActionStates {
     }
     // a HUD opt-in belongs to the prompt that asked for it: it never survives a context switch
     this.gameMask.set(CONTEXT_MASK.game);
-    const allow = ctx === 'game' ? this.gameMask : CONTEXT_MASK[ctx];
+    this.cineMask.set(CONTEXT_MASK.cinematic);
+    const allow = ctx === 'game' ? this.gameMask : ctx === 'cinematic' ? this.cineMask : CONTEXT_MASK[ctx];
     this.ctx = ctx;
     this.allow = allow;
     const { raw, virt, eff, press, release, blocked, held, lastHeld } = this;
@@ -246,6 +249,22 @@ export class ActionStates {
    * is already held when its action becomes readable must be released first, so the Space of a dodge can
    * never confirm the prompt that just appeared.
    */
+  /**
+   * Opt gameplay actions into the 'cinematic' context (a scripted prompt inside a scene: a duel beat, a Resonance
+   * confirm). Empty restores skip / pause only. Like `allowInGame`, a key already held when its action becomes
+   * readable must be released first.
+   */
+  allowInCinematic(slots: readonly number[]): void {
+    const { cineMask, raw, blocked } = this;
+    const base = CONTEXT_MASK.cinematic;
+    for (let i = 0; i < ACTION_COUNT; i++) {
+      let on = base[i];
+      if (!on) for (let k = 0; k < slots.length; k++) if (slots[k] === i) on = 1;
+      if (on && !cineMask[i] && raw[i] && this.ctx === 'cinematic') blocked[i] = 1;
+      cineMask[i] = on;
+    }
+  }
+
   allowInGame(slots: readonly number[]): void {
     const { gameMask, raw, blocked } = this;
     const base = CONTEXT_MASK.game;

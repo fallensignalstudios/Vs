@@ -120,6 +120,7 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     z.player.visual?.setGlow(1.6);
     if (!z.skipping) {
       game.vfx.flash(z.player.aimPoint(_v), FROST, 1.2, 0.3);
+      game.vfx.spawn('frostBurst', z.player.visual?.socket('handR').getWorldPosition(_w) ?? z.player.aimPoint(_w), { scale: 0.35 });
       game.audio.play('verityWhirl', { pos: sel, volume: 0.5, pitch: 1.2 });
     }
     yield 0.6;
@@ -299,11 +300,11 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     tharne?.face(holo);
     yield 1.2;
     S.holoProgress = 0.55;
-    yield* conversation(z, c, [
-      ['Tharne', 'The forward relay nodes are compromised.'], // NEW
-      ['Tharne', 'They address friendly contacts as threats.'], // NEW
-      ['Tharne', 'Two drones ahead are on that net.'], // NEW
-    ], { Tharne: tharne, Selene: z.player }, { distance: 1.6, fov: 34 });
+    // he reads it off the display (he keeps his eyes on it), the reconstruction beside him in the frame
+    c.shot(th, { yawDeg: bearing(th, display) + 48, distance: 2.3, height: 1.55, lookHeight: 1.3, fov: 38 });
+    yield* sayHeld(z, 'Tharne', 'The forward relay nodes are compromised.', tharne); // NEW
+    yield* sayHeld(z, 'Tharne', 'They address friendly contacts as threats.', tharne); // NEW
+    yield* sayHeld(z, 'Tharne', 'Two drones ahead are on that net.', tharne); // NEW
     S.holoProgress = 1;
 
     // the deployment manifest, then the line she stops on
@@ -322,7 +323,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     yield* z.say('Sol', 'Understanding the Eclipse is essential to preventing future outbreaks.', { offscreen: true, channel: 'radio' });
     // Lyric, low, to Selene
     ui.statusBoard(null);
-    c.twoShot(ly, sel, { side: 1, distance: 1.7, fov: 34 });
+    c.shot(ly, { yawDeg: bearing(ly, sel) - 24, distance: 1.7, height: 1.58, lookHeight: 1.5, fov: 32 });
     lyric?.face(sel);
     yield* z.say('Lyric', 'Do not let them put anything in those.', { actor: lyric });
     const onSeleneComm = (): void => c.shot(sel, { yawDeg: toDisplay + 32, distance: 1.8, height: 1.6, lookHeight: 1.5, fov: 32 });

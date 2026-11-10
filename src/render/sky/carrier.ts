@@ -8,7 +8,7 @@
  * hull and tower, a burst of velocity-stretched sparks, tumbling masonry, a dust column that lingers, and a
  * scrape of sparks for as long as the ram is over the stump. The sheared needle and the debris fall on the
  * sim clock (`dt`), so they keep falling if the script holds progress; a skip / load past the clip lands with
- * the needle simply gone.
+ * the needle simply gone. AFTER THE CLIP the pass goes down into the distortion (DESCENT_*): the ship is lost.
  *
  * Draw calls: hull, light cards, spark pool, debris chunks (the last two only around the clip).
  */
@@ -51,6 +51,24 @@ const knot = (along: number, side: number, y: number): THREE.Vector3 =>
 const PATH = new THREE.CatmullRomCurve3([
   knot(-2080, 220, 720), knot(-1560, 110, 636), knot(-1040, 40, 558), knot(-520, 0, AT_CLIP.y + 22), AT_CLIP.clone(), knot(760, 0, AT_CLIP.y + 22),
 ], false, 'catmullrom', 0.5);
+/**
+ * After the clip it does not recover: once the ram has dragged clear of the stump the pass bends down into the
+ * distortion below — an ease-in drop (zero slope where it starts, so there is no kink) of DESCENT_DEPTH metres by
+ * progress 1, the hull pitching nose-down along it. Slow enough at first that the trailing hull, rising as the
+ * nose drops, never sinks into the stump it is still passing over.
+ */
+const DESCENT_FROM = CLIP + 0.03;
+const DESCENT_DEPTH = 560;
+const descentAt = (t: number): number => {
+  const u = clamp01((t - DESCENT_FROM) / (1 - DESCENT_FROM));
+  return DESCENT_DEPTH * u * u * u;
+};
+/** carrier centre along the pass including the descent (pass-local) */
+const pointAt = (t: number, out: THREE.Vector3): THREE.Vector3 => {
+  PATH.getPoint(t, out);
+  out.y -= descentAt(t);
+  return out;
+};
 
 export interface Carrier extends CarrierActor {
   /** world-space effects (sparks, debris); parented next to `object` by the sky root */
@@ -123,13 +141,13 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
   const toWorld = (v: THREE.Vector3): THREE.Vector3 => v.applyAxisAngle(UP, anchorYaw).add(anchor);
   /** unit path tangent without allocating (Curve.getTangent creates two vectors per call) */
   const tangentAt = (t: number, out: THREE.Vector3): THREE.Vector3 => {
-    PATH.getPoint(Math.max(0, t - 1e-3), _a);
-    PATH.getPoint(Math.min(1, t + 1e-3), out);
+    pointAt(Math.max(0, t - 1e-3), _a);
+    pointAt(Math.min(1, t + 1e-3), out);
     return out.sub(_a).normalize();
   };
 
   const applyPose = (): void => {
-    PATH.getPoint(progress, _p);
+    pointAt(progress, _p);
     tangentAt(progress, _t);
     const loose = 1 - stabilized;
     _z.copy(_t).negate();

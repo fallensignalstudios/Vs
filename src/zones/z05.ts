@@ -42,7 +42,7 @@ const Z05_DEF: ZoneDef = {
     buildSpace(b);
   },
   beats,
-  /** carried moves, the carrier's pass and sink, the key light under its shadow, the battle light */
+  /** carried moves, the carrier's pass, the key light under its shadow, the battle light */
   update: updateZone,
   dispose() {
     disposeState();
