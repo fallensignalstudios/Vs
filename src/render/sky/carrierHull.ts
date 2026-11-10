@@ -215,11 +215,11 @@ export function buildCarrierLights(rand: () => number, shared: SharedUniforms): 
   return c.build(shared, { name: 'sky:carrierLights', minPx: 1.6 });
 }
 
-/** Is a local-space point inside the hull proxy grown by `margin` metres? */
-export function insideHull(proxy: readonly HullBox[], x: number, y: number, z: number, margin = 0): boolean {
+/** Is a local-space point inside the hull proxy? */
+export function insideHull(proxy: readonly HullBox[], x: number, y: number, z: number): boolean {
   for (let i = 0; i < proxy.length; i++) {
     const p = proxy[i];
-    if (x >= p[0] - margin && x <= p[1] + margin && y >= p[2] - margin && y <= p[3] + margin && z >= p[4] - margin && z <= p[5] + margin) return true;
+    if (x >= p[0] && x <= p[1] && y >= p[2] && y <= p[3] && z >= p[4] && z <= p[5]) return true;
   }
   return false;
 }

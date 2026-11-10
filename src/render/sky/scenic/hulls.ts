@@ -68,7 +68,6 @@ export class PartSink {
   rotateX(a: number): this { return this.transform(new THREE.Matrix4().makeRotationX(a)); }
   rotateY(a: number): this { return this.transform(new THREE.Matrix4().makeRotationY(a)); }
   rotateZ(a: number): this { return this.transform(new THREE.Matrix4().makeRotationZ(a)); }
-  scale(s: number): this { return this.transform(new THREE.Matrix4().makeScale(s, s, s)); }
   mirrorX(): this { return this.transform(new THREE.Matrix4().makeScale(-1, 1, 1)); }
 }
 

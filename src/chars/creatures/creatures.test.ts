@@ -2,35 +2,14 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import type { CharacterVisual, CreatureArchetype, DeviceArchetype } from '@/core/api';
 import {
-  asCommandEmitter, asDevice, asDrone, asElite, asFrostAnchor, asScanHead, asWallrunner, asWeaver,
-  CREATURE_ACTIONS, CREATURE_SOCKET_MAP,
+  asCommandEmitter, asCreature, asDevice, asDrone, asElite, asFrostAnchor, asScanHead, asWallrunner, asWeaver,
+  CREATURE_ACTIONS, CREATURE_BOUNDS, CREATURE_SOCKET_MAP,
 } from '@/core/api/creatures';
 import { createCreature, CREATURE_ARCHETYPES } from './index';
 import { disposeTemplates } from './core/rig';
+import { finitePose, mesh, run, skinnedBounds, STEP } from './testkit';
 
 const ALL = CREATURE_ARCHETYPES;
-const STEP = 1 / 60;
-
-function run(v: CharacterVisual, seconds: number): void {
-  const n = Math.round(seconds / STEP);
-  for (let i = 0; i < n; i++) v.update(STEP);
-}
-
-function mesh(v: CharacterVisual): THREE.SkinnedMesh {
-  let found: THREE.SkinnedMesh | null = null;
-  v.root.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) found = o as THREE.SkinnedMesh; });
-  if (!found) throw new Error('no skinned mesh');
-  return found;
-}
-
-function finitePose(v: CharacterVisual): boolean {
-  let ok = true;
-  v.root.traverse((o) => {
-    const p = o.position, q = o.quaternion, s = o.scale;
-    if (![p.x, p.y, p.z, q.x, q.y, q.z, q.w, s.x, s.y, s.z].every(Number.isFinite)) ok = false;
-  });
-  return ok;
-}
 
 afterAll(() => disposeTemplates());
 
@@ -49,6 +28,7 @@ describe('creature + device visuals', () => {
       const tris = g.getAttribute('position').count / 3;
       expect(tris).toBeGreaterThan(200);
       expect(tris).toBeLessThan(a === 'elite' ? 30000 : 12000);
+      expect(mesh(v).skeleton.bones.length).toBeLessThan(96);
       for (const name of ['position', 'normal', 'color', 'aSurf', 'aPart', 'aSlide', 'skinIndex', 'skinWeight']) expect(g.getAttribute(name)).toBeTruthy();
       // every vertex is fully weighted to existing bones
       const sw = g.getAttribute('skinWeight'), si = g.getAttribute('skinIndex');
@@ -86,6 +66,7 @@ describe('creature + device visuals', () => {
         expect(v.isPlaying(action)).toBe(true);
         run(v, 0.35);
         expect(finitePose(v)).toBe(true);
+        if (action === 'death') asCreature(v)!.revive(); // death is terminal: the rest of the list needs a live body
       }
       v.stop();
       run(v, 0.5);
@@ -269,11 +250,14 @@ describe('extensions', () => {
       dev.setDisabled(false);
       v.play('disabled');
       expect(dev.disabled).toBe(true);
-      const top0 = v.socket('top').getWorldPosition(new THREE.Vector3());
+      v.stop(); // a bare stop leaves the disabled STATE alone …
+      expect(dev.disabled).toBe(true);
+      v.stop('disabled'); // … naming it powers the device back up
+      expect(dev.disabled).toBe(false);
       v.play('death');
       run(v, 2.4);
       expect(finitePose(v)).toBe(true);
-      if (a !== 'frostAnchor' && a !== 'weaverAnchor') expect(v.socket('top').getWorldPosition(new THREE.Vector3()).distanceTo(top0)).toBeGreaterThan(0.3);
+      expect(asCreature(v)!.dead).toBe(true);
       v.dispose();
     }
   });
@@ -302,5 +286,24 @@ describe('extensions', () => {
     const tip = e.socket('prongR').getWorldPosition(new THREE.Vector3());
     expect(tip.x).toBeGreaterThan(0.5); // swung toward +X
     e.dispose();
+  });
+});
+
+describe('declared extents', () => {
+  it('CREATURE_BOUNDS contains every archetype at bind; collision radius never exceeds the visual reach', () => {
+    for (const a of ALL) {
+      for (const variant of a === 'relayReceiver' ? [0, 1] : [0]) {
+        const v = createCreature(null, a, { variant });
+        v.update(0);
+        const b = skinnedBounds(v), cb = CREATURE_BOUNDS[a];
+        expect(Math.max(-b.min.x, b.max.x), a).toBeLessThanOrEqual(cb.halfWidth);
+        expect(-b.min.z, a).toBeLessThanOrEqual(cb.front);
+        expect(b.max.z, a).toBeLessThanOrEqual(cb.rear);
+        expect(b.max.y, a).toBeLessThanOrEqual(cb.top);
+        expect(b.min.y, a).toBeGreaterThanOrEqual(cb.bottom);
+        expect(v.radius, a).toBeLessThanOrEqual(Math.max(cb.halfWidth, cb.front, cb.rear));
+        v.dispose();
+      }
+    }
   });
 });

@@ -36,8 +36,6 @@ export interface SpireOpts {
   rot?: number;
   /** false = no emissive seams or light points (silhouettes that must stay dark) */
   lit?: boolean;
-  /** baked sky visibility of the whole spire (default 1) */
-  sky?: number;
 }
 
 const LIGHT = { white: 0.60, mixed: 0.52, black: 0.5 } as const;
@@ -133,7 +131,7 @@ export function addSpire(b: GeoBuilder, cards: LightCards, o: SpireOpts): void {
   const rot = (o.rot ?? 0) + Math.PI / 4;
   const style = o.style ?? 'needle';
   const lit = o.lit !== false;
-  b.light(o.sky ?? 1, 0);
+  b.light(1, 0);
   if (style === 'needle' || detail === 0) {
     tower(b, cards, o, x, z, y, h, r, detail, rot);
     return;
