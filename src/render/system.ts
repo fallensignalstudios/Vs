@@ -180,18 +180,19 @@ export class RenderSystemImpl implements RenderSystem {
     const q = this.quality;
     const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
     const dyn = this.dynamicResolution && !this.manual ? this.dynRes.scale : 1;
-    const scale = q.resolutionScale * dyn;
-    const renderer = this.renderer;
+    const capped = Math.min(dpr, q.maxPixelRatio);
     // Pixel budget per level: a 4K panel at dpr 1 must not quietly quadruple the cost of every pass.
-    let ratio = Math.min(dpr, q.maxPixelRatio) * scale;
+    // Applied before dynamic resolution, so the controller always scales the resolution really in use.
+    let base = capped * q.resolutionScale;
     const budget = MAX_PIXELS[q.level];
-    if (w * h * ratio * ratio > budget) ratio = Math.sqrt(budget / (w * h));
-    renderer.setPixelRatio(ratio);
+    if (w * h * base * base > budget) base = Math.sqrt(budget / (w * h));
+    const renderer = this.renderer;
+    renderer.setPixelRatio(base * dyn);
     renderer.setSize(w, h, false);
     if (this.post) this.post.setSize(w, h);
     renderer.getDrawingBufferSize(this.size);
     this.reflections.setSize(this.size.x, this.size.y, q.level === 'ultra' ? 0.75 : 0.5);
-    this.stats.resolutionScale = scale;
+    this.stats.resolutionScale = (base * dyn) / capped;
     this.syncAspect(this.activeCamera());
   }
 

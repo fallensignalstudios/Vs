@@ -257,7 +257,7 @@ export function buildElite(): RigTemplate {
   b.add('chest', P.refSlate, torus(0.085, 0.026, 12, 6), T(-0.52, 2.44, 0.6, Math.PI / 2 + 0.5, -0.5, 0.2), { crease: 180 });
   b.add('chest', P.glass, sphere(0.078, 1), T(-0.53, 2.43, 0.61, 0.5, -0.5, 0, [1, 1, 0.5]), { crease: 180 });
   helmet(b, 'chest', T(-0.62, 3.02, 0.5, -0.5, 2.5, 0.4), false);
-  helmet(b, 'chest', T(0.5, 2.3, -0.62, 0.5, -0.5, -0.3), true);
+  helmet(b, 'hips', T(-0.72, 1.86, 0.0, 0.3, 1.2, 0.5), true);
 
   // ------------------------------------------------------------------ RIGHT: regenerating joint under four petal plates
   b.add('shR', P.tissue, blob(0.3, 2, 0.25, 13), T(E.shR[0] - 0.08, E.shR[1] - 0.04, E.shR[2]), { crease: 180 });
