@@ -44,6 +44,12 @@ export interface Z11 {
   holds: HandHold[];
   /** the player is seated (held pose + pinned) */
   seated: boolean;
+  /**
+   * the two seated leads look at each other (the dialogue gesture aims at a standing listener's eyes); a scene
+   * can send one gaze elsewhere for a beat (`gaze`)
+   */
+  pair: { t: Actor | null; s: Actor | null };
+  gazeAt: Map<Actor, THREE.Vector3>;
 }
 
 /** which body each forearm message rides on */
@@ -51,7 +57,10 @@ const commOwner = new Map<TextPanel, Actor>();
 
 export let S: Z11 = blank();
 function blank(): Z11 {
-  return { sp: null, seal: null, recorder: null, wafer: null, proj: null, alert: null, commT: null, commS: null, holds: [], seated: false };
+  return {
+    sp: null, seal: null, recorder: null, wafer: null, proj: null, alert: null, commT: null, commS: null, holds: [], seated: false,
+    pair: { t: null, s: null }, gazeAt: new Map(),
+  };
 }
 export function resetZ11(): void {
   for (const p of [S.proj, S.alert, S.commT, S.commS]) p?.dispose();
@@ -155,6 +164,13 @@ export function humanoid(a: Actor | null | undefined): HumanoidVisual | null {
   return v && isHumanoidVisual(v) ? v : null;
 }
 
+/** while both sit: send one lead's gaze to a point for a beat (null = back to the other lead) */
+export function gaze(who: Actor | null | undefined, at: THREE.Vector3 | null): void {
+  if (!who) return;
+  if (at) S.gazeAt.set(who, at.clone());
+  else S.gazeAt.delete(who);
+}
+
 /** place a forearm message above a body's left forearm, facing the camera */
 export function comm(panel: TextPanel | null, who: Actor | null, lines: string[] | null): void {
   if (!panel) return;
@@ -179,6 +195,14 @@ export function updateZ11(z: ZoneRuntime, dt: number): void {
   for (const h of S.holds) {
     const p = h.to instanceof THREE.Vector3 ? h.to : typeof h.to === 'function' ? h.to() : h.to.object.position;
     humanoid(h.actor)?.setHandTarget(h.hand, p, p ? 1 : 0);
+  }
+  // the seated pair: eyes on each other unless a scene sends one elsewhere
+  const { t, s } = S.pair;
+  if (t && s) {
+    for (const [a, b] of [[t, s], [s, t]] as const) {
+      const at = S.gazeAt.get(a) ?? tmp.set(b.pos.x, b.pos.y + 1.22, b.pos.z);
+      humanoid(a)?.lookAt(at);
+    }
   }
   const cam = z.game.camera.camera;
   for (const p of [S.proj, S.alert, S.commT, S.commS]) {

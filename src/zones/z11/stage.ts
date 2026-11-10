@@ -29,6 +29,7 @@ export function sitPlayer(z: ZoneRuntime): void {
   g.player.playScripted('sit');
   humanoid(z.player)?.teleported();
   S.seated = true;
+  S.pair.s = z.player;
 }
 
 /** the player stands up beside her chair (or at `at`) */
@@ -40,6 +41,15 @@ export function standPlayer(z: ZoneRuntime, at = 'lingerAt'): void {
   humanoid(z.player)?.setLoadout({ hideSheathed: false });
   z.game.player.teleport(z.m(at), z.myaw(at));
   S.seated = false;
+  endGaze();
+}
+
+/** the pair stop holding each other's eyes (someone stands) */
+export function endGaze(): void {
+  for (const a of [S.pair.t, S.pair.s]) humanoid(a)?.lookAt(null);
+  S.pair.t = null;
+  S.pair.s = null;
+  S.gazeAt.clear();
 }
 
 /** Tarrik in his chair */
@@ -49,6 +59,7 @@ export function sitTarrik(z: ZoneRuntime, t: Companion | null): void {
   t.teleport(z.m(SEAT_T), z.myaw(SEAT_T));
   humanoid(t.actor)?.setLoadout({ hideSheathed: true });
   t.play('sit');
+  S.pair.t = t.actor;
 }
 
 export function standTarrik(z: ZoneRuntime, t: Companion | null, at?: string): void {
@@ -56,6 +67,7 @@ export function standTarrik(z: ZoneRuntime, t: Companion | null, at?: string): v
   t.stopAction();
   humanoid(t.actor)?.setLoadout({ hideSheathed: false });
   if (at) t.teleport(z.m(at), z.myaw(at));
+  endGaze();
 }
 
 // =====================================================================================================================

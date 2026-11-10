@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
-import { S, carry, comm, hide, hold, humanoid, placePanels, rest, slide } from './state';
+import { S, carry, comm, gaze, hide, hold, placePanels, rest, slide } from './state';
 import { SEAT_S, SEAT_T, frame, joined, resetCover, run, sitPlayer, sitTarrik, standPlayer, standTarrik, type Step } from './stage';
 
 // =====================================================================================================================
@@ -54,10 +54,7 @@ export function* conversationScene(z: ZoneRuntime): Routine {
   const tarrik = z.cast('tarrik');
   const sp = spots(z);
   const east = z.state.rescuePriority === 'EastWalkers';
-  const lookAt = (who: 'T' | 'S', p: THREE.Vector3 | null): void => {
-    const v = who === 'T' ? humanoid(tarrik?.actor) : humanoid(z.player);
-    v?.lookAt(p);
-  };
+  const lookAt = (who: 'T' | 'S', p: THREE.Vector3 | null): void => gaze(who === 'T' ? tarrik?.actor : z.player, p);
 
   yield* z.cinematic('z11-table', function* (c: CineCtx): Routine {
     resetCover();
@@ -138,6 +135,7 @@ export function* conversationScene(z: ZoneRuntime): Routine {
       // he looks toward the Dominion fleet; then she takes it
       () => lookAt('T', z.P(2, 40, 6)),
       1.4,
+      () => lookAt('T', null),
       (cc) => takeRecorder(z, cc, sp),
       // without hesitation after that: the wafer
       (cc) => waferDown(z, cc, sp),
@@ -153,6 +151,7 @@ export function* conversationScene(z: ZoneRuntime): Routine {
       },
       1.6,
       // their hands touch as he reaches for the wafer; hers withdraws a fraction later than necessary
+      () => lookAt('S', null),
       (cc) => handsTouch(z, cc, tarrik, sp),
       ['Tarrik', 'You’re freezing.', 'T'],
       ['Selene', 'Your baseline temperature appears medically unreasonable.', 'S'],
@@ -176,6 +175,7 @@ export function* conversationScene(z: ZoneRuntime): Routine {
       // he glances toward the door as though the answer might be standing beyond it
       () => lookAt('T', z.P(6, 16, 1.7)),
       ['Tarrik', 'What happened?', 'T'],
+      () => lookAt('T', null),
       ['Selene', 'I don’t know.', 'S'],
       ['Tarrik', 'Was I injured? Captured? Kneeling to Caelus?', 'otsT'],
       ['Selene', 'I don’t know.', 'S'],
@@ -308,10 +308,10 @@ function* fieldSeal(z: ZoneRuntime, c: CineCtx, tarrik: Companion | null, sp: Sp
   yield 1.0;
   hold(tarrik, 'L', null);
   // she looks at it
-  humanoid(z.player)?.lookAt(sp.seal);
+  gaze(z.player, sp.seal);
   frame(z, c, 'S', 4);
   yield 2.0;
-  humanoid(z.player)?.lookAt(null);
+  gaze(z.player, null);
 }
 
 function* recorderAcross(z: ZoneRuntime, c: CineCtx, tarrik: Companion | null, sp: Spots): Routine {
@@ -372,13 +372,13 @@ function* handsTouch(z: ZoneRuntime, c: CineCtx, tarrik: Companion | null, sp: S
 function pointAtWound(z: ZoneRuntime, c: CineCtx, tarrik: Companion | null, on: boolean): void {
   if (!on) {
     hold(tarrik, 'R', null);
-    humanoid(tarrik?.actor)?.lookAt(null);
+    gaze(tarrik?.actor, null);
     return;
   }
   frame(z, c, 'wound', 6);
   const t = z.m(SEAT_T);
   hold(tarrik, 'R', t.clone().add(new THREE.Vector3(0.35, 1.45, -0.55)));
-  humanoid(tarrik?.actor)?.lookAt(z.m('window').setY(4));
+  gaze(tarrik?.actor, z.m('window').setY(4));
 }
 
 // =====================================================================================================================
