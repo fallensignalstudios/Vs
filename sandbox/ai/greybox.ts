@@ -118,7 +118,7 @@ export function createGreybox(scene: THREE.Scene, real: PhysicsWorld): Greybox {
 }
 
 /** a rectangular hall: floor x0..x1 × z0..z1 at y 0 with 8 m walls and white-gold ribs along the long sides */
-export function hall(g: Greybox, x0: number, z0: number, x1: number, z1: number, scene: THREE.Scene): void {
+export function hall(g: Greybox, x0: number, z0: number, x1: number, z1: number): void {
   const p = g.physics;
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
@@ -145,7 +145,6 @@ export function hall(g: Greybox, x0: number, z0: number, x1: number, z1: number,
       g.root.add(s);
     }
   }
-  void scene;
 }
 
 /** a cover block (low 1.2 m / high 2.2 m) */

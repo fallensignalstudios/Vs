@@ -79,7 +79,7 @@ describe('hall impulse', () => {
       return e;
     };
     expect(energy(0.1, 0.6)).toBeGreaterThan(energy(1.0, 1.5) * 3);
-    expect(energy(1.0, 1.5)).toBeGreaterThan(energy(2.5, 3.0) * 3);
+    expect(energy(1.0, 1.5)).toBeGreaterThan(energy(2.0, 2.5) * 3);
     expect(Math.abs(l[l.length - 1])).toBe(0);
   });
 

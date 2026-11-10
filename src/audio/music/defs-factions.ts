@@ -48,7 +48,7 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
     family: 'dominion', bpm: 96, beats: 4, tonic: D, db: -20,
     chords: [ch(0, 'm', 2), ch(8, 'M', 1), ch(10, 'M', 1), ch(0, 'm', 2), ch(5, 'm', 1), ch(7, '5', 1)],
     layers: [
-      { kind: 'sub', g: 0.32, follow: true },
+      { kind: 'sub', g: 0.7, follow: true },
       { kind: 'strings', low: 38, n: 2, g: [0.6, 0.86], gate: ['X..x..x.X..x..x.', 'X.xxX.xxX.xxX.xx'], bright: [1600, 5200], wet: 0.2 },
       { kind: 'perc', inst: 'taiko', tiers: TAIKO, g: [0.32, 0.52], human: 0.008, room: 0.3 },
       { kind: 'perc', inst: 'odaiko', tiers: ['X...............', 'X...............', 'X.........X.....'], g: [0.25, 0.42], human: 0.008, room: 0.3, wet: 0.1 },
@@ -57,7 +57,7 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
       { kind: 'perc', inst: 'anvil', tiers: ['................', '....x.......x...', '....X.......X..x'], g: [0, 0.4], th: [0.35, 0.8], room: 0.3, wet: 0.1 },
       { kind: 'brass', every: 1, bars: 1, low: 38, stab: true, pattern: 'X.........x.....', g: [0, 0.6], th: [0.3, 0.8], room: 0.2, wet: 0.15 },
       { kind: 'brass', every: 4, at: 3, bars: 1, low: 50, g: [0.36, 0.7], wet: 0.35 },
-      { kind: 'pad', voice: 'warm', low: 57, n: 3, g: [0.32, 0.28], wet: 0.3 },
+      { kind: 'pad', voice: 'warm', low: 57, n: 3, g: [0.42, 0.4], wet: 0.3 },
       { kind: 'motif', voice: 'horn', phrases: TARRIK, every: 4, at: 2, base: 50, g: [0, 0.45], th: [0.5, 0.9], wet: 0.35 },
       // violins holding the tension above everything once the fight is joined
       { kind: 'pad', voice: 'warm', low: 69, n: 2, g: [0.08, 0.3], th: [0.2, 1], bright: [3500, 7000], wet: 0.35 },
@@ -96,15 +96,15 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
     family: 'reformation', bpm: 112, beats: 4, tonic: A, db: -21,
     chords: [ch(0, 'sus2', 2), ch(9, 'sus4', 2), ch(5, 'sus2', 2), ch(7, 'sus4', 1), ch(7, '5', 1)],
     layers: [
-      { kind: 'sub', g: 0.3, follow: true },
+      { kind: 'sub', g: 0.65, follow: true },
       { kind: 'pulse', voice: 'pluck', tiers: ['x..x..x.x..x..x.', 'x.xx.xx.x.xx.xx.', 'XxoXxoXxXxoXxoXx'], notes: [0, 1, 2, 3, 2, 1, 4, 2], low: 57, g: [0.36, 0.52], room: 0.15, wet: 0.12 },
-      { kind: 'pulse', voice: 'bass', tiers: ['x.......x.......', 'x..x....x..x..x.', 'x..x..x.x..x..x.'], notes: [0], low: 33, g: [0.2, 0.3] },
+      { kind: 'pulse', voice: 'bass', tiers: ['x.......x.......', 'x..x....x..x..x.', 'x..x..x.x..x..x.'], notes: [0], low: 33, g: [0.4, 0.5] },
       { kind: 'perc', inst: 'kick', tiers: ['X.......X.......', 'X.....x.X.......', 'X..x..x.X..x..x.'], g: [0.28, 0.46], room: 0.1 },
-      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...', '....x..x....x...', '..x.X..x..x.X.xx'], g: [0.3, 0.6], room: 0.2 },
+      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...', '....x..x....x...', '..x.X..x..x.X.xx'], g: [0.24, 0.48], room: 0.2 },
       { kind: 'perc', inst: 'hat', tiers: ['..x...x...x...x.', 'x.x.x.x.x.x.x.x.', 'XoxoXoxoXoxoXoxo'], g: [0.22, 0.53], room: 0.1 },
       { kind: 'perc', inst: 'shaker', tiers: ['................', '..x...x...x...x.', 'x.x.x.x.x.x.x.x.'], g: [0.08, 0.39], th: [0.2, 0.9], room: 0.1 },
       { kind: 'perc', inst: 'metal', tiers: ['................', '..........x.....'], g: [0, 0.26], th: [0.6, 1], room: 0.3, wet: 0.15 },
-      { kind: 'pad', voice: 'glass', low: 57, n: 3, g: [0.36, 0.34], bright: [1800, 5000], wet: 0.35 },
+      { kind: 'pad', voice: 'glass', low: 57, n: 3, g: [0.5, 0.5], bright: [1800, 5000], wet: 0.35 },
       { kind: 'strings', low: 45, n: 2, g: [0.1, 0.52], th: [0.3, 0.9], gate: ['X.x.X.x.X.x.X.x.'], bright: [1900, 5600], wet: 0.2 },
       { kind: 'motif', voice: 'glass', phrases: SELENE, every: 4, at: 2, base: 69, g: [0.3, 0.5], th: [0.2, 0.8], wet: 0.4 },
       // a cold shimmer two octaves up: the top of her sound
@@ -120,7 +120,7 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
     family: 'neutral', bpm: 104, beats: 4, tonic: D, db: -20,
     chords: [ch(0, 'm', 2), ch(7, 'sus2', 2), ch(8, 'M', 2), ch(7, '5', 2)],
     layers: [
-      { kind: 'sub', g: 0.32, follow: true },
+      { kind: 'sub', g: 0.65, follow: true },
       { kind: 'perc', inst: 'odaiko', tiers: ['X...............'], g: 0.32, human: 0.006, room: 0.3, wet: 0.1 },
       { kind: 'perc', inst: 'taiko', tiers: ['X..x....X.x.....', 'X..x..x.X.x.x.xx'], mask: 'xx..', g: [0.32, 0.5], human: 0.008, room: 0.3 },
       { kind: 'perc', inst: 'shime', tiers: ['x...x...x...x...', 'x.x.x.x.x.x.x.x.'], mask: 'xx..', g: [0.31, 0.59], human: 0.004, room: 0.2 },
@@ -134,7 +134,7 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
       { kind: 'perc', inst: 'hat', tiers: ['x.x.x.x.x.x.x.x.', 'XoxoXoxoXoxoXoxo'], mask: '..xx', g: [0.31, 0.5], room: 0.1 },
       { kind: 'motif', voice: 'glass', phrases: SELENE, every: 4, at: 2, base: 69, g: 0.4, wet: 0.4 },
       // the room they are fighting in: one held open fifth under both of them
-      { kind: 'pad', voice: 'warm', low: 50, n: 2, g: 0.22, bright: [900, 1800], wet: 0.4 },
+      { kind: 'pad', voice: 'warm', low: 50, n: 2, g: 0.34, bright: [900, 1800], wet: 0.4 },
     ],
   },
 
@@ -143,8 +143,8 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
     family: 'neutral', bpm: 120, beats: 4, tonic: D, db: -22,
     chords: [ch(0, 'm', 2), ch(2, 'sus4', 2), ch(3, 'M', 2), ch(5, 'sus2', 2), ch(7, 'sus4', 2), ch(8, 'M', 2), ch(10, 'M', 2), ch(7, '5', 2)],
     layers: [
-      { kind: 'sub', g: 0.3, follow: true },
-      { kind: 'pulse', voice: 'bass', tiers: ['X.x.x.x.X.x.x.x.'], notes: [0], low: 26, g: [0.2, 0.26] },
+      { kind: 'sub', g: 0.7, follow: true },
+      { kind: 'pulse', voice: 'bass', tiers: ['X.x.x.x.X.x.x.x.'], notes: [0], low: 26, g: [0.5, 0.62] },
       { kind: 'pulse', voice: 'clock', tiers: ['x...x...x...x...', 'x.x.x.x.x.x.x.x.'], notes: [0, 2], low: 74, g: [0.3, 0.44], room: 0.2, wet: 0.2 },
       { kind: 'strings', low: 50, n: 3, gate: ['X...X...X...X...', 'X.o.X.o.X.o.X.o.'], legato: false, g: [0.5, 0.7], bright: [1700, 5400], wet: 0.25 },
       { kind: 'perc', inst: 'taiko', tiers: ['X.......X.......', 'X.....x.X.....x.', 'X..o..x.X..o.xox'], g: [0.32, 0.6], human: 0.006, room: 0.3 },
@@ -152,7 +152,7 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
       { kind: 'perc', inst: 'shime', tiers: ['x...x...x...x...', 'x.o.x.o.x.o.x.o.', 'x.oxx.oxx.oxx.ox'], g: [0.22, 0.56], room: 0.2 },
       { kind: 'perc', inst: 'hat', tiers: ['................', '..x...x...x...x.'], g: [0, 0.42], th: [0.3, 0.9], room: 0.1 },
       { kind: 'brass', every: 2, at: 1, bars: 1, low: 38, g: [0.3, 0.64], wet: 0.35 },
-      { kind: 'pad', voice: 'glass', low: 62, n: 2, g: 0.26, wet: 0.45 },
+      { kind: 'pad', voice: 'glass', low: 62, n: 2, g: 0.45, wet: 0.45 },
     ],
   },
 };

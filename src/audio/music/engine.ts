@@ -86,6 +86,11 @@ export class MusicEngine {
     return this.shared.intensity;
   }
 
+  /** the intensity last asked for (what the audible value is heading to) */
+  get targetIntensity(): number {
+    return this.target;
+  }
+
   get resolved(): boolean {
     return this.shared.resolved;
   }

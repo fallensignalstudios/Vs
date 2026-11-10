@@ -1,5 +1,5 @@
 /** Test support: the combat test world plus the real physics world and the real AI system. Not shipped. */
-import type { Actor, AiSystem, Game, GameEvents, PhysicsWorld } from '@/core/api';
+import type { Actor, AiSystem, GameEvents, PhysicsWorld } from '@/core/api';
 import { makeWorld, type TestWorld } from '@/combat/testkit';
 import { createPhysicsWorld } from '@/world/physics';
 import { createAiSystem } from './index';
@@ -36,7 +36,6 @@ export function makeAiWorld(): AiTestWorld {
   ] as const) record(t);
   w.run = (seconds: number) => {
     const n = Math.max(1, Math.round(seconds * 60));
-    const game = w.game as Game;
     for (let i = 0; i < n; i++) {
       const dt = 1 / 60;
       w.time.dt = dt;
@@ -46,7 +45,6 @@ export function makeAiWorld(): AiTestWorld {
       ai.update(dt);
       w.actors.update(dt);
       w.input.endStep(dt);
-      void game;
     }
   };
   w.arena = () => {

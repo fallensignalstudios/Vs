@@ -145,7 +145,7 @@ export class AmbienceEngine {
     }
     this.id = def ? id : 'none';
     if (!def) {
-      this.mixer.setRoom(0.6, 6500, [0.3, 0.9, 0.3], fade);
+      this.mixer.setRoom(0.6, 6500, [0.3, 1, 0], fade);
       return;
     }
     const gain = (this.norm[id] ?? UNCALIBRATED) * dbToGain(def.db);

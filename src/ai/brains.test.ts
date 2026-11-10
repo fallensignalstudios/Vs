@@ -7,11 +7,15 @@ let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
+let allowWarnings = false;
 afterEach(() => {
-  // no brain may throw (the manager reports a throwing controller with a warning) and nothing may warn at all
+  // no brain may throw (the manager reports a throwing controller with a warning) and nothing may warn at all —
+  // except in the test that feeds the API nonsense on purpose, where a warning (never a throw) is the contract
   const lines = warn.mock.calls.map((c: unknown[]) => String(c[0]));
   warn.mockRestore();
-  expect(lines).toEqual([]);
+  if (allowWarnings) expect(lines.some((l: string) => /threw/.test(l))).toBe(false);
+  else expect(lines).toEqual([]);
+  allowWarnings = false;
 });
 
 function finite(w: AiTestWorld): boolean {
@@ -246,5 +250,58 @@ describe('brains', () => {
     selene.remove();
     expect(w.ai.companions.length).toBe(2);
     expect(finite(w)).toBe(true);
+  });
+
+  it('companion orders: hold, teleport, suppress, cinderStrike, bad input', () => {
+    allowWarnings = true;
+    const w = makeAiWorld();
+    w.arena();
+    w.hero('selene', 0, 0);
+    const tarrik = w.ai.spawnCompanion('tarrik', { pos: { x: 3, y: 0, z: 0 }, mode: 'scripted' });
+    const lyessa = w.ai.spawnCompanion('lyessa', { pos: { x: -3, y: 0, z: 0 }, mode: 'follow' });
+    const foe = w.ai.spawnEnemy('linkbound', { pos: { x: 0, y: 0, z: -14 }, dormant: true, hpScale: 4 });
+    // hold: walks to the post and stays although the protagonist leaves
+    lyessa.holdAt({ x: -8, y: 0, z: -4 }, Math.PI);
+    expect(lyessa.mode).toBe('hold');
+    w.run(5);
+    expect(lyessa.arrived).toBe(true);
+    expect(lyessa.actor.distanceTo({ x: -8, y: 0, z: -4 })).toBeLessThan(0.8);
+    w.player.teleport({ x: 15, y: 0, z: 15 });
+    w.run(3);
+    expect(lyessa.actor.distanceTo({ x: -8, y: 0, z: -4 })).toBeLessThan(0.8);
+    // suppress: six rounds, pressure only
+    const hp0 = foe.hp;
+    lyessa.assist(foe, 'suppress');
+    w.run(3.2);
+    expect(hp0 - foe.hp).toBeGreaterThan(0);
+    expect(hp0 - foe.hp).toBeLessThanOrEqual(24);
+    expect(lyessa.assisting).toBe(false);
+    // cinderStrike: closes the distance, then one heavy blow
+    const hp1 = foe.hp;
+    tarrik.assist(foe, 'cinderStrike');
+    w.run(5);
+    expect(hp1 - foe.hp).toBeGreaterThanOrEqual(45);
+    expect(tarrik.actor.distanceTo(foe)).toBeLessThan(4.5);
+    expect(tarrik.assisting).toBe(false);
+    // teleport and nonsense
+    tarrik.teleport({ x: 10, y: 0, z: 10 }, 1);
+    expect(tarrik.actor.pos.x).toBeCloseTo(10, 3);
+    expect(tarrik.actor.yaw).toBe(1);
+    expect(() => {
+      tarrik.moveTo({ x: NaN, y: 0, z: 0 });
+      tarrik.assist(foe, 'nonsense' as never);
+      tarrik.mode = 'dance' as never;
+      tarrik.focus(null);
+      tarrik.face(null);
+      tarrik.follow(null);
+      tarrik.play('definitelyNotAnAction');
+      tarrik.stopAction();
+      w.ai.spawnEnemy('nope' as never, { pos: { x: NaN, y: 0, z: 0 } });
+      w.ai.alert('nobody');
+      w.run(1);
+      w.ai.clear();
+      w.ai.clear();
+    }).not.toThrow();
+    expect(w.ai.companions.length).toBe(0);
   });
 });

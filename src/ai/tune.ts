@@ -46,7 +46,7 @@ export const AI = {
     speed: 1.35,
     turn: 1.5,
     /** how far the line advances from its posts */
-    leash: 16,
+    leash: 24,
     /** distance the wall keeps from its target */
     standOff: 2.1,
     overlapWithin: 3.5,
@@ -56,7 +56,7 @@ export const AI = {
     batonRange: 2.3,
     telegraph: 0.55,
     meleeCooldown: [1.5, 2.4] as const,
-    sidearmRange: [5, 26] as const,
+    sidearmRange: [3.2, 26] as const,
     sidearmTelegraph: 0.6,
     sidearmCooldown: [2.6, 3.8] as const,
     sidearmSpeed: 60,
@@ -133,6 +133,9 @@ export const AI = {
     /** phase B: seconds the joint stays open after a heavy attack / hp per second it regenerates on its own */
     exposeSeconds: 4.5,
     selfRegen: 8,
+    /** damage-taken scale of the body: link armour in phase A, regenerating plates in phase B (1 once fractured) */
+    armorLinked: 0.4,
+    armorIsolated: 0.6,
     resonanceSeconds: 7,
     lowPressure: 3,
     fractureStagger: 5,

@@ -321,6 +321,11 @@ export class AssetLibrary {
     return this.voices !== null;
   }
 
+  /** True when a listed clip turned out not to be loadable (file gone, not audio): the line has no recording. */
+  clipMissing(id: string): boolean {
+    return this.clips.get(id)?.state === 'missing';
+  }
+
   /** The decoded clip, if it is in memory right now. */
   clip(id: string): VoiceClip | null {
     const e = this.clips.get(id);

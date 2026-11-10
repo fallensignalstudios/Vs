@@ -26,8 +26,12 @@ import { preloadLines } from './assets/voice';
 
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
 
-/** the device sample rate the boot-time preparation bets on (nearly every desktop output runs at it) */
-const PREWARM_RATE = 48000;
+/**
+ * The device sample rate the boot-time preparation bets on. Most outputs run at it; on one that does not
+ * (44.1 kHz interfaces) the same work happens at unlock instead, and sounds are synthesised live until it lands.
+ * Only one rate: the pre-rendered set is tens of megabytes, and a second, speculative copy is not worth it.
+ */
+const PREWARM_RATES = [48000] as const;
 /** gestures that can unlock audio (which of them counts as a user activation differs between browsers) */
 const UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'keydown', 'click'] as const;
 
@@ -112,8 +116,8 @@ class AudioSystemImpl implements AudioSystem {
   private gestureOff: (() => void) | null = null;
   /** frames after unlock() during which a still-resuming context may be scheduled on */
   private graceFrames = 0;
-  /** sample rate the boot-time preparation was done for (0 = none) */
-  private prewarmed = 0;
+  /** sample rates the boot-time preparation was done for */
+  private readonly prewarmed: number[] = [];
   /** recorded score + voice-over clips (null: muted, or no WebAudio to play them with) */
   private readonly library: AssetLibrary | null;
   /** lends its decoder to the library until the real context exists */
@@ -173,35 +177,46 @@ class AudioSystemImpl implements AudioSystem {
   /**
    * Everything that can be prepared without an AudioContext is prepared while the game boots: the noise
    * buffers and room impulses, and the pre-render of frequent sounds (OfflineAudioContext needs no user
-   * gesture). It is done for the most common device rate; if the device turns out to run at another rate
-   * the work is simply repeated at unlock, as it would have been anyway. With this, the first click after
-   * loading builds a mixer and nothing else — and what it plays is already pre-rendered.
+   * gesture). The device's sample rate is not knowable before the context exists, so this is done for the rate
+   * most outputs run at; if the device turns out to use another, the boot-time set is dropped at unlock and
+   * the work happens then, as it would have anyway. With this, the first click after loading builds a mixer
+   * and nothing else — and what it plays is already pre-rendered.
    */
   private prewarm(): void {
     type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
     const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
     const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
     if (!Offline || !contextCtor()) return;
-    try {
-      const shared = makeShared(new Offline(1, 1, PREWARM_RATE));
-      this.prewarmed = PREWARM_RATE;
-      void prerender(PREWARM_RATE, shared.waves);
-    } catch {
-      /* no offline rendering at that rate here: everything happens at unlock instead */
+    let chain: Promise<unknown> = Promise.resolve();
+    for (const rate of PREWARM_RATES) {
+      // one after the other: the second must not compete with the first for the cores the game is loading on
+      chain = chain.then(() => {
+        if (this.ctx || this.disposed) return undefined; // unlocked meanwhile: unlock() does what is still needed
+        try {
+          const shared = makeShared(new Offline(1, 1, rate));
+          this.prewarmed.push(rate);
+          return prerender(rate, shared.waves);
+        } catch {
+          return undefined; // no offline rendering at that rate here
+        }
+      });
     }
   }
 
   /** A context the asset library can decode with: the live one, or — before the first gesture — an offline one. */
   private decoder(): BaseAudioContext | null {
     if (this.ctx) return this.ctx;
-    if (this.offline || this.failed || this.disposed) return this.offline;
-    type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
-    const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
-    const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
-    try {
-      this.offline = Offline ? new Offline(2, 1, PREWARM_RATE) : null;
-    } catch {
-      this.offline = null;
+    if (this.failed || this.disposed) return null;
+    if (!this.offline) {
+      type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
+      const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
+      const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
+      if (!Offline) return null;
+      try {
+        this.offline = new Offline(2, 1, PREWARM_RATES[0]);
+      } catch {
+        return null;
+      }
     }
     return this.offline;
   }
@@ -256,12 +271,12 @@ class AudioSystemImpl implements AudioSystem {
     try {
       this.graceFrames = 20;
       this.ctx = new AC({ latencyHint: 'interactive' });
-      if (this.prewarmed && this.prewarmed !== this.ctx.sampleRate) {
-        // the device runs at another rate: the boot-time buffers are of no use to it
-        forgetPrerender(this.prewarmed);
-        forgetShared(this.prewarmed);
+      for (const rate of this.prewarmed.splice(0)) {
+        if (rate === this.ctx.sampleRate) continue;
+        // the device does not run at this rate: its boot-time buffers are of no use
+        forgetPrerender(rate);
+        forgetShared(rate);
       }
-      this.prewarmed = 0;
       this.engine = new AudioEngine(this.ctx, { seed: (this.game.flags.seed ?? 1) ^ 0x5a17, assets: this.library });
       this.offline = null;
       if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);

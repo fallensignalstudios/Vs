@@ -21,6 +21,11 @@ const _dir = new THREE.Vector3();
 const _snap = { x: 0, y: 0, z: 0 };
 const _g = { y: 0, surface: null as never };
 
+/** ways out of the protagonist's path, in order of preference (side 0 = straight ahead of the push) */
+const STEP_OPTIONS = [
+  { side: 1, dist: 1.2 }, { side: -1, dist: 1.2 }, { side: 1, dist: 0.8 }, { side: -1, dist: 0.8 }, { side: 0, dist: 2.2 },
+] as const;
+
 interface Order {
   pos: THREE.Vector3;
   run: boolean;
@@ -38,6 +43,8 @@ export class CompanionImpl implements Companion, ActorController {
   private order: Order | null = null;
   /** arrived at a moveTo() destination: stays there until follow() / a mode change / another order */
   private parked = false;
+  /** hold mode: on the way (back) to the post */
+  private returning = false;
   private leader: Actor | null = null;
   private followPlayer = true;
   private offRight: number;
@@ -160,6 +167,7 @@ export class CompanionImpl implements Companion, ActorController {
     this.holdPos.set(pos.x, pos.y, pos.z);
     this.holdYaw = typeof yaw === 'number' && Number.isFinite(yaw) ? yaw : null;
     this.arrived = false;
+    this.returning = true;
   }
 
   face(target: Vec3Like | null): void {
@@ -311,6 +319,18 @@ export class CompanionImpl implements Companion, ActorController {
       return;
     }
 
+    // a held post comes first: get there (and get back to it) before anything else
+    if (this._mode === 'hold' && !this.parked && this.endIn < 0) {
+      const off = a.distanceTo(this.holdPos);
+      if (off > (this.kit.style === 'melee' ? 3.6 : 1.2)) this.returning = true;
+      else if (off <= 0.45) this.returning = false;
+      if (this.returning) {
+        this.arrived = false;
+        if (!this.nav.moveTo(a, this.holdPos, AI.companion.run, dt, { stop: 0.4 }) && this.nav.stuck > AI.companion.stuckSeconds) this.unstick(a, this.holdPos);
+        return;
+      }
+      this.arrived = true;
+    }
     if ((this._mode === 'combat' || this._mode === 'hold') && !this.npc && this.kit.style !== 'none' && !this.core.ceasefire) {
       if (this.fight(a, dt, now)) {
         this.lastFightAt = now;
@@ -365,13 +385,15 @@ export class CompanionImpl implements Companion, ActorController {
     const push = (p.vel.x * dx + p.vel.z * dz) / d;
     if (push < 0.8) return;
     const physics = physicsOf(game);
-    for (const side of [1, -1]) {
-      const sx = (-dz / d) * side;
-      const sz = (dx / d) * side;
-      if (physics && !physics.canStand(a.pos.x + sx * 1.2, a.pos.y, a.pos.z + sz * 1.2, a.radius)) continue;
+    // sideways when there is room; in a doorway there is none, so a shorter side step, then straight on through
+    for (let i = 0; i < STEP_OPTIONS.length; i++) {
+      const o = STEP_OPTIONS[i] as { side: number; dist: number };
+      const sx = o.side === 0 ? dx / d : (-dz / d) * o.side;
+      const sz = o.side === 0 ? dz / d : (dx / d) * o.side;
+      if (physics && !physics.canStand(a.pos.x + sx * o.dist, a.pos.y, a.pos.z + sz * o.dist, a.radius)) continue;
       this.stepDir.set(sx, 0, sz);
-      this.stepUntil = now + 0.45;
-      if (this._mode === 'hold' || this._mode === 'scripted') this.holdPos.set(a.pos.x + sx * 1.2, a.pos.y, a.pos.z + sz * 1.2);
+      this.stepUntil = now + o.dist / 2.6;
+      if (this.parked || this._mode === 'hold' || this._mode === 'scripted') this.holdPos.set(a.pos.x + sx * o.dist, a.pos.y, a.pos.z + sz * o.dist);
       return;
     }
   }

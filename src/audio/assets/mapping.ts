@@ -67,6 +67,11 @@ export interface TrackInfo {
   tonic: number;
   /** transposition in semitones, by playback rate (tempo follows) */
   tune: number;
+  /**
+   * where the piece is in full flow (s, on a bar line): a state entered at high intensity starts its first
+   * pass here instead of sitting through a sparse introduction while the fight is already on
+   */
+  body?: number;
   regions?: Readonly<Partial<Record<RegionName, Region>>>;
 }
 
@@ -74,9 +79,11 @@ const BAR_ATRIUM = 240 / 72;
 
 export const TRACKS: Readonly<Record<TrackName, TrackInfo>> = {
   main_theme: { tonic: 38, tune: 0 },
-  dominion_combat: { tonic: 36, tune: 0 },
+  // sparse low hits for the first 20 s; the ostinato is in from bar 9 (19.2 s)
+  dominion_combat: { tonic: 36, tune: 0, body: 19.2 },
   frozen_stealth: { tonic: 38, tune: 0 },
-  relay_combat: { tonic: 38, tune: 0 },
+  // a lighter arpeggio for 15 s (8 bars), then the drive
+  relay_combat: { tonic: 38, tune: 0, body: 15 },
   atrium_carrier: {
     tonic: 33, tune: 0,
     regions: {
@@ -192,9 +199,10 @@ export interface LoopSpec {
 /**
  * The loop of `region` in a track. For the whole track that is the manifest's own convention: the next pass
  * starts `LOOP_XFADE` before the end of the file — a whole number of bars after the start — and the two
- * cross-fade. Degenerate metadata (a file shorter than its fades) shrinks the fade rather than failing.
+ * cross-fade. `hot` starts the first pass at the track's `body` (later passes are the whole piece again).
+ * Degenerate metadata (a file shorter than its fades) shrinks the fade rather than failing.
  */
-export function loopSpec(track: TrackName, meta: TrackMeta, region: RegionName = 'whole'): LoopSpec {
+export function loopSpec(track: TrackName, meta: TrackMeta, region: RegionName = 'whole', hot = false): LoopSpec {
   const info = TRACKS[track];
   const seconds = Number.isFinite(meta.seconds) && meta.seconds > 0 ? meta.seconds : 0;
   const r = region === 'whole' ? undefined : info.regions?.[region];
@@ -202,7 +210,9 @@ export function loopSpec(track: TrackName, meta: TrackMeta, region: RegionName =
   if (r && r.to + LOOP_XFADE <= seconds + 1e-6) return { intro: r.from, from: r.from, to: r.to, xfade: LOOP_XFADE, rate, meanDb: r.meanDb };
   const xfade = Math.min(LOOP_XFADE, seconds / 4);
   const from = clamp(Number.isFinite(meta.loopStart) ? meta.loopStart : 0, 0, Math.max(0, seconds - 2 * xfade));
-  return { intro: 0, from, to: seconds - xfade, xfade, rate, meanDb: Number.isFinite(meta.meanDb) ? meta.meanDb : -16 };
+  const to = seconds - xfade;
+  const intro = hot && info.body !== undefined && info.body < to - 2 * xfade ? info.body : 0;
+  return { intro, from, to, xfade, rate, meanDb: Number.isFinite(meta.meanDb) ? meta.meanDb : -16 };
 }
 
 /** Seconds heard between the start of one pass and the next (after the first). */

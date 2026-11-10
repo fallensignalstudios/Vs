@@ -32,11 +32,21 @@ export class LinkboundBrain extends Brain {
   private freed = false;
   /** which way it circles while it waits for a melee token */
   private readonly orbit: number;
+  /** offset (rad) of its approach bearing round the target */
+  private bearing = 0;
 
   constructor(core: AiCore, opts: SpawnOpts) {
     super(core, 'linkbound', opts);
     this.cooldown = this.rand(0.3, 1.4);
     this.orbit = this.rand(0, 1) < 0.5 ? 1 : -1;
+  }
+
+  protected override onActive(a: Actor): void {
+    this.bearing = ((a.id % 3) - 1) * 0.75;
+  }
+
+  protected override targetWeight(_a: Actor, t: Actor): number {
+    return t.flying ? 3 : 1;
   }
 
   protected override onAttackCancelled(_a: Actor): void {
@@ -89,8 +99,12 @@ export class LinkboundBrain extends Brain {
         if (!wantsSlot && this.holdsSlot) this.releaseSlot(a);
         if (hasSlot) {
           if (dist > reach) {
-            if (moving) this.nav.moveTo(a, t.pos, speed, dt, { turn: L.turn, stop: reach - 0.4 });
-            else this.hesitate(a, t, dt);
+            if (moving) {
+              // each body closes on its own bearing, so a group arrives as a front and not as a queue
+              const ang = Math.atan2(a.pos.z - t.pos.z, a.pos.x - t.pos.x) + this.bearing * Math.min(1, dist / 7);
+              _goal.set(t.pos.x + Math.cos(ang) * (reach - 0.5), t.pos.y, t.pos.z + Math.sin(ang) * (reach - 0.5));
+              this.nav.moveTo(a, _goal, speed, dt, { turn: L.turn, stop: 0.3 });
+            } else this.hesitate(a, t, dt);
           } else {
             a.face(t.pos, L.turn * dt);
             this.nav.halt(a);

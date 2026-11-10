@@ -179,6 +179,7 @@ export class AudioEngine {
 
   setPaused(paused: boolean): void {
     this.mixer.setPaused(paused);
+    this.vo.setPaused(paused);
   }
 
   /**

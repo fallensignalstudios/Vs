@@ -232,6 +232,7 @@ export class WeaverBrain extends Brain {
           if (!this.usesAnchor && mine === 0 && !this.anchor) {
             this.anchor = this.core.devices.anchorNear(a.pos, W.anchorRange);
             this.usesAnchor = this.anchor !== null;
+            if (this.anchor) this.core.devices.bindAnchor(this.anchor, a);
           }
           if (this.canLink) links.create(a, c, { anchor: this.usesAnchor ? this.anchor : null });
           this.candidate = null;

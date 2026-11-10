@@ -317,7 +317,8 @@ export class Voices {
     if (!r) return 0;
     const now = this.ac.currentTime;
     const delay = clamp(Number.isFinite(opts?.delay) ? (opts!.delay as number) : 0, 0, 30);
-    const t0 = now + delay + SCHEDULE_AHEAD;
+    // (never before the mix chain has settled: the very first sound of a session is at most 45 ms late)
+    const t0 = Math.max(now + delay + SCHEDULE_AHEAD, this.mixer.readyAt);
     const last = this.last.get(id);
     if (last !== undefined && t0 - last < r.gap && t0 >= last) return 0;
     this.sweep(now);

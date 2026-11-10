@@ -216,6 +216,10 @@ export abstract class Brain implements ActorController {
   protected canTarget(_a: Actor, t: Actor): boolean {
     return !t.tags.has('device') && !t.protectedNpc && t.team !== 'neutral';
   }
+  /** distance multiplier when choosing a target (> 1 = less interesting). Ground fighters care little for what flies. */
+  protected targetWeight(_a: Actor, _t: Actor): number {
+    return 1;
+  }
   /** a link whose TARGET is this body was cut */
   onLinkSevered(_a: Actor, _link: LinkHandle, _by: Actor | null): void {}
   /** a link whose SOURCE is this body was cut */
@@ -242,7 +246,7 @@ export abstract class Brain implements ActorController {
     for (let i = 0; i < list.length; i++) {
       const c = list[i] as Actor;
       if (!this.canTarget(a, c)) continue;
-      let s = a.distanceTo(c);
+      let s = a.distanceTo(c) * this.targetWeight(a, c);
       if (c === player) s *= 0.8;
       // stickiness: the current target keeps its claim unless something is clearly closer
       if (c === this.target) s *= 0.6;

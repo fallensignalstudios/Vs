@@ -8,7 +8,8 @@
  *  - A state whose recording is not there yet: the generative score plays exactly as it always did while the
  *    track loads; when it arrives the two cross-fade. If it never arrives, nothing else happens.
  *  - A state with no recording: the generative score, and any recording fades out.
- * Intensity moves the recording's level and opens its low-pass.
+ * Intensity moves the recording's level and opens its low-pass; a combat state entered while intensity is
+ * already high starts its recording past the introduction.
  */
 import { clamp } from '@/core/mathx';
 import type { MusicState } from '@/core/api';
@@ -22,6 +23,8 @@ import { TrackPlayer } from './player';
 
 /** cross-fade when a recording arrives after its state has already begun (s) */
 const ARRIVAL_FADE = 2.5;
+/** a state entered at or above this intensity skips its recording's introduction (see TrackInfo.body) */
+const HOT_ENTRY = 0.5;
 /** intensity change worth re-aiming the level and filter for */
 const INTENSITY_STEP = 0.01;
 
@@ -51,6 +54,8 @@ export class RecordedScore {
 
   /** Change the music state (see AudioSystem.setMusic). */
   setState(state: MusicState, fadeSeconds = 2): void {
+    // (a script may assert its state every frame: only a change does anything)
+    if (state === this.state) return;
     const fade = clamp(Number.isFinite(fadeSeconds) ? fadeSeconds : 2, 0.05, 30);
     const plan = scorePlan(state);
     this.state = state;
@@ -78,7 +83,9 @@ export class RecordedScore {
     const meta = lib.trackMeta(plan.track);
     const def = defOf(this.state);
     if (!buffer || !meta || !def) return false;
-    const loop = loopSpec(plan.track, meta, plan.region);
+    // (the audible intensity lags the one just asked for: either says the fight is on)
+    const hot = Math.max(this.music.intensity, this.music.targetIntensity) >= HOT_ENTRY;
+    const loop = loopSpec(plan.track, meta, plan.region, hot);
     if (!(loop.to - loop.from >= 1) || !(loop.to <= buffer.duration + 0.5)) return false;
     const at = this.music.setState(this.state, fade, {
       key: `rec:${plan.track}`, def: overlayDef(def, plan.generativeLayers), tonic: TRACKS[plan.track].tonic,

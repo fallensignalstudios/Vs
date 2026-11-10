@@ -32,9 +32,9 @@ export const ECLIPSE_MUSIC: Record<'breach' | 'combatEclipse' | 'elite' | 'decis
     family: 'eclipse', bpm: 100, beats: 4, tonic: CS, db: -21,
     chords: [ch(0, 'b2', 2), ch(6, 'tri', 1), ch(1, '5', 1), ch(0, 'b2', 2), ch(8, 'm', 1), ch(7, 'tri', 1)],
     layers: [
-      { kind: 'sub', g: 0.32, follow: true },
+      { kind: 'sub', g: 0.7, follow: true },
       { kind: 'cadence', pattern: CADENCE, g: 0.5, room: 0.3, wet: 0.15 },
-      { kind: 'pad', voice: 'wrong', low: 49, n: 3, g: 0.32, bright: [1250, 3000], wet: 0.4 },
+      { kind: 'pad', voice: 'wrong', low: 49, n: 3, g: 0.42, bright: [1250, 3000], wet: 0.4 },
       { kind: 'strings', low: 37, n: 2, gate: ['X..x..x.X..x..x.', 'X.xxX.xxX.xxX.xx'], g: [0.6, 0.84], bright: [1400, 4600], wet: 0.2 },
       { kind: 'perc', inst: 'taiko', tiers: ['X.......x.......', 'X..x....X.x.....', 'X..x..x.X.x.x.xx'], tune: 73.4, g: [0.28, 0.48], human: 0.008, room: 0.3 },
       { kind: 'perc', inst: 'odaiko', tiers: ['X...............', 'X.........X.....'], tune: 49, g: 0.32, human: 0.008, room: 0.3, wet: 0.1 },
@@ -53,7 +53,7 @@ export const ECLIPSE_MUSIC: Record<'breach' | 'combatEclipse' | 'elite' | 'decis
     family: 'eclipse', bpm: 108, beats: 4, tonic: CS, db: -20,
     chords: [ch(0, 'b2', 2), ch(6, 'tri', 2), ch(1, '5', 2), ch(0, 'dim', 2)],
     layers: [
-      { kind: 'sub', g: 0.34, follow: true },
+      { kind: 'sub', g: 0.7, follow: true },
       { kind: 'cadence', pattern: CADENCE, g: 0.44, room: 0.3, wet: 0.15 },
       { kind: 'perc', inst: 'taiko', tiers: ['X..X..X.X..X..X.', 'X.oX.oX.X.oX.oXo'], tune: 73.4, g: [0.3, 0.46], human: 0.008, room: 0.3 },
       { kind: 'perc', inst: 'odaiko', tiers: ['X.......X.......'], tune: 49, g: 0.26, human: 0.008, room: 0.3, wet: 0.1 },

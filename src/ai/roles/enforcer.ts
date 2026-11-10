@@ -37,6 +37,8 @@ export class EnforcerBrain extends Brain {
   /** out of formation (no shield overlap, a step back) until this sim time */
   brokenUntil = 0;
   private struck = false;
+  private shot: Actor | null = null;
+  private shotScanAt = 0;
 
   constructor(core: AiCore, opts: SpawnOpts) {
     super(core, 'enforcer', opts);
@@ -54,6 +56,27 @@ export class EnforcerBrain extends Brain {
   protected override cleanup(a: Actor): void {
     const v = a.visual;
     if (isHumanoidVisual(v)) v.onFootstep = null;
+  }
+
+  /** the wall advances on what walks; what flies is only worth a sidearm round */
+  protected override targetWeight(_a: Actor, t: Actor): number {
+    return t.flying ? 3 : 1;
+  }
+
+  /** who the sidearm fires at: the main target when it can be hit, else any hostile in range with a clear line (drones) */
+  private shotTarget(a: Actor, main: Actor, dist: number, facing: number): Actor | null {
+    const E = AI.enforcer;
+    if (dist >= E.sidearmRange[0] && dist <= E.sidearmRange[1] && facing < 0.5 && this.clearShot(a, main)) return main;
+    const list = this.game.actors.hostilesOf(a);
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i] as Actor;
+      if (c === main || !this.canTarget(a, c)) continue;
+      const d = a.distanceTo(c);
+      if (d < E.sidearmRange[0] || d > E.sidearmRange[1]) continue;
+      if (Math.abs(angleDelta(a.yaw, yawTo(a.pos.x, a.pos.z, c.pos.x, c.pos.z))) > 0.9) continue;
+      if (this.clearShot(a, c)) return c;
+    }
+    return null;
   }
 
   protected override onAttackCancelled(a: Actor): void {
@@ -153,6 +176,9 @@ export class EnforcerBrain extends Brain {
     const facing = Math.abs(angleDelta(a.yaw, yawTo(a.pos.x, a.pos.z, t.pos.x, t.pos.z)));
     this.meleeCd -= dt;
     this.shootCd -= dt;
+    // looking for something to shoot is a 4 Hz job, not a per-tick one
+    if (this.shootCd <= 0 && this.state === 'advance' && now < this.shotScanAt) this.shootCd = 1e-3;
+    else if (this.shootCd <= 0) this.shotScanAt = now + 0.25;
 
     switch (this.state) {
       case 'advance': {
@@ -165,7 +191,7 @@ export class EnforcerBrain extends Brain {
           this.state = 'windup';
           this.beginTelegraph(a, this.teleTime(E.telegraph), AMBER);
           this.game.audio.play('shieldUp', { pos: a.pos });
-        } else if (this.shootCd <= 0 && dist >= E.sidearmRange[0] && dist <= E.sidearmRange[1] && facing < 0.5 && this.clearShot(a, t)) {
+        } else if (this.shootCd <= 0 && (this.shot = this.shotTarget(a, t, dist, facing)) !== null) {
           this.state = 'aim';
           a.visual?.setLoadout({ shield: true, ranged: true });
           this.beginTelegraph(a, this.teleTime(E.sidearmTelegraph), AMBER);
@@ -219,10 +245,11 @@ export class EnforcerBrain extends Brain {
       case 'aim': {
         a.guarding = false;
         const k = 1 - this.teleLeft / this.teleTotal;
+        const st = this.shot && this.shot.alive ? this.shot : t;
         if (k < 0.6) {
-          a.face(t.pos, 3 * dt);
+          a.face(st.pos, 3 * dt);
           socketPos(a, 'muzzle', _from);
-          this.aimDir.copy(t.aimPoint(_aim)).sub(_from).normalize();
+          this.aimDir.copy(st.aimPoint(_aim)).sub(_from).normalize();
         }
         a.visual?.setAimPitch(Math.asin(Math.max(-0.6, Math.min(0.6, this.aimDir.y))));
         if (this.tickTelegraph(a, dt)) {

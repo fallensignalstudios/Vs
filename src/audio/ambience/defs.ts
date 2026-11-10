@@ -55,7 +55,8 @@ export interface AmbDef {
   tone: number;
   /**
    * what the space is made of: weights of the three world reverbs `[small, hall, vast]` — a 24 m gallery
-   * and a 300 m atrium differ in decay time, not just in how much reverb there is
+   * and a 300 m atrium differ in decay time, not just in how much reverb there is. A place uses the small
+   * room plus at most ONE of the long ones: every reverb in use is a convolution that runs all the time
    */
   space: readonly [number, number, number];
   beds: readonly BedLayer[];
@@ -69,7 +70,7 @@ const GROAN: AmbEvent = { id: 'structuralGroan', every: [16, 32], dist: [40, 110
 export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   /** Z00 broken landing: fire, a hull open to wind, hot metal ticking, the battle overhead. */
   crash: {
-    db: -30, room: 0.9, tone: 5000, space: [0.3, 0.8, 0.2],
+    db: -30, room: 0.9, tone: 5000, space: [0.35, 1, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 140, g: 1, am: [0.05, 0.3] },
       { color: 'pink', type: 'bandpass', f: 420, q: 0.6, g: 0.35, fm: [0.07, 150], am: [0.11, 0.4] },
@@ -86,7 +87,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z01 pressure hall: muffled pressure in a very large room. */
   pressureHall: {
-    db: -31, room: 1.1, tone: 5500, space: [0.1, 0.6, 0.6],
+    db: -31, room: 1.1, tone: 5500, space: [0.1, 1, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 110, g: 1, am: [0.04, 0.25] },
       { color: 'pink', type: 'bandpass', f: 260, q: 0.5, g: 0.4, fm: [0.05, 80] },
@@ -97,7 +98,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z02 survivor bend: close, hushed; people behind a partition. */
   survivorBend: {
-    db: -33, room: 0.6, tone: 4000, space: [1, 0.12, 0],
+    db: -33, room: 0.6, tone: 4000, space: [1, 0, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 160, g: 0.5 },
       { color: 'pink', type: 'bandpass', f: 600, q: 0.7, g: 0.3, am: [0.13, 0.3] },
@@ -129,7 +130,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z04 relay overlook: open air over a drop, cold relay hum, other people's radios. */
   relayOverlook: {
-    db: -31, room: 1.0, tone: 6000, space: [0.1, 0.6, 0.5],
+    db: -31, room: 1.0, tone: 6000, space: [0.2, 0, 1],
     beds: [
       { color: 'brown', type: 'lowpass', f: 120, g: 0.8 },
       { color: 'pink', type: 'bandpass', f: 380, q: 0.5, g: 0.4, fm: [0.08, 160], am: [0.1, 0.35] },
@@ -139,7 +140,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z05 meeting atrium: three hundred metres of air; the carrier's shadow as a throb in the floor. */
   atrium: {
-    db: -29, room: 1.4, tone: 4500, space: [0, 0.3, 1],
+    db: -29, room: 1.4, tone: 4500, space: [0, 0, 1],
     beds: [
       { color: 'brown', type: 'lowpass', f: 90, g: 0.6, am: [0.03, 0.3] },
       { color: 'brown', type: 'lowpass', f: 220, g: 0.5, fm: [0.04, 60] },
@@ -154,7 +155,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z06 breach rescue: the Eclipse is in the walls. The air itself breathes — at exactly their rate. */
   breach: {
-    db: -30, room: 1.0, tone: 3800, space: [0.3, 0.8, 0.1],
+    db: -30, room: 1.0, tone: 3800, space: [0.3, 1, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 130, g: 0.45 },
       { color: 'pink', type: 'bandpass', f: 500, q: 1.2, g: 0.6, am: [0.42, 0.8] },
@@ -192,7 +193,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z08 quarantine crucible: a pit. Something very large is breathing in it. */
   crucible: {
-    db: -29, room: 1.2, tone: 3500, space: [0.1, 0.6, 0.6],
+    db: -29, room: 1.2, tone: 3500, space: [0.15, 1, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 90, g: 0.5, am: [0.05, 0.3] },
       { color: 'pink', type: 'bandpass', f: 300, q: 1, g: 0.7, am: [0.17, 0.85] },
@@ -209,7 +210,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z09 wound gallery: quarantine has stripped the war away. What is left is almost nothing — and the Wound. */
   woundGallery: {
-    db: -38, room: 1.3, tone: 3000, space: [0.1, 0.5, 0.8],
+    db: -38, room: 1.3, tone: 3000, space: [0.1, 0, 1],
     beds: [
       { color: 'pink', type: 'bandpass', f: 400, q: 0.5, g: 0.12, am: [0.03, 0.5] },
       { color: 'brown', type: 'lowpass', f: 60, g: 0.4 },
@@ -223,7 +224,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z10 Crownmark chamber: a mechanism the size of a cathedral aligning by hairs; a gold fifth in the air. */
   coreChamber: {
-    db: -34, room: 1.2, tone: 8000, space: [0.1, 0.7, 0.5],
+    db: -34, room: 1.2, tone: 8000, space: [0.1, 1, 0],
     beds: [
       { color: 'pink', type: 'bandpass', f: 500, q: 0.5, g: 0.12 },
       { color: 'brown', type: 'lowpass', f: 100, g: 0.5 },
@@ -256,7 +257,7 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   },
   /** Z12 outer-ring hangar: two factions' engines idling at opposite berths. */
   hangar: {
-    db: -30, room: 1.1, tone: 5500, space: [0.2, 0.9, 0.2],
+    db: -30, room: 1.1, tone: 5500, space: [0.2, 1, 0],
     beds: [
       { color: 'brown', type: 'lowpass', f: 140, g: 0.9 },
       { color: 'pink', type: 'bandpass', f: 350, q: 0.6, g: 0.4, fm: [0.06, 100] },

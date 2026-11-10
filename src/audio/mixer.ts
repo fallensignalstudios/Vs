@@ -45,12 +45,11 @@ const REVERB_RETURN = 0.5;
 /**
  * A freshly created DynamicsCompressorNode starts fully attenuated and takes its whole release time (~150 ms
  * here) to open — the click that unlocks audio would be swallowed. Each compressor is therefore given a
- * near-zero release for its first 40 ms (it opens within a few milliseconds), and for the first 20 ms, while
- * it is still opening, the dynamics are bypassed altogether (the soft ceiling still protects the output).
- * From 30 ms on the chain behaves exactly as it will for the rest of the session.
+ * near-zero release for its first 40 ms: it is fully open within that time, and one-shots asked for earlier
+ * are simply scheduled at `Mixer.readyAt` (at most 45 ms late — and then exactly as loud as they will ever be).
  */
 const PRIME_RELEASE = 0.04;
-const PRIME_BYPASS = 0.02;
+const PRIME_SECONDS = 0.045;
 /** how far impacts push the score down (dB) — they read without having to be louder */
 const SIDECHAIN_DB = 3;
 /** drive into the drum bus's soft clipper (dB) */
@@ -108,6 +107,8 @@ export class Mixer {
   readonly scoreRoom: GainNode;
   /** UI halo: a soft stereo echo instead of a hall */
   readonly uiSend: GainNode;
+  /** context time from which the dynamics behave normally: nothing is scheduled to sound before it */
+  readonly readyAt: number;
   /** the nodes a signal must pass to be heard — exposed so tests can prove nothing bypasses them */
   readonly faders: { world: GainNode; ui: GainNode; voice: GainNode; music: GainNode; master: GainNode };
   /** gain reduction (dB, ≤ 0) of the score's levelling compressor right now */
@@ -127,7 +128,7 @@ export class Mixer {
   private readonly spaces: [ConvolverNode, ConvolverNode, ConvolverNode];
   private readonly spaceTail: [number, number, number];
   /** per world space: is its blend gain wired to the convolver, and when may an unused one be unplugged */
-  private readonly spaceOn = [true, true, true];
+  private readonly spaceOn = [true, true, false];
   private readonly spaceOffAt = [Infinity, Infinity, Infinity];
   private readonly musicComp: DynamicsCompressorNode;
   private readonly convolvers: ConvolverNode[] = [];
@@ -140,6 +141,7 @@ export class Mixer {
 
   constructor(readonly ac: BaseAudioContext, res: Shared, destination?: AudioNode) {
     const t0 = ac.currentTime;
+    this.readyAt = t0 + PRIME_SECONDS;
     const g = (v = 1): GainNode => {
       const n = ac.createGain();
       n.gain.value = v;
@@ -169,21 +171,6 @@ export class Mixer {
       setQ(f, 0.707);
       return f;
     };
-    /** `from` → dynamics (`chainIn` … `chainOut`) → `to`, bypassed for the first milliseconds of the graph's life. */
-    const primed = (from: AudioNode, chainIn: AudioNode, chainOut: AudioNode, to: AudioNode): void => {
-      const bypass = g(1);
-      const dyn = g(0);
-      from.connect(bypass);
-      bypass.connect(to);
-      from.connect(chainIn);
-      chainOut.connect(dyn);
-      dyn.connect(to);
-      bypass.gain.setValueAtTime(1, t0 + PRIME_BYPASS);
-      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_BYPASS + 0.01);
-      dyn.gain.setValueAtTime(0, t0 + PRIME_BYPASS);
-      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_BYPASS + 0.01);
-    };
-
     /**
      * Two cross-fed, low-passed delays panned apart: `from` → … → `to`. Short times make a small room's
      * early reflections; long ones a soft ping-pong halo.
@@ -235,10 +222,11 @@ export class Mixer {
     ceiling.oversample = '4x'; // overshoots are shaped without folding back into the audible band
     sum.connect(master);
     master.connect(guard);
+    guard.connect(glue);
     glue.connect(glueTrim);
     glueTrim.connect(limiter);
     limiter.connect(limiterTrim);
-    primed(guard, glue, limiterTrim, ceiling);
+    limiterTrim.connect(ceiling);
     ceiling.connect(destination ?? ac.destination);
 
     // --- world: sfx + ambience + room reverbs → slider → muffle → pause gate ---
@@ -266,14 +254,15 @@ export class Mixer {
     const small = conv(res.rooms.small);
     const hall = conv(res.rooms.hall);
     const vast = conv(res.rooms.vast);
-    this.blend = [g(0.3), g(0.9), g(0.3)];
+    this.blend = [g(0.29), g(0.96), g(0)];
     this.spaces = [small, hall, vast];
     this.spaceTail = [res.rooms.small.duration, res.rooms.hall.duration, res.rooms.vast.duration];
     this.roomTone = lowpass(6500);
     const roomReturn = g(REVERB_RETURN);
     for (let i = 0; i < 3; i++) {
       roomMix.connect(this.blend[i]);
-      this.blend[i].connect(this.spaces[i]);
+      // a space no place is using stays unplugged (setRoom plugs it in): a convolver costs even on silence
+      if (this.spaceOn[i]) this.blend[i].connect(this.spaces[i]);
       this.spaces[i].connect(this.roomTone);
     }
     this.near.connect(small);
@@ -321,8 +310,9 @@ export class Mixer {
       rotated.connect(ap);
       rotated = ap;
     }
+    rotated.connect(this.musicComp);
     this.musicComp.connect(musicTrim);
-    primed(rotated, this.musicComp, musicTrim, musicPre);
+    musicTrim.connect(musicPre);
     this.musicDirect.connect(musicPre);
     // drum bus: sticks and metal forward, the boom held back a little, then the shoulder
     const drumLow = ac.createBiquadFilter();

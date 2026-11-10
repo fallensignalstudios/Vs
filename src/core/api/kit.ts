@@ -345,12 +345,38 @@ export interface DeckExtraOpts {
   base?: number;
 }
 
-/** Hero props — OWNER: hero-props (src/world/props/*). Each returns a self-contained animated object. */
+/**
+ * Hero props — OWNER: hero-props (src/world/props/*). Each returns a self-contained animated object.
+ *
+ * QUICK GUIDE FOR ZONE AUTHORS (hero props)
+ *   const mark = game.props.crownmarkFive();
+ *   mark.object.position.copy(b.P(0, 0, 0.3));  mark.object.rotation.y = b.yaw(180);
+ *   b.add(mark.object);                                   // or root.add(...) — never merged by finalize()
+ *   for (const c of mark.colliders ?? []) …               // see `HeroProp.colliders`
+ *   b.onUpdate((dt, t) => mark.update(dt, t));            // REQUIRED: props only animate when updated
+ *   mark.params.glow = 1;                                 // scripts write targets; the prop eases by itself
+ *   z.onUnload / zone dispose → mark.dispose();
+ *
+ *  - ORIGIN at the floor centre, Y up, metres. FRONT = local −Z (north at yaw 0), the same rule as kit props: it
+ *    is the side characters stand on, approach from and read displays from. Sockets carry a yaw (engine
+ *    convention): a character placed at a `stand` / `seat` / `approach` socket with that socket's world yaw faces
+ *    the prop correctly — `socket.getWorldPosition(v)`, `socket.getWorldQuaternion(q)`.
+ *  - PARAMS are targets (0…1 unless noted). Values set before the first `update()` apply instantly; later changes
+ *    ease (springs with a slight overshoot; authored timelines such as `destroyed` play at a fixed pace, so
+ *    `params.destroyed = 1` IS the whole break-up animation). `snap()` jumps to the targets (checkpoint restore,
+ *    cinematic skip). Out-of-range / NaN values are clamped / ignored.
+ *  - DRAW CALLS: ≤ 6 per prop (nested rings 8). Props that own a point light: crownmarkFive, stabilizer,
+ *    containmentCage (one each, always present, intensity follows the params — no shader recompiles).
+ *  - EMISSIVE HIERARCHY: one brightest element per prop (≈ 6: the Crownmark core, an assent pad at acceptance, the
+ *    ring axis, a cage core at full charge), everything else 1.5–3.
+ *  - The props never play sound or spawn VFX: pair them with `game.vfx` / `game.audio` in the zone script
+ *    (`assentTarrik`, `assentSelene`, `meridianComplete`, `goldRecognition`, `cageDestroy`, `coherentPlane` …).
+ */
 export interface HeroProps {
   /** human-sized black-gold, white-core Crownmark Five seated in its mechanism (never loot) */
   crownmarkFive(): HeroProp<{ glow: number; integrated: number }>;
   /** suspended nested concentric ring assembly for Z10 (scenic scale; rings align on Meridian completion) */
-  nestedRings(opts?: { radius?: number }): HeroProp<{ align: number; spin: number; energy: number }>;
+  nestedRings(opts?: NestedRingsOpts): HeroProp<{ align: number; spin: number; energy: number }>;
   /** one of the two independent assent interfaces (pedestal) */
   assentInterface(side: 'tarrik' | 'selene'): HeroProp<{ active: number; assent: number }>;
   /** Z05 stabilizer control ring Selene holds the plane from */
@@ -366,7 +392,48 @@ export interface HeroProps {
   /** departure craft at human scale on the concourse */
   departureShip(kind: 'dominionShuttle' | 'reformationTransport'): HeroProp<{ engines: number; ramp: number }>;
   /** holographic displays: trajectory overlay, threat-track streams, diagnostic, forecast clock */
-  hologram(kind: 'trajectory' | 'threatStreams' | 'diagnostic' | 'forecast' | 'casualtyLog' | 'contaminationRecord' | 'sensorReconstruction'): HeroProp<{ progress: number; visible: number }>;
+  hologram(kind: HologramKind): HologramProp;
+}
+
+/** ADDED (hero-props): the display kinds of `HeroProps.hologram`. */
+export type HologramKind = 'trajectory' | 'threatStreams' | 'diagnostic' | 'forecast' | 'casualtyLog' | 'contaminationRecord' | 'sensorReconstruction';
+
+/**
+ * ADDED (hero-props): options of `HeroProps.nestedRings`. Six rings of alternating section fill a sphere of
+ * `radius` around a centre `height` above the prop origin. Rings whose radius is inside `clearRadius` never dip
+ * below `clearHeight`, so the assembly can hang directly over a walkable platform.
+ */
+export interface NestedRingsOpts {
+  /** outer ring radius in metres (default 60) */
+  radius?: number;
+  /** height of the common centre above the origin (default max(14, 0.3 × radius)) */
+  height?: number;
+  /** radius of the walkable area below that the rings must stay clear of (default 30) */
+  clearRadius?: number;
+  /** lowest height a ring may reach above the walkable area (default 6) */
+  clearHeight?: number;
+}
+
+/**
+ * ADDED (hero-props): a hologram display. `visible` 0…1 fades it (the object hides itself at 0); `progress`
+ * 0…1 advances its content:
+ *  - `trajectory`            the carrier marker travels its arc over the schematic atrium toward the impact
+ *                            marker; from 0.8 the predicted path lifts clear and the impact marker opens into a
+ *                            "clear" ring (hold ≤ 0.8 until the rescue succeeds)
+ *  - `threatStreams`         two separate glyph streams (amber blocks above, blue-white bars below) gain matching
+ *                            target glyphs and bridging ticks; they never merge
+ *  - `diagnostic`            five reference nodes: four lit and off balance, the fifth dark → 5/5 balanced
+ *  - `forecast`              segmented clock, `setText('02:11:43')`; progress drains the outer ring
+ *  - `casualtyLog` / `contaminationRecord`   rows / spread history reveal top-down
+ *  - `sensorReconstruction`  ghost figures walk their recorded paths through two scan cones
+ * Flat displays (forecast, casualtyLog, contaminationRecord, threatStreams) read correctly from the FRONT (−Z).
+ */
+export interface HologramProp extends HeroProp<{ progress: number; visible: number }> {
+  /**
+   * Replace the display's text line: the clock digits of `forecast` (`'02:11:43'`), the header of the other
+   * kinds. Characters outside 0-9 A-Z : / . - and space are drawn as blanks. Safe to call every frame.
+   */
+  setText(text: string): void;
 }
 
 export interface HeroProp<P extends Record<string, number>> {
@@ -376,7 +443,13 @@ export interface HeroProp<P extends Record<string, number>> {
   /** named attachment points (world-updated) */
   socket(name: string): THREE.Object3D | null;
   update(dt: number, time: number): void;
-  /** footprint colliders the zone should register (world-relative to object origin) */
+  /**
+   * footprint colliders the zone should register (world-relative to object origin). ADDED (hero-props): offsets
+   * and yaw are in the prop's LOCAL frame — for a prop at `pos` with yaw `r`, register each as
+   * `b.collider({ shape, x: pos.x + ox·cos r + oz·sin r, y: pos.y + oy, z: pos.z − ox·sin r + oz·cos r, yaw: r + (yaw ?? 0) })`.
+   */
   colliders?: Array<{ shape: import('./physics').ColliderShape; offset: Vec3Like; yaw?: number }>;
   dispose(): void;
+  /** ADDED (hero-props): apply the current `params` instantly, without easing (checkpoint restore, skips). */
+  snap(): void;
 }

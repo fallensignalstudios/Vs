@@ -26,7 +26,7 @@ import { LinkboundBrain } from './roles/linkbound';
 import { WallrunnerBrain } from './roles/wallrunner';
 import { WeaverBrain } from './roles/weaver';
 import { AI } from './tune';
-import { fin, guarded, live, nowOf, playerActor, vec, warnOnce } from './util';
+import { fin, guarded, live, playerActor, vec, warnOnce } from './util';
 
 export { AI } from './tune';
 export type { EliteBrain } from './roles/elite';
@@ -293,7 +293,6 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
     this.spawnSeq = 0;
     resetStats(this.stats);
     if (live(game.player)) game.player.threat = 0;
-    void nowOf;
   }
 }
 

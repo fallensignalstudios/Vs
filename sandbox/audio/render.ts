@@ -53,11 +53,16 @@ export interface Rendered {
  */
 export async function prepare(): Promise<AudioEngine> {
   const e = new AudioEngine(new OfflineAudioContext(2, 128, SR), { seed: 7283 });
+  const started = performance.now();
   await e.prerender();
+  prepareMs = Math.round(performance.now() - started);
   e.dispose();
   prepared = e;
   return e;
 }
+
+/** wall-clock milliseconds the pre-render took in this page */
+export let prepareMs = 0;
 
 /** the engine `prepare()` pre-rendered on: its sample bank is what every later render plays from */
 export let prepared: AudioEngine | null = null;

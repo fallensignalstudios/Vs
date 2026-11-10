@@ -16,6 +16,12 @@
  *                           More than +2 dB = tail and head are the same sustained sound and add in phase
  *                           (wants an equal-gain fade); less than −2 dB = a hole.
  *   CLICK                   the largest sample-to-sample step in the seam is not out of scale with the rest
+ * States: every state that has a recording is played for 8 s through the whole engine (score director,
+ *   generative layers underneath, mix chain), the first half at intensity 0, the second at intensity 1.
+ *   LEVEL = the output at intensity 1 is not the file's own level × the plan's gain (±1.5 dB; the reference is
+ *   computed from the very samples that were played, so content does not matter). CLIP as above.
+ * Transitions: title → context (recording out, generative in) → combatTarrik while its file is still
+ *   loading (generative first, the recording arriving 2 s later). HOLE = half a second below −50 dBFS.
  * Voice: the test clip through each channel's chain — level, peak, where its energy sits.
  */
 import { AudioEngine } from '@/audio/engine';
@@ -83,9 +89,39 @@ export interface VoiceRow {
   flags: string[];
 }
 
+export interface StateRow {
+  state: MusicState;
+  track: TrackName;
+  /** what the engine reported as carrying the state */
+  carriedBy: string | null;
+  /** generative layers left playing underneath */
+  generative: string[];
+  /** output RMS (dBFS) over the half at intensity 0 and the half at intensity 1 */
+  lowDb: number;
+  highDb: number;
+  /** the plan's level for intensity 1 (dBFS RMS over the whole looped part) */
+  targetDb: number;
+  /** output at intensity 1 minus (the played samples' own RMS × the plan's gain) */
+  levelErrorDb: number;
+  peakDb: number;
+  flags: string[];
+}
+
+export interface TransitionRow {
+  script: string;
+  /** output RMS per half second (dBFS) */
+  timeline: number[];
+  /** what carried the music at each second */
+  carriedBy: Array<string | null>;
+  peakDb: number;
+  flags: string[];
+}
+
 export interface AssetReport {
   manifest: 'ready' | 'missing';
   tracks: TrackRow[];
+  states: StateRow[];
+  transitions: TransitionRow[];
   voice: { id: string; found: boolean; rows: VoiceRow[] };
   mapping: Record<string, string>;
   flagged: string[];
@@ -175,6 +211,121 @@ export interface ReportOpts {
   keep?(key: string, buf: AudioBuffer, seamAt?: number, fade?: number): void;
 }
 
+/**
+ * Render `seconds` of the whole engine, driven like the game drives it: `tick(engine, t)` then
+ * `engine.update()` twenty times a second (the context is suspended while a tick awaits).
+ */
+async function renderEngine(lib: AssetLibrary, seconds: number, tick: (engine: AudioEngine, t: number, frame: number) => void | Promise<void>): Promise<AudioBuffer> {
+  const ctx = new OfflineAudioContext(2, Math.ceil(seconds * SR), SR);
+  const engine = new AudioEngine(ctx, { seed: 7283, samples: false, assets: lib });
+  const dt = 1 / 20;
+  let last = 0;
+  for (let i = 0; i * dt < seconds - 0.001; i++) {
+    const t = i * dt;
+    const step = async (): Promise<void> => {
+      await tick(engine, t, i);
+      engine.update(t - last);
+      last = t;
+    };
+    if (i === 0) await step();
+    else void ctx.suspend(t).then(step).then(() => ctx.resume());
+  }
+  try {
+    return await ctx.startRendering();
+  } finally {
+    engine.dispose();
+  }
+}
+
+/** Play each recorded state through the engine and compare its output level with the plan. */
+async function stateRows(lib: AssetLibrary, o: ReportOpts): Promise<StateRow[]> {
+  const rows: StateRow[] = [];
+  const HALF = 4;
+  for (const [state, plan] of Object.entries(SCORE_PLAN) as Array<[MusicState, ScorePlan]>) {
+    const track = plan.track;
+    if (!track) continue;
+    o.onProgress?.(`state ${state}…`);
+    lib.pin([track]);
+    const buffer = await lib.requestTrack(track);
+    const meta = lib.trackMeta(track);
+    if (!buffer || !meta) continue;
+    let carriedBy: string | null = null;
+    let generative: string[] = [];
+    const out = await renderEngine(lib, HALF * 2, (engine, t, frame) => {
+      if (frame === 0) {
+        engine.setIntensity(0, true);
+        engine.setMusic(state, 0.05);
+      }
+      if (Math.abs(t - HALF) < 1e-6) engine.setIntensity(1, true);
+      if (Math.abs(t - 6) < 1e-6) {
+        carriedBy = engine.score.track;
+        generative = (engine.music.activeDeck?.def.layers ?? []).map((l) => ('voice' in l ? `${l.kind}:${l.voice}` : l.kind));
+      }
+    });
+    const loop = loopSpec(track, meta, plan.region);
+    // the second half: 1 s for the level and tone to finish moving, then 3 s to measure
+    const from = HALF + 1;
+    const played = Math.sqrt(weightedPower(buffer, loop.intro + from * loop.rate, (HALF * 2 - from) * loop.rate, () => 1)) * planGain(plan, loop, 1);
+    const highDb = db(mean(windows(out, from, HALF * 2)));
+    const m = analyze(out, 0.3);
+    const flags: string[] = [];
+    // (states that keep generative layers, or close the low-pass, are not expected to match the file alone)
+    const plain = !plan.generativeLayers.length && plan.tone[1] >= 16000;
+    const levelErrorDb = highDb - db(played);
+    if (carriedBy !== track) flags.push('NOT-RECORDED');
+    if (plain && Math.abs(levelErrorDb) > 1.5) flags.push('LEVEL');
+    if (m.peakDb >= -0.3) flags.push('CLIP');
+    if (m.silent) flags.push('SILENT');
+    rows.push({ state, track, carriedBy, generative, lowDb: r1(db(mean(windows(out, 1, HALF)))), highDb: r1(highDb), targetDb: plan.gain[1], levelErrorDb: r1(levelErrorDb), peakDb: m.peakDb, flags });
+    o.keep?.(`state:${state}`, out);
+  }
+  return rows;
+}
+
+/** A recording leaving for the generative score, and one arriving late over it. */
+async function transitionRows(o: ReportOpts): Promise<TransitionRow[]> {
+  o.onProgress?.('transitions…');
+  // its own library, whose network holds dominion_combat back until the script lets it through
+  const decoder = new OfflineAudioContext(2, 1, SR);
+  let release = (): void => {};
+  const gate = new Promise<void>((r) => { release = r; });
+  const lib = new AssetLibrary({
+    baseUrl: import.meta.env.BASE_URL, decoder: () => decoder,
+    fetcher: async (url) => {
+      if (url.includes('dominion_combat')) await gate;
+      return fetch(url);
+    },
+  });
+  await lib.loadMusic();
+  await lib.requestTrack('main_theme');
+  const carriedBy: Array<string | null> = [];
+  const SECONDS_T = 16;
+  const out = await renderEngine(lib, SECONDS_T, async (engine, t, frame) => {
+    const at = (x: number): boolean => Math.abs(t - x) < 1e-6;
+    if (frame === 0) {
+      engine.setIntensity(0.6, true);
+      engine.setMusic('title', 0.05);
+    }
+    if (at(4)) engine.setMusic('context', 2);
+    if (at(8)) engine.setMusic('combatTarrik', 1);
+    // the file arrives two seconds into the state
+    if (at(10)) {
+      release();
+      await lib.requestTrack('dominion_combat');
+    }
+    if (frame % 20 === 0) carriedBy.push(engine.score.track);
+  });
+  const timeline: number[] = [];
+  for (let t = 0; t + 0.5 <= SECONDS_T; t += 0.5) timeline.push(r1(db(mean(windows(out, t, t + 0.5)))));
+  const m = analyze(out, 0.3);
+  const flags: string[] = [];
+  if (timeline.slice(1).some((v) => v < -50)) flags.push('HOLE');
+  if (m.peakDb >= -0.3) flags.push('CLIP');
+  if (carriedBy[2] !== 'main_theme' || carriedBy[6] !== null || carriedBy[9] !== null || carriedBy[11] !== 'dominion_combat') flags.push('ORDER');
+  o.keep?.('transition:title→context→combatTarrik (late)', out);
+  return [{ script: 'title 0 s → context 4 s → combatTarrik 8 s at intensity 0.6 (its file arrives at 10 s: generative until then)', timeline, carriedBy, peakDb: m.peakDb, flags }];
+}
+
 export async function buildAssetReport(o: ReportOpts = {}): Promise<AssetReport> {
   const decoder = new OfflineAudioContext(2, 1, SR);
   const lib = new AssetLibrary({ baseUrl: import.meta.env.BASE_URL, decoder: () => decoder });
@@ -242,6 +393,9 @@ export async function buildAssetReport(o: ReportOpts = {}): Promise<AssetReport>
     });
   }
 
+  const states = manifest ? await stateRows(lib, o) : [];
+  const transitions = manifest ? await transitionRows(o) : [];
+
   // --- voice-over: the test clip through each channel ---
   const id = voLineId(TEST_LINE[0], TEST_LINE[1]);
   await lib.loadVoices();
@@ -285,9 +439,11 @@ export async function buildAssetReport(o: ReportOpts = {}): Promise<AssetReport>
   }
   const flagged = [
     ...tracks.filter((t) => t.flags.length).map((t) => `${t.track}:${t.region} ${t.flags.join(' ')}`),
+    ...states.filter((t) => t.flags.length).map((t) => `state:${t.state} ${t.flags.join(' ')}`),
+    ...transitions.filter((t) => t.flags.length).map((t) => `transition ${t.flags.join(' ')}`),
     ...rows.filter((v) => v.flags.length).map((v) => `voice:${v.channel} ${v.flags.join(' ')}`),
     ...(manifest ? [] : ['music manifest missing']),
     ...(clip ? [] : ['voice test clip missing']),
   ];
-  return { manifest: manifest ? 'ready' : 'missing', tracks, voice: { id, found: !!clip, rows }, mapping, flagged };
+  return { manifest: manifest ? 'ready' : 'missing', tracks, states, transitions, voice: { id, found: !!clip, rows }, mapping, flagged };
 }

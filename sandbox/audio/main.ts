@@ -20,7 +20,7 @@ import { miniGame } from '../harness';
 import { analyze, drawSpectrogram, type Metrics } from './analyze';
 import { calibrate } from './calibrate';
 import { LOOP_IDS, renderAmbience, renderLoop, renderMusic, renderScene, renderSfx, renderStinger } from './lab';
-import { cut, prepare, toWav } from './render';
+import { cut, prepare, prepareMs, toWav } from './render';
 import { buildReport, type Row } from './report';
 
 const W = window as unknown as Record<string, unknown>;
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
   if (q.has('calibrate') || q.has('detail') || q.has('report')) {
     stat.textContent = 'pre-rendering samples and ensemble loops…';
     const e = await prepare();
-    W.__prerendered = { samples: e.samples.bakedCount, waves: e.res.waves.size };
+    W.__prerendered = { samples: e.samples.bakedCount, megabytes: Math.round((e.samples.bakedBytes + e.res.waves.bytes) / 1e5) / 10, waves: e.res.waves.size, milliseconds: prepareMs };
   }
   if (q.has('calibrate')) {
     W.__calibration = await calibrate({

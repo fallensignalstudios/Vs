@@ -87,6 +87,12 @@ export interface WaveSpawn {
   role: EnemyRole;
   /** marker name or position */
   at: string | Vec3Like;
+  /**
+   * Spawn options. Inside an encounter `from` and `post` may also be MARKER NAMES (resolved like `at`).
+   * `via`: 'aperture' — starts at `from` and slides / walks in to `at`; 'ceiling' — drops in at `at`;
+   * 'breach' — `eclipseSpawn` burst at `at`, the body appears half a second later; 'march' — walks in from
+   * `from` with its guard up (Enforcers). The brain does not attack until the entrance has finished.
+   */
   opts?: Partial<SpawnOpts>;
 }
 
@@ -136,25 +142,26 @@ export interface Encounter {
   forceClear(): void;
   stop(): void;
 
-  // ---- ADDED by ai ----
+  // ---- ADDED by ai. Optional so hand-built encounters (sandbox stand-ins, tests) stay valid; every Encounter
+  // ---- returned by `ai.createEncounter` has all of them.
   /** ADDED. spawns waiting for a free slot under `maxActive` (released waves only) */
-  readonly queued: number;
+  readonly queued?: number;
   /** ADDED. the hard cap this encounter was created with */
-  readonly maxActive: number;
+  readonly maxActive?: number;
   /** ADDED. highest number of simultaneously alive members seen so far */
-  readonly peakActive: number;
+  readonly peakActive?: number;
   /** ADDED. melee tokens currently held */
-  readonly meleeSlotsHeld: number;
+  readonly meleeSlotsHeld?: number;
   /**
    * ADDED. Ask for a melee attack token (brains call this before a melee telegraph). true = granted (or already
    * held). At most `meleeSlots` are out at once — 2 by default, `max(meleeSlots, 3)` once `flags.linkLearned`.
    * Tokens of dead / removed holders are reclaimed automatically.
    */
-  acquireMeleeSlot(actor: Actor): boolean;
+  acquireMeleeSlot?(actor: Actor): boolean;
   /** ADDED. Give the token back (after the attack's recovery). No-op when none is held. */
-  releaseMeleeSlot(actor: Actor): void;
+  releaseMeleeSlot?(actor: Actor): void;
   /** ADDED. Is `actor` one of this encounter's members (spawned or adopted)? */
-  has(actor: Actor): boolean;
+  has?(actor: Actor): boolean;
 }
 
 export interface LinkHandle {
@@ -223,7 +230,10 @@ export interface DeviceSystem {
   scanHead(opts: { id: string; pos: Vec3Like; yaw: number; arcDeg: number; range: number; period: number; onDetect?: () => void }): DeviceHandle;
   /** moving scan plane (Z03). `source` is the physical emitter position the trace points back to. */
   scanPlane(opts: { id: string; from: Vec3Like; to: Vec3Like; width: number; height?: number; period: number; phase?: number; source: Vec3Like; onDetect?: () => void }): ScanPlaneHandle;
-  /** E4: frost anchor position marker Selene (AI) moves to in phase B */
+  /**
+   * E4: frost anchor position marker Selene (AI) moves to in phase B. It is stood ON
+   * (`companion.moveTo(handle.actor.pos, { stopDistance: 0.6 })`); its ring lights by itself while an ally is on it.
+   */
   frostAnchor(opts: { id: string; pos: Vec3Like }): DeviceHandle;
   byId(id: string): DeviceHandle | null;
 
@@ -254,40 +264,64 @@ export interface Companion {
   readonly actor: Actor;
   readonly who: HumanoidArchetype;
   mode: CompanionMode;
-  /** walk/run to a point through nav; resolves `arrived` */
+  /**
+   * walk/run to a point through nav; resolves `arrived`. After arriving the body STAYS there (facing `yaw` when
+   * given) until `follow()`, a `mode` assignment (also to the current mode) or another order releases it. In
+   * combat mode it still fights from where it stands. A held pose (`play('sit')` …) is released first.
+   */
   moveTo(pos: Vec3Like, opts?: { run?: boolean; yaw?: number; stopDistance?: number }): void;
   readonly arrived: boolean;
+  /**
+   * Follow `leader` at an offset (metres to its right / behind it). Following the protagonist's actor means
+   * "whoever the protagonist is" — it survives a handoff. `null` = stop following and stay put. Companions in
+   * 'follow' / 'combat' mode follow the protagonist by default, each in its own slot.
+   */
   follow(leader: Actor | null, offset?: { right: number; back: number }): void;
   holdAt(pos: Vec3Like, yaw?: number): void;
   face(target: Vec3Like | null): void;
-  /** play an animation action on the figure (narrative posing) */
+  /**
+   * play an animation action on the figure (narrative posing); returns its duration in seconds. Held whole-body
+   * poses (sit, kneel, kneelTend, lieInjured, trapped, cower, distress, grounding, liftPlate, holdConsole,
+   * holdPlane, …) also pin the body in place (`actor.fixed`) until `stopAction()` / `moveTo()` / `follow()`.
+   */
   play(action: string, opts?: { loop?: boolean }): number;
   stopAction(): void;
   teleport(pos: Vec3Like, yaw?: number): void;
   /** priority target hint for combat mode */
   focus(target: Actor | null): void;
-  /** scripted assist: perform the companion's signature arrest on a target (Selene: frost tether; Lyessa: rifle shot) */
+  /**
+   * scripted assist, performed from where the companion stands (≈ 0.4 s wind-up, then the effect):
+   * 'frostArrest' — frost tether, then the target is frozen 3 s (on the elite: `EliteController.arrest(3)`, the
+   * joint is held); 'rifleShot' — one aimed round, 30 damage, at an open weak point if there is one;
+   * 'suppress' — six rounds over 2.4 s, pressure only; 'cinderStrike' — closes on the target (≤ 3 s) and lands a
+   * heavy Cinder blow, 45 damage. Cancelled if the companion is staggered, frozen or downed (`assisting` false).
+   */
   assist(target: Actor, kind: 'frostArrest' | 'rifleShot' | 'cinderStrike' | 'suppress'): void;
   remove(): void;
 
-  // ---- ADDED by ai ----
+  // ---- ADDED by ai. Optional so hand-built companions (sandbox stand-ins) stay valid; every handle returned by
+  // ---- `ai.spawnCompanion` / `ai.spawnNpc` has all of them.
   /** ADDED. true while downed (hp reached 0: kneels 4 s, cannot be hit, then recovers half its health) */
-  readonly downed: boolean;
+  readonly downed?: boolean;
   /** ADDED. true while a scripted assist() is being performed (wind-up → effect); false once it has landed */
-  readonly assisting: boolean;
-  /** ADDED. true while the companion is being staggered or frozen (a Resonance window should cancel) */
-  readonly disrupted: boolean;
+  readonly assisting?: boolean;
+  /** ADDED. true while the companion is staggered, frozen or downed (a Resonance window should cancel) */
+  readonly disrupted?: boolean;
 }
 
 /**
  * ADDED. Scripting surface of the elite's brain (`ai.elite(actor)`), for the E4 zone script.
  *
- * Phase A: at least one link feeds the elite → it regenerates (`TUNING.enemies.elite.regen` hp/s), sweeps, slams,
+ * Phase A: at least one link feeds the elite → it regenerates (`TUNING.enemies.elite.regen` hp/s) behind link
+ * armour (damage taken × 0.4: the answer is the links, not its health bar), sweeps, slams,
  * charges along clear lines and announces a corruption PRESSURE PULSE: for a few seconds `game.player.threat`
  * rises while the player stands in the field (≈ 9 m) AND a link still feeds the elite; leaving the field or
  * cutting the links relieves it. At full threat the player takes one bounded violet hit and the meter drops.
- * Phase B: isolated. It regenerates slowly on its own; after each heavy attack (slam, charge) it EXPOSES THE
- * JOINT (weak point 'joint', ×3) for a window. `fracture()` ends all regeneration.
+ * Phase B: isolated. It regenerates slowly on its own and its plates still turn part of every blow (damage taken
+ * × 0.6); after each heavy attack (slam, charge) it EXPOSES THE JOINT (weak point 'joint', ×3) for a window.
+ * `fracture()` ends all regeneration and the plate resistance, and leaves the core open (×2).
+ * A Weaver that is still alive re-links the elite six seconds after a cut: phase B only lasts once the Weaver
+ * (or its anchor) is gone — hand off / start the Resonance setup on that condition, not on the first cut.
  */
 export interface EliteController {
   readonly actor: Actor;

@@ -69,6 +69,13 @@ export class SampleBank {
     return this.baked.size;
   }
 
+  /** memory held by the pre-rendered buffers (bytes of sample data) */
+  get bakedBytes(): number {
+    let n = 0;
+    for (const list of this.baked.values()) for (const s of list) n += s.buffer.length * s.buffer.numberOfChannels * 4;
+    return n;
+  }
+
   get registeredCount(): number {
     return this.registered.size;
   }

@@ -10,8 +10,12 @@ import { render, renderFull, type RenderOpts, type Rendered } from './render';
 
 export const LOOP_IDS = Object.keys(SFX).filter((id) => SFX[id].loop);
 export const ADAPTIVE = (Object.keys(MUSIC) as Exclude<MusicState, 'silence'>[]).filter((s) => MUSIC[s].fixedIntensity === undefined);
-/** states whose job is rhythm: they must have punch and top end */
-export const COMBAT: readonly string[] = ['combatTarrik', 'combatSelene', 'combatEclipse', 'elite', 'duel', 'carrier'];
+/**
+ * States whose job is rhythm, and how far their hits must stand out of the bed at full intensity (dB, p95 − p50
+ * of the 20 ms envelope). The fights are percussion-led: 6 dB. The carrier rescue is an ostinato that must
+ * never let up — a clock and a bass line under the drums — so its bed is fuller by design: 4 dB.
+ */
+export const COMBAT: Readonly<Record<string, number>> = { combatTarrik: 6, combatSelene: 6, combatEclipse: 6, elite: 6, duel: 6, carrier: 4 };
 
 const lengthCache = new Map<string, number>();
 /** scheduled (dry) length of a one-shot, found by building it on a throwaway context */

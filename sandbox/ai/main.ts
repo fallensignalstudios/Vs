@@ -2,12 +2,12 @@
  * AI sandbox — every encounter of the slice in a greybox, with the real player, physics / nav, camera rig, VFX,
  * character visuals and HUD. The tick mirrors Game.tick (input → scripts → player → ai → actors → vfx → camera).
  *
- *   /sandbox/ai/?scene=e1|e2|e3|e4|companions      play it (WASD, mouse, LMB / F / Q / RMB / Space / 1 / 2 / Tab / V)
+ *   /sandbox/ai/?scene=e1|e2|e3|e4|companions|stage      play it (WASD, mouse, LMB / F / Q / RMB / Space / 1 / 2 / Tab / V)
  *   &bot=1        the scripted virtual-input bot plays          &god=1   the protagonist takes no damage
  *   &manual=1     no RAF loop: drive with __step() / the globals below (tools/shot.cjs)      &nohud=1
  *
- * Globals:  __ai.run(seconds)  .cam([pos],[look],fov?) / .cam(null)  .bot(on)  .god(on)  .place(x, z, yawDeg)
- *           .state()  .refs  .game  .until(fnSource, maxSeconds)  .watch(role | actor)  .press(a) .hold(a, on)
+ * Globals:  __ai.run(seconds)  .cam([pos],[look],fov?) / .cam(null)  .setBot(on)  .god(on)  .place(x, z, yawDeg)
+ *           .state()  .refs  .game  .until(expr, maxSeconds)  .watch(role | actor)  .watchFrom(actor, x, z)  .press(a) .hold(a, on)
  *           __aiReport(seconds = 60)   run the scene headless under the bot and summarise what happened
  */
 import '@fontsource/cinzel/400.css';
@@ -116,9 +116,9 @@ ui.setHudVisible(!params.has('nohud'));
 
 const bot = new Bot(game);
 const log: string[] = [];
-const sceneId = (['e1', 'e2', 'e3', 'e4', 'companions'].includes(params.get('scene') ?? '') ? params.get('scene') : 'e1') as SceneId;
+const sceneId = (['e1', 'e2', 'e3', 'e4', 'companions', 'stage'].includes(params.get('scene') ?? '') ? params.get('scene') : 'e1') as SceneId;
 const current = buildScene(sceneId, { game, gb, scene, bot, log: (msg) => log.push(`${time.now.toFixed(1)}s ${msg}`) });
-player.setProtagonist(current.who, current.start);
+player.setProtagonist(params.get('who') === 'selene' ? 'selene' : params.get('who') === 'tarrik' ? 'tarrik' : current.who, current.start);
 rig.snapBehind(current.start.yaw);
 player.godMode = params.has('god');
 bot.enabled = params.has('bot');
@@ -217,7 +217,18 @@ const api = {
     });
     return true;
   },
-  bot(on: boolean): void {
+  /** frame an actor from the side of a world point (e.g. the room centre), so walls never sit between lens and subject */
+  watchFrom(who: string | Actor, fromX: number, fromZ: number, dist = 8, height = 3, fov = 45): boolean {
+    const a = typeof who === 'string' ? actors.all.find((x) => x.alive && (String(x.archetype) === who || x.name === who)) : who;
+    if (!a) return false;
+    a.aimPoint(_v);
+    const dx = fromX - a.pos.x;
+    const dz = fromZ - a.pos.z;
+    const l = Math.hypot(dx, dz) || 1;
+    rig.setFree({ pos: { x: a.pos.x + (dx / l) * dist, y: a.pos.y + height, z: a.pos.z + (dz / l) * dist }, look: { x: _v.x, y: _v.y, z: _v.z }, fov });
+    return true;
+  },
+  setBot(on: boolean): void {
     bot.enabled = on;
     if (!on) input.virtual.clear();
   },

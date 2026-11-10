@@ -1,10 +1,9 @@
 /**
- * Recorded score + voice-over, tested in node: the line-id function, the state → track table, the loop
- * arithmetic, the library's failure handling, and the players against the strict fake context (which
- * records every source and rejects bad automation). What it sounds like is the sandbox's job.
+ * Recorded score + voice-over in node: the library's failure handling, and the players and the score
+ * director against the strict fake context (which records every source and rejects bad automation).
+ * The line id and the state table have their own files; what it all sounds like is the sandbox's job.
  */
 import { describe, expect, it } from 'vitest';
-import API from '../../core/api/audio.ts?raw';
 import MANIFEST_JSON from '../../../public/audio/music/manifest.json?raw';
 import type { Game, GameEvents, MusicState } from '@/core/api';
 import { Emitter } from '@/core/events';
@@ -15,190 +14,11 @@ import { AudioEngine } from '../engine';
 import { MUSIC } from '../music/defs';
 import { FakeBuffer, FakeContext } from '../testing/fake-context';
 import { AssetLibrary, voiceGain, type FetchResult } from './library';
-import {
-  LOOP_XFADE, SCORE_PLAN, TRACKS, TRACK_NAMES, layerMatches, loopPeriod, loopSpec, overlayDef, planGain, planTone, scorePlan,
-  type TrackMeta, type TrackName,
-} from './mapping';
+import { TRACKS, type TrackMeta, type TrackName } from './mapping';
 import { TrackPlayer } from './player';
-import { canonicalLine, fnv1a32hex, speakerSlug, voLineId } from './voiceId';
+import { voLineId } from './voiceId';
 
 const MANIFEST = JSON.parse(MANIFEST_JSON) as Record<TrackName, TrackMeta>;
-
-const STATES = ((): MusicState[] => {
-  const m = /export type MusicState =([\s\S]*?);\n/.exec(API);
-  if (!m) throw new Error('MusicState not found');
-  return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1] as MusicState);
-})();
-
-describe('voLineId', () => {
-  it('hashes with standard FNV-1a 32 over UTF-8', () => {
-    expect(fnv1a32hex('')).toBe('811c9dc5');
-    expect(fnv1a32hex('a')).toBe('e40c292c');
-    expect(fnv1a32hex('foobar')).toBe('bf9cf968');
-    // multi-byte: é is C3 A9, 😀 is F0 9F 98 80 — the same bytes TextEncoder produces
-    const viaBytes = (s: string): string => {
-      let h = 0x811c9dc5;
-      for (const b of new TextEncoder().encode(s)) h = Math.imul(h ^ b, 0x01000193);
-      return (h >>> 0).toString(16).padStart(8, '0');
-    };
-    for (const s of ['é', 'naïve façade', '😀 ok', '\ud800 lone']) expect(fnv1a32hex(s)).toBe(viaBytes(s));
-  });
-
-  it('has the documented shape: speaker slug, underscore, 8 hex digits', () => {
-    expect(voLineId('Tarrik', 'Hold the line.')).toMatch(/^tarrik_[0-9a-f]{8}$/);
-    expect(voLineId('Dominion Command', 'Report.')).toMatch(/^dominion_command_[0-9a-f]{8}$/);
-    expect(voLineId('_test_', 'x')).toMatch(/^_test__[0-9a-f]{8}$/);
-    expect(speakerSlug('Élise  d’Arc')).toBe('elise_d_arc');
-    expect(speakerSlug('')).toBe('line');
-    expect(voLineId('', '')).toBe(`line_${fnv1a32hex('')}`);
-  });
-
-  it('is pinned: these ids must never change (recordings on disk are named by them)', () => {
-    expect(canonicalLine('Tarrik', 'Hold the line.')).toBe('tarrikhold the line');
-    expect(voLineId('Tarrik', 'Hold the line.')).toBe(`tarrik_${fnv1a32hex('tarrikhold the line')}`);
-    expect(voLineId('Tarrik', 'Hold the line.')).toBe('tarrik_40653c06');
-    expect(voLineId('Selene', 'Three lanes. They are not guessing.')).toBe('selene_45b7ddea');
-    expect(voLineId('Reformation Command', 'Relay A is down — 7,184 aboard.')).toBe('reformation_command_bef6c9dd');
-  });
-
-  it('ignores case, spacing and punctuation — and nothing else', () => {
-    const id = voLineId('Selene', 'Hold the plane.');
-    expect(voLineId('SELENE', '  hold   the\tplane  ')).toBe(id);
-    expect(voLineId('Selene', 'Hold the plane!')).toBe(id);
-    expect(voLineId('Selene', 'Hold — the “plane”…')).toBe(id);
-    expect(voLineId('Selene', 'Hold\nthe plane')).toBe(id);
-    expect(voLineId('Selene', 'Hold the planes.')).not.toBe(id);
-    expect(voLineId('Tarrik', 'Hold the plane.')).not.toBe(id);
-    // composed and decomposed accents are the same line; digits count
-    expect(voLineId('Lyric', 'naïve')).toBe(voLineId('Lyric', 'naïve'));
-    expect(voLineId('Terminal', '4 of 5')).not.toBe(voLineId('Terminal', '5 of 5'));
-  });
-
-  it('never throws on junk', () => {
-    const junk = [undefined, null, 42, {}, []] as unknown as string[];
-    for (const a of junk) for (const b of junk) expect(voLineId(a, b)).toMatch(/^[a-z0-9_]+_[0-9a-f]{8}$/);
-  });
-});
-
-describe('state → track mapping', () => {
-  it('scores every MusicState, and only existing tracks', () => {
-    expect(Object.keys(SCORE_PLAN).sort()).toEqual([...STATES].sort());
-    for (const s of STATES) {
-      const p = scorePlan(s);
-      if (p.track) expect(TRACK_NAMES).toContain(p.track);
-      if (p.warm) expect(TRACK_NAMES).toContain(p.warm);
-      expect(p.tone[0]).toBeGreaterThan(100);
-      expect(p.tone[1]).toBeGreaterThanOrEqual(p.tone[0]);
-      expect(p.gain[1]).toBeGreaterThanOrEqual(p.gain[0]);
-      if (p.track) expect(p.gain[1]).toBeLessThanOrEqual(-16);
-    }
-    expect(scorePlan('nonsense' as MusicState)).toBe(SCORE_PLAN.silence);
-  });
-
-  it('is the table the task specifies', () => {
-    const by = (t: TrackName | null): string[] => STATES.filter((s) => SCORE_PLAN[s].track === t).sort();
-    expect(by('main_theme')).toEqual(['credits', 'departure', 'title']);
-    expect(by('dominion_combat')).toEqual(['combatTarrik']);
-    expect(by('frozen_stealth')).toEqual(['approachSelene', 'stealth']);
-    expect(by('relay_combat')).toEqual(['combatSelene']);
-    expect(by('atrium_carrier')).toEqual(['atrium', 'carrier', 'duel']);
-    expect(by('eclipse_combat')).toEqual(['combatEclipse', 'elite', 'resonance']);
-    expect(by('core_witness')).toEqual(['consequence', 'core', 'observation', 'recognition', 'witness']);
-    expect(by(null)).toEqual(['approachTarrik', 'breach', 'context', 'decision', 'quarantine', 'silence']);
-  });
-
-  it('gives atrium_carrier its dynamics through the states: duel quieter, carrier louder', () => {
-    expect(SCORE_PLAN.duel.gain[1]).toBeLessThan(SCORE_PLAN.atrium.gain[1]);
-    expect(SCORE_PLAN.carrier.gain[0]).toBeGreaterThan(SCORE_PLAN.atrium.gain[1] + 2);
-    expect(SCORE_PLAN.atrium.region).toBe('stillness');
-    expect(SCORE_PLAN.carrier.region).toBe('swell');
-  });
-
-  it('selects generative layers that really exist in the state they are for', () => {
-    for (const s of STATES) {
-      const p = SCORE_PLAN[s];
-      if (!p.track) {
-        expect(p.generativeLayers).toEqual([]);
-        continue;
-      }
-      const def = MUSIC[s as keyof typeof MUSIC];
-      for (const sel of p.generativeLayers) expect(def.layers.some((l) => layerMatches(l, sel)), `${s}: ${sel}`).toBe(true);
-      const over = overlayDef(def, p.generativeLayers);
-      if (!p.generativeLayers.length) expect(over).toBeNull();
-      else {
-        expect(over!.layers.length).toBeGreaterThan(0);
-        expect(over!.layers.length).toBeLessThan(def.layers.length);
-        // nothing struck on the beat is ever laid over a recording (their beats are not on a grid)
-        expect(over!.layers.filter((l) => l.kind === 'perc' || l.kind === 'cadence' || l.kind === 'strings')).toEqual([]);
-        expect(over!.bpm).toBe(def.bpm);
-      }
-    }
-    expect(overlayDef(MUSIC.core, ['motif:bell:resolved'])!.layers.every((l) => l.when === 'resolved')).toBe(true);
-  });
-
-  it('opens level and tone with intensity', () => {
-    const p = SCORE_PLAN.combatTarrik;
-    const loop = loopSpec('dominion_combat', MANIFEST.dominion_combat);
-    expect(planGain(p, loop, 1)).toBeGreaterThan(planGain(p, loop, 0) * 1.5);
-    expect(20 * Math.log10(planGain(p, loop, 1))).toBeCloseTo(p.gain[1] - MANIFEST.dominion_combat.meanDb, 5);
-    expect(planTone(p, 0)).toBeCloseTo(3200, 5);
-    expect(planTone(p, 1)).toBeCloseTo(20000, 5);
-    expect(planTone(p, 0.5)).toBeCloseTo(Math.sqrt(3200 * 20000), 3);
-    expect(planGain(p, loop, Number.NaN)).toBe(planGain(p, loop, 0));
-    // every recording stays under the limiter at full intensity (file peak × gain ≤ −2.5 dBFS)
-    for (const s of STATES) {
-      const q = SCORE_PLAN[s];
-      if (!q.track || q.region !== 'whole') continue;
-      const m = MANIFEST[q.track];
-      expect(m.maxDb + 20 * Math.log10(planGain(q, loopSpec(q.track, m), 1)), s).toBeLessThanOrEqual(-2.5);
-    }
-  });
-});
-
-describe('loop arithmetic (against the real manifest)', () => {
-  it('lists every track the table uses', () => {
-    for (const t of TRACK_NAMES) expect(MANIFEST[t], t).toBeDefined();
-  });
-
-  it('loops each whole track over a whole number of bars with a 2 s tail', () => {
-    for (const t of TRACK_NAMES) {
-      const m = MANIFEST[t];
-      const l = loopSpec(t, m);
-      expect(l.xfade).toBe(LOOP_XFADE);
-      expect(l.to + l.xfade).toBeCloseTo(m.seconds, 9);
-      const bars = (l.to - l.from) / (240 / m.bpm);
-      expect(Math.abs(bars - Math.round(bars)), `${t}: ${bars} bars`).toBeLessThan(0.01);
-      expect(Math.round(bars)).toBe(m.loopBars);
-      expect(loopPeriod(l)).toBeCloseTo((m.seconds - 2) / Math.pow(2, TRACKS[t].tune / 12), 9);
-    }
-  });
-
-  it('loops the regions of atrium_carrier inside the file, on bar lines, clear of the next section', () => {
-    const m = MANIFEST.atrium_carrier;
-    const bar = 240 / m.bpm;
-    const still = loopSpec('atrium_carrier', m, 'stillness');
-    const swell = loopSpec('atrium_carrier', m, 'swell');
-    for (const l of [still, swell]) {
-      expect((l.to - l.from) / bar).toBeCloseTo(Math.round((l.to - l.from) / bar), 6);
-      expect(l.intro).toBe(l.from);
-      expect(l.to + l.xfade).toBeLessThanOrEqual(m.seconds);
-    }
-    expect(still.to + still.xfade).toBeLessThan(36); // the swell starts at ~36 s
-    expect(swell.from).toBeGreaterThanOrEqual(36);
-    expect(swell.to + swell.xfade).toBeLessThan(76); // the decay starts at ~76 s
-    // a region a track does not have means the whole track
-    expect(loopSpec('main_theme', MANIFEST.main_theme, 'swell')).toEqual(loopSpec('main_theme', MANIFEST.main_theme));
-  });
-
-  it('survives degenerate metadata', () => {
-    const l = loopSpec('main_theme', { file: 'x', seconds: 1, bpm: 0, loopStart: 5, meanDb: Number.NaN, maxDb: 0 });
-    expect(l.xfade).toBeCloseTo(0.25, 9);
-    expect(l.to).toBeGreaterThan(l.from);
-    expect(Number.isFinite(l.meanDb)).toBe(true);
-    const z = loopSpec('main_theme', { file: 'x', seconds: Number.NaN, bpm: 0, loopStart: 0, meanDb: -16, maxDb: 0 });
-    expect(z.to - z.from).toBe(0); // the director refuses to play this
-  });
-});
 
 // ---------------------------------------------------------------------------------------------------------
 
@@ -232,8 +52,8 @@ function fakeLibrary(ctx: FakeContext | null, files: Record<string, () => FetchR
   return { lib, fetched, fetcher };
 }
 
-const musicFiles = (names: readonly string[]): Record<string, () => FetchResult> => {
-  const files: Record<string, () => FetchResult> = { 'music/manifest.json': () => ok(Object.fromEntries(names.map((n) => [n, { ...MANIFEST[n as TrackName], seconds: 20 }])), 'application/json') };
+const musicFiles = (names: readonly string[], seconds = 20): Record<string, () => FetchResult> => {
+  const files: Record<string, () => FetchResult> = { 'music/manifest.json': () => ok(Object.fromEntries(names.map((n) => [n, { ...MANIFEST[n as TrackName], seconds }])), 'application/json') };
   for (const n of names) files[`music/${n}.mp3`] = () => ok(null);
   return files;
 };
@@ -465,12 +285,12 @@ describe('track player', () => {
 });
 
 describe('score director and voice-over on the engine', () => {
-  async function world(tracks: readonly string[], vo: Record<string, number> = {}): Promise<{ ctx: FakeContext; lib: AssetLibrary; engine: AudioEngine }> {
+  async function world(tracks: readonly string[], vo: Record<string, number> = {}, seconds = 20): Promise<{ ctx: FakeContext; lib: AssetLibrary; engine: AudioEngine }> {
     const ctx = new FakeContext();
-    const files = musicFiles(tracks);
+    const files = musicFiles(tracks, seconds);
     files['vo/manifest.json'] = () => ok(Object.fromEntries(Object.entries(vo).map(([id, seconds]) => [id, { file: `${id}.mp3`, seconds }])), 'application/json');
     for (const id of Object.keys(vo)) files[`vo/${id}.mp3`] = () => ok(null);
-    const { lib } = fakeLibrary(ctx, files, 20);
+    const { lib } = fakeLibrary(ctx, files, seconds);
     await lib.loadMusic();
     await lib.loadVoices();
     return { ctx, lib, engine: new AudioEngine(ctx.asContext(), { seed: 5, assets: lib }) };
@@ -534,6 +354,18 @@ describe('score director and voice-over on the engine', () => {
     expect(engine.score.player.key).toBe('atrium_carrier:swell');
     run(ctx, engine, 3);
     expect(ctx.problems).toEqual([]);
+  });
+
+  it('skips the introduction of a combat recording when the fight is already on', async () => {
+    for (const [intensity, offset] of [[0.2, 0], [0.9, TRACKS.dominion_combat.body]] as const) {
+      const { ctx, lib, engine } = await world(['dominion_combat'], {}, 93.2);
+      await lib.requestTrack('dominion_combat');
+      engine.setIntensity(intensity); // just asked for: the audible value has not moved yet
+      engine.setMusic('combatTarrik', 0.5);
+      run(ctx, engine, 0.5);
+      expect(engine.score.player.schedule()[0].offset).toBe(offset);
+      expect(ctx.problems).toEqual([]);
+    }
   });
 
   it('falls back to the generative score for good when the file is missing, and for states without one', async () => {
@@ -609,6 +441,47 @@ describe('score director and voice-over on the engine', () => {
     await settle();
     expect(w.ctx.spans.length).toBe(m);
     expect(w.engine.vo.speaking).toBeNull();
+  });
+
+  it('holds the spoken line while the game is paused and picks it up a moment earlier', async () => {
+    const id = voLineId('Tharne', 'Two planes. Count them.');
+    const { ctx, lib, engine } = await world([], { [id]: 20 });
+    await lib.requestClip(id);
+    engine.voice('Tharne', 'Two planes. Count them.', { pos: { x: 3, y: 0, z: 0 } });
+    run(ctx, engine, 5);
+    const n = ctx.spans.length;
+    engine.setPaused(true);
+    engine.setPaused(true);
+    run(ctx, engine, 3);
+    expect(ctx.maxPolyphony(ctx.currentTime - 2, ctx.currentTime)).toBe(0); // nothing sounds while paused
+    expect(engine.vo.speaking).toBe(id);
+    engine.setPaused(false);
+    expect(ctx.spans.length).toBe(n + 1);
+    expect(ctx.spans[n].offset).toBeCloseTo(4.8, 1); // 5 s in, less the fifth of a second it backs up
+    run(ctx, engine, 1);
+    expect(engine.vo.speaking).toBe(id);
+    // a line cut while held does not come back
+    engine.setPaused(true);
+    engine.stopVoice();
+    engine.setPaused(false);
+    expect(ctx.spans.length).toBe(n + 1);
+    expect(engine.vo.speaking).toBeNull();
+    run(ctx, engine, 16);
+    expect(ctx.problems).toEqual([]);
+  });
+
+  it('treats a line whose listed file is gone as unrecorded from then on', async () => {
+    const ctx = new FakeContext();
+    const id = voLineId('Cross', 'Door is sealed.');
+    const { lib } = fakeLibrary(ctx, { 'vo/manifest.json': () => ok({ [id]: { file: `${id}.mp3`, seconds: 2 } }, 'application/json') });
+    await lib.loadVoices();
+    const engine = new AudioEngine(ctx.asContext(), { seed: 3, assets: lib });
+    expect(engine.voice('Cross', 'Door is sealed.')).toBe(2); // listed: believed until the file answers
+    await settle();
+    expect(engine.vo.speaking).toBeNull();
+    ctx.currentTime += 1;
+    expect(engine.voice('Cross', 'Door is sealed.')).toBe(0); // now known to be missing: the caller ticks instead
+    expect(ctx.spans.filter((s) => s.kind === 'buffer' && s.stop - s.start > 1.5)).toEqual([]);
   });
 
   it('has nothing to say and nothing recorded without a library', () => {

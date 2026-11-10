@@ -10,6 +10,9 @@
  * A positional line pans gently toward its speaker (at most ±0.45) and loses at most 30 % of its level with
  * distance: dialogue is information, it must never be lost to staging.
  *
+ * Pausing the game holds the line (it resumes a fifth of a second back from where it stopped), so a subtitle
+ * that froze with the simulation still has its voice when it thaws.
+ *
  * While a line plays the score and the ambience are ducked. A line whose clip is listed but not decoded yet
  * is started the moment it arrives (preloadVoices exists so that this is rare); if that takes longer than
  * a breath the line stays silent rather than run into the next one.
@@ -50,6 +53,7 @@ interface Line {
   /** context time the clip stops sounding (asked + seconds until it actually starts) */
   endAt: number;
   cancelled: boolean;
+  clip: VoiceClip | null;
   src: AudioBufferSourceNode | null;
   trim: GainNode | null;
   base: number;
@@ -60,10 +64,13 @@ interface Line {
 
 export class VoicePlayer {
   private line: Line | null = null;
-  private readonly ending: Line[] = [];
+  private readonly ending: Array<{ nodes: AudioNode[]; endAt: number }> = [];
   private readonly lpos = { x: 0, y: 0, z: 0 };
   private readonly lfwd = { x: 0, z: -1 };
   private curve: Float32Array<ArrayBuffer> | null = null;
+  private paused = false;
+  /** position (s into the clip) the held line resumes from; −1 = nothing is held */
+  private heldAt = -1;
 
   constructor(
     private readonly ac: BaseAudioContext,
@@ -88,7 +95,8 @@ export class VoicePlayer {
     // the mission and the dialogue event both announce a line: that is one utterance, not two
     if (this.line && this.line.id === id && now - this.line.asked < SAME_LINE) return this.line.seconds;
     const meta = lib.voiceMeta(id);
-    if (!meta) {
+    // not recorded — or listed, but the file proved unusable the first time it was wanted
+    if (!meta || lib.clipMissing(id)) {
       if (!lib.voicesKnown) void lib.loadVoices();
       return 0;
     }
@@ -100,7 +108,7 @@ export class VoicePlayer {
     const line: Line = {
       id, asked: now, seconds, channel, startedAt: Infinity, endAt: now + seconds, cancelled: false,
       pos: p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z) ? { x: p.x, y: p.y, z: p.z } : null,
-      src: null, trim: null, base: 1, spot: null, pan: null, nodes: [],
+      clip, src: null, trim: null, base: 1, spot: null, pan: null, nodes: [],
     };
     this.line = line;
     if (clip) this.start(line, clip, now);
@@ -108,8 +116,14 @@ export class VoicePlayer {
       void lib.requestClip(id).then((c) => {
         if (this.line !== line || line.cancelled) return;
         const t = this.ac.currentTime;
-        if (c && t - line.asked <= MAX_LATE) this.start(line, c, t);
-        else this.line = null;
+        if (!c || t - line.asked > MAX_LATE) this.line = null;
+        else if (this.paused) {
+          line.clip = c;
+          this.heldAt = 0;
+        } else this.start(line, c, t);
+      }).catch(() => {
+        // the graph refused the clip: the line stays a subtitle
+        if (this.line === line) this.line = null;
       });
     }
     this.mixer.duck(VOICE_DUCK, seconds + 0.2);
@@ -157,7 +171,7 @@ export class VoicePlayer {
     return { pan, level: 1 - (1 - MIN_LEVEL) * clamp01((d - 4) / 26) };
   }
 
-  private start(line: Line, clip: VoiceClip, at: number): void {
+  private start(line: Line, clip: VoiceClip, at: number, offset = 0): void {
     const ac = this.ac;
     const src = ac.createBufferSource();
     src.buffer = clip.buffer;
@@ -214,25 +228,21 @@ export class VoicePlayer {
       line.spot = spot;
       line.pan = pan;
     }
-    src.start(at);
-    src.stop(at + clip.buffer.duration + 0.05);
+    src.start(at, offset);
+    src.stop(at + clip.buffer.duration - offset + 0.05);
+    line.clip = clip;
     line.src = src;
     line.trim = trim;
     line.base = base;
     line.nodes = nodes;
-    line.startedAt = at;
-    line.endAt = at + clip.buffer.duration;
+    line.startedAt = at - offset;
+    line.endAt = line.startedAt + clip.buffer.duration;
   }
 
-  /** Cut the current line (cinematic skip, a new line taking the stage). */
-  stop(fadeSeconds = 0.15): void {
-    const line = this.line;
-    if (!line) return;
-    this.line = null;
-    line.cancelled = true;
+  /** Fade a sounding line's chain to silence and hand it to the clean-up list. */
+  private silence(line: Line, fade: number): void {
     if (!line.src || !line.trim) return;
     const now = this.ac.currentTime;
-    const fade = clamp(Number.isFinite(fadeSeconds) ? fadeSeconds : 0.15, 0.01, 5);
     const g = line.trim.gain;
     g.cancelScheduledValues(now);
     // (a line cut inside its own 8 ms fade-in was not at level yet)
@@ -243,8 +253,41 @@ export class VoicePlayer {
     } catch {
       /* already ended */
     }
-    line.endAt = Math.min(line.endAt, now + fade + 0.02);
-    this.ending.push(line);
+    this.ending.push({ nodes: line.nodes, endAt: now + fade + 0.02 });
+    line.src = null;
+    line.trim = null;
+    line.spot = null;
+    line.pan = null;
+    line.nodes = [];
+  }
+
+  /** Game paused / resumed: hold the line being spoken and pick it up again. */
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return;
+    this.paused = paused;
+    const line = this.line;
+    const now = this.ac.currentTime;
+    if (paused) {
+      if (!line || !line.src || !line.clip) return;
+      const at = now - line.startedAt;
+      if (at >= line.clip.buffer.duration - 0.1) return; // as good as said
+      this.silence(line, 0.05);
+      this.heldAt = Math.max(0, at - 0.2);
+    } else if (this.heldAt >= 0) {
+      const at = this.heldAt;
+      this.heldAt = -1;
+      if (line && line.clip && !line.cancelled) this.start(line, line.clip, now, at);
+    }
+  }
+
+  /** Cut the current line (cinematic skip, a new line taking the stage). */
+  stop(fadeSeconds = 0.15): void {
+    const line = this.line;
+    if (!line) return;
+    this.line = null;
+    this.heldAt = -1;
+    line.cancelled = true;
+    this.silence(line, clamp(Number.isFinite(fadeSeconds) ? fadeSeconds : 0.15, 0.01, 5));
   }
 
   /** Make sure the clips of these `[speaker, text]` lines are decoded. Never rejects. */
@@ -262,7 +305,7 @@ export class VoicePlayer {
     this.lfwd.z = forward.z;
   }
 
-  private release(line: Line): void {
+  private release(line: { nodes: AudioNode[] }): void {
     for (const n of line.nodes) n.disconnect();
     line.nodes = [];
   }

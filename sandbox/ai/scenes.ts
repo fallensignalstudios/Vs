@@ -8,7 +8,7 @@ import { buildZ04, buildZ08, planPos } from '@/world/physics/fixtures';
 import type { Bot } from './bot';
 import { coverBlock, hall, type Greybox } from './greybox';
 
-export type SceneId = 'e1' | 'e2' | 'e3' | 'e4' | 'companions';
+export type SceneId = 'e1' | 'e2' | 'e3' | 'e4' | 'companions' | 'stage';
 
 export interface SceneCtx {
   game: Game;
@@ -40,7 +40,7 @@ const SOUTH = Math.PI;
 // --------------------------------------------------------------------------------------------------------------------
 function e1(c: SceneCtx): Scene {
   const { game, gb } = c;
-  hall(gb, 0, -13, 56, 13, c.scene);
+  hall(gb, 0, -13, 56, 13);
   for (const [x, zs] of [[10, [-7, 0, 7]], [22, [-9, -2, 6]], [38, [-6, 3, 9]]] as Array<[number, number[]]>) {
     zs.forEach((z, i) => coverBlock(gb, x, z, 0.9, 3, i === 1 ? 'high' : 'low'));
   }
@@ -87,7 +87,7 @@ function e1(c: SceneCtx): Scene {
     if (emitter && e.actor === emitter.actor) enc.flags.formationBroken = true;
   });
   game.events.on('actor:died', (e) => {
-    if (enc.has(e.actor)) enc.flags.formationBroken = true;
+    if (enc.has?.(e.actor)) enc.flags.formationBroken = true;
   });
   const lyessa = game.ai.spawnCompanion('lyessa', { pos: { x: 2.5, y: 0, z: 5 }, yaw: EAST, mode: 'hold' });
   return {
@@ -113,7 +113,7 @@ function e2(c: SceneCtx): Scene {
     id: 'E2', maxActive: 6,
     waves: [{
       spawns: [
-        ...[26.6, 29.4, 32.2, 35].map((x) => ({ role: 'enforcer' as const, at: planPos(x, 22), opts: { yaw: SOUTH, via: 'march' as const, from: planPos(x, 31) } })),
+        ...[29.6, 32.4, 35.2, 38].map((x) => ({ role: 'enforcer' as const, at: planPos(x, 23), opts: { yaw: SOUTH, via: 'march' as const, from: planPos(x, 31) } })),
         { role: 'contamDrone', at: planPos(20, 15), opts: { network: 'z04' } },
         { role: 'contamDrone', at: planPos(43, 17), opts: { network: 'z04' } },
       ],
@@ -137,7 +137,7 @@ function e2(c: SceneCtx): Scene {
 // --------------------------------------------------------------------------------------------------------------------
 function e3(c: SceneCtx): Scene {
   const { game, gb } = c;
-  hall(gb, 0, -17, 56, 17, c.scene);
+  hall(gb, 0, -17, 56, 17);
   coverBlock(gb, 14, -6, 3, 0.9, 'low');
   coverBlock(gb, 14, 8, 0.9, 3, 'high');
   coverBlock(gb, 30, 10, 3, 0.9, 'low');
@@ -216,13 +216,17 @@ function e4(c: SceneCtx): Scene {
   game.physics.nav.rebuild();
   game.physics.nav.warm(1.2, 3.6);
   const noGo = [{ minX: 3, maxX: 15, minZ: -45, maxZ: -35 }, { minX: 62, maxX: 69, minZ: -45, maxZ: -35 }];
+  // the bot lets phase A play before it starts cutting links
+  c.bot.severAfter = 35;
   const frost = game.ai.devices.frostAnchor({ id: 'frostAnchor', pos: planPos(49, 21) });
   const tarrik = game.ai.spawnCompanion('tarrik', { pos: planPos(33, 6), mode: 'combat' });
   const lyessa = game.ai.spawnCompanion('lyessa', { pos: planPos(38, 5), mode: 'hold' });
   let partner: Companion = tarrik;
   let ctl: EliteController | null = null;
   let elite: Actor | null = null;
+  let weaver: Actor | null = null;
   let phaseB = false;
+  let seenA = false;
   let fractureAt = -1;
   let stage: 'A' | 'B' | 'window' | 'confirm' | 'fracturing' | 'finish' = 'A';
   let windows = 0;
@@ -239,6 +243,9 @@ function e4(c: SceneCtx): Scene {
         ],
         onSpawn: (actors) => {
           elite = actors[0] as Actor;
+          weaver = actors[1] as Actor;
+          // once it starts cutting, the bot goes for the source: the Weaver
+          c.bot.objective = () => (weaver && weaver.alive && game.time.now >= c.bot.severAfter ? weaver : null);
           ctl = game.ai.elite(elite);
           if (ctl) ctl.onPhase = (p) => c.log(`elite phase ${p}`);
         },
@@ -259,7 +266,9 @@ function e4(c: SceneCtx): Scene {
     if (!ctl || !elite || !elite.alive) return;
     cooldown -= dt;
     const now = game.time.now;
-    if (stage === 'A' && ctl.phase === 'B' && game.ai.links.all.length === 0) {
+    if (ctl.phase === 'A') seenA = true;
+    const weaverAlive = !!weaver && weaver.alive;
+    if (stage === 'A' && seenA && ctl.phase === 'B' && !weaverAlive) {
       // explicit handoff: Tarrik takes the court, Selene (AI) goes to the frost anchor
       stage = 'B';
       phaseB = true;
@@ -268,7 +277,7 @@ function e4(c: SceneCtx): Scene {
       tarrik.remove();
       game.player.setProtagonist('tarrik', at);
       partner = game.ai.spawnCompanion('selene', { pos: old.pos, yaw: old.yaw, mode: 'scripted' });
-      partner.moveTo(frost.pos, { run: true });
+      partner.moveTo(frost.actor.pos, { run: true, stopDistance: 0.6 });
       game.events.emit('handoff', { from: 'selene', to: 'tarrik' });
       c.log('handoff → Tarrik; Selene to the frost anchor');
       cooldown = 4;
@@ -291,10 +300,11 @@ function e4(c: SceneCtx): Scene {
         stage = 'confirm';
         game.audio.play('resonanceWindow');
         const joint = elite.visual?.socket('joint').getWorldPosition(new THREE.Vector3()) ?? elite.pos;
-        game.vfx.spawn('resonanceRing', joint, { duration: 5 });
+        const ring = game.vfx.spawn('resonanceRing', joint, { duration: 5 });
         game.player.setContextAction({
           id: 'thermalFracture', prompt: 'Thermal Fracture', button: 'heavy', window: 5, autoConfirmable: true,
           onConfirm: () => {
+            ring.stop();
             stage = 'fracturing';
             fractureAt = game.time.now + 0.98;
             const j = elite!.visual?.socket('joint').getWorldPosition(new THREE.Vector3()) ?? elite!.pos;
@@ -304,6 +314,7 @@ function e4(c: SceneCtx): Scene {
             c.log('Thermal Fracture confirmed');
           },
           onExpire: () => {
+            ring.stop();
             ctl!.cancelResonanceWindow();
             stage = 'B';
             cooldown = 6;
@@ -340,7 +351,7 @@ function e4(c: SceneCtx): Scene {
 // --------------------------------------------------------------------------------------------------------------------
 function companions(c: SceneCtx): Scene {
   const { game, gb } = c;
-  hall(gb, -20, -12, 20, 12, c.scene);
+  hall(gb, -20, -12, 20, 12);
   // a partition with a 3 m doorway
   gb.physics.addCollider({ shape: { kind: 'box', hx: 0.3, hy: 1.75, hz: 5.25 }, x: 6, y: 1.75, z: -6.75, tag: 'wall' });
   gb.physics.addCollider({ shape: { kind: 'box', hx: 0.3, hy: 1.75, hz: 5.25 }, x: 6, y: 1.75, z: 6.75, tag: 'wall' });
@@ -367,8 +378,22 @@ function companions(c: SceneCtx): Scene {
   };
 }
 
+// --------------------------------------------------------------------------------------------------------------------
+// stage — an empty hall: spawn anything from the console (`__ai.ai.spawnEnemy(...)`) for close-up captures
+// --------------------------------------------------------------------------------------------------------------------
+function stageScene(c: SceneCtx): Scene {
+  const { game, gb } = c;
+  hall(gb, -22, -12, 22, 12);
+  gb.flush();
+  game.physics.nav.rebuild();
+  game.actors.setHostile('player', 'reformation', true);
+  game.actors.setHostile('player', 'dominion', true);
+  return { id: 'stage', who: 'tarrik', start: { pos: { x: -6, y: 0, z: 0 }, yaw: EAST }, enc: null, update() {}, refs: {}, facts: () => ({}) };
+}
+
 export function buildScene(id: SceneId, c: SceneCtx): Scene {
   switch (id) {
+    case 'stage': return stageScene(c);
     case 'e2': return e2(c);
     case 'e3': return e3(c);
     case 'e4': return e4(c);

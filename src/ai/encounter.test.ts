@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Actor, Encounter, EncounterDef } from '@/core/api';
+import type { EncounterImpl } from './encounter';
 import { makeAiWorld } from './testkit';
+
+/** the director's own class: the ADDED contract members are optional on the interface, always present here */
+const create = (w: ReturnType<typeof makeAiWorld>, def: EncounterDef): EncounterImpl => w.ai.createEncounter(def) as EncounterImpl;
 
 function killOne(w: ReturnType<typeof makeAiWorld>, enc: Encounter): void {
   const a = enc.alive[0] as Actor;
@@ -12,7 +16,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     w.hero();
-    const enc = w.ai.createEncounter({
+    const enc = create(w, {
       id: 'cap', maxActive: 4,
       waves: [{ spawns: Array.from({ length: 6 }, (_, i) => ({ role: 'linkbound' as const, at: { x: -10 + i * 3, y: 0, z: -15 } })) }],
     });
@@ -63,7 +67,7 @@ describe('encounter director', () => {
         },
       ],
     };
-    const enc = w.ai.createEncounter(def);
+    const enc = create(w, def);
     enc.start();
     expect(w.actors.teamsHostile('player', 'reformation')).toBe(true);
     expect(enc.aliveCount).toBe(4);
@@ -101,7 +105,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     w.hero('tarrik', 0, 20);
-    const enc = w.ai.createEncounter({
+    const enc = create(w, {
       id: 'E1b', maxActive: 4,
       waves: [
         { spawns: [0, 1, 2, 3].map((i) => ({ role: 'secDrone' as const, at: { x: i * 4 - 6, y: 0, z: -18 } })) },
@@ -125,7 +129,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     w.hero('tarrik', 0, 22);
-    const enc = w.ai.createEncounter({
+    const enc = create(w, {
       id: 'E3', maxActive: 6, meleeSlots: 2,
       waves: [
         {
@@ -168,7 +172,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     w.hero('tarrik', 0, 25);
-    const enc = w.ai.createEncounter({
+    const enc = create(w, {
       id: 'slots', maxActive: 6,
       waves: [{ spawns: [0, 1, 2, 3].map((i) => ({ role: 'linkbound' as const, at: { x: i * 3 - 5, y: 0, z: -20 }, opts: { dormant: true } })) }],
     });
@@ -195,7 +199,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     const hero = w.hero('tarrik', 0, 0);
-    const enc = w.ai.createEncounter({
+    const enc = create(w, {
       id: 'press', maxActive: 6,
       waves: [{ spawns: [0, 1, 2, 3, 4].map((i) => ({ role: 'linkbound' as const, at: { x: Math.cos(i * 1.2) * 6, y: 0, z: Math.sin(i * 1.2) * 6 } })) }],
     });
@@ -215,7 +219,7 @@ describe('encounter director', () => {
     const w = makeAiWorld();
     w.arena();
     w.hero();
-    const enc = w.ai.createEncounter({ id: 'adopt', maxActive: 3, waves: [] });
+    const enc = create(w, { id: 'adopt', maxActive: 3, waves: [] });
     enc.start();
     expect(enc.cleared).toBe(false);
     const stray = w.ai.spawnEnemy('linkbound', { pos: { x: 5, y: 0, z: 5 }, dormant: true });
@@ -226,7 +230,7 @@ describe('encounter director', () => {
     w.run(0.1);
     expect(enc.cleared).toBe(true);
 
-    const bad = w.ai.createEncounter({ id: 'bad', maxActive: 2, waves: [{ spawns: [{ role: 'nope' as never, at: 'missing' }] }] });
+    const bad = create(w, { id: 'bad', maxActive: 2, waves: [{ spawns: [{ role: 'nope' as never, at: 'missing' }] }] });
     expect(() => bad.start()).not.toThrow();
     expect(bad.aliveCount).toBe(1);
     bad.stop();

@@ -154,7 +154,7 @@ export class DroneBrain extends Brain {
     }
   }
 
-  private fly(a: Actor, dt: number, speedScale: number): void {
+  private fly(a: Actor, speedScale: number): void {
     const dx = this.goal.x - a.pos.x;
     const dz = this.goal.z - a.pos.z;
     const d = Math.hypot(dx, dz);
@@ -162,7 +162,6 @@ export class DroneBrain extends Brain {
     const v = Math.min(AI.drone.speed * speedScale, d * 3 + 0.4);
     a.desiredVel.set((dx / d) * v, 0, (dz / d) * v);
     this.hum?.setPitch((this.contaminated ? 0.82 : 1) * (1 + Math.min(0.25, v * 0.05)));
-    void dt;
   }
 
   // ---- brain --------------------------------------------------------------------------------------------------
@@ -174,7 +173,7 @@ export class DroneBrain extends Brain {
   protected override calm(a: Actor, dt: number): void {
     this.hum?.setPosition(a.pos);
     this.goal.set(this.post.x, a.pos.y, this.post.z);
-    this.fly(a, dt, 0.6);
+    this.fly(a, 0.6);
   }
 
   protected think(a: Actor, dt: number): void {
@@ -229,7 +228,7 @@ export class DroneBrain extends Brain {
     if (!this.validTarget(a, t)) {
       if (this.state !== 'hold' && this.state !== 'vent') this.cancelAttack(a);
       this.goal.set(this.post.x, a.pos.y, this.post.z);
-      this.fly(a, dt, 0.6);
+      this.fly(a, 0.6);
       return;
     }
 
@@ -246,7 +245,7 @@ export class DroneBrain extends Brain {
         this.slideAt = now + 0.45;
         this.planSlide(a, t);
       }
-      this.fly(a, dt, speedScale);
+      this.fly(a, speedScale);
       a.face(t.pos, D.turn * speedScale * dt);
     }
     a.visual?.lookAt(this.state === 'hold' ? t.aimPoint(_aim) : null);

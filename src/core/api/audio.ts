@@ -1,7 +1,9 @@
 /**
  * Audio contract — OWNER: audio (src/audio/*).
  * Fully procedural WebAudio: synthesised SFX, layered adaptive music, zone ambience, mix bus with reverb.
- * No audio files. Unknown ids warn once and no-op. Must be silent-safe before unlock() and in headless tests.
+ * No audio files are needed; an optional recorded score and voice-over play over the procedural engine when
+ * their files exist (RECORDED SCORE / VOICE-OVER below). Unknown ids warn once and no-op. Must be silent-safe
+ * before unlock() and in headless tests.
  *
  * Sound by phase (from the plan):
  *  Z00–Z04 muffled pressure, intermittent fleet impacts, differentiated drone and shield cues.
@@ -65,8 +67,9 @@
  *   recognition, core, witness, consequence, observation → core_witness (played a whole tone up, in D).
  *   context, approachTarrik, breach, decision, quarantine stay generative.
  * Tracks are fetched and decoded lazily (the generative score plays until one arrives, then they cross-fade)
- * and loop seamlessly. setIntensity moves a recording's level and opens its low-pass. A missing file or
- * manifest simply means the generative score, as before.
+ * and loop seamlessly. setIntensity moves a recording's level and opens its low-pass; a combat state entered
+ * at intensity ≥ 0.5 starts its recording past the introduction. A missing file or manifest simply means
+ * the generative score, as before.
  *
  * VOICE-OVER (optional files in `public/audio/vo/<lineId>.mp3` + manifest.json, where
  * `lineId = voLineId(speaker, text)` from `@/audio/assets/voiceId` — case, spacing and punctuation do not
@@ -266,6 +269,7 @@ export interface AudioSystem {
    * nothing — when the line has no recording, audio is locked/muted/unavailable, or the voice manifest has
    * not loaded yet: the caller then falls back to `speak()` and a text-length duration.
    * Calling it twice for the same line within 0.3 s is one utterance (the `dialogue:line` wiring relies on it).
+   * `game:paused` holds the line and resumes it, so it stays with a subtitle that froze with the simulation.
    */
   voice(speaker: string, text: string, opts?: VoiceOpts): number;
   /** Cut the line being spoken, fading over `fadeSeconds` (default 0.15). No-op when nothing is playing. */

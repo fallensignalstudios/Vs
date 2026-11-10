@@ -76,6 +76,10 @@ export class DeviceImpl implements DeviceHandle {
   group: SyncGroup | null = null;
   network: RelayNetwork | null = null;
   scan: ScanHeadState | null = null;
+  /** weaverAnchor: the Weaver working through it (the anchor withers once that Weaver is dead) */
+  boundTo: Actor | null = null;
+  /** frostAnchor: 0..1 ring brightness */
+  glow = 0;
   removed = false;
   private readonly _pos = new THREE.Vector3();
 
@@ -149,7 +153,8 @@ export class DeviceSystemImpl implements DeviceSystem {
     const actor = game.actors.spawn({
       archetype: kind, name: key, team, pos: p, yaw: fin(opts.yaw, 0),
       hp: Math.max(1, fin(opts.hp, DEVICE_HP[kind])), poise: DEVICE_POISE[kind],
-      radius: Math.max(0.35, fin(v?.radius, 0.6)), height: Math.max(0.6, fin(v?.height, 1.8)),
+      // a passive floor device (the frost anchor) is stood ON: it must not shove bodies off itself
+      radius: opts.passive ? 0.05 : Math.max(0.35, fin(v?.radius, 0.6)), height: Math.max(0.6, fin(v?.height, 1.8)),
       visual: v, fixed: true, corpseSeconds: Infinity, dissolveOnDeath: false,
       targetable: !opts.passive, invulnerable: opts.passive === true,
       material: kind === 'weaverAnchor' ? 'eclipse' : 'metal',
@@ -258,10 +263,10 @@ export class DeviceSystemImpl implements DeviceSystem {
     return best;
   }
 
-  /** light the frost anchor's ring while someone channels on it */
-  setAnchorActive(id: string, amount: number): void {
-    const d = this.list.find((x) => x.id === id);
-    if (d) asFrostAnchor(d.actor.visual)?.setActive(Math.min(1, Math.max(0, fin(amount))));
+  /** a Weaver has started working through this anchor */
+  bindAnchor(anchor: Actor, weaver: Actor): void {
+    const d = this.list.find((x) => x.actor === anchor);
+    if (d && !d.boundTo) d.boundTo = weaver;
   }
 
   // ---- state changes ----------------------------------------------------------------------------------------
@@ -397,8 +402,20 @@ export class DeviceSystemImpl implements DeviceSystem {
       }
     }
 
+    // an anchor whose Weaver is dead has nothing left to hold: it withers instead of lingering as a target
+    for (const d of this.list) {
+      if (d.kind === 'weaverAnchor' && !d.disabled && d.boundTo && !d.boundTo.alive && d.actor.alive) game.actors.kill(d.actor, null);
+    }
     for (const net of this.networks.values()) this.updateNetwork(net, now);
-    for (const d of this.list) if (d.scan && !d.disabled) this.updateScanHead(d, d.scan, dt, now);
+    for (const d of this.list) {
+      if (d.scan && !d.disabled) this.updateScanHead(d, d.scan, dt, now);
+      if (d.kind === 'frostAnchor') {
+        // the ring lights while an ally stands on the anchor
+        const on = game.actors.nearest(d.actor.pos, 1.1, (o) => o.team === 'player' && o !== d.actor) !== null;
+        d.glow += ((on ? 1 : 0) - d.glow) * (1 - Math.exp(-4 * dt));
+        asFrostAnchor(d.actor.visual)?.setActive(d.glow);
+      }
+    }
     for (let i = this.planes.length - 1; i >= 0; i--) (this.planes[i] as ScanPlaneImpl).update(dt);
   }
 

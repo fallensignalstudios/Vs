@@ -147,6 +147,7 @@ function showReport(r: AssetReport, buffers: Map<string, { buf: AudioBuffer; sea
   summary.innerHTML = `music manifest <b>${r.manifest}</b> · <b>${r.tracks.filter((t) => t.decoded).length}/${r.tracks.length}</b> recordings decoded · voice test clip <b>${r.voice.found ? 'found' : 'missing'}</b> · <b class="${r.flagged.length ? 'bad' : 'ok'}">${r.flagged.length} flagged</b>${r.flagged.length ? ` — ${r.flagged.join('; ')}` : ''}`;
   const tiles = el('div', { className: 'tiles' });
   for (const [key, v] of buffers) {
+    if (key.startsWith('state:')) continue;
     const cv = el('canvas', { className: 'sg', width: 300, height: 84 });
     drawSpectrogram(cv, v.buf);
     if (v.seamAt !== undefined && v.fade !== undefined) {
@@ -172,6 +173,16 @@ function showReport(r: AssetReport, buffers: Map<string, { buf: AudioBuffer; sea
   t.innerHTML = `<tr><th>recording</th><th>states</th><th>file / decoded s</th><th>loop</th><th>rate</th><th>period</th><th>bars</th><th>next pass</th><th>peak</th><th>before / seam / after dB</th><th>gap</th><th>x-fade err</th><th>click ×</th><th>flags</th></tr>${
     r.tracks.map((x) => `<tr class="${x.flags.length ? 'flag' : ''}"><td class="id">${x.track}${x.region === 'whole' ? '' : ` [${x.region}]`}</td><td class="l wrap">${x.states.join(', ')}</td><td>${x.manifestSeconds} / ${x.decodedSeconds}</td><td>${x.loop.from} → ${x.loop.to}</td><td>${x.loop.rate}</td><td>${x.loop.periodHeard}</td><td>${x.loop.bars}</td><td>${x.schedule[1] ? `${x.schedule[1].startAt.toFixed(2)} = ${x.schedule[0].handoverAt.toFixed(2)}` : '—'}</td><td>${x.peakDb}</td><td>${x.beforeDb} / ${x.seamDb} / ${x.afterDb}</td><td>${x.gapDb}</td><td>${x.seamErrorDb}</td><td>${x.clickRatio}</td><td class="flags">${x.flags.join(' ')}</td></tr>`).join('')}`;
   section('Recordings', t);
+
+  const st = el('table');
+  st.innerHTML = `<tr><th>state</th><th>carried by</th><th>generative underneath</th><th>intensity 0 dB</th><th>intensity 1 dB</th><th>plan dB</th><th>vs played samples</th><th>peak</th><th>flags</th></tr>${
+    r.states.map((x) => `<tr class="${x.flags.length ? 'flag' : ''}"><td class="id">${x.state}</td><td class="l">${x.carriedBy ?? 'generative'}</td><td class="l">${x.generative.join(', ') || '—'}</td><td>${x.lowDb}</td><td>${x.highDb}</td><td>${x.targetDb}</td><td>${x.levelErrorDb}</td><td>${x.peakDb}</td><td class="flags">${x.flags.join(' ')}</td></tr>`).join('')}`;
+  section('States through the whole engine (8 s each: intensity 0, then 1)', st);
+  for (const x of r.transitions) {
+    const pre = el('pre');
+    pre.innerHTML = `<b>${x.script}</b>\nRMS per 0.5 s (dBFS): ${x.timeline.join('  ')}\ncarried by, per second: ${x.carriedBy.map((c) => c ?? 'gen').join(' · ')}\npeak ${x.peakDb} dBFS${x.flags.length ? ` · <span class="bad">${x.flags.join(' ')}</span>` : ''}`;
+    section('Transition', pre);
+  }
 
   const v = el('table');
   v.innerHTML = `<tr><th>voice channel</th><th>clip s</th><th>voice() returned</th><th>peak dBFS</th><th>rms dB</th><th>loudness dB</th><th>centroid Hz</th><th>&lt;80 / 80–250 / 250–2k / 2k–8k / &gt;8k</th><th>R−L dB</th><th>flags</th></tr>${

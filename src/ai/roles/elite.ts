@@ -189,6 +189,10 @@ export class EliteBrain extends Brain implements EliteController {
     this.hitOnce.clear();
   }
 
+  protected override targetWeight(_a: Actor, t: Actor): number {
+    return t.flying ? 2.5 : 1;
+  }
+
   protected override canTarget(a: Actor, t: Actor): boolean {
     if (!super.canTarget(a, t)) return false;
     for (const r of this.noGo) if (inRect(r, t.pos.x, t.pos.z, 0)) return false;
@@ -221,6 +225,8 @@ export class EliteBrain extends Brain implements EliteController {
       }
     }
     a.regen = this.fractured ? 0 : phase === 'A' ? Math.max(1, fin(a.data.linkRegen as number, TUNING.enemies.elite.regen)) : E.selfRegen;
+    // link armour while it is fed, knitting plates while it is isolated; the fracture ends both
+    a.damageTakenScale = this.fractured ? 1 : phase === 'A' ? E.armorLinked : E.armorIsolated;
     asElite(a.visual)?.setRegenerating(this.fractured ? 0 : phase === 'A' ? 1 : 0.2);
     this.regenLoop?.setPosition(a.pos);
     this.regenLoop?.setVolume(phase === 'A' ? 1 : 0.25, 0.4);
@@ -229,7 +235,7 @@ export class EliteBrain extends Brain implements EliteController {
     const player = live(this.game.player) ? this.game.player : null;
     const pa = playerActor(this.game);
     if (player) {
-      const inField = !!pa && now < this.pressureUntil && phase === 'A' && a.distanceTo(pa) <= E.pulseField;
+      const inField = !!pa && now < this.pressureUntil && phase === 'A' && !this.core.ceasefire && a.distanceTo(pa) <= E.pulseField;
       let threat = fin(player.threat, 0);
       threat += (inField ? E.threatRise : -E.threatFall) * dt;
       if (threat >= 1 && pa) {
@@ -474,6 +480,7 @@ export class EliteBrain extends Brain implements EliteController {
     this.begin(a, 'sweep', 'sweep', 0.82, 1.75);
     this.beginTelegraph(a, this.hitAt, RED);
     this.marks.push(this.game.vfx.telegraph({ kind: 'cone', pos: a.pos, yaw: a.yaw, arc: AI.elite.sweepArc, r: AI.elite.sweepReach }, this.hitAt, RED));
+    this.game.audio.play('eclipseBreath', { pos: a.pos, pitch: 0.5, volume: 1.3 });
     this.core.stats.meleeAttacks++;
   }
 

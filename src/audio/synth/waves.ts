@@ -112,6 +112,13 @@ export class WaveBank {
     return this.map.size;
   }
 
+  /** memory held by the loops (bytes of sample data) */
+  get bytes(): number {
+    let n = 0;
+    for (const w of this.map.values()) n += w.buffer.length * w.buffer.numberOfChannels * 4;
+    return n;
+  }
+
   clear(): void {
     this.map.clear();
   }
@@ -134,11 +141,13 @@ export async function bakeWaves(sampleRate: number, keys: Iterable<string>, bank
     const def = ENSEMBLES[name];
     if (!def || !Number.isFinite(octave)) continue;
     const baseHz = BASE_HZ * Math.pow(2, octave);
-    // long loops low down (fine detune resolution), short ones higher up (memory)
-    const n = Math.round((octave <= 1 ? 4 : 2) * sampleRate);
+    // a long loop for the lowest octave (its detune needs the finer frequency grid), short ones above (memory)
+    const n = Math.round((octave === 0 ? 4 : 2) * sampleRate);
+    // an ensemble whose voices all sit in the centre is one channel, not two identical ones
+    const channels = def.some((v) => v.pan !== 0) ? 2 : 1;
     const pre = Math.round(0.12 * sampleRate);
     try {
-      const ctx = new Offline(2, n + pre, sampleRate);
+      const ctx = new Offline(channels, n + pre, sampleRate);
       const lp1 = ctx.createBiquadFilter();
       lp1.type = 'lowpass';
       lp1.frequency.value = 11000;
@@ -174,8 +183,8 @@ export async function bakeWaves(sampleRate: number, keys: Iterable<string>, bank
         o.start(((0.137 + 0.618034 * ++voice) % 1) / hz);
       }
       const rendered = await ctx.startRendering();
-      const buffer = ctx.createBuffer(2, n, sampleRate);
-      for (let c = 0; c < 2; c++) buffer.getChannelData(c).set(rendered.getChannelData(c).subarray(pre, pre + n));
+      const buffer = ctx.createBuffer(channels, n, sampleRate);
+      for (let c = 0; c < channels; c++) buffer.getChannelData(c).set(rendered.getChannelData(c).subarray(pre, pre + n));
       bank.set(key, { buffer, baseHz });
     } catch (err) {
       console.warn(`[audio] ensemble loop ${key} could not be rendered — it stays on live oscillators:`, err);

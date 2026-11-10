@@ -47,12 +47,14 @@ export class WallrunnerBrain extends Brain {
   private groundLeft = 0;
   private perchIdx = 0;
   private groundY = 0;
+  private self: Actor | null = null;
 
   constructor(core: AiCore, opts: SpawnOpts) {
     super(core, 'wallrunner', opts);
   }
 
   protected override onActive(a: Actor): void {
+    this.self = a;
     this.groundY = a.pos.y;
     this.state = 'travel';
     this.perch = null;
@@ -61,6 +63,10 @@ export class WallrunnerBrain extends Brain {
   protected override cleanup(_a: Actor): void {
     this.wisp?.stop();
     this.wisp = null;
+  }
+
+  protected override targetWeight(_a: Actor, t: Actor): number {
+    return t.flying ? 3 : 1;
   }
 
   protected override onAttackCancelled(a: Actor): void {
@@ -311,6 +317,18 @@ export class WallrunnerBrain extends Brain {
     _p.x = t.pos.x + vx;
     _p.y = t.pos.y;
     _p.z = t.pos.z + vz;
+    // it lands beside its prey, on its own side — not inside it
+    const a = this.self;
+    if (a) {
+      const dx = a.pos.x - _p.x;
+      const dz = a.pos.z - _p.z;
+      const d = Math.hypot(dx, dz);
+      const off = Math.min(d, t.radius + a.radius + 0.35);
+      if (d > 1e-3) {
+        _p.x += (dx / d) * off;
+        _p.z += (dz / d) * off;
+      }
+    }
     snapToNav(this.game, _p, 2, _p);
     this.land.set(_p.x, _p.y, _p.z);
   }

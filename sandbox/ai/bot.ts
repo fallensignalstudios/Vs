@@ -14,6 +14,8 @@ export class Bot {
   enabled = false;
   /** optional priority target supplied by the scene (a device to break first) */
   objective: (() => Actor | null) | null = null;
+  /** sim time before which the bot leaves links alone (lets a linked phase be observed) */
+  severAfter = 0;
   private pathAt = 0;
   private path: Vec3Like[] = [];
   private idx = 0;
@@ -86,7 +88,7 @@ export class Bot {
     const selene = player.protagonist === 'selene';
 
     // Selene: a visible link in reach is always the first answer
-    if (selene) {
+    if (selene && now >= this.severAfter) {
       for (const link of g.ai.links.all) {
         if (!link.alive) continue;
         link.midpoint(_mid);

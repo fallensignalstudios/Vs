@@ -393,6 +393,7 @@ describe('sample path', () => {
   it('exact (Eclipse) cues draw the same random numbers on every play', () => {
     const ctx = new FakeContext();
     const engine = engineOn(ctx);
+    ctx.currentTime = 1; // past the first milliseconds, where plays are held back (see the next test)
     const shape = (id: string): string => {
       const n = ctx.spans.length;
       engine.play(id);
@@ -410,6 +411,25 @@ describe('sample path', () => {
     }
     // … whereas an ordinary cue is different every time
     expect(shape('footStone')).not.toBe(shape('footStone'));
+  });
+});
+
+describe('the first sound of a session', () => {
+  it('is scheduled when the dynamics have opened, not into their start-up dip', () => {
+    const ctx = new FakeContext();
+    const engine = engineOn(ctx);
+    const ready = engine.mixer.readyAt;
+    expect(ready).toBeGreaterThan(0.03);
+    expect(ready).toBeLessThan(0.06);
+    engine.play('uiSelect'); // the click that unlocked audio, at context time 0
+    expect(Math.min(...ctx.spans.map((s) => s.start))).toBeCloseTo(ready, 6);
+    // a moment later nothing is held back any more
+    ctx.currentTime = 0.5;
+    const n = ctx.spans.length;
+    engine.play('uiBack');
+    expect(Math.min(...ctx.spans.slice(n).map((s) => s.start))).toBeCloseTo(0.504, 3);
+    // every compressor was given its near-zero start-up release, then its real one
+    expect(ctx.problems).toEqual([]);
   });
 });
 

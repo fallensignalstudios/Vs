@@ -73,9 +73,13 @@ export interface MissionState {
   };
 }
 
-/** Fixed story-state flag keys (never player-authored branches). */
+/**
+ * Fixed story-state flag keys (never player-authored branches).
+ * `carrierLost` is the canonical Z05 outcome (the carrier is lost with all hands; the people on the platform
+ * survive). `carrierRescued` is kept only for backward compatibility — do not set it.
+ */
 export const STORY_FLAGS = [
-  'carrierRescued', 'cageDominionDestroyed', 'cageReformationDestroyed', 'threatExchangeOpen',
+  'carrierRescued', 'carrierLost', 'cageDominionDestroyed', 'cageReformationDestroyed', 'threatExchangeOpen',
   'marineRescued', 'quarantineSeparated', 'contraryRecognized', 'assentTarrik', 'assentSelene',
   'meridianComplete', 'releaseWithheld', 'grammarPropagated', 'lyricAliveNotCured',
   'evidenceExchanged', 'pactAgreed', 'departed',

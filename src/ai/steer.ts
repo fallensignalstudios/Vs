@@ -103,15 +103,16 @@ export class NavFollower {
 
     if (opts?.separate !== false) {
       // steer round bodies standing in the way (the manager's soft push handles actual overlap)
-      const near = this.game.actors.inRadius(a.pos, a.radius + 1.3, (o) => o !== a && !o.flying && o.alive);
+      const all = this.game.actors.all;
       let sx = 0;
       let sz = 0;
-      for (let i = 0; i < near.length; i++) {
-        const o = near[i] as Actor;
+      for (let i = 0; i < all.length; i++) {
+        const o = all[i] as Actor;
+        if (o === a || o.flying || !o.alive) continue;
         const ox = a.pos.x - o.pos.x;
         const oz = a.pos.z - o.pos.z;
         const od = Math.hypot(ox, oz);
-        if (od < 1e-3) continue;
+        if (od < 1e-3 || od > a.radius + o.radius + 1.3 || Math.abs(o.pos.y - a.pos.y) > 2) continue;
         const ahead = -(ox * dx + oz * dz) / od;
         if (ahead < 0.2) continue;
         const w = Math.max(0, 1 - (od - a.radius - o.radius) / 1.3) * ahead;

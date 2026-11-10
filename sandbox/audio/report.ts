@@ -203,9 +203,9 @@ async function musicRows(state: Exclude<MusicState, 'silence'>, o: ReportOpts, p
   if (hiRow.rmsDb > db + 3.2) hiRow.flags.push(`HOT${signed(hiRow.rmsDb - db)}`);
   if (hiRow.peakDb > -4) hiRow.flags.push(`PEAK${f1(hiRow.peakDb)}`);
   if (hi.gr < -3) hiRow.flags.push(`GR${f1(hi.gr)}`);
-  if (COMBAT.includes(state)) {
-    // the combat standard: hits stand ≥ 6 dB out of the bed, 2–8 kHz carries real energy, dry leads wet
-    if (hiRow.punchDb < 6) hiRow.flags.push(`PUNCH${f1(hiRow.punchDb)}`);
+  if (state in COMBAT) {
+    // the combat standard: hits stand out of the bed, 2–8 kHz carries real energy, dry leads wet
+    if (hiRow.punchDb < COMBAT[state]) hiRow.flags.push(`PUNCH${f1(hiRow.punchDb)}`);
     if (hiRow.bands[3] < 0.06) hiRow.flags.push(`DARK${(hiRow.bands[3] * 100).toFixed(1)}%`);
     const dry = analyze(await renderMusic(state, o.secs, 1, { tap: (e) => { e.mixer.scoreSend.gain.value = 0; e.mixer.scoreRoom.gain.value = 0; } }), 1);
     const wet = analyze(await renderMusic(state, o.secs, 1, { tap: (e) => { e.mixer.music.gain.value = 0; e.mixer.musicDrums.gain.value = 0; e.mixer.musicDirect.gain.value = 0; } }), 1);
