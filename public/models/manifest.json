@@ -1,0 +1,6 @@
+{
+  "tarrik": {
+    "file": "tarrik.glb", "kind": "humanoid", "height": 1.92, "tris": 58118, "rigged": true, "facing": "+Z",
+    "skeleton": "meshy24", "notes": "Hero. No cape in mesh (procedural cloth). Hands rigid (no finger bones)."
+  }
+}
