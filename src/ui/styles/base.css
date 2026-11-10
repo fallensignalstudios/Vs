@@ -191,22 +191,23 @@
 
 /* single letters: the title face. In Barlow (and its condensed cut) Q, O and 0 are near-identical narrow ovals at
    prompt size, and I matches 1; Cinzel's tailed Q, round O and serifed I cannot be mistaken. Digits keep Barlow,
-   so 0 vs O and 1 vs I also differ by face. */
+   so 0 vs O and 1 vs I also differ by face. Polish 3: bold (700) and larger — at 600 / 14.5u the Q's tail was a
+   one-pixel hairline at 960 × 540 and the guard key still read as "0". */
 .aur-key.is-letter {
   font-family: var(--f-title);
-  font-weight: 600;
-  font-size: calc(var(--u) * 14.5);
+  font-weight: 700;
+  font-size: calc(var(--u) * 19);
   padding-bottom: 0;
 }
 
 .aur-key.is-lg.is-letter {
-  font-size: calc(var(--u) * 24);
+  font-size: calc(var(--u) * 30);
 }
 
 .aur-key.is-sm.is-letter {
   min-width: calc(var(--u) * 21);
   height: calc(var(--u) * 21);
-  font-size: calc(var(--u) * 12);
+  font-size: calc(var(--u) * 15.5);
 }
 
 /* ---------------------------------------------------------------- debug + fps */

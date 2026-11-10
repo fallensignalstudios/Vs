@@ -72,9 +72,20 @@ export function streamsOpen(snap: boolean): void {
 
 export function* bridgeScene(z: ZoneRuntime): Routine {
   const game = z.game;
+  yield 0.8;
+  // the author's two context cards belong to `bridge` alone: whatever ends the scene (its last line, a skip, an
+  // error, a reload), they never stay up over the plating fall, the panel or the exit
+  try {
+    yield* bridgeCinematic(z);
+  } finally {
+    game.ui.card(null);
+  }
+}
+
+function* bridgeCinematic(z: ZoneRuntime): Routine {
+  const game = z.game;
   const tharne = z.cast('tharne');
   const tarrik = z.cast('tarrik');
-  yield 0.8;
   yield* z.cinematic('z07-bridge', function* (c: CineCtx): Routine {
     // Tharne rises from Lyric's side to the desk a step away
     tharne?.stopAction();

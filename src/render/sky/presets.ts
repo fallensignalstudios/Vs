@@ -43,6 +43,27 @@ export interface SkyPresetDef {
   battle: { at: AzEl; spread: number; fleet: number; intensity: number };
   key: { at: AzEl; color: number; intensity: number };
   fill: { at: AzEl; color: number; intensity: number };
+  /** saturation of everything in the dome except the red remnant (1 = as authored, 0 = grey) */
+  sat: number;
+  /** tint multiplied onto the nebula (sRGB hex) */
+  nebulaTint: number;
+  /** 0..1 how many stars there are (`stars` is how bright they are) */
+  starDensity: number;
+  /** brightness of the red remnant and its nebula */
+  redGain: number;
+  /** 0..1 interiors: the megastructure's own hazy, lit upper space replaces open sky above the horizon */
+  enclosure: number;
+  /** colour of that upper space's haze (sRGB hex) */
+  enclosureColor: number;
+  /** 0..1 a shut view boundary between the viewer and space (dims and greys everything beyond it) */
+  veil: number;
+  /** brightness of the Wound's accretion swirl, debris light and inner band (the rim stays as authored) */
+  swirl: number;
+  /**
+   * white balance of everything in space (not the horizon haze, which scenic pieces share): lets a preset be
+   * authored against its zone's grade — e.g. warm here so a look with blue split-toned shadows lands on charcoal
+   */
+  tint: number;
 }
 
 /** Unit vector for an (azimuth, elevation) pair in degrees. */
@@ -60,6 +81,7 @@ const D = (o: Partial<SkyPresetDef> & Pick<SkyPresetDef, 'key'>): SkyPresetDef =
   ground: 0, gain: 1, scenicHaze: 0.00055, scenicAmbient: 0.5,
   battle: { at: [20, 40], spread: 30, fleet: 0, intensity: 0 },
   fill: { at: [-38, 20], color: 0xff5a3c, intensity: 0 },
+  sat: 1, nebulaTint: 0xffffff, starDensity: 1, redGain: 1, enclosure: 0, enclosureColor: 0x8a98a6, veil: 0, swirl: 1, tint: 0xffffff,
   ...o,
 });
 
@@ -109,16 +131,20 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
     battle: { at: [0, 60], spread: 45, fleet: 0.15, intensity: 0.3 },
     key: { at: [20, 60], color: 0x9aa4c8, intensity: 0.5 },
   }),
-  // Z09: the Wound overlook concept painting.
+  // Z09: the Wound overlook concept painting. A desaturated night — charcoal, grey-violet, teal-black — with the red
+  // remnant as the one accent, small and high on the left; the Wound a clean black disc wholly above the city,
+  // its accretion swirl reaching down behind the spires; few stars.
   woundVista: D({
-    wound: { at: [0, 8.5], radius: 14, vis: 1, lens: 0.6, debris: 1, halo: 1, activity: 0.45 },
-    red: { at: [-37, 16], radius: 7.4, vis: 1 },
-    white: { at: [33, 11], radius: 0.30, vis: 1 },
-    stars: 1, nebula: 1, zenith: 0x010207, horizon: 0x06060d, haze: 0x2b2c38, hazeAmt: 0.8, hazeFall: 15,
-    hazeRed: 0x3a0c08, hazeWhite: 0x1a2028, ground: 1, scenicHaze: 0.00042, scenicAmbient: 1.0,
-    battle: { at: [62, 30], spread: 26, fleet: 0.6, intensity: 0.15 },
-    key: { at: [33, 24], color: 0xe4ecff, intensity: 1.7 },
-    fill: { at: [-37, 18], color: 0xff5a3c, intensity: 0.45 },
+    wound: { at: [0, 15], radius: 9.5, vis: 1, lens: 0.42, debris: 1, halo: 1, activity: 0.45 },
+    red: { at: [-41, 25], radius: 4.4, vis: 1 },
+    white: { at: [34, 17], radius: 0.30, vis: 1 },
+    // (authored a touch warm: the gallery grade pulls shadows toward blue)
+    stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 2.6, tint: 0xfff3c4,
+    zenith: 0x221f1e, horizon: 0x302b29, haze: 0x463d38, hazeAmt: 0.8, hazeFall: 12,
+    hazeRed: 0x260907, hazeWhite: 0x16161a, ground: 1, scenicHaze: 0.00055, scenicAmbient: 1.0,
+    battle: { at: [62, 30], spread: 26, fleet: 0.3, intensity: 0.15 },
+    key: { at: [34, 24], color: 0xf6efe4, intensity: 1.7 },
+    fill: { at: [-41, 23], color: 0xff5a3c, intensity: 0.4 },
   }),
   // Z10: enclosed nested machinery; the view boundary is shut — dim grey nebula between immense members.
   coreChamber: D({
@@ -173,6 +199,10 @@ export class SkyState {
   readonly fillDir = new THREE.Vector3(-0.5, 0.4, 0.5).normalize();
   readonly fillColor = new THREE.Color(1, 0.35, 0.25);
   fillIntensity = 0;
+  sat = 1; starDensity = 1; redGain = 1; enclosure = 0; veil = 0; swirl = 1;
+  readonly nebulaTint = new THREE.Color(1, 1, 1);
+  readonly enclosureColor = new THREE.Color(0.25, 0.3, 0.37);
+  readonly tint = new THREE.Color(1, 1, 1);
 
   /** Load from an authored preset. */
   setFromDef(d: SkyPresetDef): this {
@@ -194,6 +224,8 @@ export class SkyState {
     this.keyColor.setHex(d.key.color); this.keyIntensity = d.key.intensity;
     dirFromAzEl(d.fill.at[0], d.fill.at[1], this.fillDir);
     this.fillColor.setHex(d.fill.color); this.fillIntensity = d.fill.intensity;
+    this.sat = d.sat; this.starDensity = d.starDensity; this.redGain = d.redGain; this.enclosure = d.enclosure; this.veil = d.veil; this.swirl = d.swirl;
+    this.nebulaTint.setHex(d.nebulaTint); this.enclosureColor.setHex(d.enclosureColor); this.tint.setHex(d.tint);
     return this;
   }
 
@@ -207,9 +239,10 @@ const NUM_KEYS = [
   'woundRadius', 'woundVis', 'woundLens', 'woundDebris', 'woundHalo', 'woundActivity', 'redRadius', 'redVis',
   'whiteRadius', 'whiteVis', 'stars', 'nebula', 'hazeAmt', 'hazeFall', 'ground', 'gain', 'scenicHaze', 'scenicAmbient',
   'battleSpread', 'fleet', 'battleIntensity', 'keyIntensity', 'fillIntensity',
+  'sat', 'starDensity', 'redGain', 'enclosure', 'veil', 'swirl',
 ] as const satisfies readonly (keyof SkyState)[];
 const DIR_KEYS = ['woundDir', 'redDir', 'whiteDir', 'battleDir', 'keyDir', 'fillDir'] as const satisfies readonly (keyof SkyState)[];
-const COL_KEYS = ['zenith', 'horizon', 'haze', 'hazeRed', 'hazeWhite', 'keyColor', 'fillColor'] as const satisfies readonly (keyof SkyState)[];
+const COL_KEYS = ['zenith', 'horizon', 'haze', 'hazeRed', 'hazeWhite', 'keyColor', 'fillColor', 'nebulaTint', 'enclosureColor', 'tint'] as const satisfies readonly (keyof SkyState)[];
 
 const _q = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();

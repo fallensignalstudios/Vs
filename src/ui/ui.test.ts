@@ -376,6 +376,25 @@ describe('HUD visibility borrowing', () => {
     r.step(0.6);
     expect(ctx.style.display).toBe('none');
   });
+  it('shows the context prompt only where its button can be read: game always, cinematic with opt-in, never menu', () => {
+    const r = rig();
+    r.ui.setHudVisible(false);
+    r.hud.context = { id: 'strike', prompt: 'Strike', button: 'attack', window: 3, onConfirm() {} };
+    const ctx = r.root.find('aur-ctx')!;
+    const input = r.game.input as unknown as { setContext(c: InputContext): void; allowInCinematic?: unknown };
+    input.setContext('menu');
+    r.step(0.5);
+    expect(ctx.style.display).toBe('none');
+    input.setContext('cinematic');
+    r.step(0.5);
+    expect(ctx.style.display).toBe('none'); // this input cannot opt a gameplay button into the scene
+    input.allowInCinematic = () => {};
+    r.step(0.5);
+    expect(ctx.style.display).toBe('flex');
+    input.setContext('game');
+    r.step(0.5);
+    expect(ctx.style.display).toBe('flex');
+  });
 });
 
 describe('added API members', () => {
@@ -394,10 +413,80 @@ describe('added API members', () => {
     expect(r.root.find('aur-readout')!.style.display).toBe('none');
     expect(r.root.find('aur-hint')!.style.display).toBe('none');
   });
-  it('estimates subtitle time like the subtitle layer does', () => {
+  it('estimates subtitle time like the subtitle layer does (short lines no longer held 2.2 s)', () => {
     const r = rig();
-    expect(r.ui.estimateSubtitleSeconds('Hold.')).toBeCloseTo(2.2);
+    expect(r.ui.estimateSubtitleSeconds('Hold.')).toBeCloseTo(1.23);
+    expect(r.ui.estimateSubtitleSeconds('Not yet.')).toBeCloseTo(1.81);
+    expect(r.ui.estimateSubtitleSeconds('Hold the line.')).toBeCloseTo(2.39);
     expect(r.ui.estimateSubtitleSeconds('one two three four five six seven eight nine ten')).toBeCloseTo(4.7);
+  });
+
+  it('zone:loading (a zone exit or a debug goto) drops the card, the board, captions and the subtitle at once', () => {
+    const r = rig();
+    r.ui.card('The fleets are not allies.', { style: 'context' });
+    r.ui.statusBoard([{ label: 'Boundary', value: 'Closed', tone: 'ok' }], { title: 'Terminal' });
+    r.ui.caption('Scan sweep', 'scan', 1);
+    r.ui.subtitle({ speaker: 'Tharne', text: 'Selene, I can bridge local targeting.' });
+    r.ui.letterbox(true, 0);
+    r.step(1.5);
+    expect(r.root.find('aur-card')!.style.display).toBe('flex');
+    expect(r.root.find('aur-board')!.style.display).toBe('block');
+    r.game.events.emit('zone:loading', { zone: 'Z08' });
+    expect(r.root.find('aur-card')!.style.display).toBe('none');
+    expect(r.root.find('aur-board')!.style.display).toBe('none');
+    expect(r.root.findAll('aur-cap').every((c) => c.style.display === 'none')).toBe(true);
+    r.step(0.5);
+    expect(r.root.find('aur-sub')!.style.display).toBe('none');
+    // a card queued to cross-fade in does not come back either
+    r.ui.card('One', { style: 'context' });
+    r.step(1);
+    r.ui.card('Two', { style: 'context' });
+    r.game.events.emit('zone:loading', { zone: 'Z09' });
+    r.step(2);
+    expect(r.root.find('aur-card')!.style.display).toBe('none');
+    // the letterbox belongs to the mission system's scene teardown, not to the UI's clean-up
+    expect(r.root.find('aur-letterbox')!.style.display).toBe('block');
+  });
+
+  it('a clean frame hides the HUD and what outlives it until switched off; a HUD restore does not undo it', () => {
+    const r = rig();
+    r.ui.zoneCard('Z01 · Pressure Hall');
+    r.ui.toast('Checkpoint saved', 'checkpoint');
+    r.ui.subtitle({ speaker: 'Lyessa', text: 'Three lanes.' , duration: 9 });
+    r.ui.skipHint(true, 0);
+    r.step(1);
+    expect(r.ui.cleanFrame).toBe(false);
+    r.ui.setCleanFrame!(true);
+    r.ui.setHudVisible(true); // a cinematic ending restores the HUD
+    r.step(1);
+    expect(r.ui.cleanFrame).toBe(true);
+    expect(r.root.find('aur-hud')!.style.display).toBe('none');
+    expect(r.root.find('aur-notices')!.style.visibility).toBe('hidden');
+    expect(r.root.find('aur-talk')!.style.visibility).toBe('hidden');
+    expect(r.root.find('aur-skip')!.style.visibility).toBe('hidden');
+    r.ui.setCleanFrame!(false);
+    r.step(1);
+    expect(r.root.find('aur-hud')!.style.display).toBe('block');
+    expect(r.root.find('aur-notices')!.style.visibility).toBe('visible');
+    expect(r.root.find('aur-talk')!.style.visibility).toBe('visible');
+    expect(r.root.find('aur-skip')!.style.visibility).toBe('');
+  });
+
+  it('status board placement: centre by default, lower third and side on request', () => {
+    const r = rig();
+    const rows = [{ label: 'Terminal release', value: 'Requires contrary bearer concurrence' }];
+    r.ui.statusBoard(rows);
+    expect(r.root.find('aur-board')!.dataset.place).toBe('centre');
+    r.ui.statusBoard(rows, { placement: 'lowerThird' });
+    expect(r.root.find('aur-board')!.dataset.place).toBe('lowerThird');
+    r.ui.statusBoard(rows, { placement: 'side' });
+    expect(r.root.find('aur-board')!.dataset.place).toBe('side');
+    r.ui.statusBoard(rows, { placement: 'center' as never });
+    expect(r.root.find('aur-board')!.dataset.place).toBe('centre');
+    r.ui.statusBoard(rows, { placement: 'ceiling' as never });
+    expect(r.root.find('aur-board')!.dataset.place).toBe('centre');
+    r.step(2);
+    expect(r.root.findAll('aur-board-row').length).toBe(1);
   });
 });
 

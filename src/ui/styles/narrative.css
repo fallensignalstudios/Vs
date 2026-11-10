@@ -515,6 +515,80 @@
   color: #ffb199;
 }
 
+/* placement 'lowerThird': a compact strip above the subtitle band, so terminal text sits under a close-up
+   (subtitles: bottom 8.2 % / letterboxed 11.5 % + 14u, at most two lines — the strip clears both) */
+.aur-board[data-place='lowerThird'] {
+  top: auto;
+  bottom: calc(11.5% + var(--u) * 132);
+  width: calc(var(--u) * 720);
+  padding: calc(var(--u) * 14) calc(var(--u) * 30) calc(var(--u) * 12);
+  background: linear-gradient(180deg, rgba(8, 12, 18, 0.8), rgba(8, 12, 18, 0.7));
+  transform: translate3d(-50%, calc(var(--u) * 8 * var(--k)), 0);
+}
+
+.aur-board[data-place='lowerThird'] .aur-board-title {
+  margin-bottom: calc(var(--u) * 6);
+  font-size: calc(var(--u) * 11.5);
+}
+
+.aur-board[data-place='lowerThird'] .aur-board-rows {
+  padding: calc(var(--u) * 4) 0 calc(var(--u) * 6);
+}
+
+.aur-board[data-place='lowerThird'] .aur-board-row {
+  height: calc(var(--u) * 32);
+}
+
+.aur-board[data-place='lowerThird'] .aur-board-label {
+  font-size: calc(var(--u) * 13);
+}
+
+.aur-board[data-place='lowerThird'] .aur-board-value {
+  font-size: calc(var(--u) * 17);
+}
+
+/* placement 'side': a narrow column at the right edge, clear of a centred face; label over value */
+.aur-board[data-place='side'] {
+  left: auto;
+  right: var(--safe-x);
+  top: 50%;
+  width: calc(var(--u) * 360);
+  padding: calc(var(--u) * 20) calc(var(--u) * 24) calc(var(--u) * 18);
+  transform: translate3d(calc(var(--u) * 10 * var(--k)), -50%, 0);
+}
+
+.aur-board[data-place='side'] .aur-board-title {
+  margin-bottom: calc(var(--u) * 8);
+  text-align: left;
+  padding-left: 0;
+  font-size: calc(var(--u) * 11.5);
+}
+
+.aur-board[data-place='side'] .aur-board-row {
+  flex-wrap: wrap;
+  align-items: baseline;
+  height: auto;
+  row-gap: calc(var(--u) * 3);
+  column-gap: calc(var(--u) * 10);
+  padding: calc(var(--u) * 8) 0;
+}
+
+.aur-board[data-place='side'] .aur-board-label {
+  flex: 0 0 100%;
+  font-size: calc(var(--u) * 12);
+}
+
+.aur-board[data-place='side'] .aur-board-lead {
+  display: none;
+}
+
+.aur-board[data-place='side'] .aur-board-value {
+  flex: 1;
+  font-size: calc(var(--u) * 16);
+  letter-spacing: 0.2em;
+  line-height: 1.25;
+}
+
 /* ================================================================ choice */
 .aur-choice-veil {
   position: absolute;

@@ -24,6 +24,11 @@ import { Guidance } from './guidance';
 import { InteractionSet } from './interact';
 import { Pickups } from './pickups';
 
+/** the player's lock target when it is a real, living actor (never a stub) */
+function liveLock(t: Actor | null | undefined): Actor | null {
+  return t && !isStub(t) && t.alive === true ? t : null;
+}
+
 /** seconds `skip` must be held to skip a cinematic */
 export const SKIP_HOLD_SECONDS = 0.8;
 /** the skip hint is shown this long at the start of every skippable cinematic */
@@ -276,6 +281,7 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
       context: input.context,
       hud: ui.hudVisible !== false,
       invulnerable: actor ? actor.invulnerable === true : false,
+      lock: liveLock(player.lockTarget),
     };
     const useCeasefire = opts?.ceasefire !== false;
     const ctx = new CineCtxImpl(g, () => this.skipping);
@@ -293,6 +299,9 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
     try {
       player.enabled = false;
       player.setContextAction(null);
+      // A lock-on keeps turning the disabled lead toward its target every tick, which undoes a `z.player.yaw` the
+      // scene sets (Z07: Selene turned back to what she had locked instead of to Tarrik). Scenes own the facing.
+      if (prev.lock) player.lockTarget = null;
       if (actor) actor.invulnerable = true;
       input.setContext('cinematic');
       if (opts?.keepHud !== true) ui.setHudVisible(false);
@@ -313,6 +322,10 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
       if (opts?.keepHud !== true) ui.setHudVisible(prev.hud);
       if (input.context === 'cinematic') input.setContext(prev.context === 'cinematic' ? 'game' : prev.context);
       player.enabled = prev.enabled;
+      // give the lock back when the same lead still faces the same living, targetable foe
+      const lock = prev.lock;
+      if (lock && !this.disposed && now === actor && player.lockTarget === null && lock.alive && lock.targetable !== false
+        && (isStub(g.actors) || g.actors.areHostile(actor!, lock))) player.lockTarget = lock;
       camera.cine.finish();
       camera.release(this.disposed ? 0 : opts?.blendOut ?? 0.6);
       g.events.emit('cinematic:end', { id, skipped: cine.skipped });

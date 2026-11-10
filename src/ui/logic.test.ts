@@ -94,7 +94,11 @@ describe('subtitle pagination', () => {
     expect(d[0]).toBeGreaterThan(d[1]!);
   });
   it('estimates reading time within bounds', () => {
-    expect(subtitleSeconds('Go.')).toBeGreaterThanOrEqual(2.2);
+    expect(subtitleSeconds('Go.')).toBeGreaterThanOrEqual(1.2);
+    expect(subtitleSeconds('Go.')).toBeLessThan(1.3);
+    expect(subtitleSeconds('Go now.')).toBeLessThan(2);
+    expect(subtitleSeconds('Go now, Tharne.')).toBeGreaterThanOrEqual(2.2);
+    for (let w = 1; w < 40; w++) expect(subtitleSeconds('w '.repeat(w + 1))).toBeGreaterThanOrEqual(subtitleSeconds('w '.repeat(w)));
     expect(subtitleSeconds('word '.repeat(80))).toBeLessThanOrEqual(9);
   });
 });

@@ -4,6 +4,16 @@ import { DOME_FRAGMENT, DOME_VERTEX } from './domeShader';
 import type { SkyState } from './presets';
 import { SKY_ORDER, viewportTracker, type SharedUniforms } from './shared';
 
+/**
+ * The Wound breathes with its activity: drawn back (activity → 0) it contracts to 86 % of its authored radius,
+ * at the default 0.3 it is exactly the authored size, and at full activity it swells by 3 %.
+ */
+export function woundScale(activity: number): number {
+  const a = Math.min(Math.max(Number.isFinite(activity) ? activity : 0.3, 0), 1);
+  const s1 = (t: number): number => t * t * (3 - 2 * t);
+  return 0.86 + 0.14 * s1(Math.min(a / 0.3, 1)) + 0.03 * s1(Math.max(0, (a - 0.3) / 0.7));
+}
+
 export interface SkyDome {
   readonly mesh: THREE.Mesh;
   /** push the blended state + animated scalars into the shader */
@@ -26,6 +36,8 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     uStars: { value: 1 }, uNebula: { value: 0.6 },
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
     uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall, uGround: { value: 0 }, uGain: { value: 1 },
+    uSat: { value: 1 }, uNebTint: { value: new THREE.Color(1, 1, 1) }, uStarDens: { value: 1 }, uRedGain: { value: 1 },
+    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
   };
   // one program per quality tier, sharing every uniform; variants are created the first time they are needed
   const variants: Array<THREE.ShaderMaterial | null> = [null, null, null];
@@ -83,6 +95,16 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uHorizon.value.copy(s.horizon);
       uniforms.uGround.value = s.ground;
       uniforms.uGain.value = s.gain;
+      uniforms.uSat.value = s.sat;
+      uniforms.uNebTint.value.copy(s.nebulaTint);
+      uniforms.uStarDens.value = s.starDensity;
+      uniforms.uRedGain.value = s.redGain;
+      uniforms.uEnclose.value = s.enclosure;
+      uniforms.uEncCol.value.copy(s.enclosureColor);
+      uniforms.uVeil.value = s.veil;
+      uniforms.uSwirl.value = s.swirl;
+      uniforms.uTint.value.copy(s.tint);
+      uniforms.uWoundScale.value = woundScale(activity);
     },
     get detail() { return detail; },
     setDetail(level) {

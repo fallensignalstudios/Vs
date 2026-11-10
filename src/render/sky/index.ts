@@ -122,13 +122,37 @@ class SkySystemImpl implements SkySystem {
   }
 
   setBattleIntensity(n: number): void { this.battleTarget = clamp01(finite(n, 0)); }
-  setWoundActivity(n: number): void { this.activityTarget = clamp01(finite(n, 0)); }
 
-  setBoundaryClosed(closed: boolean, seconds = 3): void {
+  setWoundActivity(n: number, opts?: { snap?: boolean }): void {
+    this.activityTarget = clamp01(finite(n, 0));
+    if (opts?.snap === true || this.fastForward()) {
+      this.activityNow = this.activityTarget;
+      this.pushUniforms();
+    }
+  }
+
+  setBoundaryClosed(closed: boolean, seconds = 3, opts?: { snap?: boolean }): void {
     this.closedTarget = closed ? 1 : 0;
     const s = finite(seconds, 3);
-    if (s <= 0) this.closedNow = this.closedTarget;
-    else this.closedRate = 1 / s;
+    if (s <= 0 || opts?.snap === true || this.fastForward()) {
+      this.closedNow = this.closedTarget;
+      this.pushUniforms();
+    } else this.closedRate = 1 / s;
+  }
+
+  /**
+   * True while the mission fast-forwards (a cinematic skip) or loads a zone (beat `enter` restoring a stage):
+   * the eased setters land on their target at once, so a skipped scene ends in exactly the state it would have
+   * reached watched. Reads the mission defensively — the sky also runs in sandboxes without one.
+   */
+  private fastForward(): boolean {
+    try {
+      const m = this.game.mission;
+      if (!m || isStub(m)) return false;
+      return m.loading === true || m.runtime?.skipping === true;
+    } catch {
+      return false;
+    }
   }
 
   setHeading(yaw: number): void {

@@ -1,11 +1,29 @@
 /**
  * Status board for the consequence sequence ("BOUNDARY — CLOSED", "RELEASE — WITHHELD"). Rows reveal one by
  * one; calling again with a longer list keeps the rows already on screen and reveals only the new ones.
+ * Placement: 'centre' (the default panel), 'lowerThird' (a compact strip above the subtitles, so terminal text
+ * can sit under a close-up) or 'side' (a narrow column at the right edge; each row stacks label over value).
  */
-import { Fader, Txt, clear, h, svg } from '../dom';
+import { Fader, Txt, clear, h, svg, warnOnce } from '../dom';
 import { ICON } from '../theme';
 
 export type BoardTone = 'ok' | 'warn' | 'neutral';
+export type BoardPlacement = 'centre' | 'lowerThird' | 'side';
+const PLACEMENTS: readonly BoardPlacement[] = ['centre', 'lowerThird', 'side'];
+
+export interface BoardOpts {
+  title?: string;
+  placement?: BoardPlacement;
+}
+
+/** 'center' is accepted for 'centre'; anything unknown warns once and falls back to the centre panel */
+export function boardPlacement(v: unknown): BoardPlacement {
+  if (v === undefined || v === null || v === 'center') return 'centre';
+  if ((PLACEMENTS as readonly unknown[]).includes(v)) return v as BoardPlacement;
+  warnOnce(`board:${String(v)}`, `unknown statusBoard placement "${String(v)}" — using 'centre'`);
+  return 'centre';
+}
+
 export interface BoardRow {
   label: string;
   value: string;
@@ -37,6 +55,7 @@ export class StatusBoard {
   private readonly rowsEl: HTMLElement;
   private readonly rows: RowView[] = [];
   private active = 0;
+  private place: BoardPlacement | '' = '';
 
   constructor() {
     this.titleEl = h('div', 'aur-board-title aur-label');
@@ -44,9 +63,23 @@ export class StatusBoard {
     this.el = h('div', 'aur-board', h('div', 'aur-board-head', this.titleEl, h('div', 'aur-rule')), this.rowsEl, h('div', 'aur-rule'));
     this.title = new Txt(this.titleEl);
     this.fader = new Fader(this.el, { in: 0.6, out: 0.7 });
+    this.setPlacement('centre');
   }
 
-  set(rows: BoardRow[] | null, options?: { title?: string } | null): void {
+  /** where the board sits; applies at once, also to a board already on screen */
+  setPlacement(p: BoardPlacement): void {
+    if (p === this.place) return;
+    this.place = p;
+    this.el.dataset.place = p;
+  }
+
+  /** ADDED. Drop the board at once (zone change). */
+  clear(): void {
+    this.fader.show(false, true);
+    this.active = 0;
+  }
+
+  set(rows: BoardRow[] | null, options?: BoardOpts | null): void {
     const opts = options ?? {};
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       this.fader.show(false);
@@ -60,6 +93,7 @@ export class StatusBoard {
       this.rows.length = 0;
       this.active = 0;
     }
+    this.setPlacement(boardPlacement(opts.placement));
     const title = String(opts.title ?? '').trim();
     this.title.set(title);
     this.titleEl.style.display = title ? '' : 'none';

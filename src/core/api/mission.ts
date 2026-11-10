@@ -109,8 +109,10 @@ export interface ZoneDef {
 
 export interface SayOpts {
   /**
-   * seconds the line stays up. Default: the voice-over clip's length + 0.25 s when one exists, otherwise
-   * clamp(1.6 + 0.055 × characters, 2, 8).
+   * seconds the line stays up. A given duration is always used as is (with voice-over: at least the clip's
+   * length + 0.25 s). Default: the voice-over clip's length + 0.25 s when one exists, otherwise the reading time
+   * clamp(1.6 + 0.055 × characters, 2, 8) for lines of 20 characters or more; shorter lines ease down to a 1.2 s
+   * floor ("No." 1.2 s, "Do it." ≈ 1.4 s, "Kill them." ≈ 1.8 s). (Polish 3: the floor was 2 s for every line.)
    */
   duration?: number;
   offscreen?: boolean;
@@ -118,7 +120,9 @@ export interface SayOpts {
   /**
    * make the speaking companion/actor face its listener (the protagonist, else the nearest same-side figure),
    * look at the listener's eyes (its `eye` / `head` socket — right for seated, kneeling or lying listeners) and
-   * play the talk gesture for the length of the line
+   * play the talk gesture for the length of the line. After the line a companion returns to the facing target
+   * the zone gave it with `face()` before the line (or none). Only companions are turned; for the protagonist's
+   * own actor (`actor: z.player`) the head turns but the body keeps the yaw the zone set.
    */
   actor?: Actor | Companion | null;
   /**
@@ -127,6 +131,17 @@ export interface SayOpts {
    * held pose is not interrupted. Default true. Only meaningful with `actor`.
    */
   gesture?: boolean;
+  /**
+   * ADDED (polish 3). true = the speaker keeps its body facing (it is not turned to the listener and keeps the
+   * `face()` target the zone gave it); only the head turns toward the listener's eyes, within the neck's range.
+   * Default false. Only meaningful with `actor`.
+   */
+  keepFacing?: boolean;
+  /**
+   * ADDED (polish 3). true = a drawn weapon stays drawn: no talk gesture (that clip needs empty hands) — the same
+   * as `gesture: false`. Default false. Only meaningful with `actor`.
+   */
+  keepWeapon?: boolean;
 }
 
 /**
@@ -160,6 +175,11 @@ export interface InteractOpts {
 export interface Interactable {
   readonly id: string;
   readonly done: boolean;
+  /**
+   * ADDED (polish 3). `InteractOpts.required` as given (false for optional pockets). Optional so hand-built
+   * stand-ins stay valid; a reader treats a missing value as required.
+   */
+  readonly required?: boolean;
   enabled: boolean;
   readonly pos: THREE.Vector3;
   /** 0..1 current hold progress */
@@ -356,6 +376,23 @@ export interface CheckpointInfo {
   label: string;
 }
 
+/**
+ * ADDED (polish 3). Options for `gotoZone` (the debug harness's `goto` passes `fresh: true`). Applied inside the
+ * load queue, after any load already in flight, right before the zone builds.
+ */
+export interface GotoOpts {
+  /**
+   * start from a fresh mission state — no flags, story flags, recorded choices, optional records or priority —
+   * keeping only the difficulty and the play statistics; as if the page had been opened at this zone. Default
+   * false (the state as it stands).
+   */
+  fresh?: boolean;
+  /** flags to set after the reset (e.g. `{ z03Detected: true }`, `{ officerFate: 'spared' }`) */
+  flags?: Record<string, boolean | number | string>;
+  /** the recorded Z07 priority to start with (Z08 / Z11 read it) */
+  rescuePriority?: Exclude<RescuePriority, 'pending'>;
+}
+
 /** ADDED (mission). The decision panel that is waiting for an answer (autoplay / tests select through it). */
 export interface ActiveChoice {
   readonly id: string;
@@ -398,6 +435,10 @@ export interface MissionSystem {
   /** current objective for HUD / autoplay */
   readonly objectiveText: string | null;
   readonly objectiveMarker: THREE.Vector3 | null;
+  /**
+   * interactions not done yet in the loaded zone. (Polish 3: optional ones are listed too — O1–O4 records, side
+   * consoles; filter on `Interactable.required` for the critical path, as the autoplay bot does.)
+   */
   readonly interactables: readonly Interactable[];
   readonly checkpoints: readonly CheckpointInfo[];
 
@@ -406,7 +447,7 @@ export interface MissionSystem {
   newGame(difficulty?: Difficulty): Promise<void>;
   continueGame(): Promise<boolean>;
   /** load a zone at a beat (default first). Unloads the current zone. */
-  gotoZone(zone: ZoneId, beat?: string): Promise<void>;
+  gotoZone(zone: ZoneId, beat?: string, opts?: GotoOpts): Promise<void>;
   loadCheckpoint(id: CheckpointId): Promise<void>;
   /** reload the last saved checkpoint (death / pause menu) */
   reloadCheckpoint(): Promise<void>;

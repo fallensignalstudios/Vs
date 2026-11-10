@@ -5,18 +5,33 @@ import { createTestWorld, idle, spawnAtStart, zoneOf } from './testkit';
 import type { Actor, CharacterVisual, Routine, Vec3Like, ZoneRuntime } from '@/core/api';
 
 describe('dialogue duration', () => {
-  it('is clamp(1.6 + 0.055 × chars, 2, 8)', () => {
-    expect(lineDuration('')).toBe(2);
-    expect(lineDuration('No.')).toBe(2);
+  it('is clamp(1.6 + 0.055 × chars, 2, 8) from 20 characters up', () => {
     expect(lineDuration('x'.repeat(20))).toBeCloseTo(2.7, 6);
     expect(lineDuration('x'.repeat(60))).toBeCloseTo(4.9, 6);
     expect(lineDuration('x'.repeat(110))).toBeCloseTo(7.65, 6);
     expect(lineDuration('x'.repeat(400))).toBe(8);
   });
 
+  it('one- and two-word lines ease down to a 1.2 s floor (polish 3: was 2 s for every line)', () => {
+    expect(lineDuration('')).toBeCloseTo(1.2, 6);
+    expect(lineDuration('No.')).toBeCloseTo(1.2, 6);
+    expect(lineDuration('West.')).toBeLessThan(1.35);
+    expect(lineDuration('Do it.')).toBeCloseTo(1.356, 3);
+    expect(lineDuration('Kill them.')).toBeGreaterThan(1.6);
+    expect(lineDuration('Kill them.')).toBeLessThan(1.9);
+    // continuous and never shorter for a longer line
+    let prev = lineDuration('');
+    for (let n = 0; n <= 160; n++) {
+      const d = lineDuration('x'.repeat(n));
+      expect(d).toBeGreaterThanOrEqual(prev - 1e-9);
+      expect(d - prev).toBeLessThan(0.12);
+      prev = d;
+    }
+  });
+
   it('never returns a non-finite duration for bad input', () => {
-    expect(lineDuration(undefined as unknown as string)).toBe(2);
-    expect(lineDuration(null as unknown as string)).toBe(2);
+    expect(lineDuration(undefined as unknown as string)).toBeCloseTo(1.2, 6);
+    expect(lineDuration(null as unknown as string)).toBeCloseTo(1.2, 6);
   });
 
   it('barks go stale after six seconds in the queue', () => {
@@ -152,6 +167,99 @@ describe('speaker gestures', () => {
     // no believable socket (the root comes back for unknown names): eye height of a standing figure
     const bare = { pos, height: 1.8, visual: fakeVisual([], pos) } as unknown as Actor;
     expect(gazePoint(bare, { x: 0, y: 0, z: 0 }).y).toBeCloseTo(1.8 * 0.93, 6);
+  });
+
+  /** a companion-shaped speaker that records face() calls into the same log as its visual */
+  function fakeCompanion(calls: string[], at: THREE.Vector3, faceTo: THREE.Vector3 | null = null) {
+    const actor = { id: 11, pos: at, height: 1.8, alive: true, team: 'player', visual: fakeVisual(calls, at) } as unknown as Actor;
+    const c = {
+      actor, who: 'tharne', mode: 'scripted', faceTo,
+      moveTo: () => {},
+      face(t: Vec3Like | null) {
+        this.faceTo = t ? new THREE.Vector3(t.x, t.y, t.z) : null;
+        calls.push(t ? `face:${t.x.toFixed(1)},${t.z.toFixed(1)}` : 'face:null');
+        // the real Companion.face also points the head at the (foot-level) point it is given
+        actor.visual!.lookAt(this.faceTo);
+      },
+    };
+    return c;
+  }
+
+  function sayWorld(lines: (rt: ZoneRuntime) => Routine) {
+    const z = zoneOf('Z00', [{ id: 'a', enter: spawnAtStart, run: lines }, { id: 'b', run: idle }]);
+    return createTestWorld({ zones: [z] });
+  }
+
+  it("a companion speaker turns to the listener but its gaze ends on the listener's eyes, not its feet", async () => {
+    const calls: string[] = [];
+    const tharne = fakeCompanion(calls, new THREE.Vector3(3, 0, 0));
+    const w = sayWorld(function* (rt) {
+      yield* rt.say('Tharne', 'Both routes stay passable.', { actor: tharne as never, duration: 1 });
+      rt.setFlag('said', true);
+    });
+    await w.mission.gotoZone('Z00');
+    const lead = w.player.actor as Actor;
+    (lead as { visual: CharacterVisual | null }).visual = fakeVisual([], lead.pos, { eye: 1.6 });
+    w.tick(1.2);
+    expect(w.mission.state.flags.said).toBe(true);
+    const faceAt = calls.findIndex((c) => c.startsWith('face:') && c !== 'face:null');
+    expect(faceAt).toBeGreaterThanOrEqual(0);
+    // the first gaze after the turn is the eye point (1.6 m), the last word before the line ends
+    const looks = calls.slice(faceAt).filter((c) => c.startsWith('look:'));
+    expect(looks[1]).toBe(`look:${(lead.pos.y + 1.6).toFixed(2)}`);
+    // no facing of its own before the line: released afterwards
+    expect(calls.at(-2)).toBe('face:null');
+  });
+
+  it('after the line a companion goes back to the facing the zone gave it', async () => {
+    const calls: string[] = [];
+    const target = new THREE.Vector3(9, 0, -4);
+    const tharne = fakeCompanion(calls, new THREE.Vector3(3, 0, 0), target.clone());
+    const w = sayWorld(function* (rt) {
+      yield* rt.say('Tharne', 'It followed the containment geometry.', { actor: tharne as never, duration: 1 });
+      rt.setFlag('said', true);
+    });
+    await w.mission.gotoZone('Z00');
+    w.tick(1.2);
+    expect(w.mission.state.flags.said).toBe(true);
+    expect(calls.filter((c) => c.startsWith('face:')).at(-1)).toBe('face:9.0,-4.0');
+    expect(tharne.faceTo?.x).toBe(9);
+  });
+
+  it('keepFacing leaves the body alone — only the head turns to the listener', async () => {
+    const calls: string[] = [];
+    const target = new THREE.Vector3(-5, 0, 1);
+    const tharne = fakeCompanion(calls, new THREE.Vector3(3, 0, 0), target.clone());
+    const w = sayWorld(function* (rt) {
+      yield* rt.say('Tharne', 'I can bridge local targeting.', { actor: tharne as never, keepFacing: true, duration: 1 });
+      rt.setFlag('said', true);
+    });
+    await w.mission.gotoZone('Z00');
+    const lead = w.player.actor as Actor;
+    (lead as { visual: CharacterVisual | null }).visual = fakeVisual([], lead.pos, { eye: 1.6 });
+    w.tick(1.2);
+    expect(w.mission.state.flags.said).toBe(true);
+    expect(calls.some((c) => c.startsWith('face:'))).toBe(false);
+    expect(calls).toContain(`look:${(lead.pos.y + 1.6).toFixed(2)}`);
+    expect(calls).toContain('play:talk');
+    // the head goes back to what the body faces
+    expect(calls.at(-1)).toBe('look:0.00');
+    expect(tharne.faceTo?.x).toBe(-5);
+  });
+
+  it('keepWeapon is the same as gesture: false (no talk clip, the mouth moves)', async () => {
+    const calls: string[] = [];
+    const tharne = fakeCompanion(calls, new THREE.Vector3(3, 0, 0));
+    const w = sayWorld(function* (rt) {
+      yield* rt.say('Tharne', 'Hold.', { actor: tharne as never, keepWeapon: true, duration: 1 });
+      rt.setFlag('said', true);
+    });
+    await w.mission.gotoZone('Z00');
+    w.tick(1.2);
+    expect(w.mission.state.flags.said).toBe(true);
+    expect(calls).not.toContain('play:talk');
+    expect(calls).toContain('speak:0.7');
+    expect(calls).toContain('speak:0');
   });
 
   it('gesture: false keeps a drawn weapon out — no talk clip, the mouth moves, the gaze still meets the listener', async () => {

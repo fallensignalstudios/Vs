@@ -16,6 +16,16 @@ import { Reticle } from './reticle';
 import { Vitals } from './vitals';
 import { WorldHud } from './world';
 
+/** can the player answer a context prompt in the current input context? (see Hud.readContext) */
+export function contextPromptAllowed(game: Game): boolean {
+  const input = game.input;
+  if (isStub(input)) return true;
+  const ctx = input.context;
+  if (ctx === 'menu') return false;
+  if (ctx === 'cinematic') return typeof input.allowInCinematic === 'function';
+  return true;
+}
+
 export class Hud {
   /** projected elements (markers, pips, lock bracket) — lowest layer */
   readonly worldEl: HTMLElement;
@@ -135,8 +145,14 @@ export class Hud {
   hitMarker(kind?: HitKind): void { this.reticle.hitMarker(kind); }
   focusActor(actor: Actor | null): void { this.world.focusActor(actor); }
 
-  /** the context action on offer (with its widened window), read even while the rest of the HUD is hidden */
+  /**
+   * the context action on offer (with its widened window), read even while the rest of the HUD is hidden — but
+   * only while the input context lets its button through: always in 'game'; in 'cinematic' when the input system
+   * can opt the button in (`allowInCinematic`, which the player's context actions use by themselves); never in
+   * 'menu' (a menu has the keys, so a prompt there could not be answered).
+   */
   private readContext(s: PlayerHudState | null): ContextAction | null {
+    if (!contextPromptAllowed(this.game)) return null;
     const st = s ?? this.readState();
     return st?.context ?? null;
   }

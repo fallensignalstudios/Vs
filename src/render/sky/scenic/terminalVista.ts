@@ -102,8 +102,9 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
     }
   }
 
-  const tones: SpireTone[] = ['black', 'mixed', 'mixed', 'white'];
-  const styles: SpireStyle[] = ['needle', 'needle', 'blade', 'cluster', 'stepped'];
+  // weathered pale stone dominates (the concept's white-gold city), black stone at the footings and between
+  const tones: SpireTone[] = ['white', 'white', 'mixed', 'mixed', 'black'];
+  const styles: SpireStyle[] = ['needle', 'crown', 'rib', 'needle', 'crown', 'cluster', 'stepped', 'blade'];
   const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)];
   const spire = (x: number, z: number, h: number, r: number, tone: SpireTone, style: SpireStyle, base = yd): void => {
     if (inCorridor(x, z) || Math.hypot(x, z) < 760) return; // the near field belongs to the authored hero towers
@@ -198,8 +199,8 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   // (pushed outward, the nearest pair also steps back so it stays inside a forward-looking frame)
   const zf = edge > 0 ? 1.6 : 1;
   const heroes: Array<[number, number, number, number, SpireTone, SpireStyle]> = [
-    [hx(-300, 30), -330 * zf, drop + 190, 30, 'white', 'cluster'], [hx(-560, 24) - (edge > 0 ? 190 : 0), -640, drop + 90, 24, 'mixed', 'stepped'], [hx(-215, 15), -560 * zf, drop + 10, 15, 'white', 'blade'],
-    [hx(390, 32), -430 * zf, drop + 250, 32, 'white', 'cluster'], [hx(640, 26) + (edge > 0 ? 150 : 0), -780, drop + 130, 26, 'mixed', 'stepped'], [hx(270, 15), -720 * zf, drop + 30, 15, 'white', 'blade'],
+    [hx(-300, 30), -330 * zf, drop + 190, 30, 'white', 'crown'], [hx(-560, 24) - (edge > 0 ? 190 : 0), -640, drop + 90, 24, 'mixed', 'stepped'], [hx(-215, 15), -560 * zf, drop + 10, 15, 'white', 'rib'],
+    [hx(390, 32), -430 * zf, drop + 250, 32, 'white', 'needle'], [hx(640, 26) + (edge > 0 ? 150 : 0), -780, drop + 130, 26, 'mixed', 'crown'], [hx(270, 15), -720 * zf, drop + 30, 15, 'white', 'rib'],
   ];
   for (const [x, z, h, r, tone, style] of heroes) {
     addPier(b, cards, x, z, yd, r, 640, rand, 1, true);
@@ -229,7 +230,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   const group = new THREE.Group();
   group.name = 'scenic:terminalVista';
   const mesh = new THREE.Mesh(b.build(), createScenicMaterial(shared, {
-    name: 'ScenicVista', panel: [34, 17], gloss: 0.85, lowHaze: 1, lowStart: yd - 20, lowDepth: 460, windows: [5.5, 11, 1.5], nearFill: [0.22, 0.21, 0.24, 1300],
+    name: 'ScenicVista', panel: [34, 17], gloss: 0.85, lowHaze: 1, lowStart: yd - 20, lowDepth: 460, windows: [5.5, 11, 0.55], nearFill: [0.23, 0.215, 0.2, 1300], weather: 1, ambientTint: [0.22, 0.18, 0.125],
   }));
   mesh.name = 'scenic:terminalVista:structure';
   mesh.frustumCulled = false;

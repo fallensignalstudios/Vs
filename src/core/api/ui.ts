@@ -18,7 +18,9 @@
  *      'objective:changed' → objective(text)     'player:protagonist' → HUD accent + name swap
  *      'player:damaged' → damage-direction arc   'actor:hit' (attacker = player) → hit marker
  *      'player:echo' → Echo gain flash + "+22 counter" label   'player:healed' → heal flash
- *      'zone:loading' → clears world-bound HUD (markers, prompt, hint, readout, elite frame, pinned actor)
+ *      'zone:loading' → clears world-bound HUD (markers, prompt, hint, readout, elite frame, pinned actor) and
+ *                       the scene's narrative staging (card, flash, status board, captions, subtitle, skip hint)
+ *                       — so a zone exit or a debug goto never carries a card into the next zone
  *  - UI sounds the UI plays itself (do not double them): uiMove / uiSelect / uiBack in menus, uiPrompt when a
  *    context action appears, uiObjective when the objective line changes, uiChoice / uiCommit on the choice
  *    panel. (The checkpoint toast is silent: the audio system already answers 'checkpoint:saved'.)
@@ -116,6 +118,16 @@ export interface UiSystem {
   setHudVisible(visible: boolean): void;
   /** ADDED — the visibility last requested through setHudVisible (save it before a cinematic, restore after). */
   readonly hudVisible: boolean;
+  /**
+   * ADDED (polish 3) — screenshot mode for the debug harness (`__aurelion.hud(false)`): hides the HUD AND what
+   * normally outlives it — zone card, toasts, subtitles, captions, the context prompt and the skip hint — until
+   * turned off. Independent of `setHudVisible` (a cinematic restoring the HUD does not undo it); narrative cards,
+   * flash text, the status board, letterbox, fades, the choice panel and menus still draw. Timers keep running
+   * underneath. Optional so hand-built UI stand-ins stay valid.
+   */
+  setCleanFrame?(on: boolean): void;
+  /** ADDED (polish 3) — the state last set through setCleanFrame */
+  readonly cleanFrame?: boolean;
   /** current objective line (null hides). A change animates and is tagged "Updated" for a few seconds. */
   objective(text: string | null): void;
   /**
@@ -160,7 +172,10 @@ export interface UiSystem {
    * A line that nobody clears disappears `duration` (or `estimateSubtitleSeconds`) + 2.5 s after it appeared.
    */
   subtitle(line: DialogueLine | null): void;
-  /** ADDED — reading time the UI assumes for a line without `duration` (1.4 s + 0.33 s/word, clamped 2.2–9 s). */
+  /**
+   * ADDED — reading time the UI assumes for a line without `duration`: 1.4 s + 0.33 s/word, clamped 2.2–9 s, for
+   * three words or more; one- and two-word lines get a shorter lead-in (≈ 1.2 s for one word, ≈ 1.8 s for two).
+   */
   estimateSubtitleSeconds(text: string): number;
   /**
    * "[ SCAN SWEEP → right ]" caption with a kind icon; `bearing` in radians relative to camera forward
@@ -196,8 +211,15 @@ export interface UiSystem {
    * status rows (consequence sequence: "BOUNDARY — CLOSED", "RELEASE — WITHHELD"). Rows reveal one by one
    * (~0.7 s apart); calling again with a longer list keeps the rows already shown and reveals only the new ones.
    * Tones differ by glyph: ok = check, warn = triangle, neutral = dash.
+   * ADDED (polish 3) `placement`: 'centre' (default — the panel in the middle of the screen), 'lowerThird' (a
+   * compact strip above the subtitle band, so terminal text can sit under a close-up) or 'side' (a narrow column
+   * at the right edge; label over value). It applies at once, also to a board already on screen; omitted means
+   * 'centre'.
    */
-  statusBoard(rows: Array<{ label: string; value: string; tone?: 'ok' | 'warn' | 'neutral' }> | null, opts?: { title?: string }): void;
+  statusBoard(
+    rows: Array<{ label: string; value: string; tone?: 'ok' | 'warn' | 'neutral' }> | null,
+    opts?: { title?: string; placement?: 'centre' | 'lowerThird' | 'side' },
+  ): void;
 
   /** true while a menu/choice has focus and gameplay input should be ignored */
   readonly modalOpen: boolean;

@@ -12,8 +12,11 @@ const DEG = Math.PI / 180;
 export const EYE = 1.7;
 /** lights are tolerated this far above the horizon inside the cone (the city's own glow line) */
 const GLOW_LINE = 1.1 * DEG;
-/** structure tops inside the cone stay below this elevation */
-const CAP = 6 * DEG;
+/**
+ * Structure tops inside the cone stay below this elevation: a little under the disc's lower limb, so no spire
+ * ever cuts into the Wound's silhouette (the accretion swirl beyond the rim may sink behind them).
+ */
+const CAP = Math.max(SKY_PRESETS.woundVista.wound.at[1] - SKY_PRESETS.woundVista.wound.radius * 1.12, 1.5) * DEG;
 
 export interface WoundCone { dir: THREE.Vector3; radius: number }
 
@@ -33,9 +36,19 @@ export function insideWound(cone: WoundCone, x: number, y: number, z: number, ma
   return Math.acos(Math.max(-1, Math.min(1, c))) < cone.radius * margin;
 }
 
-/** Tallest a structure at (x, z) may stand (`top` = wanted top height) and whether it may carry lights. */
+/**
+ * Tallest a structure at (x, z) may stand (`top` = wanted top height) and whether it may carry lights. Anything
+ * standing in the disc's azimuth band (seen from the overlook) is capped under the lower limb — a spire whose top
+ * would rise past the disc would otherwise cut its silhouette on the way up.
+ */
 export function woundLimit(cone: WoundCone | null, x: number, z: number, top: number): { top: number; lit: boolean } {
-  if (!cone || !insideWound(cone, x, top, z, 1.1)) return { top, lit: true };
-  const capped = Math.min(top, EYE + Math.tan(CAP) * Math.hypot(x, z));
-  return { top: capped, lit: !insideWound(cone, x, capped, z, 1.1) };
+  if (!cone) return { top, lit: true };
+  const hd = Math.hypot(x, z);
+  const ch = Math.hypot(cone.dir.x, cone.dir.z);
+  if (hd < 1e-6 || ch < 1e-6) return { top, lit: !insideWound(cone, x, top, z, 1.1) };
+  const daz = Math.acos(Math.max(-1, Math.min(1, (x * cone.dir.x + z * cone.dir.z) / (hd * ch))));
+  const inBand = daz * ch < cone.radius * 1.15;
+  const capTop = EYE + Math.tan(CAP) * hd;
+  if (!inBand || top <= capTop) return { top, lit: !insideWound(cone, x, top, z, 1.1) };
+  return { top: capTop, lit: !insideWound(cone, x, capTop, z, 1.1) };
 }

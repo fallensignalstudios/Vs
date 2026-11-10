@@ -35,6 +35,10 @@ class InteractableImpl implements Interactable {
     return this.opts.id;
   }
 
+  get required(): boolean {
+    return this.opts.required === true;
+  }
+
   get enabled(): boolean {
     if (!this.manualEnabled || this.done || this.removed) return false;
     const fn = this.opts.enabled;
@@ -82,6 +86,11 @@ export class InteractionSet {
   /** required interactions still to do (nav assist + autoplay) */
   get required(): Interactable[] {
     return this.items.filter((i) => i.opts.required === true && !i.done);
+  }
+
+  /** every interaction still to do, required and optional (`Interactable.required` tells them apart) */
+  get pending(): Interactable[] {
+    return this.items.filter((i) => !i.done);
   }
 
   get all(): readonly Interactable[] {

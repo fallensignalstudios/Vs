@@ -119,6 +119,7 @@ export class SkipHint {
   private readonly ringEl: HTMLElement;
   private readonly ring: Num;
   private readonly label: Txt;
+  private covered = false;
 
   constructor(private readonly game: Game) {
     this.key = keycap('', '');
@@ -139,6 +140,13 @@ export class SkipHint {
       this.label.set(this.game.settings.get('holdToToggle') === true ? 'Press to skip' : p > 0 ? 'Skipping' : 'Hold to skip');
     }
     this.fader.show(show === true);
+  }
+
+  /** hidden without losing state (debug clean frame) */
+  setCovered(covered: boolean): void {
+    if (covered === this.covered) return;
+    this.covered = covered;
+    this.el.style.visibility = covered ? 'hidden' : '';
   }
 
   update(dt: number): void {
@@ -214,6 +222,14 @@ export class Card {
       return;
     }
     this.present(spec);
+  }
+
+  /** ADDED. Drop the card (and one waiting to cross-fade in) at once — a zone change never inherits a card. */
+  clear(): void {
+    this.pending = null;
+    this.current = null;
+    this.life = Infinity;
+    this.fader.show(false, true);
   }
 
   private present(spec: CardSpec): void {

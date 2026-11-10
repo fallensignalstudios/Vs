@@ -5,6 +5,8 @@
  * Timing is driven exclusively by `update(dt)` (deterministic under headless stepping); the DOM is only
  * touched when a value changes.
  */
+// Cinzel 700 for single-letter key caps (Q / O / I must not read as 0 / 1 at prompt size)
+import '@fontsource/cinzel/latin-700.css';
 import './styles/base.css';
 import './styles/hud-player.css';
 import './styles/hud-centre.css';
@@ -24,7 +26,7 @@ import { h } from './dom';
 import { Hud } from './hud';
 import { subtitleSeconds, type HitKind } from './logic';
 import { MenuInput, ModalStack } from './menu';
-import { StatusBoard, type BoardRow } from './narrative/board';
+import { StatusBoard, type BoardOpts, type BoardRow } from './narrative/board';
 import { ChoicePanel } from './narrative/choice';
 import { Card, FlashText, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor } from './narrative/stage';
 import { Subtitles } from './narrative/subtitles';
@@ -35,7 +37,7 @@ import { TitleScreen } from './screens/title';
 import { artUrl } from './theme';
 
 const FONT_FACES = [
-  '400 16px Cinzel', '600 16px Cinzel', '400 16px Barlow', '500 16px Barlow', '600 16px Barlow',
+  '400 16px Cinzel', '600 16px Cinzel', '700 16px Cinzel', '400 16px Barlow', '500 16px Barlow', '600 16px Barlow',
   '500 16px "Barlow Condensed"', '600 16px "Barlow Condensed"',
 ];
 
@@ -73,6 +75,8 @@ class UiSystemImpl implements UiSystem {
   private readonly settings: SettingsScreen;
 
   private hudWanted = true;
+  /** screenshot mode (debug `hud(false)`): HUD, notices, subtitles, captions, prompts and skip hint hidden */
+  private clean = false;
   /** the title flow hid the HUD; give it back when the title closes */
   private hudBorrowedByTitle = false;
   private objectiveText: string | null = null;
@@ -112,8 +116,25 @@ class UiSystemImpl implements UiSystem {
     game.uiRoot.appendChild(this.root);
 
     game.events.on('objective:changed', (e) => this.objective(e?.text ?? null));
-    // a new zone never inherits world-bound UI from the previous one
-    game.events.on('zone:loading', () => this.clearWorldHud());
+    // a new zone (also a debug goto) never inherits world-bound UI or narrative staging from the previous one
+    game.events.on('zone:loading', () => {
+      this.clearWorldHud();
+      this.clearNarrative();
+    });
+  }
+
+  /**
+   * Narrative staging that belongs to the scene that set it: the card (and one waiting to cross-fade in), the
+   * one-flash text, the status board, captions, the subtitle and the skip hint. Letterbox and fade stay: the
+   * mission system owns them across a load.
+   */
+  private clearNarrative(): void {
+    this.cardW.clear();
+    this.flashW.show(null);
+    this.board.clear();
+    this.talk.show(null);
+    this.talk.clearCaptions();
+    this.skip.set(false);
   }
 
   async init(): Promise<void> {
@@ -204,6 +225,14 @@ class UiSystemImpl implements UiSystem {
     return this.hudWanted;
   }
 
+  setCleanFrame(on: boolean): void {
+    this.clean = on === true;
+  }
+
+  get cleanFrame(): boolean {
+    return this.clean;
+  }
+
   objective(text: string | null): void {
     this.objectiveText = typeof text === 'string' && text.trim() ? text.trim() : null;
     this.hud.objective(this.objectiveText);
@@ -291,7 +320,7 @@ class UiSystemImpl implements UiSystem {
     return this.choiceW.present(opts);
   }
 
-  statusBoard(rows: BoardRow[] | null, opts?: { title?: string }): void {
+  statusBoard(rows: BoardRow[] | null, opts?: BoardOpts): void {
     this.board.set(rows, opts);
   }
 
@@ -330,8 +359,10 @@ class UiSystemImpl implements UiSystem {
     });
     this.run('hud', () => {
       const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
-      this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open, !screen, !screen && !this.choiceW.open);
-      this.talk.setCovered(this.death.shown || this.pause.shown);
+      const clean = this.clean;
+      this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open && !clean, !screen && !clean, !screen && !this.choiceW.open && !clean);
+      this.talk.setCovered(this.death.shown || this.pause.shown || clean);
+      this.skip.setCovered(clean);
     });
     this.run('narrative', () => {
       this.letterboxW.update(d);

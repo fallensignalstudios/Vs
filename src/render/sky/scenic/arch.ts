@@ -4,7 +4,7 @@
  * seams; lower language = polished black stone with narrow gold channels. No heraldry — only structure and light.
  */
 import { PALETTE } from '@/core/api';
-import type { GeoBuilder, P3 } from './geo';
+import type { Frame, GeoBuilder, P3 } from './geo';
 import type { LightCards } from './lights';
 
 export const KING = {
@@ -18,7 +18,7 @@ export const KING = {
 } as const;
 
 export type SpireTone = 'white' | 'black' | 'mixed';
-export type SpireStyle = 'needle' | 'blade' | 'cluster' | 'stepped';
+export type SpireStyle = 'needle' | 'blade' | 'cluster' | 'stepped' | 'crown' | 'rib';
 
 export interface SpireOpts {
   x: number; y: number; z: number;
@@ -40,45 +40,62 @@ export interface SpireOpts {
 
 const LIGHT = { white: 0.60, mixed: 0.52, black: 0.5 } as const;
 
-/** One tower body: plinth, lit base lift, two shaft lifts with gold collars, a needle. */
+/**
+ * One tower body, read as a stack of lifts rather than a cone: plinth, lit base lift, an octagonal shaft, a
+ * corbelled gallery ringed with pinnacles, a slimmer upper lift, a crown of small pinnacles and a long needle.
+ * Even the far silhouette (detail 0) keeps the gallery and the crown, so a skyline steps instead of tapering.
+ */
 function tower(b: GeoBuilder, cards: LightCards, o: SpireOpts, x: number, z: number, y: number, h: number, r: number, detail: number, rot: number): void {
   const { rand, tone } = o;
   const lit = o.lit !== false;
+  const gg = lit ? 0.12 : 0; // gold catches a glint even in shadow
   const light = LIGHT[tone];
   const plinth = tone === 'black' ? KING.black : KING.whiteGold;
   const shaft = tone === 'white' ? KING.whiteGold : KING.black;
-  const upper = tone === 'black' ? KING.blackDeep : tone === 'mixed' ? KING.black : KING.whiteGold;
-  const y1 = y + h * 0.05, y2 = y + h * 0.14, y3 = y + h * 0.50, y4 = y + h * 0.78;
-  const win = lit ? 1 : 0;
-  b.dress(0, 1).paint(plinth, 0, light * 0.9).prism(x, y, z, y1, r * 2.05, r * 1.9, 4, { rot });
+  const upper = tone === 'black' ? KING.blackDeep : KING.whiteGold;
+  const y1 = y + h * 0.05, y2 = y + h * 0.14, y3 = y + h * (0.46 + rand() * 0.08), y4 = y + h * (0.70 + rand() * 0.06);
+  const win = lit ? 0.6 : 0;
+  b.dress(0, 1).paint(plinth, 0, light * 0.9).prism(x, y, z, y1, r * 1.8, r * 1.7, 8, { rot });
   if (detail >= 1) {
-    b.dress(0.75 * win, 1).paint(plinth, 0, light).prism(x, y1, z, y2, r * 1.5, r * 1.24, 8, { rot });
-    b.dress(0, 1).paint(KING.gold, 0, 0.7).prism(x, y2 - h * 0.006, z, y2 + h * 0.004, r * 1.3, r * 1.28, 8, { rot });
+    b.dress(0.6 * win, 1).paint(plinth, 0, light).prism(x, y1, z, y2, r * 1.4, r * 1.3, 8, { rot });
+    b.dress(0, 1).paint(KING.gold, gg, 0.7).prism(x, y2 - h * 0.006, z, y2 + h * 0.004, r * 1.36, r * 1.34, 8, { rot });
   }
-  b.dress(0.30 * win, 1).paint(shaft, 0, light).prism(x, detail >= 1 ? y2 : y1, z, y3, r, r * 0.72, 4, { rot });
-  if (detail >= 1) b.dress(0, 1).paint(KING.gold, 0, 0.7).prism(x, y3, z, y3 + h * 0.012, r * 0.82, r * 0.78, 4, { rot });
-  b.dress(0.18 * win, 1).paint(upper, 0, light).prism(x, y3 + h * 0.012, z, y4, r * 0.62, r * 0.34, 4, { rot });
-  if (detail >= 1) b.dress(0, 1).paint(KING.gold, 0, 0.7).prism(x, y4, z, y4 + h * 0.01, r * 0.42, r * 0.4, 4, { rot });
-  b.dress(0, 1).paint(upper, 0, light * 0.9).prism(x, y4 + h * 0.01, z, y + h, r * 0.28, 0, 4, { rot });
+  // the shaft rises nearly straight: a tower, not a cone
+  b.dress(0.22 * win, 1).paint(shaft, 0, light).prism(x, detail >= 1 ? y2 : y1, z, y3, r, r * 0.9, 8, { rot });
+  // the gallery: a corbelled band wider than the shaft, gold-lipped, with pinnacles on its corners
+  b.dress(0, 1).paint(plinth, 0, light * 0.95).prism(x, y3, z, y3 + h * 0.025, r * 0.92, r * 1.1, 8, { rot });
+  b.paint(KING.gold, gg, 0.7).prism(x, y3 + h * 0.025, z, y3 + h * 0.031, r * 1.11, r * 1.08, 8, { rot });
+  const gp = detail >= 1 ? 8 : 4;
+  for (let i = 0; i < gp; i++) {
+    const a = rot + (i / gp) * Math.PI * 2;
+    b.paint(plinth, 0, light * 0.9).prism(x + Math.cos(a) * r * 0.92, y3 + h * 0.031, z - Math.sin(a) * r * 0.92, y3 + h * (0.09 + (i % 2) * 0.03), r * 0.1, 0, 4, { rot });
+  }
+  b.dress(0.14 * win, 1).paint(upper, 0, light).prism(x, y3 + h * 0.031, z, y4, r * 0.66, r * 0.56, 8, { rot });
+  b.dress(0, 1).paint(KING.gold, gg, 0.7).prism(x, y4, z, y4 + h * 0.008, r * 0.62, r * 0.6, 8, { rot });
+  // crown of small pinnacles round the foot of the needle
+  const cp = detail >= 1 ? 6 : 3;
+  for (let i = 0; i < cp; i++) {
+    const a = rot + (i / cp) * Math.PI * 2 + 0.3;
+    b.paint(upper, 0, light * 0.9).prism(x + Math.cos(a) * r * 0.52, y4 + h * 0.008, z - Math.sin(a) * r * 0.52, y4 + h * 0.08, r * 0.08, 0, 4, { rot });
+  }
+  b.paint(upper, 0, light * 0.9).prism(x, y4 + h * 0.008, z, y4 + h * 0.05, r * 0.4, r * 0.3, 8, { rot });
+  b.paint(upper, 0, light * 0.9).prism(x, y4 + h * 0.05, z, y + h, r * 0.2, 0, 6, { rot });
   if (detail < 1) return;
 
   // corner buttresses leaning into the shaft, each crowned by a pinnacle
-  const nh = h * (0.32 + rand() * 0.12);
+  const nh = h * (0.30 + rand() * 0.12);
   for (let i = 0; i < 4; i++) {
     const a = rot + (i * Math.PI) / 2;
     const ca = Math.cos(a), sa = -Math.sin(a);
     const fx = x + ca * r * 1.42, fz = z + sa * r * 1.42;
-    b.paint(plinth, 0, light * 0.95).prism(fx, y1, fz, y1 + nh * 0.72, r * 0.34, r * 0.2, 4, { rot });
+    b.paint(plinth, 0, light * 0.95).prism(fx, y1, fz, y1 + nh * 0.72, r * 0.32, r * 0.2, 4, { rot });
     b.paint(shaft, 0, light * 0.9).prism(fx, y1 + nh * 0.72, fz, y1 + nh, r * 0.2, 0, 4, { rot });
     if (detail >= 2) {
-      b.paint(KING.gold, 0, 0.7).prism(fx, y1 + nh * 0.72, fz, y1 + nh * 0.735, r * 0.26, r * 0.25, 4, { rot });
+      b.paint(KING.gold, gg, 0.7).prism(fx, y1 + nh * 0.72, fz, y1 + nh * 0.735, r * 0.26, r * 0.25, 4, { rot });
       // flying web between buttress and shaft
       b.push().translate((x + fx) / 2, y1 + nh * 0.34, (z + fz) / 2).rotateY(a);
       b.paint(plinth, 0, light * 0.8).box(0, 0, 0, r * 0.9, nh * 0.5, r * 0.14, { top: [0.25, 1], shift: [-r * 0.3, 0] });
       b.pop();
-      // upper pinnacles where the shaft steps in
-      const px = x + ca * r * 0.76, pz = z + sa * r * 0.76;
-      b.paint(upper, 0, light * 0.9).prism(px, y3, pz, y3 + h * 0.09, r * 0.13, 0, 4, { rot });
       const qx = x + ca * r * 1.2, qz = z + sa * r * 1.2;
       b.paint(plinth, 0, light).prism(qx, y2, qz, y2 + h * 0.07, r * 0.14, 0, 4, { rot });
     }
@@ -87,40 +104,153 @@ function tower(b: GeoBuilder, cards: LightCards, o: SpireOpts, x: number, z: num
     // setback string courses up the shaft
     for (let i = 1; i <= 4; i++) {
       const t = i / 5, yy = y2 + (y3 - y2) * t;
-      b.paint(plinth, 0, light * 0.85).prism(x, yy, z, yy + h * 0.006, r * (1.05 - 0.28 * t), r * (1.03 - 0.28 * t), 4, { rot });
+      b.paint(plinth, 0, light * 0.85).prism(x, yy, z, yy + h * 0.006, r * (1.03 - 0.2 * t), r * (1.01 - 0.2 * t), 8, { rot });
     }
   }
   if (!lit) return;
-  // vertical light seams set into the shaft faces ("light as information")
-  const faceA = rot - Math.PI / 4;
-  const seams = detail >= 2 ? 4 : rand() < 0.6 ? 1 : 0;
+  // vertical light seams set into the shaft faces ("light as information"): narrow gold slits, not office windows
+  const faceA = rot - Math.PI / 8;
+  const seams = detail >= 2 ? 4 : rand() < 0.55 ? 1 : 0;
   for (let i = 0; i < seams; i++) {
     const a = faceA + (i * Math.PI) / 2;
     const t0 = 0.10 + rand() * 0.16, t1 = t0 + 0.34 + rand() * 0.3;
     const ya = y2 + (y3 - y2) * t0, yb = y2 + (y3 - y2) * Math.min(t1, 0.94);
-    const rad = (r * (1 - 0.28 * ((t0 + t1) / 2))) * 0.7072 + 0.25;
+    const rad = (r * (1 - 0.2 * ((t0 + t1) / 2))) * 0.93 + 0.25;
     if (detail >= 2) {
       b.push().translate(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad).rotateY(a);
-      b.dress(0, 0).paint(KING.light, 1.7).box(0, 0, 0, 0.5, yb - ya, Math.max(r * 0.07, 0.9));
-      b.paint(KING.gold, 0, 0.7).box(-0.2, 0, 0, 0.5, (yb - ya) * 1.04, Math.max(r * 0.16, 1.6));
+      b.dress(0, 0).paint(KING.light, 1.5).box(0, 0, 0, 0.5, yb - ya, Math.max(r * 0.06, 0.8));
+      b.paint(KING.gold, gg, 0.7).box(-0.2, 0, 0, 0.5, (yb - ya) * 1.04, Math.max(r * 0.15, 1.5));
       b.pop().dress(0, 1);
     } else {
-      cards.strip(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad, Math.max(r * 0.05, 0.7), yb - ya, KING.light, 1.3 + rand() * 1.2);
+      cards.strip(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad, Math.max(r * 0.045, 0.6), yb - ya, KING.light, 1.0 + rand() * 0.9);
     }
   }
-  // lit openings near the base, a sparse column climbing the shaft, a beacon on the tallest
-  const n = detail >= 2 ? 10 : 3 + Math.floor(rand() * 3);
+  // lit openings near the base, a beacon on the tallest
+  const n = detail >= 2 ? 8 : 2 + Math.floor(rand() * 3);
   for (let i = 0; i < n; i++) {
     const a = faceA + (rand() - 0.5) * 2.6;
     const d = r * (1.5 + rand() * 0.5);
-    cards.point(x + Math.cos(a) * d, y + h * (0.02 + rand() * 0.1), z - Math.sin(a) * d, 1.6 + rand() * 1.6, KING.light, 3 + rand() * 3);
+    cards.point(x + Math.cos(a) * d, y + h * (0.02 + rand() * 0.1), z - Math.sin(a) * d, 1.6 + rand() * 1.6, KING.light, 2.6 + rand() * 2.6);
   }
   if (h > 320 || detail >= 2) cards.point(x, y + h + 2, z, 3, KING.white, 4.5);
 }
 
 /**
- * A gothic spire from one of four families so a skyline has rhythm instead of one needle repeated:
- *  needle  — plinth, lit base, tapering shaft in lifts with gold collars, buttress needles
+ * Stepped crown: a square shaft with ribbed faces rising straight (barely tapering), capped by a lantern — a
+ * crown of tall pinnacles round a shorter central spire. Reads as a gothic tower, never as a cone.
+ */
+function crownTower(b: GeoBuilder, cards: LightCards, o: SpireOpts, x: number, z: number, y: number, h: number, r: number, detail: number, rot: number): void {
+  const { rand, tone } = o;
+  const lit = o.lit !== false;
+  const gg = lit ? 0.12 : 0; // gold catches a glint even in shadow
+  const light = LIGHT[tone];
+  const pale = tone === 'black' ? KING.black : KING.whiteGold;
+  const body = tone === 'white' ? KING.whiteGold : tone === 'mixed' ? KING.whiteGold : KING.black;
+  const yb = y + h * 0.06, yc = y + h * (0.62 + rand() * 0.08), yl = yc + h * 0.1;
+  b.dress(0, 1).paint(KING.black, 0, 1).prism(x, y, z, yb, r * 1.9, r * 1.7, 4, { rot });
+  b.paint(KING.gold, gg, 0.7).prism(x, yb, z, yb + h * 0.006, r * 1.72, r * 1.7, 4, { rot });
+  b.dress(lit ? 0.12 : 0, 1).paint(body, 0, light).prism(x, yb, z, yc, r * 1.2, r * 1.06, 4, { rot });
+  // ribs on each face: tall shallow fins that run the shaft and stop under the crown
+  const ribs = detail >= 1 ? 2 : 1;
+  for (let f = 0; f < 4; f++) {
+    const a = rot + Math.PI / 4 + (f * Math.PI) / 2;
+    for (let k = 0; k < ribs; k++) {
+      const off = ribs === 1 ? 0 : (k - 0.5) * r * 0.7;
+      const ca = Math.cos(a), sa = -Math.sin(a);
+      const px = x + ca * r * 0.86 - sa * off, pz = z + sa * r * 0.86 + ca * off;
+      b.push().translate(px, (yb + yc) / 2, pz).rotateY(a);
+      b.paint(pale, 0, light * 0.92).box(0, 0, 0, r * 0.22, yc - yb, r * 0.12);
+      b.pop();
+    }
+  }
+  // the crown: a corbelled cornice, pinnacles round it, a lantern and its spire
+  b.paint(pale, 0, light).prism(x, yc, z, yc + h * 0.02, r * 1.08, r * 1.32, 4, { rot });
+  b.paint(KING.gold, gg, 0.7).prism(x, yc + h * 0.02, z, yc + h * 0.026, r * 1.33, r * 1.3, 4, { rot });
+  const pins = detail >= 1 ? 8 : 4;
+  for (let i = 0; i < pins; i++) {
+    const a = rot + Math.PI / 4 + (i / pins) * Math.PI * 2;
+    const k = i % 2 === 0 ? 1.18 : 1.05;
+    const ph = h * (i % 2 === 0 ? 0.17 : 0.11);
+    b.paint(pale, 0, light * 0.9).prism(x + Math.cos(a) * r * k, yc + h * 0.026, z - Math.sin(a) * r * k, yc + h * 0.026 + ph, r * 0.13, 0, 4, { rot });
+  }
+  b.paint(body, 0, light).prism(x, yc + h * 0.026, z, yl, r * 0.62, r * 0.5, 8, { rot });
+  b.paint(KING.gold, gg, 0.7).prism(x, yl, z, yl + h * 0.006, r * 0.54, r * 0.52, 8, { rot });
+  b.paint(body, 0, light * 0.9).prism(x, yl + h * 0.006, z, y + h, r * 0.34, 0, 6, { rot });
+  if (!lit) return;
+  // a lit lantern under the spire and a few lights at the foot
+  cards.point(x, yl - h * 0.03, z + r * 0.6, Math.max(r * 0.35, 1.2), KING.light, 3.2);
+  const n = detail >= 2 ? 8 : 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = rot + (rand() - 0.5) * 3;
+    cards.point(x + Math.cos(a) * r * 2.1, y + h * (0.01 + rand() * 0.05), z - Math.sin(a) * r * 2.1, 1.6 + rand(), KING.light, 2.6 + rand() * 2.4);
+  }
+  if (detail >= 1 && rand() < 0.6) cards.strip(x, (yb + yc) / 2, z + r * 1.1, Math.max(r * 0.05, 0.6), (yc - yb) * 0.7, KING.light, 1.1);
+  if (h > 320 || detail >= 2) cards.point(x, y + h + 2, z, 3, KING.white, 4.5);
+}
+
+/**
+ * Ribs: three or four curved blades springing from a podium and leaning in until they nearly meet — the
+ * Crownmark's own rib language at city scale. Pale stone with a gold edge on the inner face; a thread of light
+ * where they converge.
+ */
+function ribTower(b: GeoBuilder, cards: LightCards, o: SpireOpts, x: number, z: number, y: number, h: number, r: number, detail: number, rot: number): void {
+  const { rand, tone } = o;
+  const lit = o.lit !== false;
+  const gg = lit ? 0.12 : 0; // gold catches a glint even in shadow
+  const light = LIGHT[tone];
+  const pale = tone === 'black' ? KING.black : KING.whiteGold;
+  b.dress(0, 1).paint(KING.black, 0, 1).prism(x, y, z, y + h * 0.05, r * 2.6, r * 2.3, 8, { rot });
+  b.paint(KING.gold, gg, 0.7).prism(x, y + h * 0.05, z, y + h * 0.056, r * 2.32, r * 2.3, 8, { rot });
+  const n = rand() < 0.5 ? 3 : 4;
+  const segs = detail >= 1 ? 9 : 5;
+  const y0 = y + h * 0.056;
+  for (let k = 0; k < n; k++) {
+    const a = rot + (k / n) * Math.PI * 2;
+    const ca = Math.cos(a), sa = -Math.sin(a);
+    const hk = h * (k === 0 ? 1 : 0.84 + rand() * 0.1);
+    const frames: Frame[] = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      // out then in: a pointed, slightly bellied curve whose tip leans past the axis
+      const rad = r * (2.0 * (1 - t) + 0.9 * Math.sin(Math.PI * t * 0.85)) * (1 - 0.92 * t * t) - r * 0.25 * t * t;
+      const yy = y0 + (hk - h * 0.056) * t;
+      const dt = 1 / segs;
+      const t2 = Math.min(t + dt, 1), t1 = Math.max(t - dt, 0);
+      const r2 = r * (2.0 * (1 - t2) + 0.9 * Math.sin(Math.PI * t2 * 0.85)) * (1 - 0.92 * t2 * t2) - r * 0.25 * t2 * t2;
+      const r1 = r * (2.0 * (1 - t1) + 0.9 * Math.sin(Math.PI * t1 * 0.85)) * (1 - 0.92 * t1 * t1) - r * 0.25 * t1 * t1;
+      // tangent in the (radial, up) plane → the section's "up" is the in-plane normal
+      const tr = r2 - r1, ty = (hk - h * 0.056) * (t2 - t1);
+      const tl = Math.hypot(tr, ty) || 1;
+      const nr = -ty / tl, ny = tr / tl;
+      frames.push({
+        p: [x + ca * rad, yy, z + sa * rad],
+        side: [-sa, 0, ca],
+        up: [ca * nr, ny, sa * nr],
+        w: r * (0.55 * (1 - t) + 0.12),
+        d: r * (0.95 * (1 - t) + 0.16),
+      });
+    }
+    b.dress(lit ? 0.1 : 0, 1).paint(pale, 0, light).sweep(frames);
+    if (detail >= 1) {
+      // gold edge along the inner face
+      const edge = frames.map((f) => ({ ...f, p: [f.p[0] - f.up[0] * f.d * 0.52, f.p[1] - f.up[1] * f.d * 0.52, f.p[2] - f.up[2] * f.d * 0.52] as P3, w: f.w * 0.35, d: f.d * 0.08 }));
+      b.paint(KING.gold, gg, 0.7).sweep(edge);
+    }
+  }
+  if (!lit) return;
+  cards.strip(x, y0 + h * 0.4, z, Math.max(r * 0.12, 0.8), h * 0.55, KING.light, 1.3);
+  for (let i = 0; i < 6; i++) {
+    const a = rand() * Math.PI * 2;
+    cards.point(x + Math.cos(a) * r * 2.6, y + h * 0.06, z - Math.sin(a) * r * 2.6, 1.7, KING.light, 2.6 + rand() * 2);
+  }
+  if (h > 320 || detail >= 2) cards.point(x, y + h + 2, z, 3, KING.white, 4.5);
+}
+
+/**
+ * A gothic spire from one of six families so a skyline has rhythm instead of one needle repeated:
+ *  needle  — plinth, lit base, octagonal lifts with a pinnacled gallery and a crown, a long needle
+ *  crown   — a ribbed square shaft capped by a lantern inside a crown of tall pinnacles (stepped crown)
+ *  rib     — three or four curved blades leaning in until they nearly meet (the Crownmark's rib language)
  *  blade   — two dark slabs with a continuous seam of light between them
  *  cluster — a main needle with satellite needles on a shared podium
  *  stepped — a ziggurat of lit setbacks carrying a short needle
@@ -132,6 +262,14 @@ export function addSpire(b: GeoBuilder, cards: LightCards, o: SpireOpts): void {
   const style = o.style ?? 'needle';
   const lit = o.lit !== false;
   b.light(1, 0);
+  if (style === 'crown') {
+    crownTower(b, cards, o, x, z, y, h, r, detail, rot);
+    return;
+  }
+  if (style === 'rib') {
+    ribTower(b, cards, o, x, z, y, h, r, detail, rot);
+    return;
+  }
   if (style === 'needle' || detail === 0) {
     tower(b, cards, o, x, z, y, h, r, detail, rot);
     return;

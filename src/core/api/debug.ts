@@ -2,7 +2,7 @@
  * Debug / test harness contract — OWNER: mission (src/debug/*).
  * Exposed as window.__aurelion. Used by Playwright smoke tests, screenshot tooling and the autoplay bot.
  */
-import type { CheckpointId, Vec3Like, ZoneId } from './common';
+import type { CheckpointId, RescuePriority, Vec3Like, ZoneId } from './common';
 import type { CamPose } from './camera';
 import type { QualityLevel } from './render';
 
@@ -26,8 +26,10 @@ export interface DebugSnapshot {
   // --- ADDED (mission/debug) ---
   /** draw calls / triangles of the main colour pass only (the numbers the BRIEF budgets refer to) */
   scene?: { drawCalls: number; triangles: number };
-  /** required interactions that are not done yet */
-  interactables?: Array<{ id: string; enabled: boolean; x: number; y: number; z: number; progress: number }>;
+  /**
+   * interactions that are not done yet — required ones and (polish 3) optional ones; `required` tells them apart
+   */
+  interactables?: Array<{ id: string; enabled: boolean; required?: boolean; x: number; y: number; z: number; progress: number }>;
   /** objective marker position, if any */
   objectiveMarker?: { x: number; y: number; z: number } | null;
   /** id of the open decision panel, if any */
@@ -62,6 +64,31 @@ export interface RunToResult {
   errors: string[];
 }
 
+/** ADDED (polish 3). Options for DebugApi.goto. */
+export interface DebugGotoOpts {
+  /**
+   * keep the mission state as it stands (flags, story flags, recorded choices, optional records). Default false:
+   * every debug goto starts from a fresh state (difficulty and play statistics kept), as if the page had been
+   * opened at that zone — flags from earlier gotos in the same page no longer leak into the next one.
+   */
+  keepState?: boolean;
+  /** flags to set on top of the (fresh) state, e.g. `{ z03Detected: true }` or `{ officerFate: 'spared' }` */
+  flags?: Record<string, boolean | number | string>;
+  /** the Z07 priority to start with (Z08 / Z11 read it) */
+  rescuePriority?: Exclude<RescuePriority, 'pending'>;
+}
+
+/** ADDED (polish 3). Options for DebugApi.planView. */
+export interface PlanViewOpts {
+  /**
+   * height (m) of the horizontal section plane above the floor the lead stands on: everything above it — ceilings,
+   * vaults, upper shells — is not drawn. Default 2.8. `false` = no cut (the whole zone, roofs included).
+   */
+  cut?: number | false;
+  /** keep the scene fog (default false: a plan view is drawn without fog, which from 40 m up hides the floor) */
+  fog?: boolean;
+}
+
 export interface DebugApi {
   /** true once the title screen (or the requested zone) is interactive */
   ready: boolean;
@@ -73,7 +100,12 @@ export interface DebugApi {
   render(): void;
   /** run sim + render alternately (seconds of sim, frames rendered) — for screenshots with settled animation */
   settle(seconds?: number): void;
-  goto(zone: ZoneId, beat?: string): Promise<void>;
+  /**
+   * load a zone at a beat (default its first). Polish 3: starts from a fresh mission state unless
+   * `opts.keepState`, and drops a free camera / plan view left from earlier captures (also on loadCheckpoint and
+   * newGame) so the jump opens on the gameplay camera.
+   */
+  goto(zone: ZoneId, beat?: string, opts?: DebugGotoOpts): Promise<void>;
   loadCheckpoint(id: CheckpointId): Promise<void>;
   newGame(): Promise<void>;
   teleport(pos: Vec3Like, yaw?: number): void;
@@ -81,10 +113,19 @@ export interface DebugApi {
   killAll(): void;
   skipCinematic(): void;
   setQuality(q: QualityLevel): void;
-  /** free camera for screenshots; null returns to gameplay camera */
+  /** free camera for screenshots; null returns to gameplay camera. Ends a plan view's section cut. */
   cam(pose: CamPose | null): void;
-  /** look at the zone from above (plan view) for layout verification */
-  planView(height?: number): void;
+  /**
+   * look at the zone from above (plan view) for layout verification. Polish 3: the view is cut by a horizontal
+   * section plane a few metres above the lead's floor (see PlanViewOpts) so ceilings no longer hide the plan, and
+   * drawn without fog; `cam()`, `goto()`, `loadCheckpoint()` and `newGame()` remove the cut and restore the fog.
+   */
+  planView(height?: number, opts?: PlanViewOpts): void;
+  /**
+   * show / hide the HUD. Polish 3: `hud(false)` is a clean frame for screenshots — it also hides the zone card,
+   * toasts, subtitles, captions, the context prompt and the skip hint (`ui.setCleanFrame`), and a cinematic
+   * restoring the HUD does not bring them back; `hud(true)` shows everything again.
+   */
   hud(visible: boolean): void;
   /** show physics/nav debug wireframes */
   physics(visible: boolean): void;

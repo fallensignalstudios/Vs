@@ -82,10 +82,15 @@ export function bearingWord(bearing: number): string {
   return ['ahead', 'ahead right', 'right', 'behind right', 'behind', 'behind left', 'left', 'ahead left'][i] as string;
 }
 
-/** Reading time for a subtitle when the script gives no duration. */
+/**
+ * Reading time for a subtitle when the script gives no duration: 1.4 s + 0.33 s/word, clamped 2.2–9 s, from three
+ * words up. One- and two-word lines ("No.", "West.") are read at a glance: their lead-in and floor shrink (one
+ * word ≈ 1.2 s, two ≈ 1.8 s) instead of holding every interjection for 2.2 s.
+ */
 export function subtitleSeconds(text: string): number {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return clampN(1.4 + words * 0.33, 2.2, 9);
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
+  const k = clampN((words - 1) / 2, 0, 1);
+  return clampN(0.9 + 0.5 * k + words * 0.33, 1.2 + 1.0 * k, 9);
 }
 
 const SENTENCE_END = /[.!?…;:]["')\]]?$|—$/;

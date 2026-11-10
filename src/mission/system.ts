@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import type {
-  ActiveChoice, Archetype, Beat, BeatLogEntry, CheckpointId, CheckpointInfo, Difficulty, Game, Interactable,
+  ActiveChoice, Archetype, Beat, BeatLogEntry, CheckpointId, CheckpointInfo, Difficulty, Game, GotoOpts, Interactable,
   MissionState, MissionSystem, Routine, ZoneBuilder, ZoneDef, ZoneId, ZoneRuntime,
 } from '@/core/api';
 import { reportError } from '@/core/events';
@@ -101,7 +101,7 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
     return this.rt ? this.rt.guidance.marker : null;
   }
   get interactables(): readonly Interactable[] {
-    return this.rt ? this.rt.interactions.required : NO_INTERACTABLES;
+    return this.rt ? this.rt.interactions.pending : NO_INTERACTABLES;
   }
   get activeChoice(): ActiveChoice | null {
     return this.rt ? this.rt.activeChoice : null;
@@ -213,8 +213,29 @@ export class MissionSystemImpl implements MissionSystem, RuntimeHost {
     });
   }
 
-  gotoZone(zone: ZoneId, beat?: string): Promise<void> {
-    return this.enqueue(() => this.load(zone, beat, 'debug'));
+  gotoZone(zone: ZoneId, beat?: string, opts?: GotoOpts): Promise<void> {
+    return this.enqueue(async () => {
+      if (opts) this.prepareGoto(zone, beat, opts);
+      await this.load(zone, beat, 'debug');
+    });
+  }
+
+  /** `gotoZone` options: a fresh state (difficulty and statistics kept), then the requested flags / priority. */
+  private prepareGoto(zone: ZoneId, beat: string | undefined, opts: GotoOpts): void {
+    const s = this.state;
+    if (opts.fresh === true) {
+      const stats = s.stats;
+      assignState(s, createMissionState(s.difficulty, zone, beat ?? ''));
+      s.stats = stats;
+      this.note(`goto ${zone}${beat ? `/${beat}` : ''}: fresh mission state`);
+    }
+    const flags = opts.flags;
+    if (flags && typeof flags === 'object') {
+      for (const [k, v] of Object.entries(flags)) {
+        if (typeof k === 'string' && k.length > 0 && (typeof v === 'boolean' || typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)))) s.flags[k] = v;
+      }
+    }
+    if (opts.rescuePriority === 'WestStretchers' || opts.rescuePriority === 'EastWalkers') s.rescuePriority = opts.rescuePriority;
   }
 
   requestGoto(zone: ZoneId, fade: FadeColor = 'black'): void {

@@ -4,7 +4,9 @@
  * jumping between beats, headless full runs).
  */
 import * as THREE from 'three';
-import type { CamPose, CheckpointId, DebugApi, DebugSnapshot, Game, QualityLevel, RunToResult, Vec3Like, ZoneId } from '@/core/api';
+import type {
+  CamPose, CheckpointId, DebugApi, DebugGotoOpts, DebugSnapshot, Game, PlanViewOpts, QualityLevel, RunToResult, Vec3Like, ZoneId,
+} from '@/core/api';
 import { reportError } from '@/core/events';
 import { isStub } from '@/core/stub';
 import { orderedZones } from '@/mission/checkpoints';
@@ -17,6 +19,8 @@ import type { RunToOptions } from './runto';
 const n = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 const s = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
 const errorList = (): string[] => ((globalThis as { __aurelionErrors?: string[] }).__aurelionErrors ??= []);
+/** plan view: the section plane sits this far above the floor the lead stands on (doors are 3.5 m, rooms taller) */
+export const PLAN_CUT_HEIGHT = 2.8;
 
 class DebugApiImpl implements DebugApi {
   ready = false;
@@ -24,6 +28,10 @@ class DebugApiImpl implements DebugApi {
   private readonly bot: AutoplayBot;
   private readonly overlayView: DebugOverlay;
   private physicsView: THREE.Object3D | null = null;
+  /** the plan view's section plane while it is applied to the renderer */
+  private planClip: THREE.Plane | null = null;
+  /** the scene fog a plan view took away (a 40 m overhead camera otherwise looks through a wall of haze) */
+  private planFog: THREE.Fog | THREE.FogExp2 | null = null;
   private running: Promise<RunToResult> | null = null;
 
   constructor(private readonly game: Game) {
@@ -119,7 +127,9 @@ class DebugApiImpl implements DebugApi {
       stats: { fps: n(stats.fps), drawCalls: n(stats.drawCalls), triangles: n(stats.triangles) },
       scene: { drawCalls: n(stats.sceneDrawCalls), triangles: n(stats.sceneTriangles) },
       interactables: m
-        ? m.interactables.map((i) => ({ id: i.id, enabled: i.enabled, x: n(i.pos.x), y: n(i.pos.y), z: n(i.pos.z), progress: n(i.progress) }))
+        ? m.interactables.map((i) => ({
+          id: i.id, enabled: i.enabled, required: i.required !== false, x: n(i.pos.x), y: n(i.pos.y), z: n(i.pos.z), progress: n(i.progress),
+        }))
         : [],
       objectiveMarker: marker ? { x: marker.x, y: marker.y, z: marker.z } : null,
       choice: m && m.activeChoice ? m.activeChoice.id : null,
@@ -154,18 +164,25 @@ class DebugApiImpl implements DebugApi {
     }
   }
 
-  goto(zone: ZoneId, beat?: string): Promise<void> {
+  goto(zone: ZoneId, beat?: string, opts?: DebugGotoOpts): Promise<void> {
     this.enterPlay();
-    return this.game.mission.gotoZone(zone, beat);
+    this.resetView();
+    return this.game.mission.gotoZone(zone, beat, {
+      fresh: opts?.keepState !== true,
+      flags: opts?.flags,
+      rescuePriority: opts?.rescuePriority,
+    });
   }
 
   loadCheckpoint(id: CheckpointId): Promise<void> {
     this.enterPlay();
+    this.resetView();
     return this.game.mission.loadCheckpoint(id);
   }
 
   newGame(): Promise<void> {
     this.enterPlay();
+    this.resetView();
     return this.game.mission.newGame(this.game.settings.get('difficulty'));
   }
 
@@ -200,12 +217,20 @@ class DebugApiImpl implements DebugApi {
   }
 
   cam(pose: CamPose | null): void {
+    this.setPlanClip(null);
+    this.setPlanFog(true);
     this.game.camera.setFree(pose);
   }
 
-  planView(height?: number): void {
+  planView(height?: number, opts?: PlanViewOpts): void {
     const g = this.game;
     const box = this.playBounds();
+    // section cut: everything above a plane a few metres over the lead's floor is not drawn (ceilings, vaults,
+    // upper shells), so the plan reads like a drawing
+    const cutAt = opts?.cut === false ? null : typeof opts?.cut === 'number' && Number.isFinite(opts.cut) && opts.cut > 0 ? opts.cut : PLAN_CUT_HEIGHT;
+    const lead = isStub(g.player) ? null : g.player.actor;
+    const floor = lead && !isStub(lead) && Number.isFinite(lead.pos.y) ? lead.pos.y : box.min.y;
+    const clipY = cutAt === null ? null : floor + cutAt;
     const cx = (box.min.x + box.max.x) / 2;
     const cz = (box.min.z + box.max.z) / 2;
     const fov = 40;
@@ -214,12 +239,18 @@ class DebugApiImpl implements DebugApi {
     const fitZ = (box.max.z - box.min.z + 6) / (2 * halfTan);
     const fitX = (box.max.x - box.min.x + 6) / (2 * halfTan * aspect);
     const h = height && height > 0 ? height : Math.max(12, fitX, fitZ);
+    const top = clipY === null ? box.max.y : Math.min(box.max.y, clipY);
     // a hair south of the centre so that north (−Z) is up on screen
-    g.camera.setFree({ pos: { x: cx, y: box.max.y + h, z: cz + h * 0.002 }, look: { x: cx, y: box.max.y, z: cz }, fov });
+    g.camera.setFree({ pos: { x: cx, y: top + h, z: cz + h * 0.002 }, look: { x: cx, y: top, z: cz }, fov });
+    this.setPlanClip(clipY);
+    this.setPlanFog(opts?.fog === true);
   }
 
   hud(visible: boolean): void {
-    this.game.ui.setHudVisible(!!visible);
+    const ui = this.game.ui;
+    ui.setHudVisible(!!visible);
+    // a clean frame: zone card, toasts, subtitles, captions, prompts and the skip hint go too
+    if (typeof ui.setCleanFrame === 'function') ui.setCleanFrame(!visible);
   }
 
   physics(visible: boolean): void {
@@ -256,6 +287,50 @@ class DebugApiImpl implements DebugApi {
   zones(): string[] {
     const m = this.game.mission;
     return isStub(m) ? [] : orderedZones(m.zones).map((z) => z.id);
+  }
+
+  /** A jump starts from the gameplay camera: drop a free camera / plan view left over from earlier captures. */
+  private resetView(): void {
+    this.setPlanClip(null);
+    this.setPlanFog(true);
+    const cam = this.game.camera;
+    if (!isStub(cam) && cam.mode === 'free') cam.setFree(null);
+  }
+
+  /** plan view without (false) or with (true, the normal state) the scene's fog */
+  private setPlanFog(on: boolean): void {
+    const scene = this.game.scene;
+    if (!scene || isStub(scene)) return;
+    if (!on) {
+      if (!this.planFog && scene.fog) {
+        this.planFog = scene.fog;
+        scene.fog = null;
+      }
+      return;
+    }
+    if (this.planFog) {
+      if (!scene.fog) scene.fog = this.planFog;
+      this.planFog = null;
+    }
+  }
+
+  /** apply (y) or remove (null) the plan view's horizontal section plane on the renderer */
+  private setPlanClip(y: number | null): void {
+    const r = this.game.render.renderer as THREE.WebGLRenderer | undefined;
+    if (!r || isStub(r) || !Array.isArray(r.clippingPlanes)) return;
+    if (y === null) {
+      if (!this.planClip) return;
+      r.clippingPlanes = r.clippingPlanes.filter((p) => p !== this.planClip);
+      this.planClip = null;
+      return;
+    }
+    // keep fragments with y <= cut: normal (0, −1, 0), constant = cut
+    const plane = this.planClip ?? new THREE.Plane(new THREE.Vector3(0, -1, 0), y);
+    plane.constant = y;
+    if (!this.planClip) {
+      this.planClip = plane;
+      r.clippingPlanes = [...r.clippingPlanes, plane];
+    }
   }
 
   /** Leave the title / boot state so the simulation runs (debug jumps, autoplay, headless runs). */

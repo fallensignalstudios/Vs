@@ -278,6 +278,15 @@ export class Subtitles {
     slot.fader.show(true);
   }
 
+  /** ADDED. Drop every caption at once (zone change). */
+  clearCaptions(): void {
+    for (const c of this.caps) {
+      c.life = 0;
+      c.pos = null;
+      c.fader.show(false, true);
+    }
+  }
+
   private aimCaption(c: Caption): void {
     if (c.pos) {
       const cam = this.game.camera;

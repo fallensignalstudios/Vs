@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { Actor, Companion, DialogueLine, Game, Routine, SayOpts, SpeakerId, Vec3Like } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
-import { clamp } from '@/core/mathx';
+import { clamp, smoothstep } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 
 /** a line must have been up this long before `confirm` (or a tap of `skip` in a cinematic) may advance it */
@@ -19,10 +19,20 @@ const VOICE_TAIL = 0.25;
 /** a `skip` press shorter than this is a tap (advance the line), not a hold (skip the scene) */
 const TAP_SECONDS = 0.3;
 
-/** Reading time for a subtitle without voice-over: clamp(1.6 + 0.055 × characters, 2, 8) seconds. */
+/** lines this short (characters) are read at a glance: shortest lead-in and floor */
+const GLANCE_CHARS = 4;
+/** from this length up a line gets the full reading lead-in and the 2 s floor */
+const READ_CHARS = 20;
+
+/**
+ * Reading time for a subtitle without voice-over: clamp(1.6 + 0.055 × characters, 2, 8) seconds for a line of
+ * 20 characters or more. Shorter lines ease down to a 1.0 s lead-in and a 1.2 s floor ("No." 1.2 s, "Do it."
+ * 1.36 s, "Kill them." 1.76 s), so one- and two-word exchanges no longer hold the screen for 2 s each.
+ */
 export function lineDuration(text: string): number {
   const chars = typeof text === 'string' ? text.length : 0;
-  return clamp(1.6 + 0.055 * chars, 2, 8);
+  const k = smoothstep(GLANCE_CHARS, READ_CHARS, chars);
+  return clamp(1.0 + 0.6 * k + 0.055 * chars, 1.2 + 0.8 * k, 8);
 }
 
 /** Should a queued bark still be said? */
@@ -47,6 +57,10 @@ interface Stage {
   companion: Companion | null;
   /** false: no talk gesture (a drawn weapon stays out) — only the gaze and the moving mouth */
   gesture: boolean;
+  /** true: the body keeps its facing; only the head turns to the listener */
+  keepFacing: boolean;
+  /** the companion's own facing target before the line (restored afterwards), if it had one */
+  prevFace: THREE.Vector3 | null;
   started: number;
   duration: number;
 }
@@ -94,6 +108,18 @@ const asActor = (a: Actor | Companion | null | undefined): Actor | null => {
 };
 const asCompanion = (a: Actor | Companion | null | undefined): Companion | null =>
   a && !isStub(a) && typeof (a as Companion).moveTo === 'function' ? (a as Companion) : null;
+
+/**
+ * The facing target a zone gave a companion with `face()` before the line. The Companion contract has no reader
+ * for it, so this looks at the implementation's `faceTo` field and treats anything else as "none".
+ */
+function companionFacing(c: Companion | null): THREE.Vector3 | null {
+  const f = c ? (c as unknown as { faceTo?: unknown }).faceTo : null;
+  if (!f || typeof f !== 'object') return null;
+  const v = f as { x?: unknown; y?: unknown; z?: unknown };
+  if (typeof v.x !== 'number' || typeof v.y !== 'number' || typeof v.z !== 'number' || !Number.isFinite(v.x + v.y + v.z)) return null;
+  return new THREE.Vector3(v.x, v.y, v.z);
+}
 
 export class DialogueDirector {
   private stage: Stage | null = null;
@@ -186,7 +212,11 @@ export class DialogueDirector {
     line.duration = voiced > 0 ? Math.max(voiced + VOICE_TAIL, opts?.duration ?? 0) : opts?.duration && opts.duration > 0 ? opts.duration : lineDuration(text);
 
     const stage: Stage = {
-      line, actor, companion: asCompanion(opts?.actor), gesture: opts?.gesture !== false, started: time.now, duration: line.duration,
+      line, actor, companion: asCompanion(opts?.actor),
+      gesture: opts?.gesture !== false && opts?.keepWeapon !== true,
+      keepFacing: opts?.keepFacing === true,
+      prevFace: null,
+      started: time.now, duration: line.duration,
     };
     this.stage = stage;
     this.blocking = blocking;
@@ -211,28 +241,36 @@ export class DialogueDirector {
   }
 
   /**
-   * Speaking actor looks at the listener's eyes / turns to them and plays the talk gesture for the length of the
-   * line — or, with `gesture: false`, only moves its mouth (the gesture would sheathe a drawn weapon).
+   * Speaking actor turns to the listener (unless `keepFacing`), looks at the listener's eyes and plays the talk
+   * gesture for the length of the line — or, with `gesture: false` / `keepWeapon`, only moves its mouth (the
+   * gesture would sheathe a drawn weapon). Afterwards a companion goes back to the facing target the zone gave
+   * it before the line (or none).
+   *
+   * Order matters: `Companion.face()` also points the head at the (foot-level) position it is given, so the eye
+   * gaze is set AFTER it — otherwise every companion speaker would look at the listener's feet.
    */
   private gesture(stage: Stage, on: boolean): void {
     const actor = stage.actor;
     if (!actor) return;
     const visual = actor.visual;
     const hasVisual = !!visual && !isStub(visual);
+    const companion = stage.companion;
     if (!on) {
       if (hasVisual) {
         if (stage.gesture) visual!.stop('talk');
         else if (isHumanoidVisual(visual)) visual.setSpeaking(0);
-        visual!.lookAt(null);
       }
-      stage.companion?.face(null);
+      const prev = stage.prevFace;
+      if (companion && !stage.keepFacing) companion.face(prev);
+      else if (hasVisual) visual!.lookAt(prev);
       return;
     }
+    stage.prevFace = companionFacing(companion);
     const listener = this.listenerFor(actor);
     if (listener) {
+      if (companion && !stage.keepFacing) companion.face(listener.pos);
       gazePoint(listener, this.eye);
       if (hasVisual) visual!.lookAt(this.eye);
-      stage.companion?.face(listener.pos);
     }
     if (!hasVisual) return;
     if (stage.gesture) visual!.play('talk', { loop: true });

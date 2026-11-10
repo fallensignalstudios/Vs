@@ -178,7 +178,7 @@ export function buildCrownmarkArm(shared: SharedUniforms, opts?: CrownmarkArmOpt
   const group = new THREE.Group();
   group.name = 'scenic:crownmarkArm';
   const mesh = new THREE.Mesh(b.build(), createScenicMaterial(shared, {
-    name: 'ScenicCrownmarkArm', panel: [42, 21], gloss: 0.95, lowHaze: 1, lowStart: yd - 30, lowDepth: 520, arm: [W / 2, L, ROOT_Z], windows: [5, 11, 1.4], nearFill: [0.16, 0.155, 0.18, 1300],
+    name: 'ScenicCrownmarkArm', panel: [42, 21], gloss: 0.8, lowHaze: 1, lowStart: yd - 30, lowDepth: 520, arm: [W / 2, L, ROOT_Z], windows: [5, 11, 0.6], nearFill: [0.17, 0.16, 0.15, 1300], weather: 1, ambientTint: [0.18, 0.15, 0.105],
   }));
   mesh.name = 'scenic:crownmarkArm:structure';
   mesh.frustumCulled = false;

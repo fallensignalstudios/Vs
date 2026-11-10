@@ -382,7 +382,8 @@ export class AutoplayBot {
     let best: Interactable | null = null;
     let bestDist = Infinity;
     for (const it of this.game.mission.interactables) {
-      if (isStub(it) || it.done || !it.enabled) continue;
+      // optional pockets are listed too; the bot walks the critical path only
+      if (isStub(it) || it.done || !it.enabled || it.required === false) continue;
       const d = d2(actor.pos, it.pos);
       if (d < bestDist) {
         best = it;

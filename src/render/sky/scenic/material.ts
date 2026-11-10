@@ -46,6 +46,10 @@ export interface ScenicMaterialOpts {
   windows?: [number, number, number];
   /** how strongly the fleet battle's light rims the surface (the carrier's underside) */
   battleRim?: number;
+  /** 0..1 weathering on pale stone: soot and rain streaks down vertical faces, blotches, darker footings */
+  weather?: number;
+  /** base sky-ambient colour (linear, before the preset haze and ambient scale); default a cool grey */
+  ambientTint?: [number, number, number];
   name?: string;
 }
 
@@ -122,6 +126,8 @@ uniform float uBattleRim;
 uniform vec3 uFlashPos;
 uniform vec3 uFlashColor;
 uniform float uTime;
+uniform float uWeather;
+uniform vec3 uAmbTint;
 ${GLSL_NOISE}
 ${GLSL_HAZE}
 
@@ -171,6 +177,22 @@ void main() {
     float seam = max(gridLine(pc.x, 0.03), gridLine(pc.y, 0.03));
     albedo *= 1.0 - uPanelLook.y * seam * step(glow, 0.01) * vLight.w;
     tilt = (vec2(tone, hash21(cell + 31.7)) - 0.5) * fade;
+  }
+
+  // --- weathering: pale ceramic-stone is old — soot and rain streaks run down its faces, blotches gather, footings
+  //     darken. Filtered by footprint so it fades to its average instead of shimmering kilometres away.
+  if (uWeather > 0.0 && glow < 0.01) {
+    float lumA = dot(albedo, vec3(0.3, 0.55, 0.15));
+    float pale = smoothstep(0.12, 0.40, lumA);
+    vec3 sp = vec3(vLocal.x * 0.30, vLocal.y * 0.016, vLocal.z * 0.30);
+    float fws = max(fwidth(sp.x) + fwidth(sp.z), fwidth(sp.y) * 6.0);
+    float fade = 1.0 - clamp(fws * 1.6 - 0.2, 0.0, 1.0);
+    float streak = mix(0.5, vnoise(sp + 3.0), fade);
+    float blot = vnoise(vLocal * 0.035 + 11.0);
+    float grime = 0.6 * smoothstep(0.38, 0.82, streak) * wall + 0.4 * smoothstep(0.42, 0.85, blot);
+    albedo *= 1.0 - uWeather * pale * (0.10 + 0.32 * grime);
+    // a faint warm patina on the pale stone (ivory, never blue-white)
+    albedo = mix(albedo, albedo * vec3(1.04, 0.99, 0.90), uWeather * pale * 0.6);
   }
 
   // --- lit openings: tall narrow slits in a regular module, some dark; dissolve into an even glow when sub-pixel
@@ -243,7 +265,7 @@ void main() {
   float ndk = max(dot(n, uKeyDir), 0.0);
   float ndf = max(dot(n, uFillDir), 0.0);
   float hemi = 0.5 + 0.5 * n.y;
-  vec3 ambient = (uHaze * 3.0 + vec3(0.16, 0.17, 0.21)) * uAmbient * mix(0.55, 1.0, hemi) * mix(uShade, 1.0, skyVis);
+  vec3 ambient = (uHaze * 3.0 + uAmbTint) * uAmbient * mix(0.55, 1.0, hemi) * mix(uShade, 1.0, skyVis);
   float lum = dot(albedo, vec3(0.3, 0.55, 0.15));
   // mirror-polished black stone: almost no diffuse response, the reflection carries it
   float polish = uGloss * mix(1.0, 0.33, smoothstep(0.02, 0.22, lum));
@@ -322,6 +344,8 @@ export function createScenicMaterial(shared: SharedUniforms, opts: ScenicMateria
       uNearFill: { value: new THREE.Vector4(...(opts.nearFill ?? [0, 0, 0, 1])) },
       uWindows: { value: new THREE.Vector3(...(opts.windows ?? [1, 1, 0])) },
       uBattleRim: { value: opts.battleRim ?? 0 },
+      uWeather: { value: opts.weather ?? 0 },
+      uAmbTint: { value: new THREE.Vector3(...(opts.ambientTint ?? [0.16, 0.17, 0.21])) },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,

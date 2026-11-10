@@ -413,3 +413,90 @@ describe('helpers', () => {
     expect(errors().some((e) => e.includes('nested'))).toBe(true);
   });
 });
+
+describe('polish 3: scene facing, optional interactions', () => {
+  it('a lock-on is dropped for a scene (it would turn the lead back every tick) and given back afterwards', async () => {
+    const foe = { id: 40, alive: true, targetable: true, pos: { x: 4, y: 0, z: -4 } };
+    let inside: unknown = 'unset';
+    const z = zoneOf('Z00', [{
+      id: 'a',
+      enter: spawnAtStart,
+      *run(rt: ZoneRuntime): Routine {
+        yield* rt.cinematic('scene', function* (): Routine {
+          rt.player.yaw = 1.25;
+          inside = (rt.game.player as { lockTarget: unknown }).lockTarget;
+          yield 0.5;
+        });
+        rt.setFlag('done', true);
+      },
+    }, { id: 'b', run: idle }]);
+    const w = createTestWorld({ zones: [z] });
+    await w.mission.gotoZone('Z00');
+    (w.game.player as { lockTarget: unknown }).lockTarget = foe;
+    w.tick(1);
+    expect(inside).toBeNull();
+    expect(w.mission.state.flags.done).toBe(true);
+    expect((w.game.player as { lockTarget: unknown }).lockTarget).toBe(foe);
+    expect(w.player.actor!.yaw).toBe(1.25);
+  });
+
+  it('a lock whose target died during the scene is not given back', async () => {
+    const foe = { id: 41, alive: true, targetable: true, pos: { x: 4, y: 0, z: -4 } };
+    const z = zoneOf('Z00', [{
+      id: 'a',
+      enter: spawnAtStart,
+      *run(rt: ZoneRuntime): Routine {
+        yield* rt.cinematic('scene', function* (): Routine {
+          yield 0.2;
+          foe.alive = false;
+        });
+      },
+    }, { id: 'b', run: idle }]);
+    const w = createTestWorld({ zones: [z] });
+    await w.mission.gotoZone('Z00');
+    (w.game.player as { lockTarget: unknown }).lockTarget = foe;
+    w.tick(1);
+    expect((w.game.player as { lockTarget: unknown }).lockTarget).toBeNull();
+  });
+
+  it('mission.interactables lists optional interactions too, tagged required: false', async () => {
+    const z = zoneOf('Z00', [{
+      id: 'a',
+      enter: spawnAtStart,
+      *run(rt: ZoneRuntime): Routine {
+        rt.interact({ id: 'panel', at: rt.P(2, 0), prompt: 'Use', required: true });
+        rt.interact({ id: 'record', at: rt.P(-2, 0), prompt: 'Read' });
+        yield 100;
+      },
+    }]);
+    const w = createTestWorld({ zones: [z] });
+    await w.mission.gotoZone('Z00');
+    w.tick(0.1);
+    const list = w.mission.interactables.map((i: Interactable) => `${i.id}:${String(i.required)}`);
+    expect(list).toEqual(['panel:true', 'record:false']);
+    w.mission.interactables[1]!.complete();
+    expect(w.mission.interactables.map((i: Interactable) => i.id)).toEqual(['panel']);
+  });
+
+  it('gotoZone({ fresh }) starts from a clean state (difficulty and statistics kept), then applies flags / priority', async () => {
+    const z = zoneOf('Z00', [{ id: 'a', enter: spawnAtStart, run: idle }]);
+    const w = createTestWorld({ zones: [z] });
+    await w.mission.gotoZone('Z00');
+    const s = w.mission.state;
+    s.flags.threatExchangeOpen = true;
+    s.flags['choice:rescuePriority'] = 'EastWalkers';
+    s.rescuePriority = 'EastWalkers';
+    s.optional.O3 = true;
+    s.difficulty = 'hard';
+    w.tick(2);
+    const played = s.stats.playSeconds;
+    await w.mission.gotoZone('Z00', undefined, { keepState: true } as never);
+    expect(s.flags.threatExchangeOpen).toBe(true); // no opts: the state as it stands
+    await w.mission.gotoZone('Z00', undefined, { fresh: true, flags: { z03Detected: true }, rescuePriority: 'WestStretchers' });
+    expect(s.flags).toEqual({ z03Detected: true });
+    expect(s.rescuePriority).toBe('WestStretchers');
+    expect(s.optional.O3).toBe(false);
+    expect(s.difficulty).toBe('hard');
+    expect(s.stats.playSeconds).toBeGreaterThanOrEqual(played);
+  });
+});

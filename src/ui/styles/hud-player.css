@@ -573,7 +573,8 @@
 }
 
 .aur-ab-frame .aur-key.is-letter {
-  font-size: calc(var(--u) * 17);
+  font-weight: 700;
+  font-size: calc(var(--u) * 19);
 }
 
 .aur-ab-cd {

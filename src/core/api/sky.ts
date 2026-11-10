@@ -30,7 +30,7 @@ export type SkyPreset =
   | 'battleCeiling'   // Z05: transparent ceiling, amber / blue-white / violet battle light, carrier crossing
   | 'breachDeep'      // Z06–Z08: enclosed, distant impacts
   | 'woundVista'      // Z09: one enormous Crownmark arm; Wound fills much of the horizon (concept: Wound overlook)
-  | 'coreChamber'     // Z10: enclosed nested machinery volume, dark shut view boundary
+  | 'coreChamber'     // Z10: enclosed nested machinery volume; the Wound seen dimly through the dark shut view boundary
   | 'observation'     // Z11: red remnant left, hard white remnant right, Wound between
   | 'hangar';         // Z12: outer ring, both fleets wary at distance
 
@@ -144,10 +144,21 @@ export interface SkySystem {
   readonly carrier: CarrierActor;
   /** 0..1 distant fleet battle activity (flashes, tracers) */
   setBattleIntensity(n: number): void;
-  /** 0..1 restrained violet movement behind the Wound boundary */
-  setWoundActivity(n: number): void;
-  /** Consequence visual: boundary closed / stability recovering (subtle gold rim settles, violet stills) */
-  setBoundaryClosed(closed: boolean, seconds?: number): void;
+  /**
+   * 0..1 restrained violet movement behind the Wound boundary. The Wound also breathes with it: drawn back toward 0
+   * it visibly CONTRACTS (to 86 % of its radius at 0; the authored size at the default 0.3; +3 % at 1), and the
+   * violet and the rim's life withdraw. Eased (≈ 1 s) unless snapped.
+   * ADDED `opts.snap`: land on the value at once. The sky also snaps by itself while the mission fast-forwards a
+   * skipped cinematic or loads a zone (`game.mission.runtime.skipping` / `game.mission.loading`), so a skipped scene
+   * lands in the state it would have reached watched; pass `{ snap: z.skipping }` to be explicit.
+   */
+  setWoundActivity(n: number, opts?: { snap?: boolean }): void;
+  /**
+   * Consequence visual: boundary closed / stability recovering (subtle gold rim settles, violet stills).
+   * `seconds` (default 3; ≤ 0 = instant) is the transition. ADDED `opts.snap`: instant, whatever `seconds` says;
+   * like setWoundActivity it also snaps by itself during a skip or a zone load.
+   */
+  setBoundaryClosed(closed: boolean, seconds?: number, opts?: { snap?: boolean }): void;
 
   /** current (eased) values of the three setters above; boundaryClosed is 0..1 */
   readonly battleIntensity: number;
