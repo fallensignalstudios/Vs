@@ -412,11 +412,6 @@ export function rock(seed: number, flatness = 1, points = 11): THREE.BufferGeome
   return new ConvexGeometry(pts);
 }
 
-/** Convex hull of arbitrary points (flat shaded). */
-export function hull(points: ReadonlyArray<readonly [number, number, number]>): THREE.BufferGeometry {
-  return new ConvexGeometry(points.map(([x, y, z]) => V(x, y, z)));
-}
-
 /**
  * Faceted star in the XY plane: `tips[i]` is the radius of point i (point 0 straight up, then counter-clockwise),
  * valleys at `rIn`, the centre raised to ±`depth` along Z.

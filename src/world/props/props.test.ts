@@ -281,5 +281,13 @@ describe('holo canvas', () => {
     t.set('ZZZZZZ');
     c.setAlpha(-1, 1);
     c.setAlpha(9999, 1);
+    // fading a text range never lights the cells its glyphs leave dark
+    const c2 = new HoloCanvas(64);
+    const t2 = c2.text('1', 0, 0, 0.01, 0xffffff, 1);
+    c2.fade(t2.range, 0.5);
+    const mesh = c2.mesh(new THREE.MeshBasicMaterial());
+    const alpha = (id: number): number => mesh.geometry.attributes.color.getW(id * 4);
+    expect(alpha(0)).toBe(0);
+    expect(alpha(1)).toBe(0.5);
   });
 });

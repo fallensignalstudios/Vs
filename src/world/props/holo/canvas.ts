@@ -45,6 +45,9 @@ export class HoloCanvas {
   private readonly nrm: Float32Array;
   /** base alpha per quad (what `setAlpha(id, 1)` means) */
   private readonly alpha0: Float32Array;
+  /** glyph gate per quad (text / segment cells that are switched off stay off whatever the fade) and fade level */
+  private readonly gate: Float32Array;
+  private readonly level: Float32Array;
   private used = 0;
   private posAttr: THREE.BufferAttribute | null = null;
   private colAttr: THREE.BufferAttribute | null = null;
@@ -57,6 +60,8 @@ export class HoloCanvas {
     this.col = new Float32Array(max * 16);
     this.nrm = new Float32Array(max * 12);
     this.alpha0 = new Float32Array(max);
+    this.gate = new Float32Array(max).fill(1);
+    this.level = new Float32Array(max).fill(1);
   }
 
   get count(): number {
@@ -160,7 +165,7 @@ export class HoloCanvas {
       set: (s: string): void => {
         for (let i = 0; i < capacity; i++) {
           const m = i < s.length ? glyphMask(s[i]) : 0;
-          for (let b = 0; b < 15; b++) this.setAlpha(first + i * 15 + b, (m >> (14 - b)) & 1);
+          for (let b = 0; b < 15; b++) this.setGate(first + i * 15 + b, (m >> (14 - b)) & 1);
         }
       },
     };
@@ -194,16 +199,28 @@ export class HoloCanvas {
   /** light a seven-segment cell for a character; unlit segments keep a faint ghost */
   setSegments(first: number, ch: string, ghost = 0.06): void {
     const m = SEG[ch] ?? 0;
-    for (let b = 0; b < 7; b++) this.setAlpha(first + b, (m >> b) & 1 ? 1 : ghost);
+    for (let b = 0; b < 7; b++) this.setGate(first + b, (m >> b) & 1 ? 1 : ghost);
+  }
+
+  /** switch a glyph cell on / off (or to a ghost level) independently of the fade applied with `setAlpha` */
+  setGate(id: number, g: number): void {
+    if (id < 0 || id >= this.used || this.gate[id] === g) return;
+    this.gate[id] = g;
+    this.write(id);
+  }
+
+  private write(id: number): void {
+    const v = this.alpha0[id] * this.gate[id] * this.level[id], o = id * 16 + 3;
+    if (this.col[o] === v) return;
+    this.col[o] = this.col[o + 4] = this.col[o + 8] = this.col[o + 12] = v;
+    this.dirtyCol = true;
   }
 
   /** alpha as a fraction of the quad's authored alpha */
   setAlpha(id: number, a: number): void {
-    if (id < 0 || id >= this.used) return;
-    const v = this.alpha0[id] * a, o = id * 16 + 3;
-    if (this.col[o] === v) return;
-    this.col[o] = this.col[o + 4] = this.col[o + 8] = this.col[o + 12] = v;
-    this.dirtyCol = true;
+    if (id < 0 || id >= this.used || this.level[id] === a) return;
+    this.level[id] = a;
+    this.write(id);
   }
 
   fade(range: Range, a: number): void {

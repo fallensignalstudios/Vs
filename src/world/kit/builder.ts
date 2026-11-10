@@ -39,7 +39,7 @@ export class ZoneBuilderImpl implements ZoneBuilder {
   private disposed = false;
   private attached = false;
 
-  constructor(private readonly game: Game, readonly root: THREE.Group, seed: number) {
+  constructor(readonly game: Game, readonly root: THREE.Group, seed: number) {
     this.ctx = new KitCtx(game, root, mulberry32((Number.isFinite(seed) ? seed : 1) >>> 0));
     this.physics = game.physics;
     this.mats = game.mats;

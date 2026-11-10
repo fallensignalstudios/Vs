@@ -71,6 +71,8 @@ export function setQ(f: BiquadFilterNode, q: number): void {
 }
 /** preview length when a sustaining recipe is played as a one-shot */
 const PREVIEW_HOLD = 1.1;
+/** frames per render quantum (the block size every implementation processes the graph in) */
+const QUANTUM = 128;
 
 export class Kit {
   /** latest scheduled end, seconds after `t` */
@@ -108,6 +110,19 @@ export class Kit {
   /** A frequency moved onto the loop grid (no-op unless `grid` is set). */
   private onGrid(hz: number): number {
     return this.grid > 0 ? Math.max(1, Math.round(hz / this.grid)) * this.grid : hz;
+  }
+
+  /**
+   * The first render-quantum boundary at or after `t`, for sources that modulate one another at audio rate.
+   * Chromium renders a modulator → carrier pair that starts part-way through a quantum with the two a fraction
+   * of a block out of step; at whole-number ratios that moves the level of the note by several dB depending on
+   * the instant it was asked for, and on the sample rate. Started on a boundary the pair matches the arithmetic
+   * exactly at any rate (sandbox/audio measures this). Costs at most one quantum (2.9 ms at 44.1 kHz).
+   */
+  private onQuantum(t: number): number {
+    const sr = this.ac.sampleRate;
+    // (a hundredth of a frame early: start times round UP to a frame, and n·128/sr can land a rounding error late)
+    return (Math.ceil((t * sr) / QUANTUM - 1e-6) * QUANTUM - 0.01) / sr;
   }
 
   /** uniform random in [lo, hi) */
@@ -340,7 +355,7 @@ export class Kit {
    * (bright → mellow when it falls). Bells, metal, servos, screeches.
    */
   fm(f: Sweep, ratio: number, index: Sweep, env: Env, o?: SrcOpts & { type?: OscillatorType }): OscillatorNode {
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.onQuantum(this.t + (o?.at ?? 0));
     const len = this.envLen(env);
     const fin = Number.isFinite(len) ? len : 1;
     const mul = o?.fixed ? 1 : this.pitch;

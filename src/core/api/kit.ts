@@ -220,6 +220,12 @@ export interface ZoneEnvOpts {
 }
 
 export interface ZoneBuilder {
+  /**
+   * ADDED (integration). The game the zone is being built for — `build()` receives only the builder, so this is
+   * how a zone reaches `game.sky.scenic.*` (far-field backdrop), `game.vfx.ambient(...)`, `game.props.*` and
+   * `game.render.quality` while it builds.
+   */
+  readonly game: import('./index').Game;
   /** Root group of the zone. Everything added here is disposed on unload. */
   readonly root: THREE.Group;
   readonly physics: PhysicsWorld;

@@ -4,7 +4,7 @@
  */
 import { PALETTE } from '@/core/api/materials';
 import { clamp01, mulberry32, smoothstep } from '@/core/mathx';
-import { HoloCanvas, glyphMask, type Range, type TextField } from './canvas';
+import { HoloCanvas, glyphMask, type Range } from './canvas';
 
 /** what a display kind provides */
 export interface Content {

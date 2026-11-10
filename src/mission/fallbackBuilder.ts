@@ -23,6 +23,7 @@ export function createFallbackBuilder(game: Game, root: THREE.Group, seed: numbe
   const warned = new Set<string>();
 
   const real: Partial<ZoneBuilder> & BuilderExtras = {
+    game,
     root,
     physics: game.physics,
     mats: game.mats,

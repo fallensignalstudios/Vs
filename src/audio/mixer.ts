@@ -46,11 +46,10 @@ const REVERB_RETURN = 0.5;
  * A freshly created DynamicsCompressorNode starts fully attenuated and takes its whole release time (~150 ms
  * here) to open — the click that unlocks audio would be swallowed. Each compressor is therefore given a
  * near-zero release for its first 40 ms: it is fully open within that time, and one-shots asked for earlier
- * are simply scheduled at `Mixer.readyAt` (at most 70 ms late — and then exactly as loud as they will ever
- * be; measured, a cue started 45 ms in can still come out 2 dB hot, one started 65 ms in never does).
+ * are simply scheduled at `Mixer.readyAt` (at most 45 ms late).
  */
 const PRIME_RELEASE = 0.04;
-const PRIME_SECONDS = 0.07;
+const PRIME_SECONDS = 0.045;
 /** how far impacts push the score down (dB) — they read without having to be louder */
 const SIDECHAIN_DB = 3;
 /** drive into the drum bus's soft clipper (dB) */

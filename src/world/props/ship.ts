@@ -158,7 +158,6 @@ function buildRamp(P: Parts, s: Spec, dominion: boolean): void {
 }
 
 export class DepartureShip extends PropBase<Params> {
-  private readonly spec: Spec;
   private readonly eng: Glow;
   private readonly lit: Glow;
   private readonly rampPivot = new THREE.Group();
@@ -166,7 +165,7 @@ export class DepartureShip extends PropBase<Params> {
 
   constructor(lib: MaterialLibrary | null, kind: Kind) {
     super(`departureShip.${kind}`, lib, { engines: 0, ramp: 0 }, { engines: spring(2.2, 0.9), ramp: rate(2.8) });
-    const s = (this.spec = SPECS[kind] ?? SPECS.dominionShuttle);
+    const s = SPECS[kind] ?? SPECS.dominionShuttle;
     const dom = kind !== 'reformationTransport';
     const P = new Parts();
     if (dom) buildDominion(P, s); else buildReformation(P, s);

@@ -393,20 +393,22 @@ describe('sample path', () => {
   it('exact (Eclipse) cues draw the same random numbers on every play', () => {
     const ctx = new FakeContext();
     const engine = engineOn(ctx);
-    ctx.currentTime = 1; // past the first milliseconds, where plays are held back (see the next test)
+    // a real context's clock moves in whole render quanta (128 frames); FM voices start on that grid
+    const quanta = (seconds: number): number => (Math.round((seconds * ctx.sampleRate) / 128) * 128) / ctx.sampleRate;
+    ctx.currentTime = quanta(1); // past the first milliseconds, where plays are held back (see the next test)
     const shape = (id: string): string => {
       const n = ctx.spans.length;
       engine.play(id);
       const t0 = ctx.currentTime;
       const made = ctx.spans.slice(n).map((s) => `${s.kind}@${(s.start - t0).toFixed(5)}+${s.offset.toFixed(6)}-${(s.stop - t0).toFixed(5)}`);
-      ctx.currentTime += 20;
+      ctx.currentTime = quanta(ctx.currentTime + 20);
       engine.update(0.05);
       return made.join('|');
     };
     for (const id of Object.keys(SFX).filter((k) => SFX[k].exact && !SFX[k].loop)) {
       const first = shape(id);
       engine.play('footStone'); // something else draws from the shared generator in between
-      ctx.currentTime += 5;
+      ctx.currentTime = quanta(ctx.currentTime + 5);
       expect(shape(id), id).toBe(first);
     }
     // … whereas an ordinary cue is different every time
@@ -419,8 +421,8 @@ describe('the first sound of a session', () => {
     const ctx = new FakeContext();
     const engine = engineOn(ctx);
     const ready = engine.mixer.readyAt;
-    expect(ready).toBeGreaterThan(0.05);
-    expect(ready).toBeLessThan(0.1);
+    expect(ready).toBeGreaterThan(0.03);
+    expect(ready).toBeLessThan(0.06);
     engine.play('uiSelect'); // the click that unlocked audio, at context time 0
     expect(Math.min(...ctx.spans.map((s) => s.start))).toBeCloseTo(ready, 6);
     // a moment later nothing is held back any more

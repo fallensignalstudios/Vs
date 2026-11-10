@@ -228,14 +228,6 @@ export class Glow {
     this.last = i;
     this.material.color.copy(this.base).multiplyScalar(i);
   }
-
-  /** change the base colour */
-  tint(color: number): void {
-    this.base.setHex(color);
-    const i = this.last;
-    this.last = -1;
-    this.set(i);
-  }
 }
 
 /** Material access for one prop: per-prop clones (disposed with it), fallbacks without a library. */

@@ -66,11 +66,6 @@ export class Hologram extends PropBase<Params> implements HologramProp {
     this.content.setText(typeof text === 'string' ? text : String(text ?? ''));
   }
 
-  /** quads in use / (debug, tests) */
-  get quadCount(): number {
-    return this.canvas.count;
-  }
-
   protected apply(_dt: number, time: number): void {
     const v = clamp01(this.cur.visible);
     this.object.visible = v > 0.004;
