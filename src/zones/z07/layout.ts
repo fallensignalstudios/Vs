@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import type { ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { AMBER, BLUE, FACE, GOLD } from '../shared';
+import { AMBER, BLUE, FACE, GOLD, VIOLET } from '../shared';
 import { textPanel } from './display';
 import { S, type CageRig } from './state';
 
@@ -47,9 +47,9 @@ const DESK: [number, number] = [7.4, 19.55];
 /** the recovery panel (faces south) and the O3 console (west wall, by the glass) */
 const PANEL: [number, number] = [EXIT_X, 8];
 const O3: [number, number] = [0.95, 17.4];
-/** the cages: plan position, height, scale (≈ 21 m across), and the bearing they face (toward the gallery) */
-const CAGE_DOM = { x: -40, n: 148, h: -11, scale: 3, yawDeg: 160 } as const;
-const CAGE_REF = { x: 72, n: 156, h: -7, scale: 3, yawDeg: 200 } as const;
+/** the cages: plan position, height, scale (≈ 24 m across, ~120 m out), and the bearing they face (the gallery) */
+const CAGE_DOM = { x: 5, n: 140, h: -2.5, scale: 3.5, yawDeg: 176 } as const; // dead ahead of the sighting ring
+const CAGE_REF = { x: 78, n: 128, h: -9, scale: 3.5, yawDeg: 208 } as const;
 /** the cages' field / core height above their own origin at scale 1 (the Dominion core sits higher) */
 const CORE_H = { dominion: 3.6, reformation: 3.2 } as const;
 
@@ -270,10 +270,49 @@ function buildCages(b: ZoneBuilder): void {
     light.position.copy(lp);
     b.add(light);
     const core = base.clone().setY(base.y + CORE_H[kind] * o.scale);
-    return { prop, base, core, light, tint: new THREE.Color(tint), spread: 0, spreadTarget: 0, lit: 1, litTarget: 1, wisp: null };
+    const veins = buildVeins(b, kind);
+    prop.object.add(veins);
+    return { prop, base, core, light, veins, tint: new THREE.Color(tint), spread: 0, spreadTarget: 0, lit: 1, litTarget: 1, wisp: null };
   };
   S.dom = rig('dominion', CAGE_DOM, AMBER);
   S.ref = rig('reformation', CAGE_REF, BLUE);
+}
+
+/**
+ * Violet veins that trace the containment geometry (book: “Violet veins begin tracing the containment geometry.”):
+ * thin lit lines climbing the field's cylinder and running round it, in the cage's own frame. The zone grows them
+ * from the base (scale.y) with the Eclipse's spread and draws them back when the cage dies.
+ */
+function buildVeins(b: ZoneBuilder, kind: 'dominion' | 'reformation'): THREE.Object3D {
+  const g = new THREE.Group();
+  g.name = 'z07-veins';
+  const dom = kind === 'dominion';
+  const r = (dom ? 1.62 : 1.26) + 0.04;
+  const y0 = dom ? 1.4 : 1.95;
+  const y1 = dom ? 5.9 : 4.5;
+  // its own copy: the cage is far outside, so no room haze on it (released in resetState)
+  const mat = b.mats.emissive(VIOLET, 3.2).clone();
+  mat.fog = false;
+  const rnd = (): number => b.rand();
+  const geos: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 7; k++) {
+    let a = (k / 7) * Math.PI * 2 + rnd() * 0.4;
+    const pts: THREE.Vector3[] = [];
+    const steps = 7;
+    for (let i = 0; i <= steps; i++) {
+      pts.push(new THREE.Vector3(Math.cos(a) * r, y0 + ((y1 - y0) * i) / steps, Math.sin(a) * r));
+      a += (rnd() - 0.5) * 0.5;
+    }
+    geos.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 28, 0.028, 4, false));
+  }
+  // and round the field where it meets its rings
+  for (const y of dom ? [2.05, 3.7, 4.9] : [1.95, 4.5]) {
+    geos.push(new THREE.TorusGeometry(r + 0.01, 0.022, 4, 48).rotateX(Math.PI / 2).translate(0, y, 0));
+  }
+  for (const geo of geos) g.add(new THREE.Mesh(geo, mat));
+  g.scale.set(1, 0.001, 1);
+  g.visible = false;
+  return g;
 }
 
 /** the interoperability display over the desk (+ its label lines), the record over the O3 console, the strips */

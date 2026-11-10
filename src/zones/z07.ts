@@ -132,6 +132,8 @@ function update(z: ZoneRuntime, dt: number): void {
     rig.lit += (rig.litTarget - rig.lit) * (snap ? 1 : 1 - Math.exp(-dt * 1.6));
     rig.light.color.copy(rig.tint).lerp(VIOLET_C, 0.7 * rig.spread);
     rig.light.intensity = RIM * rig.lit * (1 + 0.4 * rig.spread);
+    rig.veins.visible = rig.spread > 0.01;
+    rig.veins.scale.y = Math.max(0.001, rig.spread);
   }
   // every Reformation system in range flickers while the Eclipse uses the field
   S.flicker = Math.max(0, S.flicker - dt);

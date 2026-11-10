@@ -21,6 +21,8 @@ export interface CageRig {
   /** 0…1 overall rim light level (eased toward `litTarget`; 0 once the cage is gone) */
   lit: number;
   litTarget: number;
+  /** violet veins tracing the containment geometry (grow with `spread`) */
+  veins: THREE.Object3D;
   /** the violet wisps at its core while the Eclipse uses the field (cosmetic; null when skipped / gone) */
   wisp: VfxHandle | null;
 }
@@ -62,8 +64,11 @@ function blank(): Z07State {
 
 /** release the hero props and text panels (their materials are not under the zone root), then forget everything */
 export function resetState(): void {
-  S.dom?.prop.dispose();
-  S.ref?.prop.dispose();
+  for (const rig of [S.dom, S.ref]) {
+    rig?.prop.dispose();
+    const vein = rig?.veins.children[0] as THREE.Mesh | undefined;
+    (vein?.material as THREE.Material | undefined)?.dispose();
+  }
   S.streams?.dispose();
   S.record?.dispose();
   for (const p of [...S.streamLabels, S.recordText, S.stripSelene, S.stripTarrik]) p?.dispose();

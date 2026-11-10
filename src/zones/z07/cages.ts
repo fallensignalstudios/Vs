@@ -127,7 +127,7 @@ export function* cagesScene(z: ZoneRuntime): Routine {
 
     // (4) he looks toward her: she stands at the glass with both of them out there beyond it
     z.player.yaw = yawToward(T, Se);
-    c.twoShot(Se, T, { side: -1, distance: 1.9, fov: 40 });
+    c.twoShot(Se, T, { side: -1, distance: 1.7, fov: 34 });
     yield* z.say('Tarrik', 'Yours?', { actor: z.player, gesture: false });
     // she turns to him, then indicates the Dominion resonator
     selene?.face(T);
@@ -139,12 +139,12 @@ export function* cagesScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(18.6, 18.2, 1.75), look: z.P(13.9, 26.6, 1.5), fov: 42 });
     yield* z.say('Selene', 'One of them. And yours.');
     // from the floor, where Tharne set her down
-    c.shot(L, { yawDeg: 158, distance: 2.0, height: 0.95, lookHeight: 0.82, fov: 38 });
+    c.shot(L, { yawDeg: 212, distance: 2.0, height: 0.95, lookHeight: 0.82, fov: 38 });
     yield* z.say('Lyric', 'Kill them.', { actor: lyric });
     selene?.face(L);
     c.shot(Se, { yawDeg: 245, distance: 2.4, height: 1.62, lookHeight: 1.56, fov: 36 });
     yield* z.say('Selene', 'The specimens?', { actor: selene });
-    c.shot(L, { yawDeg: 128, distance: 1.6, height: 0.9, lookHeight: 0.84, fov: 34 });
+    c.shot(L, { yawDeg: 222, distance: 1.6, height: 0.9, lookHeight: 0.84, fov: 34 });
     yield* z.say('Lyric', 'The cages.', { actor: lyric });
 
     // black tissue spreads along the boundary rather than through it; violet veins trace the containment
@@ -166,9 +166,9 @@ export function* cagesScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(9.6, 15.2, 2.1), look: z.P(4.6, 20.4, 1.0), fov: 44 });
     if (!z.skipping) game.audio.play('ambCommBlip', { volume: 0.7, pitch: 0.8 });
     yield 1.6;
-    c.shot(Th, { yawDeg: 172, distance: 2.1, height: 1.2, lookHeight: 1.0, fov: 36 });
+    c.shot(Th, { yawDeg: bearing(Th, T) + 22, distance: 2.0, height: 1.2, lookHeight: 1.0, fov: 36 });
     yield* z.say('Tharne', 'It’s learning the field.', { actor: tharne });
-    c.shot(L, { yawDeg: 140, distance: 1.5, height: 0.88, lookHeight: 0.84, fov: 32 });
+    c.shot(L, { yawDeg: 205, distance: 1.5, height: 0.88, lookHeight: 0.84, fov: 32 });
     yield* z.say('Lyric', 'No. It’s using it.', { actor: lyric });
 
     // the Crownwatch command channel
@@ -258,7 +258,6 @@ export function* tarrikFires(z: ZoneRuntime): Routine {
       dom.spreadTarget = 0;
       dom.litTarget = 0;
       dom.lit = 3;
-      z.story('cageDominionDestroyed');
       if (!z.skipping) {
         game.vfx.spawn('cageDestroy', dom.base, { scale: 3 });
         game.vfx.spawn('explosionLarge', dom.core, { scale: 5, color: AMBER });
@@ -269,6 +268,7 @@ export function* tarrikFires(z: ZoneRuntime): Routine {
       beam?.remove(0.6);
       yield 1.6;
     }
+    z.story('cageDominionDestroyed');
     // the glow of it on his face through the glass
     c.shot(z.player.pos, { yawDeg: 20, distance: 2.0, height: 1.66, lookHeight: 1.6, fov: 34 });
     if (!z.skipping) game.camera.shake(0.12, 0.6);
@@ -309,7 +309,7 @@ export function* seleneFires(z: ZoneRuntime): Routine {
     yield* z.say('Sol', 'Veyne.', RADIO);
     // whispering, from the floor
     const L = feet(z, 'lyric');
-    c.shot(L, { yawDeg: 120, distance: 1.45, height: 0.86, lookHeight: 0.84, fov: 30 });
+    c.shot(L, { yawDeg: 215, distance: 1.45, height: 0.86, lookHeight: 0.84, fov: 30 });
     yield* z.say('Lyric', 'Do it.', { actor: lyric });
     // end state: Tarrik has stepped aside, the station is hers
     if (z.skipping) tarrik?.teleport(z.m('tarrikAside'), z.myaw('tarrikAside'));
