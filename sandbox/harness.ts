@@ -149,3 +149,101 @@ export function createHarness(opts: HarnessOpts = {}): Harness {
   (window as any).__step = (s: number) => h.step(s);
   return h;
 }
+
+// -------------------------------------------------------------------------------------------------
+// miniGame — a fake Game for sandboxes: real events/settings/time/scripts, everything else a null-object
+// stub unless you pass an override. Example:
+//   const game = miniGame(h, { physics: createPhysicsWorld(null) });
+//   const vfx = createVfxSystem(game);  h.onUpdate((dt) => vfx.update(dt));
+// Pass { ownRenderer: true } if your subsystem creates its own WebGLRenderer on `game.canvas`
+// (then build the harness with createCanvasOnly() instead of createHarness()).
+// -------------------------------------------------------------------------------------------------
+import type { Game, GameEvents, QualityProfile } from '@/core/api';
+import { Emitter } from '@/core/events';
+import { SettingsStoreImpl } from '@/core/settings';
+import { ScriptRunnerImpl } from '@/core/script';
+import { nullObject } from '@/core/stub';
+import { mulberry32 } from '@/core/mathx';
+
+export const SANDBOX_QUALITY: QualityProfile = {
+  level: 'high', resolutionScale: 1, maxPixelRatio: 1, shadows: true, shadowMapSize: 2048, ao: true, bloom: true,
+  dof: true, reflections: true, volumetrics: true, particleScale: 1, maxShadowLights: 2, anisotropy: 4, textureSize: 512,
+};
+
+/** Wrap a partial object so missing members resolve to null-object stubs instead of undefined. */
+export function withStubs<T extends object>(name: string, real: Partial<T>): T {
+  const cache: Record<string | symbol, unknown> = { ...(real as Record<string, unknown>) };
+  return new Proxy(cache, {
+    get(t, p) {
+      if (p in t) return t[p];
+      if (typeof p === 'symbol' || p === 'then') return undefined;
+      return (t[p] = nullObject(`${name}.${String(p)}`));
+    },
+    set(t, p, v) { t[p] = v; return true; },
+    has(t, p) { return p in t; },
+  }) as T;
+}
+
+export function miniGame(h: Pick<Harness, 'scene' | 'camera' | 'renderer' | 'onUpdate'> | null, overrides: Partial<Game> = {}): Game {
+  const events = new Emitter<GameEvents>();
+  const settings = new SettingsStoreImpl(events);
+  const scripts = new ScriptRunnerImpl();
+  const rng = mulberry32(7283);
+  const time = { now: 0, dt: 0, unscaledDt: 0, scale: 1, frame: 0, hitStop() {}, slowMo() {} };
+  h?.onUpdate((dt, t) => { time.now = t; time.dt = dt; time.unscaledDt = dt; time.frame++; scripts.update(dt); });
+  const q = new URLSearchParams(location.search);
+  const flags = { zone: null, beat: null, checkpoint: null, debug: true, autoplay: false, mute: q.has('mute'), nopost: q.has('nopost'), quality: null, manual: q.has('manual'), seed: 7283 };
+  const base: Partial<Game> = {
+    events, settings, scripts, flags,
+    time: time as Game['time'],
+    random: () => rng(),
+    phase: 'playing', paused: false,
+    setPhase() {}, setPaused() {}, tick() {},
+    uiRoot: document.body,
+  };
+  if (h) {
+    Object.assign(base, {
+      scene: h.scene,
+      canvas: h.renderer.domElement,
+      camera: withStubs<Game['camera']>('camera', { camera: h.camera, mode: 'follow', yaw: 0, pitch: 0 } as Partial<Game['camera']>),
+      render: withStubs<Game['render']>('render', { renderer: h.renderer, scene: h.scene, quality: SANDBOX_QUALITY } as Partial<Game['render']>),
+    });
+  }
+  return withStubs<Game>('game', { ...base, ...overrides });
+}
+
+/** For subsystems that own the renderer (render-core): just a full-window canvas + the ready/step protocol. */
+export function createCanvasOnly(): { canvas: HTMLCanvasElement; params: URLSearchParams; onUpdate(fn: (dt: number, t: number) => void): void; step(seconds: number): void; ready(): void; setRender(fn: () => void): void } {
+  const params = new URLSearchParams(location.search);
+  document.body.style.cssText = 'margin:0;overflow:hidden;background:#07090d';
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:block';
+  document.body.appendChild(canvas);
+  const updaters: Array<(dt: number, t: number) => void> = [];
+  let renderFn: () => void = () => {};
+  let time = 0;
+  const api = {
+    canvas, params,
+    onUpdate(fn: (dt: number, t: number) => void) { updaters.push(fn); },
+    setRender(fn: () => void) { renderFn = fn; },
+    step(seconds: number) {
+      const n = Math.max(1, Math.round(seconds * 60));
+      for (let i = 0; i < n; i++) { time += 1 / 60; for (const u of updaters) u(1 / 60, time); }
+      renderFn();
+    },
+    ready() { renderFn(); requestAnimationFrame(() => { renderFn(); (window as any).__ready = true; }); },
+  };
+  addEventListener('error', (e) => ((window as any).__aurelionErrors ??= []).push(String(e.error?.stack ?? e.message)));
+  if (!params.has('manual')) {
+    let last = performance.now();
+    const loop = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
+      for (const u of updaters) u(dt, time);
+      renderFn();
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+  (window as any).__step = (s: number) => api.step(s);
+  return api;
+}
