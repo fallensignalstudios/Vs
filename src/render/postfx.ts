@@ -120,9 +120,9 @@ export class PostChain {
     if (q.ao) {
       const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
       const ao = new N8AOPostPass(scene, camera, size.x, size.y);
-      const half = q.level === 'medium';
-      ao.configuration.halfRes = half;
-      ao.setQualityMode(q.level === 'ultra' ? 'High' : q.level === 'high' ? 'Medium' : 'Low');
+      // medium: half-resolution AO with depth-aware upsampling (needs a float colour target for its depth copy)
+      const half = q.level === 'medium' && this.renderer.extensions.has('EXT_color_buffer_float') && enableHalfRes(ao);
+      ao.setQualityMode(q.level === 'ultra' ? 'High' : q.level === 'high' ? 'Medium' : half ? 'Low' : 'Performance');
       ao.configuration.distanceFalloff = 1;
       ao.configuration.color = new THREE.Color(0, 0, 0);
       // Explicit (skips N8AO's per-frame scene scan). On: transparent / additive surfaces are not darkened by
@@ -282,6 +282,37 @@ export class PostChain {
 
   dispose(): void {
     this.composer.dispose();
+  }
+}
+
+/**
+ * Switch N8AO to half resolution. n8ao 2.0's multi-target helper overrides `texture` to return the whole
+ * texture array, which three r187 no longer tolerates when it binds the target — restore the standard
+ * accessor on that one instance. Returns false (and leaves the pass at full resolution) if the internals are
+ * not what we expect, so a library update can never break the frame.
+ */
+function enableHalfRes(ao: N8AOPostPass): boolean {
+  try {
+    ao.configuration.halfRes = true;
+    const target = (ao as unknown as { depthDownsampleTarget?: THREE.WebGLRenderTarget | null }).depthDownsampleTarget;
+    if (!target || !Array.isArray(target.textures) || target.textures.length < 2) throw new Error('unexpected N8AO internals');
+    if (Array.isArray(target.texture as unknown)) {
+      Object.defineProperty(target, 'texture', {
+        configurable: true,
+        get(this: THREE.WebGLRenderTarget): THREE.Texture {
+          return this.textures[0];
+        },
+      });
+    }
+    return true;
+  } catch (err) {
+    console.warn('[render] half-resolution AO unavailable — using the full-resolution performance mode', err);
+    try {
+      ao.configuration.halfRes = false;
+    } catch {
+      /* already at full resolution */
+    }
+    return false;
   }
 }
 

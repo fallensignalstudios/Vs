@@ -28,18 +28,18 @@ interface KindDef {
 }
 
 const KINDS: Record<AmbientKind, KindDef> = {
-  embers: { sprite: 'ember', color: 0xff7a2a, intensity: 5, size: 0.04, count: 200, drift: [0.06, 0.42, 0.03], sway: 0.35, swayFreq: 0.7, twinkle: 0.7, twinkleFreq: 5, spin: 1.5, unison: false, additive: true },
-  dust: { sprite: 'dot', color: 0xe8dcc8, intensity: 0.55, size: 0.028, count: 420, drift: [0.03, 0.012, 0.02], sway: 0.16, swayFreq: 0.25, twinkle: 0.5, twinkleFreq: 0.6, spin: 0, unison: false, additive: true },
-  frostMotes: { sprite: 'star', color: 0xcfeeff, intensity: 2.4, size: 0.05, count: 240, drift: [0, -0.012, 0], sway: 0.03, swayFreq: 0.2, twinkle: 0.85, twinkleFreq: 0.9, spin: 0.1, unison: false, additive: true },
-  violetMotes: { sprite: 'dot', color: 0x8a4cff, intensity: 3, size: 0.045, count: 150, drift: [0, 0.04, 0], sway: 0.4, swayFreq: 0.55, twinkle: 0.35, twinkleFreq: 1.3, spin: 0, unison: true, additive: true },
-  ash: { sprite: 'chip0', color: 0x1c1a19, intensity: 1, size: 0.05, count: 240, drift: [0.12, -0.32, 0.05], sway: 0.4, swayFreq: 0.5, twinkle: 0, twinkleFreq: 1, spin: 1.4, unison: false, additive: false },
-  goldMotes: { sprite: 'diamond', color: 0xffc56b, intensity: 2.6, size: 0.045, count: 200, drift: [0, 0.07, 0], sway: 0.1, swayFreq: 0.3, twinkle: 0.6, twinkleFreq: 0.8, spin: 0.25, unison: false, additive: true },
-  snow: { sprite: 'dot', color: 0xf2f7ff, intensity: 1.1, size: 0.05, count: 520, drift: [0.18, -0.6, 0.06], sway: 0.3, swayFreq: 0.6, twinkle: 0.2, twinkleFreq: 1, spin: 0, unison: false, additive: true },
+  embers: { sprite: 'ember', color: 0xff7a2a, intensity: 5, size: 0.065, count: 520, drift: [0.06, 0.42, 0.03], sway: 0.35, swayFreq: 0.7, twinkle: 0.7, twinkleFreq: 5, spin: 1.5, unison: false, additive: true },
+  dust: { sprite: 'dot', color: 0xe8dcc8, intensity: 0.55, size: 0.042, count: 1000, drift: [0.03, 0.012, 0.02], sway: 0.16, swayFreq: 0.25, twinkle: 0.5, twinkleFreq: 0.6, spin: 0, unison: false, additive: true },
+  frostMotes: { sprite: 'star', color: 0xcfeeff, intensity: 2.4, size: 0.075, count: 520, drift: [0, -0.012, 0], sway: 0.03, swayFreq: 0.2, twinkle: 0.85, twinkleFreq: 0.9, spin: 0.1, unison: false, additive: true },
+  violetMotes: { sprite: 'dot', color: 0x8a4cff, intensity: 3, size: 0.07, count: 300, drift: [0, 0.04, 0], sway: 0.4, swayFreq: 0.55, twinkle: 0.35, twinkleFreq: 1.3, spin: 0, unison: true, additive: true },
+  ash: { sprite: 'chip0', color: 0x1c1a19, intensity: 1, size: 0.075, count: 560, drift: [0.12, -0.32, 0.05], sway: 0.4, swayFreq: 0.5, twinkle: 0, twinkleFreq: 1, spin: 1.4, unison: false, additive: false },
+  goldMotes: { sprite: 'diamond', color: 0xffc56b, intensity: 2.6, size: 0.07, count: 460, drift: [0, 0.07, 0], sway: 0.1, swayFreq: 0.3, twinkle: 0.6, twinkleFreq: 0.8, spin: 0.25, unison: false, additive: true },
+  snow: { sprite: 'dot', color: 0xf2f7ff, intensity: 1.1, size: 0.065, count: 1200, drift: [0.18, -0.6, 0.06], sway: 0.3, swayFreq: 0.6, twinkle: 0.2, twinkleFreq: 1, spin: 0, unison: false, additive: true },
 };
 
 /** camera window (metres) the particles wrap inside */
-const WINDOW = new THREE.Vector3(26, 12, 26);
-const MAX_PER_VOLUME = 1400;
+const WINDOW = new THREE.Vector3(18, 10, 18);
+const MAX_PER_VOLUME = 2400;
 
 const VERT = /* glsl */ `
 attribute vec4 aSeed;

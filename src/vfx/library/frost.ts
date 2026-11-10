@@ -33,7 +33,7 @@ export const FROST: Record<string, EffectDef> = {
     emitters: [
       { p: star(C.ice, 12, 1.3, 0.1), burst: 1 },
       { p: ringPop(C.frost, 6, 0.2, 1.8, 0.26), burst: 1 },
-      { p: shards(C.frost, { life: [1.1, 1.9], gravity: 9.5, drag: 0.6, bounce: 0.42, spin: 7, size: [0.2, 0.2, 0.14] }), burst: [24, 28], shape: 'sphere', radius: 0.3, vel: 'radial', speed: [2.5, 9], up: [0.5, 3] },
+      { p: shards(C.frost, { life: [1.1, 1.9], gravity: 9.5, drag: 0.6, bounce: 0.42, spin: 7, size: [0.2, 0.2, 0.14] }), burst: [24, 28], shape: 'sphere', radius: 0.3, vel: 'radial', speed: [2.5, 7.5], up: [0.5, 2.2] },
       { p: shards(C.frostDeep, { life: [0.6, 1.1], gravity: 9.5, drag: 1, bounce: 0.3, spin: 12, size: [0.07, 0.07, 0.04] }), burst: [16, 20], shape: 'sphere', radius: 0.3, vel: 'radial', speed: [4, 12], up: [0, 3] },
       { p: glints({ life: [0.4, 0.9] }), burst: [9, 12], shape: 'sphere', radius: 0.7, vel: 'radial', speed: [0.1, 0.6] },
       { p: dust(C.steam, { life: [0.7, 1.2], size: [0.3, 0.8, 1.1], alpha: 0.16 }), burst: 4, shape: 'sphere', radius: 0.3, vel: 'radial', speed: [0.5, 1.4] },
@@ -76,10 +76,10 @@ export const FROST: Record<string, EffectDef> = {
       { p: motes(C.frost, 2.2, { life: [1.6, 2.6], size: [0.025, 0.035, 0.02] }), rate: 16, shape: 'sphere', radius: 3.2, vel: 'none', offset: [0, 0.3, 0] },
     ],
     events: [
-      { at: 0, kind: 'shape', shape: { kind: 'dome', life: 0.5, sustain: true, color: [C.frostDeep, 1.5], color2: [C.ice, 1.3], radius: [0.4, 3.5], attack: 0.32, detail: 15 } },
+      { at: 0, kind: 'shape', shape: { kind: 'dome', life: 0.5, sustain: true, color: [C.frostDeep, 0.6], color2: [C.ice, 0.55], radius: [0.4, 3.5], attack: 0.32, detail: 15 } },
       { at: 0, kind: 'shock', radius: 3.6, color: C.frost, seconds: 0.36 },
       { at: 0, kind: 'flash', color: C.frostDeep, intensity: 2, seconds: 0.2, offset: [0, 1, 0] },
-      { at: 0.05, kind: 'decal', decal: 'frost', size: 6.6, life: 7 },
+      { at: 0.05, kind: 'decal', decal: 'frost', size: 5.2, life: 7 },
     ],
   },
 
@@ -89,7 +89,7 @@ export const FROST: Record<string, EffectDef> = {
    */
   dispatchStreak: {
     emitters: [
-      { p: sparks(C.frost, { life: [0.14, 0.26], size: [0.04, 0.03, 0.006], aspect: 6, stretch: 0.03, gravity: 0, bounce: 0, drag: 7, color: [[C.ice, 7], [C.frost, 4], [C.frostDeep, 0.5]] }), burst: [22, 26], shape: 'line', height: 4, radius: 0, vel: 'cone', cone: 0.03, speed: [22, 46] },
+      { p: sparks(C.frost, { life: [0.14, 0.26], size: [0.028, 0.022, 0.006], aspect: 6, stretch: 0.03, gravity: 0, bounce: 0, drag: 7, color: [[C.ice, 7], [C.frost, 4], [C.frostDeep, 0.5]] }), burst: [22, 26], shape: 'line', height: 4, radius: 0, vel: 'cone', cone: 0.03, speed: [22, 46] },
       { p: flashGlow(C.frost, 3, 0.9, 0.16, { color: [[C.ice, 3], [C.frost, 1.5], [C.frostDeep, 0]] }), burst: 1 },
       { p: star(C.ice, 11, 1.1, 0.1), burst: 1, at: 0.05, offset: [0, 4, 0] },
       { p: ringPop(C.frost, 5, 0.1, 1.1, 0.22), burst: 1, at: 0.05, offset: [0, 4, 0] },

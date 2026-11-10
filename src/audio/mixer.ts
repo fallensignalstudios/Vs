@@ -12,6 +12,7 @@
  * muffle filter and the pause gate act on tails as well.
  */
 import { clamp, clamp01 } from '@/core/mathx';
+import { setQ } from './synth/kit';
 import type { Shared } from './synth/shared';
 
 export interface Volumes {
@@ -49,7 +50,6 @@ export class Mixer {
   private readonly reverbTone: BiquadFilterNode;
   private readonly master: GainNode;
   private readonly sum: GainNode;
-  private muffleAmount = 0;
   private duckUntil = 0;
   private duckDepth = 0;
 
@@ -61,30 +61,31 @@ export class Mixer {
     };
     this.sum = g();
     // --- master dynamics: gentle glue → fast limiter → soft ceiling (never hard-clips) ---
-    const glue = ac.createDynamicsCompressor();
-    glue.threshold.value = -16;
-    glue.knee.value = 12;
-    glue.ratio.value = 2.2;
-    glue.attack.value = 0.018;
-    glue.release.value = 0.22;
-    const limiter = ac.createDynamicsCompressor();
-    limiter.threshold.value = -4;
-    limiter.knee.value = 2;
-    limiter.ratio.value = 20;
-    limiter.attack.value = 0.002;
-    limiter.release.value = 0.09;
-    // Chrome/WebKit compressors add fixed make-up gain ((1/fullRangeGain)^0.6); trim it back out so the
-    // chain is unity below threshold. Values measured in the sandbox transfer test.
-    const trim = g(dB(MAKEUP_TRIM_DB));
+    const comp = (c: CompParams): DynamicsCompressorNode => {
+      const n = ac.createDynamicsCompressor();
+      n.threshold.value = c.threshold;
+      n.knee.value = c.knee;
+      n.ratio.value = c.ratio;
+      n.attack.value = c.attack;
+      n.release.value = c.release;
+      return n;
+    };
+    // WebKit-lineage compressors add fixed make-up gain ((1/fullRangeGain)^0.6). Each stage is trimmed back to
+    // unity below its threshold, so "−6 dBFS in" means −6 dBFS out until the dynamics actually work.
+    const glue = comp(DYNAMICS.glue);
+    const glueTrim = g(dB(-DYNAMICS.glue.makeupDb));
+    const limiter = comp(DYNAMICS.limiter);
+    const limiterTrim = g(dB(-DYNAMICS.limiter.makeupDb));
     const ceiling = ac.createWaveShaper();
     ceiling.curve = res.curves.ceiling;
     // the master slider sits BEFORE the dynamics so turning it up can never push past the ceiling
     this.master = g();
     this.sum.connect(this.master);
     this.master.connect(glue);
-    glue.connect(limiter);
-    limiter.connect(trim);
-    trim.connect(ceiling);
+    glue.connect(glueTrim);
+    glueTrim.connect(limiter);
+    limiter.connect(limiterTrim);
+    limiterTrim.connect(ceiling);
     ceiling.connect(destination ?? ac.destination);
 
     // --- world: sfx + ambience + reverb return through the muffle filter ---
@@ -92,7 +93,7 @@ export class Mixer {
     this.muffle = ac.createBiquadFilter();
     this.muffle.type = 'lowpass';
     this.muffle.frequency.value = 20000;
-    this.muffle.Q.value = 0.6;
+    setQ(this.muffle, 0.707);
     this.worldGate = g();
     world.connect(this.muffle);
     this.muffle.connect(this.worldGate);
@@ -108,7 +109,25 @@ export class Mixer {
     this.music = g();
     this.musicDuck = g();
     this.musicGate = g();
-    this.music.connect(this.musicDuck);
+    // score "mastering" tilt: synthesised low strings and drums pile energy under 250 Hz, so ease the bottom
+    // and lift presence — the score sits behind the SFX without turning to mud on small speakers
+    const lowShelf = ac.createBiquadFilter();
+    lowShelf.type = 'lowshelf';
+    lowShelf.frequency.value = 160;
+    lowShelf.gain.value = -3.5;
+    const presence = ac.createBiquadFilter();
+    presence.type = 'highshelf';
+    presence.frequency.value = 2200;
+    presence.gain.value = 5;
+    // drums and stabs land together on the bar line: hold those peaks so the score has body without
+    // spiking into the SFX's headroom
+    const musicComp = comp(DYNAMICS.music);
+    const musicTrim = g(dB(-DYNAMICS.music.makeupDb));
+    this.music.connect(lowShelf);
+    lowShelf.connect(presence);
+    presence.connect(musicComp);
+    musicComp.connect(musicTrim);
+    musicTrim.connect(this.musicDuck);
     this.musicDuck.connect(this.musicGate);
     this.musicGate.connect(this.sum);
 
@@ -123,6 +142,7 @@ export class Mixer {
     this.reverbTone = ac.createBiquadFilter();
     this.reverbTone.type = 'lowpass';
     this.reverbTone.frequency.value = 6500;
+    setQ(this.reverbTone, 0.707);
     const ret = g(REVERB_RETURN);
     this.reverbIn.connect(conv);
     conv.connect(this.reverbTone);
@@ -152,7 +172,7 @@ export class Mixer {
       else p.setTargetAtTime(val, now, fade / 3);
     };
     // buses carry (slider gain / reference gain): the recipes are calibrated at the reference settings
-    set(this.master.gain, sliderGain(v.master) / sliderGain(REFERENCE_VOLUMES.master) * MASTER_REF);
+    set(this.master.gain, sliderGain(v.master) / sliderGain(REFERENCE_VOLUMES.master));
     set(this.music.gain, sliderGain(v.music) / sliderGain(REFERENCE_VOLUMES.music));
     const s = sliderGain(v.sfx) / sliderGain(REFERENCE_VOLUMES.sfx);
     set(this.sfx.gain, s);
@@ -169,17 +189,14 @@ export class Mixer {
 
   /** 0..1 "muffled pressure" low-pass on the world bus (sfx, ambience, reverb). */
   setMuffle(amount: number, fade = 0.4): void {
-    this.muffleAmount = clamp01(Number.isFinite(amount) ? amount : 0);
+    const m = clamp01(Number.isFinite(amount) ? amount : 0);
     // 20 kHz → 280 Hz, perceptually even
-    const hz = 20000 * Math.pow(280 / 20000, Math.pow(this.muffleAmount, 0.8));
+    const hz = 20000 * Math.pow(280 / 20000, Math.pow(m, 0.8));
     const now = this.ac.currentTime;
     this.muffle.frequency.cancelScheduledValues(now);
     this.muffle.frequency.setTargetAtTime(hz, now, Math.max(0.01, fade) / 3);
-    this.muffle.Q.setTargetAtTime(0.6 + this.muffleAmount * 0.9, now, Math.max(0.01, fade) / 3);
-  }
-
-  get muffled(): number {
-    return this.muffleAmount;
+    // a little resonance at the cutoff as the world closes in (Q is in dB for a low-pass)
+    this.muffle.Q.setTargetAtTime(-3 + m * 6, now, Math.max(0.01, fade) / 3);
   }
 
   /** Lower music + ambience by `amount` (0..1) for `seconds`, then recover. Overlapping ducks extend. */
@@ -209,7 +226,19 @@ export class Mixer {
 
 /** Reverb return level (the impulse has unit energy). */
 const REVERB_RETURN = 0.5;
-/** Compensation for the two compressors' built-in make-up gain (dB) — see sandbox "chain" report. */
-const MAKEUP_TRIM_DB = -7.4;
-/** Master gain at the reference master slider. */
-const MASTER_REF = 1;
+export interface CompParams {
+  threshold: number;
+  knee: number;
+  ratio: number;
+  attack: number;
+  release: number;
+  /** the node's built-in make-up gain for these settings (dB), measured by the sandbox "chain" report */
+  makeupDb: number;
+}
+
+/** Dynamics stages: the score's own peak control, then the master glue compressor into a fast limiter. */
+export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
+  music: { threshold: -17, knee: 8, ratio: 4, attack: 0.003, release: 0.14, makeupDb: 6.1 },
+  glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
+  limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
+};

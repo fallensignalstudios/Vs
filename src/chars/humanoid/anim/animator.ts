@@ -54,6 +54,9 @@ export class Animator {
   private xfadeLower = true;
   private shot: Active | null = null;
   private pose: Active | null = null;
+  /** looping pose requested by locomotion flags (guard / aim); yields to explicit poses */
+  private autoName: string | null = null;
+  private poseAuto = false;
   private readonly add = new Additive();
   private time = 0;
   private hasOut = false;
@@ -103,19 +106,33 @@ export class Animator {
     const a: Active = { clip, name: action, time: 0, speed, upperOnly: opts?.upperOnly ?? clip.upperOnly, loop, onEvent: opts?.onEvent, ev: 0, ended: false };
     const lower = !a.upperOnly || (!loop && !!this.shot && !this.shot.upperOnly);
     this.transition(opts?.fade ?? clip.fadeIn, lower);
-    if (loop) this.pose = a; else this.shot = a;
+    if (loop) { this.pose = a; this.poseAuto = false; } else this.shot = a;
     return { duration: clip.duration / speed, hitTimes: clip.hitTimes.map((t) => t / speed), loop };
+  }
+
+  /** Looping pose implied by locomotion flags ('guard' / 'aim'); null clears it. Explicit poses win. */
+  setAuto(name: string | null): void {
+    this.autoName = name;
+    if (this.pose && !this.poseAuto) return;
+    if (name === (this.pose ? this.pose.name : null)) return;
+    if (!name) { if (this.pose) { this.transition(0.2, !this.pose.upperOnly); this.pose = null; this.poseAuto = false; } return; }
+    const clip = this.resolve(name);
+    const a: Active = { clip, name, time: 0, speed: 1, upperOnly: clip.upperOnly, loop: true, onEvent: undefined, ev: 0, ended: false };
+    this.transition(clip.fadeIn, !a.upperOnly);
+    this.pose = a; this.poseAuto = true;
   }
 
   stop(action: string | undefined, fade: number | undefined): void {
     const f = fade ?? 0.2;
     if (action === undefined) {
       if (this.shot || this.pose) this.transition(f, true);
-      this.shot = null; this.pose = null;
-      return;
+      this.shot = null; this.pose = null; this.poseAuto = false;
+    } else {
+      if (this.shot && this.shot.name === action) { this.transition(f, !this.shot.upperOnly); this.shot = null; }
+      if (this.pose && this.pose.name === action) { this.transition(f, !this.pose.upperOnly); this.pose = null; this.poseAuto = false; }
     }
-    if (this.shot && this.shot.name === action) { this.transition(f, !this.shot.upperOnly); this.shot = null; }
-    if (this.pose && this.pose.name === action) { this.transition(f, !this.pose.upperOnly); this.pose = null; }
+    // a flag-implied pose resumes as soon as nothing explicit holds the slot
+    if (!this.pose && this.autoName) { const n = this.autoName; this.autoName = null; this.setAuto(n); }
   }
 
   isPlaying(action: string | undefined): boolean {

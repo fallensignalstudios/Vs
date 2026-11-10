@@ -24,11 +24,6 @@ export const FACTION_ICON: Record<Faction, string> = {
   none: '',
 };
 
-export const FACTION_LABEL: Record<Faction, string> = {
-  dominion: 'Dominion', reformation: 'Reformation', ancient: 'King-era', system: 'System', eclipse: 'Eclipse',
-  neutral: '', none: '',
-};
-
 export type MarkerKind = NonNullable<WorldMarkerOpts['kind']>;
 
 /** 24×24 world-marker shapes (kinds differ by silhouette, then by colour). */
@@ -96,9 +91,12 @@ export function keycap(text: string, cls = ''): HTMLSpanElement {
   return el;
 }
 
+const capState = new WeakMap<HTMLElement, string>();
+
 export function setKeycap(el: HTMLElement, text: string, round = false): void {
-  if (el.dataset.g === text && el.classList.contains('is-round') === round) return;
-  el.dataset.g = text;
+  const key = round ? `${text}\u0001` : text;
+  if (capState.get(el) === key) return;
+  capState.set(el, key);
   el.textContent = text;
   el.classList.toggle('is-wide', text.length > 1);
   el.classList.toggle('is-round', round);

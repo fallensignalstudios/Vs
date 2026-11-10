@@ -9,7 +9,7 @@
  *   game.render.setLook({ fog: { density: 0.02 } }, 2);     // partial overrides blend over 2 s
  *   game.render.setLook(LOOKS.witness, 1.5);                // whole-look change for a story beat
  *   game.render.registerReflectiveFloor(mesh);              // mirror-polished floors (kit does this for you)
- *   game.render.refreshEnvironment({ scene: true });        // after the zone is built: local reflections
+ *   game.render.refreshEnvironment();                       // after the zone is built: local reflection probe
  *   await game.render.compile();                            // during loading, after the zone is in the scene
  *
  * IMAGE PIPELINE (HDR half-float, in order): scene → ambient occlusion → [depth of field] → chromatic
@@ -138,13 +138,13 @@ export interface ReflectiveFloorOpts {
 
 export interface EnvRefreshOpts {
   /**
-   * false (default): environment = current sky + a dim fill tinted by `Look.ambient` (cheap, always safe).
-   * true: additionally captures the current scene (zone geometry, emissive strips, lights) as a local
-   * reflection probe, so metals and floors reflect the hall they are in. Call after the zone is built and
-   * before characters are spawned (whatever is in the scene is baked in).
+   * true (default): the environment is a local reflection probe — the current scene (zone geometry, emissive
+   * strips, lights) plus the sky and a dim fill tinted by `Look.ambient`, captured from `position`. Metals and
+   * polished floors reflect the hall they are in. Whatever is in the scene on layer 0 is baked in.
+   * false: sky + fill only (cheapest; use for open vistas where the zone geometry should not tint the light).
    */
   scene?: boolean;
-  /** probe position for `scene: true`; default = the active camera position */
+  /** probe position; default = the player's position (eye height) or, failing that, the active camera */
   position?: Vec3Like;
 }
 
@@ -178,7 +178,8 @@ export interface RenderSystem {
 
   /**
    * Rebuild scene.environment (PMREM) from the current sky + zone lights. Call after zone/sky changes.
-   * The bake is deferred to the next rendered frame, so several calls in one frame cost one bake.
+   * The bake is deferred to the next rendered frame, so several calls in one frame cost one bake, and it is
+   * repeated automatically (same options) on `zone:ready`, when the whole zone is in the scene.
    */
   refreshEnvironment(opts?: EnvRefreshOpts): void;
 

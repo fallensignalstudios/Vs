@@ -59,6 +59,7 @@ export class Subtitles {
   private faction: Faction | '' = '';
   private enabled = true;
   private letterboxed = false;
+  private covered = false;
 
   private readonly capEl: HTMLElement;
   private readonly caps: Caption[] = [];
@@ -73,6 +74,7 @@ export class Subtitles {
     this.tagIcon = icon(ICON.radio, 'aur-ico aur-sub-tagico');
     this.who = h('div', 'aur-sub-who', this.shape as unknown as HTMLElement, name, h('span', 'aur-sub-tag', this.tagIcon as unknown as HTMLElement, tag));
     this.textEl = h('div', 'aur-sub-text');
+    this.textEl.setAttribute('aria-live', 'polite');
     this.pagerEl = h('span', 'aur-sub-pager aur-num');
     this.subEl = h('div', 'aur-sub', this.who, this.textEl, this.pagerEl);
     this.name = new Txt(name);
@@ -130,6 +132,13 @@ export class Subtitles {
     if (on === this.letterboxed) return;
     this.letterboxed = on;
     this.el.classList.toggle('is-letterboxed', on);
+  }
+
+  /** pause / death menus sit on a translucent veil: keep stale dialogue from showing through it */
+  setCovered(covered: boolean): void {
+    if (covered === this.covered) return;
+    this.covered = covered;
+    this.el.style.visibility = covered ? 'hidden' : 'visible';
   }
 
   // ------------------------------------------------------------------------------------------ subtitles
@@ -198,10 +207,40 @@ export class Subtitles {
     const n = this.pages.length;
     const t = this.pages[this.page] ?? '';
     // Txt caches: force a write because pagination measured through the same node
-    this.textEl.textContent = t;
+    const el = this.textEl;
+    el.style.width = '';
+    el.textContent = t;
     this.text.set(t);
     this.pager.set(n > 1 ? `${this.page + 1} / ${n}` : '');
     this.pagerEl.style.display = n > 1 ? '' : 'none';
+    this.shrinkWrap();
+  }
+
+  /**
+   * A wrapped block is as wide as its container, not its longest line, which leaves the backing plate much
+   * wider than the words. Measure the rendered lines and pin the block to the widest one.
+   */
+  private shrinkWrap(): void {
+    const el = this.textEl;
+    const node = el.firstChild;
+    if (!node) return;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rects = range.getClientRects();
+      if (rects.length < 2) return;
+      let left = Infinity;
+      let right = -Infinity;
+      for (let i = 0; i < rects.length; i++) {
+        const r = rects[i] as DOMRect;
+        if (r.width <= 0) continue;
+        left = Math.min(left, r.left);
+        right = Math.max(right, r.right);
+      }
+      if (right > left) el.style.width = `${Math.ceil(right - left) + 2}px`;
+    } catch {
+      /* no layout available (tests) */
+    }
   }
 
   // ------------------------------------------------------------------------------------------ captions

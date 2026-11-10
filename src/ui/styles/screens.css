@@ -1,0 +1,213 @@
+/* AURELION UI — full-screen overlays: loading, death, mission complete. */
+
+/* ================================================================ loading */
+.aur-loading {
+  background: #05070b;
+}
+
+.aur-loading-grad {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(4, 6, 10, 0.5) 0%, rgba(4, 6, 10, 0.12) 36%, rgba(4, 6, 10, 0.9) 100%),
+    linear-gradient(90deg, rgba(4, 6, 10, 0.72), rgba(4, 6, 10, 0) 62%);
+}
+
+.aur-loading-col {
+  position: absolute;
+  left: calc(var(--safe-x) + var(--u) * 46);
+  bottom: calc(var(--safe-y) + var(--u) * 78);
+  max-width: calc(var(--u) * 1240);
+  text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 16) rgba(0, 0, 0, 0.85);
+}
+
+.aur-loading-code {
+  margin-bottom: calc(var(--u) * 16);
+  font-size: calc(var(--u) * 14);
+  letter-spacing: 0.52em;
+  color: var(--gold-l);
+}
+
+.aur-loading-title {
+  font-size: calc(var(--u) * 52);
+  letter-spacing: 0.2em;
+  text-wrap: balance;
+}
+
+.aur-loading-col .aur-rule-l {
+  width: calc(var(--u) * 460);
+  margin: calc(var(--u) * 22) 0 calc(var(--u) * 16);
+}
+
+.aur-loading-sub {
+  font-family: var(--f-label);
+  font-weight: 500;
+  font-size: calc(var(--u) * 16);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(246, 242, 234, 0.82);
+}
+
+.aur-loading-foot {
+  position: absolute;
+  left: calc(var(--safe-x) + var(--u) * 46);
+  right: calc(var(--safe-x) + var(--u) * 46);
+  bottom: calc(var(--safe-y) - var(--u) * 2);
+  display: flex;
+  justify-content: space-between;
+  color: rgba(246, 242, 234, 0.5);
+}
+
+.aur-loading-foot .aur-label {
+  font-size: calc(var(--u) * 10);
+  letter-spacing: 0.36em;
+}
+
+.aur-loading-bar {
+  position: absolute;
+  left: calc(var(--safe-x) + var(--u) * 46);
+  right: calc(var(--safe-x) + var(--u) * 46);
+  bottom: calc(var(--safe-y) + var(--u) * 24);
+  height: max(2px, calc(var(--u) * 2));
+  overflow: hidden;
+  background: rgba(246, 242, 234, 0.16);
+}
+
+.aur-loading-bar i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--gold), var(--gold-l));
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.aur-loading-bar.is-indeterminate i {
+  background: linear-gradient(90deg, rgba(230, 207, 154, 0), var(--gold-l) 50%, rgba(230, 207, 154, 0));
+}
+
+/* ================================================================ death */
+.aur-death-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 48%, rgba(14, 6, 6, 0.84), rgba(3, 2, 3, 0.98) 72%);
+}
+
+.aur-death-col {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transform: translate3d(-50%, calc(-50% + var(--u) * 10 * var(--k)), 0);
+}
+
+.aur-death-who {
+  height: calc(var(--u) * 13);
+  font-size: calc(var(--u) * 13);
+  letter-spacing: 0.5em;
+  padding-left: 0.5em;
+  color: var(--accent);
+}
+
+.aur-death-title {
+  margin-top: calc(var(--u) * 22);
+  font-size: calc(var(--u) * 82);
+  letter-spacing: 0.36em;
+  padding-left: 0.36em;
+  color: #efe5da;
+}
+
+.aur-death-orn {
+  margin: calc(var(--u) * 28) 0 calc(var(--u) * 24);
+}
+
+.aur-death-line {
+  margin-bottom: calc(var(--u) * 44);
+  font-size: calc(var(--u) * 17);
+  color: rgba(246, 242, 234, 0.66);
+}
+
+.aur-death .aur-btn {
+  opacity: 0;
+  transition: opacity 0.5s, color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.aur-death.is-ready .aur-btn {
+  opacity: 1;
+}
+
+/* ================================================================ mission complete */
+.aur-complete {
+  background: #05070b;
+}
+
+.aur-complete-grad {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 46%, rgba(5, 8, 12, 0.8), rgba(5, 8, 12, 0.95) 80%);
+}
+
+.aur-complete-col {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--u) * 760);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.aur-complete-series {
+  padding-left: 0.52em;
+  font-size: calc(var(--u) * 12);
+}
+
+.aur-complete-title {
+  margin-top: calc(var(--u) * 22);
+  font-size: calc(var(--u) * 58);
+  letter-spacing: 0.26em;
+  padding-left: 0.26em;
+  white-space: nowrap;
+}
+
+.aur-complete-orn {
+  margin: calc(var(--u) * 24) 0 calc(var(--u) * 18);
+}
+
+.aur-complete-tag {
+  margin-bottom: calc(var(--u) * 30);
+  font-size: calc(var(--u) * 13);
+  letter-spacing: 0.54em;
+  padding-left: 0.54em;
+  color: var(--gold-l);
+}
+
+.aur-complete-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: calc(var(--u) * 38);
+}
+
+.aur-complete-row {
+  align-items: center;
+  gap: calc(var(--u) * 14);
+  height: calc(var(--u) * 40);
+  transform: translate3d(0, calc(var(--u) * 6 * var(--k)), 0);
+}
+
+.aur-complete-label {
+  font-size: calc(var(--u) * 13);
+  letter-spacing: 0.3em;
+  color: rgba(246, 242, 234, 0.6);
+}
+
+.aur-complete-value {
+  font-weight: 500;
+  font-size: calc(var(--u) * 18);
+  letter-spacing: 0.02em;
+}

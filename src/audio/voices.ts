@@ -13,6 +13,8 @@ import { dbToGain, type Recipe, type RecipeTable } from './sfx/recipe';
 /** hard budget of simultaneous SFX voices (loops included) */
 export const MAX_VOICES = 28;
 const MAX_LOOPS = 14;
+/** voices allowed to be mid steal-fade at once */
+const STEAL_SLACK = 6;
 const SCHEDULE_AHEAD = 0.004;
 
 interface Voice {
@@ -26,11 +28,12 @@ interface Voice {
   kit: Kit;
   /** authored gain (before LoopHandle.setVolume) */
   base: number;
-  sendBase: number;
   /** loops built from one-shot recipes re-trigger at this period */
   retrig: { recipe: Recipe; next: number; period: number } | null;
   /** a loop that has been told to stop (handle calls become no-ops) */
   stopped: boolean;
+  /** stolen: fading out over a few milliseconds, no longer counted against the budget */
+  dying: boolean;
 }
 
 const finite = (v: Vec3Like | undefined): v is Vec3Like =>
@@ -59,9 +62,11 @@ export class Voices {
     private readonly norm: Readonly<Record<string, number>>,
   ) {}
 
-  /** live voice count (for budgets / debug) */
+  /** sounding voices (stolen voices in their last few milliseconds are not counted) */
   get count(): number {
-    return this.live.length;
+    let n = 0;
+    for (const v of this.live) if (!v.dying) n++;
+    return n;
   }
 
   has(id: string): boolean {
@@ -116,7 +121,7 @@ export class Voices {
 
   private instances(id: string, now: number): number {
     let n = 0;
-    for (const v of this.live) if (v.id === id && v.end > now) n++;
+    for (const v of this.live) if (v.id === id && v.end > now && !v.dying) n++;
     return n;
   }
 
@@ -135,10 +140,13 @@ export class Voices {
 
   /** Make room for a voice of priority `prio`. Returns false if the newcomer should be dropped instead. */
   private reserve(prio: number, now: number): boolean {
-    if (this.live.length < MAX_VOICES) return true;
+    const sounding = this.count;
+    if (sounding < MAX_VOICES) return true;
+    // a burst inside one steal-fade cannot pile up unbounded either
+    if (this.live.length - sounding >= STEAL_SLACK) return false;
     let victim: Voice | null = null;
     for (const v of this.live) {
-      if (v.end === Infinity || v.end <= now) continue;
+      if (v.dying || v.end === Infinity || v.end <= now) continue;
       if (v.prio > prio) continue;
       if (!victim || v.prio < victim.prio || (v.prio === victim.prio && v.end < victim.end)) victim = v;
     }
@@ -146,6 +154,7 @@ export class Voices {
     victim.input.gain.cancelScheduledValues(now);
     victim.input.gain.setTargetAtTime(0, now, 0.006);
     victim.end = now + 0.04;
+    victim.dying = true;
     return true;
   }
 
@@ -175,15 +184,14 @@ export class Voices {
       input.connect(bus);
     }
     const send = ac.createGain();
-    const sendBase = this.sendLevel(r, pos);
-    send.gain.value = sendBase;
+    send.gain.value = this.sendLevel(r, pos);
     input.connect(send);
     send.connect(r.bus === 'ui' ? this.mixer.reverbIn : this.mixer.sfxSend);
 
     const cents = r.vary > 0 ? (this.rnd() * 2 - 1) * r.vary : 0;
     const pitch = clamp(Number.isFinite(opts?.pitch) ? (opts!.pitch as number) : 1, 0.25, 4) * Math.pow(2, cents / 1200);
     const kit = new Kit(ac, this.res, input, t0, pitch, this.rnd, sustain);
-    return { id, input, pan, send, end: t0, prio: r.prio, kit, base, sendBase, retrig: null, stopped: false };
+    return { id, input, pan, send, end: t0, prio: r.prio, kit, base, retrig: null, stopped: false, dying: false };
   }
 
   /** Play a one-shot. Returns its scheduled length in seconds (0 if it was limited or unknown). */
@@ -207,6 +215,13 @@ export class Voices {
     v.end = t0 + v.kit.end + 0.08;
     this.live.push(v);
     return v.kit.end;
+  }
+
+  /** Place a one-shot at a random bearing `dist` metres from the listener (ambience events). */
+  playAround(id: string, dist: number, volume: number): number {
+    const a = this.rnd() * Math.PI * 2;
+    const pos = { x: this.lpos.x + Math.cos(a) * dist, y: this.lpos.y + this.rnd() * dist * 0.2, z: this.lpos.z + Math.sin(a) * dist };
+    return this.play(id, { pos, volume });
   }
 
   /** Start a sustaining voice. One-shot recipes are re-triggered end-to-end. */
@@ -276,7 +291,8 @@ export class Voices {
       if (!rt) continue;
       if (rt.next < now) rt.next = now + SCHEDULE_AHEAD;
       while (rt.next < now + lookahead) {
-        const k = v.kit.fork(v.input, rt.next);
+        const vary = rt.recipe.vary > 0 ? Math.pow(2, ((this.rnd() * 2 - 1) * rt.recipe.vary) / 1200) : 1;
+        const k = v.kit.fork(v.input, rt.next, v.kit.pitch * vary);
         rt.recipe.make(k);
         k.seal();
         rt.next += rt.period;

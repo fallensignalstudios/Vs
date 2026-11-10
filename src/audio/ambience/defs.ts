@@ -94,8 +94,9 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   survivorBend: {
     db: -33, room: 0.6, tone: 4000,
     beds: [
-      { color: 'brown', type: 'lowpass', f: 160, g: 0.7 },
-      { color: 'pink', type: 'bandpass', f: 600, q: 0.7, g: 0.2, am: [0.13, 0.3] },
+      { color: 'brown', type: 'lowpass', f: 160, g: 0.5 },
+      { color: 'pink', type: 'bandpass', f: 600, q: 0.7, g: 0.3, am: [0.13, 0.3] },
+      { color: 'pink', type: 'highpass', f: 3500, g: 0.02 },
     ],
     tones: [{ wave: 'sine', f: 120, g: 0.04 }],
     events: [
@@ -109,9 +110,10 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   frozenCorridor: {
     db: -32, room: 0.8, tone: 7500,
     beds: [
-      { color: 'pink', type: 'highpass', f: 5000, g: 0.12, am: [0.07, 0.4] },
-      { color: 'pink', type: 'bandpass', f: 900, q: 2.5, g: 0.22, fm: [0.06, 300], am: [0.1, 0.5] },
-      { color: 'brown', type: 'lowpass', f: 90, g: 0.6 },
+      { color: 'pink', type: 'highpass', f: 5000, g: 0.06, am: [0.07, 0.4] },
+      { color: 'pink', type: 'bandpass', f: 900, q: 2.5, g: 0.5, fm: [0.06, 300], am: [0.1, 0.5] },
+      { color: 'pink', type: 'bandpass', f: 2600, q: 4, g: 0.12, fm: [0.045, 700], am: [0.08, 0.6] },
+      { color: 'brown', type: 'lowpass', f: 90, g: 0.25 },
     ],
     tones: [{ wave: 'sine', f: 2093, g: 0.012, beat: 1.3, am: [0.05, 0.8] }, { wave: 'sine', f: 3136, g: 0.006, am: [0.07, 0.8] }],
     events: [
@@ -134,14 +136,14 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   atrium: {
     db: -29, room: 1.4, tone: 4500,
     beds: [
-      { color: 'brown', type: 'lowpass', f: 80, g: 1, am: [0.03, 0.3] },
-      { color: 'brown', type: 'lowpass', f: 200, g: 0.5, fm: [0.04, 60] },
-      { color: 'pink', type: 'bandpass', f: 1500, q: 0.4, g: 0.05, am: [0.06, 0.5] },
+      { color: 'brown', type: 'lowpass', f: 90, g: 0.6, am: [0.03, 0.3] },
+      { color: 'brown', type: 'lowpass', f: 220, g: 0.5, fm: [0.04, 60] },
+      { color: 'pink', type: 'bandpass', f: 420, q: 0.5, g: 0.3, fm: [0.03, 120], am: [0.05, 0.4] },
+      { color: 'pink', type: 'bandpass', f: 1500, q: 0.4, g: 0.16, am: [0.06, 0.5] },
     ],
     tones: [
-      { wave: 'sine', f: 36.7, g: 0.25, am: [0.05, 0.4] },
-      { wave: 'sine', f: 55, g: 0.1, beat: 0.4 },
-      { wave: 'sawtooth', f: 48, g: 0.05, lp: 140, am: [0.5, 0.3] },
+      { wave: 'sine', f: 55, g: 0.12, beat: 0.4, am: [0.05, 0.4] },
+      { wave: 'sawtooth', f: 73.4, g: 0.05, lp: 260, am: [0.5, 0.3] },
     ],
     events: [{ id: 'structuralGroan', every: [8, 18], dist: [60, 150] }, { ...FLEET, every: [10, 22] }, { id: 'ambDust', every: [8, 18], dist: [8, 25] }],
   },
@@ -149,9 +151,9 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   breach: {
     db: -30, room: 1.0, tone: 3800,
     beds: [
-      { color: 'brown', type: 'lowpass', f: 130, g: 0.8 },
-      { color: 'pink', type: 'bandpass', f: 500, q: 1.2, g: 0.3, am: [0.42, 0.8] },
-      { color: 'pink', type: 'bandpass', f: 2400, q: 2, g: 0.04, am: [0.42, 0.9] },
+      { color: 'brown', type: 'lowpass', f: 130, g: 0.45 },
+      { color: 'pink', type: 'bandpass', f: 500, q: 1.2, g: 0.6, am: [0.42, 0.8] },
+      { color: 'pink', type: 'bandpass', f: 2400, q: 2, g: 0.1, am: [0.42, 0.9] },
       { color: 'crackle', type: 'bandpass', f: 700, q: 1, g: 0.08, rate: 0.4 },
     ],
     tones: [{ wave: 'sawtooth', f: 69.3, g: 0.04, lp: 300, beat: 4.1 }],
@@ -187,11 +189,12 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   crucible: {
     db: -29, room: 1.2, tone: 3500,
     beds: [
-      { color: 'brown', type: 'lowpass', f: 70, g: 1, am: [0.05, 0.3] },
-      { color: 'pink', type: 'bandpass', f: 300, q: 1, g: 0.35, am: [0.17, 0.85] },
+      { color: 'brown', type: 'lowpass', f: 90, g: 0.5, am: [0.05, 0.3] },
+      { color: 'pink', type: 'bandpass', f: 300, q: 1, g: 0.7, am: [0.17, 0.85] },
+      { color: 'pink', type: 'bandpass', f: 1100, q: 1.4, g: 0.16, am: [0.17, 0.9] },
       { color: 'pink', type: 'highpass', f: 3000, g: 0.03, am: [0.17, 0.9] },
     ],
-    tones: [{ wave: 'sine', f: 34.6, g: 0.2, am: [0.17, 0.5] }, { wave: 'sawtooth', f: 51.9, g: 0.04, lp: 200, beat: 3.3 }],
+    tones: [{ wave: 'sine', f: 69.3, g: 0.1, am: [0.17, 0.5] }, { wave: 'sawtooth', f: 51.9, g: 0.05, lp: 240, beat: 3.3 }],
     events: [
       { id: 'ambChain', every: [3, 9], dist: [6, 18] },
       { id: 'ambDrip', every: [2, 5], dist: [4, 12] },
@@ -235,11 +238,11 @@ export const AMBIENCE: Readonly<Record<Exclude<AmbienceId, 'none'>, AmbDef>> = {
   observation: {
     db: -35, room: 0.35, tone: 3500,
     beds: [
-      { color: 'pink', type: 'lowpass', f: 500, g: 0.25 },
-      { color: 'pink', type: 'bandpass', f: 2200, q: 0.6, g: 0.03 },
-      { color: 'brown', type: 'lowpass', f: 55, g: 0.9, am: [0.025, 0.5] },
+      { color: 'pink', type: 'lowpass', f: 500, g: 0.4 },
+      { color: 'pink', type: 'bandpass', f: 2200, q: 0.6, g: 0.06 },
+      { color: 'brown', type: 'lowpass', f: 80, g: 0.5, am: [0.025, 0.5] },
     ],
-    tones: [{ wave: 'sine', f: 60, g: 0.03 }, { wave: 'sine', f: 41, g: 0.12, am: [0.03, 0.6] }],
+    tones: [{ wave: 'sine', f: 120, g: 0.02 }, { wave: 'sine', f: 55, g: 0.08, am: [0.03, 0.6] }],
     events: [
       { id: 'ambConsoleTick', every: [4, 11], dist: [2, 5] },
       { id: 'ambStellar', every: [12, 28], dist: [80, 200] },

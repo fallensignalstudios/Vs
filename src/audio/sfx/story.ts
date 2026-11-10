@@ -103,9 +103,9 @@ export const STORY_SFX: RecipeTable = {
   }),
   witnessEnter: sfx(-8, { ...STORY, gap: 3, max: 1, send: 0.85, ref: 40 }, (k) => {
     // Witness V: a floor of sub, one great bell, and a breath that is not hostile
-    k.osc('sine', [30, 36.7, 2], { a: 1.6, h: 0.8, d: 2.2, g: 0.9 });
-    struck(k, 'bell', D3, 4.2, 0.7, { at: 1.0, exact: true });
-    struck(k, 'bell', A3, 3.4, 0.3, { at: 1.06, exact: true, pan: 0.3 });
+    k.osc('sine', [36.7, 73.4, 2.4], { a: 1.6, h: 0.8, d: 2.2, g: 0.5 });
+    struck(k, 'bell', D3, 4.2, 1, { at: 1.0, exact: true });
+    struck(k, 'bell', A3, 3.4, 0.45, { at: 1.06, exact: true, pan: 0.3 });
     thump(k, 70, 30, 0.6, 0.6, 1.0);
     const e = { a: 1.4, h: 0.9, d: 2.2, lin: true };
     breath(k, { ...e, g: 0.5 }, 0.5);

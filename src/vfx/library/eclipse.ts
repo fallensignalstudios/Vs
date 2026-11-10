@@ -35,8 +35,8 @@ export const ECLIPSE: Record<string, EffectDef> = {
    */
   linkSever: {
     emitters: [
-      { p: star(C.white, 16, 1.5, 0.08, { tint: 0 }), burst: 1 },
-      { p: { layer: 'add', sprite: 'flare', life: 0.14, size: [1.2, 2.6, 3.0], sizeRand: 1, aspect: 0.5, color: [[C.white, 9], [C.violetLight, 3]], fadeIn: 0.02, fadeOut: 0.3, rot: 0, tint: 0 }, burst: 1 },
+      { p: star(C.white, 11, 0.9, 0.08, { tint: 0 }), burst: 1 },
+      { p: { layer: 'add', sprite: 'flare', life: 0.14, size: [0.9, 1.9, 2.2], sizeRand: 1, aspect: 0.5, color: [[C.white, 5], [C.violetLight, 2.4]], fadeIn: 0.02, fadeOut: 0.3, rot: 0, tint: 0 }, burst: 1 },
       { p: ringPop(C.violetLight, 5, 0.1, 1.2, 0.2), burst: 1 },
       { p: sparks(C.violet, { life: [0.25, 0.55], gravity: 3, color: [[C.white, 7], [C.violetLight, 4], [C.violet, 0.5]] }), burst: [12, 14], vel: 'cone', cone: 0.4, speed: [5, 13] },
       { p: sparks(C.violet, { life: [0.25, 0.55], gravity: 3, color: [[C.white, 7], [C.violetLight, 4], [C.violet, 0.5]] }), burst: [12, 14], vel: 'cone', cone: 0.4, speed: [5, 13], flip: true },

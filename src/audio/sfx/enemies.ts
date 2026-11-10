@@ -18,7 +18,7 @@ function bolt(k: Parameters<typeof crack>[0], at: number, g: number): void {
 }
 
 export const DRONE_SFX: RecipeTable = {
-  droneHum: sfx(-26, { loop: true, max: 6, prio: 0, send: 0.2, vary: 70, ref: 3 }, (k) => {
+  droneHum: sfx(-20, { loop: true, max: 6, prio: 0, send: 0.2, vary: 70, ref: 5 }, (k) => {
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     k.osc('triangle', 196, { ...e, g: 0.6 });
     k.osc('sine', 294.4, { ...e, g: 0.4 }); // a slightly wide fifth: slow, clean beating
@@ -48,10 +48,10 @@ export const DRONE_SFX: RecipeTable = {
     // rotors spin down, the tone stutters, then a small clean pop
     const st = k.gain(0.6);
     k.lfo(17, 0.4, st.gain, { type: 'square' });
-    k.osc('sawtooth', [880, 70, 0.6], { a: 0.004, d: 0.7, g: 0.5 }, { to: st, lp: [3600, 400, 0.6] });
-    k.osc('triangle', [294, 60, 0.6], { a: 0.004, d: 0.65, g: 0.5 });
-    k.noise('crackle', { a: 0.002, d: 0.5, g: 0.6 }, { hp: 3000 });
-    blast(k, 0.55, 0.7, 0.38);
+    k.osc('sawtooth', [880, 70, 0.6], { a: 0.004, d: 0.7, g: 0.9 }, { to: st, lp: [3600, 400, 0.6] });
+    k.osc('triangle', [294, 60, 0.6], { a: 0.004, d: 0.65, g: 0.6 });
+    k.noise('crackle', { a: 0.002, d: 0.5, g: 0.9 }, { hp: 3000 });
+    blast(k, 0.55, 0.6, 0.38);
     debris(k, 4, 0.5, 0.25, 0.45, 600, 2400);
   }),
   droneAlert: sfx(-13, { gap: 0.5, max: 2, prio: 2, send: 0.35, vary: 5 }, (k) => {
@@ -86,10 +86,10 @@ export const ENFORCER_SFX: RecipeTable = {
     debris(k, 6, 0.7, 0.3, 0.15, 500, 2200);
   }),
   enforcerStep: sfx(-15, { gap: 0.12, max: 4, prio: 0, send: 0.35, ref: 5, vary: 60 }, (k) => {
-    thump(k, 78, 40, 0.16, 1);
-    k.noise('brown', { a: 0.002, d: 0.09, g: 0.8 }, { lp: [900, 260] });
-    struck(k, 'plate', k.rr(240, 290), 0.12, 0.3, { tilt: 1.4 });
-    struck(k, 'bar', k.rr(1700, 2300), 0.04, 0.12, { at: 0.03 });
+    thump(k, 92, 46, 0.16, 0.8);
+    k.noise('pink', { a: 0.002, d: 0.09, g: 0.8 }, { lp: [1800, 400] });
+    struck(k, 'plate', k.rr(240, 290), 0.14, 0.5, { tilt: 1.1 });
+    struck(k, 'bar', k.rr(1700, 2300), 0.05, 0.3, { at: 0.03 });
   }),
   batonZap: sfx(-10, { gap: 0.15, max: 3, prio: 2, send: 0.3, ref: 5 }, (k) => {
     crack(k, 0.9, 0, 2600, 0.008);
@@ -100,7 +100,7 @@ export const ENFORCER_SFX: RecipeTable = {
 };
 
 export const ECLIPSE_SFX: RecipeTable = {
-  eclipseBreath: sfx(-21, { ...ECLIPSE, loop: true, max: 5, prio: 0 }, (k) => {
+  eclipseBreath: sfx(-19, { ...ECLIPSE, loop: true, max: 5, prio: 0 }, (k) => {
     const e = { a: 0.5, h: Infinity, d: 0.8 };
     const am = k.gain(0.5);
     k.lfo(0.42, 0.45, am.gain); // every body breathes at exactly this rate
@@ -139,7 +139,7 @@ export const ECLIPSE_SFX: RecipeTable = {
     thump(k, 130, 46, 0.2, 1, 0.52);
     crack(k, 0.6, 0.52, 1200, 0.015);
   }),
-  weaverChant: sfx(-19, { ...ECLIPSE, loop: true, max: 2, prio: 1, send: 0.6 }, (k) => {
+  weaverChant: sfx(-17, { ...ECLIPSE, loop: true, max: 2, prio: 1, send: 0.6 }, (k) => {
     // two voices a tritone apart through one mouth, pulsing on an exact cadence
     const e = { a: 0.4, h: Infinity, d: 0.9 };
     const pulse = k.gain(0.55);
@@ -149,7 +149,7 @@ export const ECLIPSE_SFX: RecipeTable = {
     k.osc('sawtooth', 155.56, { ...e, g: 0.5 }, { to: mouth, fixed: true });
     k.noise('pink', { ...e, g: 0.25 }, { to: mouth });
   }),
-  linkHum: sfx(-23, { ...ECLIPSE, loop: true, max: 4, prio: 0, send: 0.3 }, (k) => {
+  linkHum: sfx(-20, { ...ECLIPSE, loop: true, max: 4, prio: 0, send: 0.3 }, (k) => {
     const e = { a: 0.25, h: Infinity, d: 0.4 };
     wrong(k, 233.1, { ...e, g: 0.7 }, { rate: 7 });
     k.osc('sine', 1864.7, { ...e, g: 0.08 }, { fixed: true });
@@ -157,16 +157,17 @@ export const ECLIPSE_SFX: RecipeTable = {
   }),
   linkSever: sfx(-7, { gap: 0.15, max: 2, prio: 3, send: 0.6, vary: 12 }, (k) => {
     // a taut line parting: snap, a pitch that falls away, and breath let go
-    crack(k, 1, 0, 2000, 0.01);
-    k.fm([1250, 140, 0.16], 1.5, [6, 0.5], { a: 0.001, d: 0.3, g: 0.8 });
-    k.osc('sine', [2500, 280, 0.16], { a: 0.001, d: 0.22, g: 0.3 });
-    thump(k, 150, 60, 0.12, 0.6);
+    crack(k, 1, 0, 1600, 0.012);
+    k.fm([1250, 140, 0.16], 1.5, [3.5, 0.4], { a: 0.001, d: 0.3, g: 0.9 });
+    k.osc('sine', [2500, 280, 0.16], { a: 0.001, d: 0.22, g: 0.25 });
+    thump(k, 160, 64, 0.14, 0.85);
     breath(k, { a: 0.06, d: 0.7, g: 0.5 }, 0.8, { at: 0.08 });
     struck(k, 'glass', 2093, 0.6, 0.18, { at: 0.1 });
   }),
   elitePulse: sfx(-7, { ...ECLIPSE, gap: 1, max: 1, prio: 3, send: 0.6, ref: 14 }, (k) => {
     // the announced pressure pulse: it gathers for most of a second so the player can act, then lets go
-    k.osc('sine', [30, 56, 0.85], { a: 0.8, d: 0.2, g: 0.9 }, { fixed: true });
+    k.osc('sine', [36, 62, 0.85], { a: 0.8, d: 0.2, g: 0.5 }, { fixed: true });
+    k.noise('brown', { a: 0.8, d: 0.1, g: 0.7 }, { lp: [180, 900, 0.85] });
     breath(k, { a: 0.8, d: 0.1, g: 0.7 }, 0.7);
     wrong(k, 69.3, { a: 0.75, d: 0.15, g: 0.5 }, { rate: 11 });
     thump(k, 80, 26, 0.7, 1, 0.9);
@@ -181,18 +182,20 @@ export const ECLIPSE_SFX: RecipeTable = {
     k.osc('sawtooth', [[0, 55.1], [0.3, 82.6], [1.1, 64.6], [1.7, 46.6]], { ...e, g: 0.6 }, { to: throat, fixed: true });
     k.noise('pink', { ...e, g: 0.7 }, { to: throat });
     k.noise('brown', { ...e, g: 0.8 }, { to: sh, lp: 420 });
-    k.osc('sine', [[0, 40], [0.3, 55], [1.7, 32]], { ...e, g: 0.6 }, { fixed: true });
+    k.osc('sine', [[0, 44], [0.3, 60], [1.7, 36]], { ...e, g: 0.35 }, { fixed: true });
   }),
   eliteSlam: sfx(-4, { ...ECLIPSE, gap: 0.6, max: 1, prio: 3, send: 0.6, ref: 16 }, (k) => {
     crack(k, 1, 0, 500, 0.04);
-    thump(k, 74, 24, 0.9, 1.1);
-    k.osc('sine', 31, { a: 0.03, d: 1.2, g: 0.8 }, { at: 0.03, fixed: true });
-    k.noise('brown', { a: 0.005, d: 1.1, g: 1 }, { to: k.shaper('soft', 2.4), lp: [2200, 110, 0.9] });
+    thump(k, 92, 30, 0.9, 1);
+    k.osc('sine', 38, { a: 0.03, d: 1.2, g: 0.5 }, { at: 0.03, fixed: true });
+    k.noise('brown', { a: 0.005, d: 1.1, g: 1 }, { to: k.shaper('soft', 2.4), lp: [2600, 300, 0.9] });
+    k.noise('white', { a: 0.003, d: 0.3, g: 0.6 }, { bp: [2400, 600], q: 0.7 });
+    k.osc('square', [120, 48, 0.35], { a: 0.003, d: 0.5, g: 0.4 }, { to: k.shaper('hard', 3), lp: 1600, fixed: true });
     // shockwave travelling outward
     whoosh(k, [[0, 300], [0.5, 1500]], { a: 0.3, d: 0.5, g: 0.3 }, 1, { at: 0.08 });
     debris(k, 9, 1.1, 0.35, 0.25);
   }),
-  eliteRegen: sfx(-17, { ...ECLIPSE, loop: true, max: 1, prio: 1, send: 0.4, ref: 10 }, (k) => {
+  eliteRegen: sfx(-15, { ...ECLIPSE, loop: true, max: 1, prio: 1, send: 0.4, ref: 10 }, (k) => {
     const e = { a: 0.4, h: Infinity, d: 0.8 };
     const pulse = k.gain(0.5);
     k.lfo(3, 0.5, pulse.gain);
@@ -211,9 +214,9 @@ export const ECLIPSE_SFX: RecipeTable = {
   }),
   // Eclipse cadence clock (AudioSystem.cadenceTick): the regular one is stamped out, the irregular one stumbles
   cadenceTick: sfx(-18, { ...ECLIPSE, gap: 0.08, max: 3, prio: 1 }, (k) => {
-    k.noise('white', { a: 0.001, d: 0.03, g: 0.8 }, { bp: 1400, q: 6 });
-    k.osc('sine', 207.65, { a: 0.002, d: 0.09, g: 0.6 }, { fixed: true });
-    breath(k, { a: 0.004, d: 0.07, g: 0.5 }, 0.2);
+    k.noise('white', { a: 0.001, d: 0.035, g: 1.6 }, { bp: 1400, q: 6 });
+    k.osc('sine', 207.65, { a: 0.002, d: 0.09, g: 0.4 }, { fixed: true });
+    breath(k, { a: 0.004, d: 0.07, g: 0.6 }, 0.2);
   }),
   cadenceTickOff: sfx(-21, { gap: 0.08, max: 3, prio: 1, send: 0.45, vary: 260 }, (k) => {
     k.noise('white', { a: 0.001, d: k.rr(0.02, 0.05), g: 0.8 }, { bp: k.rr(1000, 1900), q: 4 });

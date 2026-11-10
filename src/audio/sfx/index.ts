@@ -7,6 +7,8 @@ import { SELENE_SFX } from './selene';
 import { DRONE_SFX, ECLIPSE_SFX, ENFORCER_SFX } from './enemies';
 import { DEVICE_SFX, WORLD_SFX } from './world';
 import { STORY_SFX } from './story';
+import { AMBIENT_SFX } from './ambient';
+import { SPEAK_SFX } from '../speak';
 
 export const SFX: RecipeTable = {
   ...UI_SFX,
@@ -20,6 +22,8 @@ export const SFX: RecipeTable = {
   ...DEVICE_SFX,
   ...WORLD_SFX,
   ...STORY_SFX,
+  ...AMBIENT_SFX,
+  ...SPEAK_SFX,
 };
 
 /** Auditioning groups for the sandbox (and a readable catalogue of what exists). */
@@ -35,6 +39,8 @@ export const SFX_GROUPS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['Devices', Object.keys(DEVICE_SFX)],
   ['World', Object.keys(WORLD_SFX)],
   ['Story', Object.keys(STORY_SFX)],
+  ['Ambient detail', Object.keys(AMBIENT_SFX)],
+  ['Speaker ticks', Object.keys(SPEAK_SFX)],
 ];
 
 export type { Recipe, RecipeTable } from './recipe';

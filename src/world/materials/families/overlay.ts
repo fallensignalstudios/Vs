@@ -13,26 +13,30 @@ import { fbm, sstep, warp, worley } from '../noise';
  */
 export function ice(size: number): PbrLayers {
   const L = newLayers(size, 0.006);
-  const [br, bg, bb] = linearRgb(0xbfe4f7);
-  const facets = worley(size, 7, 131, 1);
+  const [br, bg, bb] = linearRgb(0xc4e6f8);
+  const facets = worley(size, 6, 131, 1);
   const lo = Math.min(size, 256);
-  const wx = fbm(lo, { freq: 4, octaves: 3, seed: 132 });
-  const wy = fbm(lo, { freq: 4, octaves: 3, seed: 133 });
-  const f1 = warp(facets.f1, wx, wy, size * 0.05).data;
-  const fid = warp(facets.id, wx, wy, size * 0.05).data;
-  const crackA = cracks(size, 5, 134, 0.035, size * 0.03).data;
-  const crackB = cracks(size, 11, 135, 0.022, size * 0.02).data;
+  const wx = fbm(lo, { freq: 4, octaves: 4, seed: 132 });
+  const wy = fbm(lo, { freq: 4, octaves: 4, seed: 133 });
+  const f1 = warp(facets.f1, wx, wy, size * 0.07).data;
+  const fid = warp(facets.id, wx, wy, size * 0.07).data;
+  // a few long fracture planes plus short branching cracks that only appear in the cloudier ice
+  const crackA = cracks(size, 3, 134, 0.022, size * 0.09).data;
+  const crackB = cracks(size, 9, 135, 0.02, size * 0.04).data;
   const cloud = fbm(size, { freq: 3, octaves: 5, gain: 0.6, seed: 136 }).data;
   const wisps = fbm(size, { freq: 5, freqY: 2, octaves: 4, gain: 0.6, seed: 137 }).data;
   const micro = fbm(size, { freq: 40, octaves: 3, gain: 0.6, seed: 138 }).data;
+  const bubbles = fbm(size, { freq: 30, octaves: 2, gain: 0.5, seed: 139, mode: 'billow' }).data;
   for (let i = 0; i < L.r.length; i++) {
-    const crack = Math.min(1, crackA[i] * 0.9 + crackB[i] * 0.45 * sstep(0.4, 0.7, cloud[i]));
-    const dens = Math.min(1, sstep(0.3, 0.8, cloud[i] * 0.65 + wisps[i] * 0.35) * 0.85 + crack * 0.6);
-    const t = 0.72 + dens * 0.28;
+    const gate = sstep(0.45, 0.7, cloud[i]);
+    const crack = Math.min(1, crackA[i] * (0.5 + 0.5 * wisps[i]) + crackB[i] * 0.5 * gate);
+    const mist = sstep(0.35, 0.85, cloud[i] * 0.6 + wisps[i] * 0.4);
+    const dens = Math.min(1, mist * mist * 0.9 + crack * 0.7 + (1 - bubbles[i]) * gate * 0.12);
+    const t = 0.7 + dens * 0.3;
     L.r[i] = Math.min(1, br * t + crack * 0.3);
     L.g[i] = Math.min(1, bg * t + crack * 0.22);
     L.b[i] = Math.min(1, bb * (0.9 + dens * 0.1) + crack * 0.1);
-    L.height[i] = 0.35 + f1[i] * 0.45 + fid[i] * 0.2 + (micro[i] - 0.5) * 0.06 - crack * 0.25;
+    L.height[i] = 0.35 + f1[i] * 0.4 + fid[i] * 0.25 + (micro[i] - 0.5) * 0.05 - crack * 0.2;
     L.rough[i] = 0.5 + (dens - 0.5) * 0.5 + crack * 0.4 + (micro[i] - 0.5) * 0.2;
     L.metal[i] = 1;
     L.ao[i] = 1 - crack * 0.2;
@@ -42,26 +46,27 @@ export function ice(size: number): PbrLayers {
 }
 
 /**
- * `rime` — hoar frost coating: clumped needle crystals, bright and rough, with denser drifts.
+ * `rime` — hoar frost coating: fine needle crystals in clumps and drifts, bright and rough.
  * Mask = crystal tips (sparkle sites). Tile ≈ 1.2 m.
  */
 export function rime(size: number): PbrLayers {
-  const L = newLayers(size, 0.02);
-  const [br, bg, bb] = linearRgb(0xe6f3fb);
-  const needles = fbm(size, { freq: 20, octaves: 4, gain: 0.65, seed: 141, mode: 'ridged' }).data;
+  const L = newLayers(size, 0.008);
+  const [br, bg, bb] = linearRgb(0xf0f7fb);
   const clump = fbm(size, { freq: 5, octaves: 4, gain: 0.55, seed: 142 }).data;
-  const grain = fbm(size, { freq: 64, octaves: 2, gain: 0.7, seed: 143 }).data;
-  const cells = worley(size, 26, 144, 1).f1.data;
+  const grain = fbm(size, { freq: 72, octaves: 2, gain: 0.7, seed: 143 }).data;
+  const fluff = fbm(size, { freq: 22, octaves: 3, gain: 0.6, seed: 141, mode: 'billow' }).data;
+  const cells = worley(size, 84, 144, 1).f1.data;
   for (let i = 0; i < L.r.length; i++) {
-    const c = sstep(0.25, 0.75, clump[i]);
-    const h = needles[i] * (0.45 + c * 0.55) * (0.6 + 0.4 * (1 - Math.min(1, cells[i] * 1.3)));
-    const t = 0.7 + h * 0.3 + (grain[i] - 0.5) * 0.08;
-    L.r[i] = br * t; L.g[i] = bg * t; L.b[i] = bb * (0.85 + h * 0.15);
-    L.height[i] = h * 0.9 + (grain[i] - 0.5) * 0.1;
-    L.rough[i] = 0.5 + (0.5 - h) * 0.4 + (grain[i] - 0.5) * 0.3;
+    const c = sstep(0.2, 0.8, clump[i]);
+    const crystal = 1 - Math.min(1, cells[i] * 1.6);
+    const h = (crystal * 0.5 + fluff[i] * 0.3 + grain[i] * 0.2) * (0.55 + c * 0.45);
+    const t = 0.86 + h * 0.14 - (1 - c) * 0.06;
+    L.r[i] = br * t; L.g[i] = bg * t; L.b[i] = bb * Math.min(1, t + 0.03);
+    L.height[i] = h;
+    L.rough[i] = 0.5 + (0.5 - h) * 0.35 + (grain[i] - 0.5) * 0.3;
     L.metal[i] = 1;
-    L.ao[i] = 0.55 + h * 0.45;
-    L.mask[i] = sstep(0.72, 0.9, h + (grain[i] - 0.5) * 0.3);
+    L.ao[i] = 0.82 + h * 0.18;
+    L.mask[i] = sstep(0.62, 0.85, crystal * (0.6 + grain[i] * 0.8));
   }
   return L;
 }
@@ -72,8 +77,8 @@ export function rime(size: number): PbrLayers {
  */
 export function tissue(size: number): PbrLayers {
   const L = newLayers(size, 0.02);
-  const [dr, dg, db] = linearRgb(0x16091c);
-  const [hr, hg, hb] = linearRgb(0x4a1f3f);
+  const [dr, dg, db] = linearRgb(0x0c070f);
+  const [hr, hg, hb] = linearRgb(0x2c1626);
   const lumps = fbm(size, { freq: 5, octaves: 4, gain: 0.5, seed: 151, mode: 'billow' }).data;
   const sinew = fbm(size, { freq: 4, freqY: 9, octaves: 4, gain: 0.55, seed: 152, mode: 'ridged' });
   const lo = Math.min(size, 256);
@@ -91,9 +96,9 @@ export function tissue(size: number): PbrLayers {
     const vein = Math.min(1, vA[i] + vB[i] * 0.6);
     const k = Math.min(1, h[i] * 0.9 + vein * 0.25);
     const shade = 0.55 + cav[i] * 0.45;
-    L.r[i] = (dr + (hr - dr) * k) * shade + vein * 0.035;
+    L.r[i] = (dr + (hr - dr) * k) * shade + vein * 0.012;
     L.g[i] = (dg + (hg - dg) * k) * shade;
-    L.b[i] = (db + (hb - db) * k) * shade + vein * 0.06;
+    L.b[i] = (db + (hb - db) * k) * shade + vein * 0.03;
     L.height[i] = h[i] + vein * 0.1;
     L.rough[i] = 0.5 + (cav[i] - 0.5) * 0.5 + (pore[i] - 0.5) * 0.25 - vein * 0.2;
     L.metal[i] = 1;

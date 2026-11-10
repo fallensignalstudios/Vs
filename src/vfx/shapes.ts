@@ -15,6 +15,8 @@ varying vec3 vNormalV;
 varying vec3 vViewPos;
 varying vec3 vLocal;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <logdepthbuf_pars_vertex>
 void main() {
   vUv = uv;
@@ -43,6 +45,8 @@ varying vec3 vNormalV;
 varying vec3 vViewPos;
 varying vec3 vLocal;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <logdepthbuf_pars_fragment>
 
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -62,6 +66,8 @@ float line(float d, float w) { float aa = fwidth(d) + 1e-4; return 1.0 - smooths
 
 void main() {
   #include <logdepthbuf_fragment>
+  // MSAA can extrapolate varyings past the primitive edge; exp() of an out-of-range uv explodes into bloom
+  vec2 uv = clamp(vUv, 0.0, 1.0);
   vec3 n = normalize(vNormalV);
   vec3 v = normalize(-vViewPos);
   float ndv = abs(dot(n, v));
@@ -69,72 +75,74 @@ void main() {
 
   if (uKind < 1.5) {
     // ---- dome / sphere: fresnel shell, frozen hex lattice with slow per-cell glints, bright foot
-    float fres = pow(1.0 - ndv, 2.4);
+    float fres = pw(1.0 - ndv, 3.2);
     vec2 sp = vec2(atan(vLocal.z, vLocal.x) / 6.2831853, acos(clamp(vLocal.y, -1.0, 1.0)) / 3.14159265);
     vec4 hx = hexGrid(vec2(sp.x * 2.0 * uDetail * max(0.25, sin(sp.y * 3.14159265)), sp.y * uDetail * 1.1547));
     float e = hexD(hx.xy);
     float lattice = smoothstep(0.43, 0.49, e) * smoothstep(0.02, 0.2, sp.y);
-    float glint = pow(0.5 + 0.5 * sin(uTime * 0.7 + h21(hx.zw + uSeed) * 40.0), 12.0);
+    float glint = pw(0.5 + 0.5 * sin(uTime * 0.7 + h21(hx.zw + uSeed) * 40.0), 12.0);
     float foot = uKind < 0.5 ? exp(-max(vLocal.y, 0.0) * 11.0) : 0.0;
     float breathe = 0.92 + 0.08 * sin(uTime * 1.1);
-    col = uColor * (fres * 1.1 * breathe + foot * 1.3) + uColor2 * (lattice * (0.16 + 0.5 * fres) + glint * 0.22 * (1.0 - e * 1.6));
+    col = uColor * (fres * 1.2 * breathe + foot * 1.1) + uColor2 * (lattice * (0.1 + 0.55 * fres) + glint * 0.2 * (1.0 - e * 1.6));
   } else if (uKind < 2.5) {
     // ---- band: expanding wall of pressure, bright foot, streaked body
-    float y = vUv.y;
-    float streak = 0.55 + 0.45 * vn(vec2(vUv.x * 120.0, uSeed * 17.0 + y * 2.0));
-    float body = pow(1.0 - y, 2.2) * streak;
+    float y = uv.y;
+    float streak = 0.55 + 0.45 * vn(vec2(uv.x * 120.0, uSeed * 17.0 + y * 2.0));
+    float body = pw(1.0 - y, 2.2) * streak;
     float foot = exp(-y * 26.0) * 1.6;
-    float life = pow(1.0 - uProg, 1.3);
+    float life = pw(1.0 - uProg, 1.3);
     col = (uColor * body * mix(1.5, 0.55, ndv) + uColor2 * foot) * life;
   } else if (uKind < 3.5) {
     // ---- column: soft volumetric shaft, rising hairline streaks
-    float y = vUv.y;
-    float core = pow(ndv, 1.7);
+    float y = uv.y;
+    float core = pw(ndv, 1.7);
     float vert = exp(-y * 2.4) * 1.1 + 0.16 * (1.0 - y) * (1.0 - y);
-    float streak = 0.7 + 0.6 * pow(vn(vec2(vUv.x * 46.0, y * uDims.y * 0.9 - uTime * 1.6 + uSeed * 9.0)), 2.0);
+    float streak = 0.7 + 0.6 * pw(vn(vec2(uv.x * 46.0, y * uDims.y * 0.9 - uTime * 1.6 + uSeed * 9.0)), 2.0);
     float foot = exp(-y * 40.0);
     col = (uColor * core * vert * streak + uColor2 * foot * core * 1.2) * smoothstep(1.0, 0.75, y);
   } else if (uKind < 4.5) {
     // ---- wall: light rises to full height behind a hot leading edge; vertical seams + drifting scan lines
-    float x = vUv.x, y = vUv.y;
+    float x = uv.x, y = uv.y;
     float below = 1.0 - smoothstep(uRise - 0.002, uRise + 0.002, y);
-    float lead = exp(-pow((y - uRise) * uDims.y * 5.0, 2.0)) * (1.0 - smoothstep(0.9, 1.0, uRise));
-    float seams = pow(0.5 + 0.5 * cos(x * uDims.x * 6.2831853 / max(0.4, uDetail)), 40.0);
+    float lead = exp(-pw((y - uRise) * uDims.y * 11.0, 2.0)) * (1.0 - smoothstep(0.9, 1.0, uRise));
+    float seams = pw(0.5 + 0.5 * cos(x * uDims.x * 6.2831853 / max(0.4, uDetail)), 40.0);
     float scan = 0.5 + 0.5 * sin((y * uDims.y - uTime * 0.25) * 48.0);
     float sides = smoothstep(0.0, 0.25 / uDims.x, x) * smoothstep(1.0, 1.0 - 0.25 / uDims.x, x);
     float foot = exp(-y * uDims.y * 3.0);
     float top = line(y - 0.995, 0.004) * step(0.97, uRise);
     float fill = (0.07 + 0.035 * scan + seams * 0.55 + foot * 0.6) * (1.0 - 0.45 * y);
-    col = (uColor * fill * below + uColor2 * (lead * 2.2 + top * 0.8)) * sides;
+    col = (uColor * fill * below + uColor2 * (lead * 1.6 + top * 0.8)) * sides;
   } else if (uKind < 5.5) {
     // ---- hex ripple: shield cells lit as the impact ring passes them
-    vec2 p = vUv * 2.0 - 1.0;
+    vec2 p = uv * 2.0 - 1.0;
     float r = length(p);
     vec4 hx = hexGrid(p * uDetail);
     float e = hexD(hx.xy);
     float cellR = length(hx.zw * vec2(1.0, 1.7320508)) / uDetail;
-    float ring = exp(-pow((cellR - uProg * 1.15) * 4.5, 2.0));
+    float ring = exp(-pw((cellR - uProg * 1.15) * 4.5, 2.0));
     float edge = smoothstep(0.4, 0.48, e);
     float mask = smoothstep(1.0, 0.72, r);
-    float hot = exp(-r * r * 26.0) * pow(1.0 - uProg, 3.0);
-    col = (uColor * (edge * (0.1 + ring * 1.7) + (1.0 - edge) * ring * 0.3) + uColor2 * hot * 2.4) * mask * (1.0 - uProg * 0.6);
+    float hot = exp(-r * r * 60.0) * pw(1.0 - uProg, 4.0);
+    col = (uColor * (edge * (0.08 + ring * 1.5) + (1.0 - edge) * ring * 0.22) + uColor2 * hot * 1.2) * mask * (1.0 - uProg * 0.6);
   } else if (uKind < 6.5) {
-    // ---- iris: an aperture closing to a seam, then nothing ("boundary closed")
-    vec2 p = vUv * 2.0 - 1.0;
-    float r = length(p), ang = atan(p.y, p.x);
+    // ---- iris: an aperture closing to a seam, then nothing. The closed part is a smooth, seam-free veil.
+    vec2 p = uv * 2.0 - 1.0;
+    float r = length(p);
     float t = clamp(uProg / 0.82, 0.0, 1.0);
     float ap = 1.0 - t * t * (3.0 - 2.0 * t);
-    float closed = smoothstep(ap - 0.01, ap + 0.01, r) * (1.0 - smoothstep(0.9, 1.0, r));
-    float rim = exp(-pow((r - ap) * 40.0, 2.0)) * step(0.004, ap);
-    float blades = line(fract(ang / 6.2831853 * uDetail + r * 0.35 + (1.0 - ap) * 0.25) - 0.5, 0.012) * closed;
-    float rings = line(fract(r * 9.0) - 0.5, 0.03) * closed * 0.35;
+    float outer = 1.0 - smoothstep(0.82, 1.0, r);
+    float closed = smoothstep(ap - 0.01, ap + 0.01, r) * outer;
+    float aa = fwidth(r);
+    float rim = exp(-(r - ap) * (r - ap) / (0.00012 + aa * aa)) * step(0.004, ap);
+    // two soft ripples left behind by the travelling rim
+    float wake = closed * exp(-(r - ap) * 7.0) * (0.5 + 0.5 * cos((r - ap) * 60.0 - uTime * 2.0)) * 0.12;
     float seamT = clamp((uProg - 0.8) / 0.2, 0.0, 1.0);
-    float seam = exp(-p.y * p.y * 2600.0) * exp(-abs(p.x) * (1.5 + seamT * 14.0)) * (1.0 - seamT) * step(0.8, uProg) * 3.0;
+    float seam = exp(-p.y * p.y * 2600.0) * exp(-abs(p.x) * (1.5 + seamT * 14.0)) * (1.0 - seamT) * step(0.8, uProg) * 2.2;
     float hold = 1.0 - smoothstep(0.78, 0.95, uProg);
-    col = uColor * (closed * 0.06 + blades * 0.55 + rings) * hold + uColor2 * (rim * 2.0 * hold + seam);
+    col = uColor * (closed * (0.035 + 0.05 * (1.0 - r)) + wake) * hold + uColor2 * (rim * 0.9 * hold + seam);
   } else if (uKind > 7.5) {
     // ---- plane: a steady, coherent sheet — hairline grid, concentric rulings, bright rim; nothing wanders
-    vec2 p = vUv * 2.0 - 1.0;
+    vec2 p = uv * 2.0 - 1.0;
     vec2 m = p * uDims;
     float box = max(abs(p.x), abs(p.y));
     float rim = line(box - 0.985, 0.012) + exp(-(1.0 - box) * 22.0) * 0.35;
@@ -147,11 +155,12 @@ void main() {
     col = (uColor * (0.05 + cells * 0.2 + rings * 0.3) * breathe + uColor2 * (rim * 1.3 + axis * 0.5)) * inside;
   } else {
     // ---- halo: thin camera-facing ring with soft inner bloom
-    vec2 p = vUv * 2.0 - 1.0;
+    vec2 p = uv * 2.0 - 1.0;
     float r = length(p);
     float d = r - 0.9;
-    float ring = exp(-d * d * 2400.0) * 1.8;
-    float inner = d < 0.0 ? exp(d * 9.0) * 0.28 : exp(-d * 50.0) * 0.28;
+    float w = 0.011, aa = fwidth(r);
+    float ring = exp(-d * d / (w * w + aa * aa)) * (w / sqrt(w * w + aa * aa)) * 0.9;
+    float inner = d < 0.0 ? exp(d * 11.0) * 0.07 : exp(-d * 60.0) * 0.07;
     float ticks = line(fract(atan(p.y, p.x) / 6.2831853 * uDetail) - 0.5, 0.05) * step(0.8, r) * step(r, 0.88) * 0.6;
     col = uColor * (ring + inner) + uColor2 * ticks;
   }

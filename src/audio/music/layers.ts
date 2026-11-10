@@ -4,9 +4,9 @@
  * drives from the smoothed intensity so combat layers cross-fade in and out.
  */
 import { lerp } from '@/core/mathx';
-import { Kit } from '../synth/kit';
+import { Kit, setQ } from '../synth/kit';
 import type { Shared } from '../synth/shared';
-import { mtof, parsePattern, tierFor, voicing, type Chord } from './theory';
+import { mtof, openVoicing, parsePattern, tierFor, voicing, type Chord } from './theory';
 import type { Layer } from './types';
 import { brassNote, cadenceHit, hit, motifNote, padNote, pulseNote, stringNote } from './instruments';
 
@@ -22,6 +22,8 @@ export interface DeckEnv {
   intensity: number;
   /** Eclipse cadence: 0 = stamped out, 1 = fully irregular */
   irregular: number;
+  /** context time of the last cadence beat supplied by gameplay (AudioSystem.cadenceTick); −∞ if never */
+  externalCadenceAt: number;
 }
 
 export interface LayerRt {
@@ -30,14 +32,19 @@ export interface LayerRt {
   chord?(c: Chord, t: number, dur: number): void;
   bar?(bar: number, t: number, c: Chord): void;
   step?(step: number, t: number, c: Chord): void;
+  /** cadence layers only: sound one beat now (driven by the enemies' own cadence clock) */
+  pulse?(t: number, irregular: boolean): void;
   dispose(at: number): void;
 }
 
-/** Fold a MIDI pitch into the sub register (31–62 Hz). */
-function subHz(m: number): number {
+/** how long after the last gameplay-supplied beat the score waits before ticking by itself again (s) */
+const EXTERNAL_CADENCE_HOLD = 3.2;
+
+/** Fold a MIDI pitch into the bass-drone register (41–82 Hz: low, but present on small speakers too). */
+export function subHz(m: number): number {
   let f = mtof(m);
-  while (f >= 62) f /= 2;
-  while (f < 31) f *= 2;
+  while (f >= 82) f /= 2;
+  while (f < 41) f *= 2;
   return f;
 }
 
@@ -68,14 +75,16 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
     case 'sub': {
       const lp = ac.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 150;
+      lp.frequency.value = 220;
+      setQ(lp, 0.707);
       lp.connect(level);
       const k = kit(lp, true);
       const swell = k.gain(0.85, lp);
       k.lfo(0.07, 0.15, swell.gain, { at: start });
       const f0 = subHz(env.tonic);
-      const o1 = k.osc('sine', f0, { a: 1.6, h: Infinity, d: 1, g: 0.9 }, { at: start, to: swell });
-      const o2 = k.osc('triangle', f0 * 2, { a: 2.2, h: Infinity, d: 1, g: 0.22 }, { at: start, to: swell });
+      // levels are deliberately modest: a drone that dominates the meter leaves no room for the score
+      const o1 = k.osc('sine', f0, { a: 1.6, h: Infinity, d: 1, g: 0.2 }, { at: start, to: swell });
+      const o2 = k.osc('triangle', f0 * 2, { a: 2.2, h: Infinity, d: 1, g: 0.12 }, { at: start, to: swell });
       return {
         def, level,
         chord: def.follow
@@ -90,10 +99,10 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
     }
 
     case 'pad': {
-      const bright = def.bright ?? (def.voice === 'glass' ? [2400, 5000] : def.voice === 'felt' ? [1800, 2600] : [700, 1600]);
+      const bright = def.bright ?? (def.voice === 'glass' ? [2400, 5000] : def.voice === 'felt' ? [1800, 2600] : [1300, 2800]);
       const filt = ac.createBiquadFilter();
       filt.type = 'lowpass';
-      filt.Q.value = 0.6;
+      setQ(filt, 0.707);
       filt.frequency.value = lerp(bright[0], bright[1], env.intensity);
       filt.connect(level);
       const ks = kit(filt, true);
@@ -114,10 +123,10 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
     }
 
     case 'strings': {
-      const bright = def.bright ?? [600, 1600];
+      const bright = def.bright ?? [1100, 2800];
       const filt = ac.createBiquadFilter();
       filt.type = 'lowpass';
-      filt.Q.value = 0.9;
+      setQ(filt, 1.2);
       filt.frequency.value = lerp(bright[0], bright[1], env.intensity);
       // legato path and marcato (gated) path, cross-faded per bar by intensity tier
       const sustain = ac.createGain();
@@ -138,7 +147,7 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
       return {
         def, level,
         chord: (c, t, dur) => {
-          const notes = voicing(env.tonic, c, def.low, def.n);
+          const notes = openVoicing(env.tonic, c, def.low, def.n);
           const vel = 1 / Math.sqrt(notes.length);
           notes.forEach((m, i) => stringNote(k, t, mtof(m), dur, vel, (i % 2 ? 0.5 : -0.5)));
         },
@@ -276,9 +285,11 @@ export function makeLayer(def: Layer, env: DeckEnv, dry: AudioNode, wet: AudioNo
       const pat = parsePattern(def.pattern);
       return {
         def, level,
+        // while gameplay is supplying the beat, the score's own grid stays out of its way: one clock only
+        pulse: (t, irregular) => cadenceHit(k, t, irregular ? 0.75 : 1, irregular ? 1 : 0),
         step: (step, t) => {
           const v = pat[step % pat.length];
-          if (v <= 0) return;
+          if (v <= 0 || t - env.externalCadenceAt < EXTERNAL_CADENCE_HOLD) return;
           const irr = env.irregular;
           if (irr <= 0.001) {
             cadenceHit(k, t, v, 0);

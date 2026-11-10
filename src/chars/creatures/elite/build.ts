@@ -17,8 +17,21 @@ import { RigBuilder, type Paint, type RigTemplate } from '../core/rig';
 
 export const ELITE_GROUPS = { eye: 1, core: 2, joint: 3, nodes: 4, stump: 5 } as const;
 
-/** key bind-pose positions shared with the animation code */
-export const E = {
+/**
+ * Proportion pass: the figure is authored squat and then its legs (and everything hanging below the hip
+ * line: forearms, claws, tendril ends) are lengthened; the rig is scaled back to 3.6 m by ELITE_MODEL_SCALE.
+ */
+const LEG_FROM = 0.24, LEG_TO = 1.5, LEG_STRETCH = 1.27;
+const LEG_SHIFT = (LEG_TO - LEG_FROM) * (LEG_STRETCH - 1);
+export function eliteWarp(p: [number, number, number]): void {
+  const y = p[1];
+  if (y > LEG_TO) p[1] = y + LEG_SHIFT;
+  else if (y > LEG_FROM) p[1] = LEG_FROM + (y - LEG_FROM) * LEG_STRETCH;
+}
+export const ELITE_MODEL_SCALE = 3.6 / (3.56 + LEG_SHIFT);
+
+/** authoring (un-warped) bind positions */
+const E = {
   hips: [0, 1.55, 0.28] as Pt3,
   spine: [0, 1.92, 0.2] as Pt3,
   chest: [0, 2.4, -0.02] as Pt3,
@@ -41,6 +54,13 @@ export const E = {
   ankleL: [-0.6, 0.24, 0.26] as Pt3,
   core: [0, 2.42, -0.7] as Pt3,
 } as const;
+
+/** key bind-pose positions shared with the animation code (final, warped model space) */
+export const EW = Object.fromEntries(Object.entries(E).map(([k, v]) => {
+  const q: [number, number, number] = [v[0], v[1], v[2]];
+  eliteWarp(q);
+  return [k, q as Pt3];
+})) as { readonly [K in keyof typeof E]: Pt3 };
 
 export const TENDRIL_COUNT = 6;
 export const TENDRIL_BONES = 4;
@@ -99,6 +119,7 @@ function helmet(b: RigBuilder, bone: string, m: THREE.Matrix4, dominion: boolean
 
 export function buildElite(): RigTemplate {
   const b = new RigBuilder();
+  b.setWarp(eliteWarp);
   const G = ELITE_GROUPS;
 
   // ------------------------------------------------------------------ skeleton
@@ -180,6 +201,10 @@ export function buildElite(): RigTemplate {
     [-2.4, 0.2, 0.76, P.domOxblood, slab(0.62, 0.8, 12, 2), -0.2, undefined],
     [0.62, -0.5, 0.72, IVORY_D, slab(0.4, 0.5, 14, 2), -0.3, undefined],
     [-0.62, -0.52, 0.72, P.refSlate, slab(0.4, 0.46, 15, 1), 0.25, undefined],
+    // lower back: the lumbar run under the hump carapace
+    [Math.PI, -0.28, 0.75, IVORY, kite(0.62, 0.8, 0.28, 16), 0.04, TRIM],
+    [Math.PI - 0.62, -0.62, 0.72, P.domBlack, slab(0.44, 0.56, 17, 2), 0.2, undefined],
+    [Math.PI + 0.62, -0.62, 0.72, IVORY_D, slab(0.46, 0.56, 18, 2), -0.2, undefined],
   ];
   torso.forEach(([yaw, pitch, r, paint, outline, roll, trim], i) => {
     const { pos, n } = tp(yaw, pitch, r);
@@ -236,7 +261,7 @@ export function buildElite(): RigTemplate {
 
   // ------------------------------------------------------------------ RIGHT: regenerating joint under four petal plates
   b.add('shR', P.tissue, blob(0.3, 2, 0.25, 13), T(E.shR[0] - 0.08, E.shR[1] - 0.04, E.shR[2]), { crease: 180 });
-  b.add('jointCore', tint(P.violetHot, { c: 0xc79bff, e: 3.2 }), blob(0.37, 2, 0.26, 17), T(E.shR[0] + 0.05, E.shR[1] + 0.06, E.shR[2]), { group: G.joint, crease: 180 });
+  b.add('jointCore', tint(P.violetHot, { c: 0xb98cff, e: 1.9, seam: 0.45 }), blob(0.37, 2, 0.26, 17), T(E.shR[0] + 0.05, E.shR[1] + 0.06, E.shR[2]), { group: G.joint, crease: 180 });
   // sinew cage over the glowing tissue (dark strands crossing the light)
   for (let i = 0; i < 7; i++) {
     const a0 = (i / 7) * Math.PI * 2;
@@ -248,7 +273,7 @@ export function buildElite(): RigTemplate {
     b.add('jointCore', P.sinew, tube(pts, (t) => 0.03 + 0.02 * Math.sin(t * Math.PI), 5), undefined, { crease: 180 });
   }
   // fractured stump embers (hidden until the joint is shattered)
-  b.add('shR', tint(P.domGlow, { c: 0xff7a2a, e: 2.4 }), blob(0.2, 1, 0.5, 23, [1.2, 0.8, 1.1]), T(E.shR[0] + 0.12, E.shR[1] + 0.16, E.shR[2]), { group: G.stump, crease: 180 });
+  b.add('shR', tint(P.domGlow, { c: 0xff6a1a, e: 2.4, seam: 1 }), blob(0.22, 2, 0.5, 23, [1.25, 0.8, 1.15]), T(E.shR[0] + 0.12, E.shR[1] + 0.16, E.shR[2]), { group: G.stump, crease: 180 });
   const petals: [number, Pt3, Pt3, Pt2[], number][] = [
     [0, [E.shR[0] + 0.02, E.shR[1] + 0.5, E.shR[2]], [0.1, 1, 0], kite(0.82, 0.92, 0.3, 31), 0.1],
     [1, [E.shR[0] + 0.5, E.shR[1] + 0.1, E.shR[2]], [1, 0.25, 0], kite(0.78, 0.95, 0.26, 32), -0.12],

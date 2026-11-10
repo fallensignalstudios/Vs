@@ -46,7 +46,8 @@ export class StatusBoard {
     this.fader = new Fader(this.el, { in: 0.6, out: 0.7 });
   }
 
-  set(rows: BoardRow[] | null, opts: { title?: string } = {}): void {
+  set(rows: BoardRow[] | null, options?: { title?: string } | null): void {
+    const opts = options ?? {};
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       this.fader.show(false);
       this.active = 0;

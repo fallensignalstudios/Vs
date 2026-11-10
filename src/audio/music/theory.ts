@@ -39,14 +39,6 @@ export interface Chord {
 
 export const ch = (root: number, q: Quality, bars = 1): Chord => ({ root, iv: QUALITY[q], bars });
 
-/** The i-th chord tone (extended upward over octaves, downward for negative i) in semitones above the tonic. */
-export function chordTone(c: Chord, i: number): number {
-  const n = c.iv.length;
-  const oct = Math.floor(i / n);
-  const k = ((i % n) + n) % n;
-  return c.root + c.iv[k] + 12 * oct;
-}
-
 /**
  * A close voicing of `count` chord tones as MIDI notes, starting from the lowest chord tone at or above `low`.
  * Keeps voices in one register across chord changes so pads move smoothly instead of leaping.
@@ -61,6 +53,20 @@ export function voicing(tonic: number, c: Chord, low: number, count: number): nu
     m++;
   }
   return out;
+}
+
+/**
+ * An open low-register voicing: root, fifth, octave, then the colour tone an octave up. Thirds and seconds
+ * are kept out of the bottom octave, where they turn to mud. Chords without a fifth use their second tone.
+ */
+export function openVoicing(tonic: number, c: Chord, low: number, count: number): number[] {
+  let r = tonic + c.root;
+  while (r < low) r += 12;
+  while (r - 12 >= low) r -= 12;
+  const fifth = c.iv.includes(7) ? 7 : (c.iv[1] ?? 7);
+  const colour = c.iv.find((iv) => iv !== 0 && iv !== fifth) ?? fifth;
+  const stack = [0, fifth, 12, 12 + (colour % 12), 12 + fifth, 24];
+  return stack.slice(0, Math.max(1, count)).map((s) => r + s);
 }
 
 /** Total bars of a chord cycle. */

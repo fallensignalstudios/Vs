@@ -63,13 +63,11 @@ export class MenuColumn {
   readonly list: FocusList;
   private readonly head: HTMLElement;
   private readonly items: HTMLElement;
-  private readonly foot: HTMLElement;
 
   constructor(game: Game, menu: MenuInput, cls = '') {
     this.head = h('div', 'aur-menu-head');
     this.items = h('div', 'aur-menu-items');
-    this.foot = h('div', 'aur-menu-note');
-    this.el = h('div', `aur-menu ${cls}`.trim(), this.head, this.items, this.foot);
+    this.el = h('div', `aur-menu ${cls}`.trim(), this.head, this.items);
     this.list = new FocusList(game, menu, 'v');
   }
 
@@ -80,10 +78,9 @@ export class MenuColumn {
     if (opts.header) {
       this.head.appendChild(h('div', 'aur-menu-title aur-label', opts.header));
       if (opts.lead) this.head.appendChild(h('div', 'aur-menu-lead', opts.lead));
+      if (opts.note) this.head.appendChild(h('div', 'aur-menu-note', opts.note));
     }
     this.head.style.display = opts.header ? '' : 'none';
-    this.foot.textContent = opts.note ?? '';
-    this.foot.style.display = opts.note ? '' : 'none';
     this.items.classList.toggle('has-desc', entries.some((e) => !!e.desc));
     for (const e of entries) {
       const el = h('div', 'aur-mi',
@@ -94,6 +91,7 @@ export class MenuColumn {
         ),
         h('i', 'aur-mi-rule'),
       );
+      el.setAttribute('role', 'button');
       this.items.appendChild(el);
       this.list.add({ el, onConfirm: e.onSelect, disabled: e.disabled });
     }

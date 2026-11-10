@@ -143,6 +143,7 @@ class Layer {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
       uAtlas: { value: atlas },
       uGrid: { value: new THREE.Vector2(ATLAS_COLS, ATLAS_ROWS) },
+      uPixel: { value: 0.001 },
       uDepth: shared.uDepth, uResolution: shared.uResolution, uNearFar: shared.uNearFar,
     };
     if (id === 'lit') {
@@ -163,6 +164,12 @@ class Layer {
     this.mesh.visible = false;
     // smoke under glow: lit, alpha, then additive layers
     this.mesh.renderOrder = 900 + (id === 'lit' ? 0 : id === 'alpha' ? 1 : id === 'add' ? 2 : 3);
+    const size = new THREE.Vector2();
+    this.mesh.onBeforeRender = (renderer, _scene, camera) => {
+      renderer.getDrawingBufferSize(size);
+      const p = (camera as THREE.PerspectiveCamera).projectionMatrix.elements[5];
+      uniforms.uPixel.value = 2 / (Math.max(0.01, p) * Math.max(1, size.y));
+    };
   }
 
   kill(i: number): void {

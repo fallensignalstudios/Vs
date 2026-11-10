@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addValueNoise, blur, fbm, hash2, pow2Floor, repeat, resample, sampleBilinear, sstep, warp, whiteNoise, worley } from './noise';
+import { addValueNoise, blur, fbm, hash2, sampleBilinear, sstep, warp, worley } from './noise';
 
 /** Largest difference between each edge texel and its wrapped neighbour, relative to interior differences. */
 function seamRatio(data: Float32Array, size: number): number {
@@ -30,12 +30,6 @@ describe('noise toolkit', () => {
     for (let i = 0; i < n; i++) sum += hash2(i % 141, (i / 141) | 0, 5);
     expect(sum / n).toBeGreaterThan(0.48);
     expect(sum / n).toBeLessThan(0.52);
-  });
-
-  it('pow2Floor', () => {
-    expect(pow2Floor(1)).toBe(4);
-    expect(pow2Floor(512)).toBe(512);
-    expect(pow2Floor(1000)).toBe(512);
   });
 
   it('fbm is normalised, deterministic and tiles seamlessly', () => {
@@ -94,17 +88,8 @@ describe('noise toolkit', () => {
     expect(seamRatio(w.data, 32)).toBeLessThanOrEqual(1.6);
   });
 
-  it('resample and repeat keep the range and size contracts', () => {
-    const src = fbm(32, { freq: 3, octaves: 3, seed: 4 });
-    expect(resample(src, 32)).toBe(src);
-    expect(resample(src, 64).data.length).toBe(64 * 64);
-    const r = repeat(src, 2);
-    // the tile now repeats every half size
-    for (let i = 0; i < 16; i++) expect(r.data[i]).toBe(r.data[i + 16]);
-  });
-
   it('blur preserves the mean and reduces variance', () => {
-    const src = whiteNoise(32, 7);
+    const src = { size: 32, data: new Float32Array(32 * 32).map((_, i) => hash2(i % 32, (i / 32) | 0, 7)) };
     const b = blur(src, 2, 2);
     const mean = (a: Float32Array): number => a.reduce((s, v) => s + v, 0) / a.length;
     const variance = (a: Float32Array): number => { const m = mean(a); return a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length; };

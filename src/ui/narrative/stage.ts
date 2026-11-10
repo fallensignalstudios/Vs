@@ -181,7 +181,8 @@ export class Card {
     this.fader = new Fader(this.el, { in: 0.9, out: 0.6, display: 'flex' });
   }
 
-  set(text: string | null, opts: { sub?: string; seconds?: number; style?: CardStyle } = {}): void {
+  set(text: string | null, options?: { sub?: string; seconds?: number; style?: CardStyle } | null): void {
+    const opts = options ?? {};
     const t = text === null || text === undefined ? '' : String(text).trim();
     if (!t) {
       this.pending = null;

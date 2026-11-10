@@ -8,6 +8,8 @@ import type { ScanPlaneVisual, Vec3Like } from '@/core/api';
 const VERT = /* glsl */ `
 varying vec2 vUv;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_vertex>
 #include <logdepthbuf_pars_vertex>
 void main() {
@@ -27,6 +29,8 @@ uniform float uTime;
 uniform vec2 uSize;
 varying vec2 vUv;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -36,24 +40,26 @@ float vn(vec2 p) {
 }
 void main() {
   #include <logdepthbuf_fragment>
-  vec2 m = vUv * uSize;            // metres from the bottom-left corner
-  float x = vUv.x, y = vUv.y;
+  vec2 uv = clamp(vUv, 0.0, 1.0);  // MSAA may extrapolate varyings past the edge
+  vec2 m = uv * uSize;             // metres from the bottom-left corner
+  float x = uv.x, y = uv.y;
   float speed = mix(0.35, 1.6, uAlert);
-  // border: hot ground edge, thinner top/sides
-  float ground = exp(-m.y * 26.0) * 1.8 + exp(-m.y * 3.0) * 0.35;
-  float top = exp(-(uSize.y - m.y) * 40.0) * 0.8;
-  float sides = (exp(-m.x * 40.0) + exp(-(uSize.x - m.x) * 40.0)) * 0.7;
-  // body: faint fill, fine horizontal lines drifting, streaky data noise
-  float lines = pow(0.5 + 0.5 * sin((m.y + uTime * speed * 0.25) * 60.0), 6.0);
+  // border: hot ground edge (the leading edge that sweeps the floor), thinner top/sides
+  float ground = exp(-m.y * 26.0) * 1.3 + exp(-m.y * 3.0) * 0.18;
+  float top = exp(-(uSize.y - m.y) * 40.0) * 0.55;
+  float sides = (exp(-m.x * 40.0) + exp(-(uSize.x - m.x) * 40.0)) * 0.45;
+  // body: a faint sheet, hairlines drifting upward, sparse streaks of data
+  float lines = pw(0.5 + 0.5 * sin((m.y + uTime * speed * 0.25) * 90.0), 8.0);
   float data = vn(vec2(m.x * 2.5 - uTime * speed, floor(m.y * 14.0)));
-  float body = 0.035 + lines * 0.05 + smoothstep(0.62, 0.9, data) * 0.09;
+  float body = 0.018 + lines * 0.03 + smoothstep(0.72, 0.95, data) * 0.04;
   // sweeping bar
   float bx = fract(uTime * speed * 0.22);
-  float bar = exp(-pow((x - bx) * uSize.x * 2.2, 2.0)) * 0.45;
-  // alert: hazard chevrons marching outwards from the centre + global pulse
+  float bar = exp(-pw((x - bx) * uSize.x * 2.2, 2.0)) * 0.2;
+  // alert: thin hazard chevrons marching outwards from the centre + a quick pulse (shape and motion, not just hue)
   float cx = abs(x - 0.5) * uSize.x;
-  float chev = step(0.5, fract(cx * 1.2 + abs(y - 0.5) * uSize.y * 0.6 - uTime * 2.4)) * uAlert * 0.22;
-  float pulse = 1.0 + uAlert * (0.35 + 0.35 * sin(uTime * 14.0));
+  float cv = fract(cx * 0.9 + abs(y - 0.5) * uSize.y * 0.45 - uTime * 1.8);
+  float chev = (smoothstep(0.0, 0.06, cv) - smoothstep(0.1, 0.16, cv)) * uAlert * 0.14;
+  float pulse = 1.0 + uAlert * (0.25 + 0.2 * sin(uTime * 12.0));
   vec3 base = mix(uColor, uAlertColor, uAlert);
   float edgeFade = smoothstep(0.0, 0.02, y);
   vec3 col = base * (ground + top + sides + (body + bar + chev) * (1.0 - 0.35 * y)) * pulse * edgeFade;
@@ -84,8 +90,8 @@ class ScanPlane implements ScanPlaneVisual {
     _c.setHex(color);
     this.uniforms = {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-      uColor: { value: new THREE.Vector3(_c.r, _c.g, _c.b).multiplyScalar(1.6) },
-      uAlertColor: { value: new THREE.Vector3(3.2, 0.9, 0.35) },
+      uColor: { value: new THREE.Vector3(_c.r, _c.g, _c.b).multiplyScalar(1.1) },
+      uAlertColor: { value: new THREE.Vector3(1.7, 0.5, 0.22) },
       uAlert: { value: 0 }, uTime: { value: 0 }, uSize: { value: new THREE.Vector2(4, 3) },
     };
     const mat = new THREE.ShaderMaterial({

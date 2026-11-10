@@ -42,6 +42,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   private viewDirty = true;
   private viewAge = 0;
   private shoulderSetExternally = false;
+  private worldWarned = false;
   private lastFov = -1;
   private lastAspect = -1;
 
@@ -63,15 +64,27 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     this.cine = new CinematicImpl(this);
     this.base.copy(this.follow.out);
 
+    // World queries are defensive: a bad answer (or a throw) from physics degrades to "no collision" for that
+    // query instead of freezing the camera.
     this.sweepFn = (from, to, radius) => {
-      const k = this.game.physics.sweepSphere(from, to, radius) as unknown;
-      return typeof k === 'number' && Number.isFinite(k) ? k : null;
+      try {
+        const k = this.game.physics.sweepSphere(from, to, radius) as unknown;
+        return typeof k === 'number' && Number.isFinite(k) ? k : null;
+      } catch (err) {
+        this.warnWorld(err);
+        return null;
+      }
     };
     this.groundFn = (x, z, yRef) => {
-      const hit = this.game.physics.groundAt(x, z, yRef, 0) as unknown;
-      if (!hit || isStub(hit)) return null;
-      const y = (hit as { y?: unknown }).y;
-      return typeof y === 'number' && Number.isFinite(y) ? y : null;
+      try {
+        const hit = this.game.physics.groundAt(x, z, yRef, 0) as unknown;
+        if (!hit || isStub(hit)) return null;
+        const y = (hit as { y?: unknown }).y;
+        return typeof y === 'number' && Number.isFinite(y) ? y : null;
+      } catch (err) {
+        this.warnWorld(err);
+        return null;
+      }
     };
 
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -79,6 +92,12 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
         this.viewDirty = true;
       });
     }
+    // A zone load is a hard cut: nothing from the previous space (shake, recoil, a blend) may carry over.
+    game.events.on('zone:loading', () => {
+      this.feel.reset();
+      this.blendT = 1;
+      this.follow.snap();
+    });
     const scene = game.scene as THREE.Scene | undefined;
     if (scene && (scene as { isScene?: boolean }).isScene === true) scene.add(this.camera);
     this.refreshViewport();
@@ -165,8 +184,8 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     if (!this.blendIsRelease) this.blendT = 1;
   }
 
-  aimAt(point: Vec3Like): void {
-    this.follow.aimAt(point);
+  aimAt(point: Vec3Like, seconds = 0): void {
+    this.follow.aimAt(point, seconds);
   }
 
   setFraming(framing: FollowFraming | null, blendSeconds = 1): void {
@@ -196,8 +215,9 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   release(seconds: number = DEFAULT_RELEASE): void {
     if (!this.cine.active) return;
     this.cine.exit();
+    // blends from the shot as authored right now — correct even when it was cut earlier this same tick
     this.startBlend(Number.isFinite(seconds) ? seconds : DEFAULT_RELEASE, true);
-    if (!this.follow.hasTarget) this.follow.out.copy(this.base); // nothing to return to: hold the shot
+    if (!this.follow.hasTarget) this.follow.out.copy(this.blendFrom); // nothing to return to: hold the shot
   }
 
   setFree(pose: CamPose | null): void {
@@ -352,8 +372,14 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   // internals
   // -------------------------------------------------------------------------------------------
 
+  private warnWorld(err: unknown): void {
+    if (this.worldWarned) return;
+    this.worldWarned = true;
+    console.warn('[camera] physics query failed — camera collision degraded', err);
+  }
+
   private startBlend(seconds: number, isRelease: boolean): void {
-    this.blendFrom.copy(this.base);
+    this.blendFrom.copy(isRelease ? this.cine.out : this.base);
     this.blendDur = Math.max(0, seconds);
     this.blendT = this.blendDur > 0 ? 0 : 1;
     this.blendIsRelease = isRelease && this.blendDur > 0;

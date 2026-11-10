@@ -3,8 +3,11 @@
  *
  *   /sandbox/materials/?scene=gallery&env=studio|dark[&only=id,id][&size=256|512|1024]
  *   /sandbox/materials/?scene=corridor&env=dark        corridor swatch (white-gold · black stone · frost · corruption)
+ *        &refl=core   use render-core's real planar reflections on the floors (default: a sandbox mirror)
+ *        &nomirror=1  environment-map reflections only
  *   /sandbox/materials/?scene=hall                     60 m hall: tiling / macro-variation check
  *   /sandbox/materials/?scene=moving                   object-space mapping on moving, instanced and skinned meshes
+ *   /sandbox/materials/?scene=maps&id=blackStone       the raw baked maps of one material, tiled 2 × 2
  *
  * Globals for tools/shot.cjs: __mats, __ids, __focus(id, dist?, grazing?), __corrupt(amount), __view(name),
  * __stats() (bake time, texture memory), plus the harness __h / __step.
@@ -16,7 +19,7 @@ import { MAT_IDS } from '@/world/materials/defs';
 import { createHarness, miniGame, SANDBOX_QUALITY } from '../harness';
 import { bevelledSlab, label, ribSegment } from './shapes';
 import { buildCorridor } from './corridor';
-import { buildHall, buildMoving } from './checks';
+import { buildHall, buildMaps, buildMoving } from './checks';
 
 const q = new URLSearchParams(location.search);
 const scene = q.get('scene') ?? 'gallery';
@@ -92,13 +95,15 @@ async function boot(): Promise<void> {
   if (scene === 'corridor') Object.assign(controls, buildCorridor(h, mats));
   else if (scene === 'hall') Object.assign(controls, buildHall(h, mats));
   else if (scene === 'moving') Object.assign(controls, buildMoving(h, mats));
-  else buildGallery();
+  else if (scene !== 'maps') buildGallery();
   Object.assign(w, controls);
+  if (controls.__ready instanceof Promise) await controls.__ready;
   if (!q.has('noinit')) {
     const t0 = performance.now();
     await mats.init();
     bakeMs = performance.now() - t0;
   }
+  if (scene === 'maps') buildMaps(h, mats, (q.get('id') ?? 'blackStone') as MatId);
   h.ready();
 }
 void boot();

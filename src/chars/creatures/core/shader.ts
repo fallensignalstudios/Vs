@@ -31,6 +31,8 @@ export interface StateUniforms {
   uBeat: { value: number };
   /** rgb = hot colour vertices in the hot group shift toward, a = amount */
   uHot: { value: THREE.Vector4 };
+  /** vein pattern frequency multiplier (large bodies use < 1 so the thread spacing stays in proportion) */
+  uVeinScale: { value: number };
 }
 
 export interface StateMaterial {
@@ -79,6 +81,7 @@ uniform vec4 uRim;
 uniform float uGroup[${GROUPS}];
 uniform float uBeat;
 uniform vec4 uHot;
+uniform float uVeinScale;
 
 float cHash(vec3 p) {
   p = fract(p * 0.3183099 + vec3(0.71, 0.113, 0.419));
@@ -117,18 +120,28 @@ float cWear = vSurf.w * (0.45 + 0.55 * cN2);
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.9 + 0.035, cWear * 0.65);
 diffuseColor.rgb *= 1.0 - clamp(cEmi, 0.0, 1.0) * 0.85;
 
-// Eclipse corruption: thin conduits that creep out of seams/tissue first, then across plating.
-// Stretched along the body's vertical so veins run WITH limbs and structure rather than marbling it.
+// Eclipse corruption: thin conduit lines (two warped families of parallel threads) that surface in patches —
+// out of seams and tissue first, then across plating as the amount rises. Line width is constant by
+// construction, so veins stay threads at any scale; violet stays an accent.
 float cCorr = clamp(uCorruption, 0.0, 1.0);
-vec3 cVp = cP * vec3(4.6, 2.0, 4.6);
-float cRidgeA = abs(cNoise(cVp + 3.1) * 2.0 - 1.0);
-float cRidgeB = abs(cNoise(cVp * 2.3 - 7.7) * 2.0 - 1.0);
-float cGateN = cNoise(cP * 1.7 + 5.0) * 0.6 + cTissue * 0.5 + cN1 * 0.1;
-float cGate = cCorr > 0.001 ? smoothstep(1.02 - cCorr * 1.05, 1.14 - cCorr * 0.95, cGateN + cCorr * 0.25) : 0.0;
-float cVein = (1.0 - smoothstep(0.0, 0.022 + 0.03 * cCorr, min(cRidgeA, cRidgeB + 0.1))) * cGate;
-float cFlow = 0.5 + 0.5 * sin(cNoise(cP * 2.2) * 20.0 - uTime * 2.4);
+float cGateN = cNoise(cP * 1.7 + 5.0) * 0.45 + cTissue * 0.55 + cN1 * 0.08;
+float cGate = cCorr > 0.001 ? smoothstep(1.02 - cCorr * 1.05, 1.16 - cCorr * 0.95, cGateN + cCorr * 0.25) : 0.0;
+vec3 cVp = cP * uVeinScale;
+float cWarp = cNoise(cVp * 2.3 + 3.1);
+float cWarp2 = cNoise(cVp * 5.1 - 1.7);
+float cU1 = cVp.x * 6.0 + cVp.z * 4.4 + cVp.y * 1.2 + cWarp * 3.4 + cWarp2 * 1.1;
+float cU2 = cVp.y * 6.5 - cVp.x * 4.0 + cVp.z * 3.0 + cNoise(cVp * 2.9 - 7.7) * 3.2;
+float cL1 = abs(fract(cU1) - 0.5);
+float cL2 = abs(fract(cU2) - 0.5);
+float cBreak = cNoise(cVp * 3.7 + 9.0);
+float cHalf = (0.034 + 0.03 * cCorr) * uVeinScale;
+float cVein = max((1.0 - smoothstep(cHalf * 0.5, cHalf, cL1)) * smoothstep(0.4, 0.56, cBreak),
+                  (1.0 - smoothstep(cHalf * 0.4, cHalf * 0.8, cL2)) * smoothstep(0.66, 0.8, cBreak + cWarp * 0.3)) * cGate * (0.45 + 0.55 * cTissue);
+float cFlow = 0.5 + 0.5 * sin(cU1 * 2.0 + cU2 - uTime * 2.4);
+float cRidgeA = cL1 * 2.0;
+float cRidgeB = cL2 * 2.0;
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.016, 0.01, 0.026), cGate * 0.6 * (1.0 - clamp(cEmi, 0.0, 1.0)));
-vec3 cCorrEmi = vec3(0.3, 0.1, 1.0) * cVein * (0.35 + 1.5 * uBeat + 0.5 * cFlow);
+vec3 cCorrEmi = vec3(0.3, 0.1, 1.0) * cVein * (0.4 + 1.5 * uBeat + 0.5 * cFlow);
 
 // frost: creeps outward from uFrostOrigin, crystalline breakup
 float cFd = distance(cP, uFrostOrigin) + (cN1 - 0.5) * 0.35 * uFrostRange;
@@ -137,7 +150,7 @@ float cFrost = uFrozen > 0.001 ? smoothstep(cFr, cFr - 0.22 * uFrostRange - 0.02
 float cCrys = abs(cNoise(cP * 24.0 + 2.0) * 2.0 - 1.0);
 float cCrack = 1.0 - smoothstep(0.0, 0.09, cCrys);
 float cLum = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
-diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(cLum), vec3(0.58, 0.78, 0.9), 0.78) * (0.8 + 0.3 * cCrack), cFrost * 0.88);
+diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(cLum), vec3(0.4, 0.6, 0.74), 0.78) * (0.8 + 0.3 * cCrack), cFrost * 0.88);
 `;
 
 const FRAG_ROUGH = /* glsl */ `
@@ -172,9 +185,11 @@ const FRAG_EMISSIVE = /* glsl */ `
   float cFres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
   float cHotMask = vPart.x > 0.5 ? uHot.a * clamp(cGroup - 1.0, 0.0, 1.0) : 0.0;
   vec3 cBase = mix(vColor.rgb, uHot.rgb, cHotMask);
-  vec3 cE = cBase * cEmi * uGlow * cGroup * (1.0 - cFrost * 0.75);
+  // organic glows are mottled (embers, tissue light through a crust); hard-surface lights stay clean
+  float cMottle = mix(1.0, 0.15 + 1.75 * smoothstep(0.3, 0.72, cNoise(cP * 11.0 + 4.0)), cTissue);
+  vec3 cE = cBase * cEmi * uGlow * cGroup * cMottle * (1.0 - cFrost * 0.75);
   cE += cCorrEmi * (1.0 - cFrost);
-  cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.55 + cCrack * 0.22);
+  cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.3 + cCrack * 0.1);
   cE += uDissolveColor * cDEdge * 5.0;
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
   cE += uTelegraph.rgb * uTelegraph.a * cTp * (cFres * 1.6 + clamp(cEmi, 0.0, 1.0) * 2.5 + 0.06);
@@ -220,6 +235,7 @@ export function createStateMaterial(bump = true): StateMaterial {
     uKnit: { value: new THREE.Vector4(0, 0, 0, 0) },
     uBeat: { value: 0 },
     uHot: { value: new THREE.Vector4(1, 1, 1, 0) },
+    uVeinScale: { value: 1 },
   };
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1, envMapIntensity: 1 });
   material.name = 'creatureState';

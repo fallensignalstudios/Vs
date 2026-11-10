@@ -80,10 +80,13 @@ export function brass(k: Kit, f: number, env: Env, bright = 6, o?: SrcOpts): voi
 
 /** Dominion electric arc: mains-rate buzz and spark crackle (shock baton, shield field). */
 export function zap(k: Kit, d: number, g: number, at = 0, rate = 92): void {
-  const body = k.filter('bandpass', 2300, 0.8, { at, to: k.shaper('hard', 3) });
-  k.osc('sawtooth', [rate * 1.15, rate * 0.9], { a: 0.002, d, g: g * 0.5 }, { at, to: body, hp: 700 });
-  k.osc('square', rate * 2.01, { a: 0.002, d: d * 0.8, g: g * 0.2 }, { at, to: body, hp: 900 });
+  // buzz: mains-rate saw driven hard, then band-limited to the "bzzt" region; arc: crackle on top
+  const band = k.filter('bandpass', 2100, 0.7, { at });
+  const drive = k.shaper('hard', 9, band);
+  k.osc('sawtooth', [rate * 1.15, rate * 0.9], { a: 0.002, d, g: g * 0.45 }, { at, to: drive, hp: 500 });
+  k.osc('square', rate * 2.01, { a: 0.002, d: d * 0.8, g: g * 0.25 }, { at, to: drive, hp: 700 });
   k.noise('crackle', { a: 0.002, d: d * 1.1, g: g * 0.9 }, { at, hp: 2600 });
+  k.noise('white', { a: 0.002, d: d * 0.5, g: g * 0.25 }, { at, bp: 4800, q: 2 });
 }
 
 /** Reformation servo: a clean stepped tone with a faint whine above it. */
@@ -143,10 +146,13 @@ export function debris(k: Kit, count: number, span: number, g: number, at = 0, l
 /** Explosion core: crack + body + noise bloom + sub. `size` 0.5 small … 2 huge. */
 export function blast(k: Kit, size: number, g: number, at = 0): void {
   const len = 0.5 * size + 0.25;
-  crack(k, g * 0.9, at, 900, 0.02);
-  thump(k, 130 / Math.sqrt(size), 34 / Math.sqrt(size), len, g, at);
+  crack(k, g, at, 900, 0.022);
+  thump(k, 140 / Math.sqrt(size), 38 / Math.sqrt(size), len, g * 0.85, at);
   const sh = k.shaper('soft', 2.5);
-  k.noise('brown', { a: 0.004, d: len * 1.3, g: g * 0.9 }, { at, to: sh, lp: [3200 / size, 160], q: 0.8 });
-  k.noise('white', { a: 0.002, d: len * 0.5, g: g * 0.3 }, { at, to: sh, bp: [2400, 500], q: 0.7 });
-  k.osc('sine', 44 / Math.sqrt(size), { a: 0.02, d: len * 1.5, g: g * 0.7 }, { at: at + 0.02 });
+  // the body of the bang lives in the low mids; the sub is there to be felt, not to carry it
+  k.noise('brown', { a: 0.004, d: len * 1.3, g: g * 0.9 }, { at, to: sh, lp: [3600 / size, 380], q: 0.8 });
+  k.noise('white', { a: 0.002, d: len * 0.55, g: g * 0.6 }, { at, to: sh, bp: [2600, 600], q: 0.7 });
+  k.noise('pink', { a: 0.003, d: len * 0.35, g: g * 0.5 }, { at, hp: 700, lp: [6500, 1800] }); // air shock
+  k.osc('square', [150 / Math.sqrt(size), 52 / Math.sqrt(size), len * 0.4], { a: 0.003, d: len * 0.6, g: g * 0.3 }, { at, to: sh, lp: 1700 });
+  k.osc('sine', 48 / Math.sqrt(size), { a: 0.02, d: len * 1.4, g: g * 0.45 }, { at: at + 0.02 });
 }

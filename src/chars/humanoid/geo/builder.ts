@@ -55,7 +55,7 @@ function compileSurf(s: Surf): SurfC {
     metal,
     code: (s.zone ?? 0) * 16 + (s.part ?? 0),
     er, eg, eb,
-    edge: s.edge ?? (metal > 0.5 ? 0.55 : 0.12),
+    edge: s.edge ?? (metal > 0.5 ? 0.22 : 0.08),
   };
 }
 

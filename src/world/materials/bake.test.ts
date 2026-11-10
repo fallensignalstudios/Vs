@@ -147,7 +147,8 @@ describe('material table', () => {
   it('the mirror floor is in the specified roughness window', () => {
     const r = MAT_DEFS.blackStoneFloor.props.roughness as number;
     const amp = MAT_DEFS.blackStoneFloor.tp?.roughAmp ?? 0;
-    expect(r - amp / 2).toBeGreaterThanOrEqual(0.03);
+    expect(r - amp / 2).toBeGreaterThanOrEqual(0.045);
+    expect(r + amp / 2).toBeLessThanOrEqual(0.16);
     expect(r).toBeGreaterThanOrEqual(0.06);
     expect(r).toBeLessThanOrEqual(0.15);
   });

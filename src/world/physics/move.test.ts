@@ -200,6 +200,88 @@ describe('moveCharacter — steps, ramps and levels', () => {
   });
 });
 
+describe('moveCharacter — headroom (surfaces without solids beneath)', () => {
+  // bare ramp: no under-fill colliders at all. Rises 0 → 3 m going north over n 10..22, x 10..16.
+  const bare = (): PhysicsWorld => {
+    const w = world();
+    fxFloor(w, 0, 0, 30, 30, 0);
+    w.addSurface({ shape: { kind: 'rect', hx: 3, hz: 6 }, x: 13, z: -16, y: 3, y1: 0 });
+    return w;
+  };
+
+  it('cannot walk through the low part of a ramp from the floor beside it', () => {
+    const w = bare();
+    // at n = 14 the ramp is 1 m up: the body would be cut in half → blocked at the ramp's side
+    const mid = walk(w, planPos(5, 14), 1, 0, 5, 3);
+    expect(mid.pos.x).toBeLessThanOrEqual(10 + 1e-6);
+    expect(mid.pos.x).toBeGreaterThan(9.95);
+    expect(mid.pos.y).toBe(0);
+    expect(mid.last.blocked).toBe(true);
+    expect(mid.last.normal!.x).toBeLessThan(-0.9);
+    // at n = 11 it is 0.25 m up: a step → walks onto the ramp
+    const low = walk(w, planPos(5, 11), 1, 0, 5, 1.6);
+    expect(low.pos.x).toBeCloseTo(13, 5);
+    expect(low.pos.y).toBeCloseTo(0.25, 5);
+    // at n = 20 it is 2.5 m up: clear headroom → walks underneath
+    const under = walk(w, planPos(5, 20), 1, 0, 5, 3);
+    expect(under.pos.x).toBeCloseTo(20, 5);
+    expect(under.path.every((p) => p.y === 0)).toBe(true);
+    expect(under.blocked).toBe(0);
+    // walking south underneath it: stopped where the headroom runs out (ramp at 1.8 m ↔ n = 17.2)
+    const squeeze = walk(w, planPos(13, 21), 0, 1, 5, 3);
+    expect(-squeeze.pos.z).toBeGreaterThanOrEqual(17.2 - 1e-3);
+    expect(-squeeze.pos.z).toBeLessThan(17.25);
+    // a 3.6 m creature does not fit under it anywhere
+    const big = walk(w, planPos(5, 20), 1, 0, 4, 3, 1 / 60, { height: 3.6 }, 1.2);
+    expect(big.pos.x).toBeLessThanOrEqual(10 + 1e-6);
+  });
+
+  it('agrees with canStand and the nav grid, and lets a trapped actor walk out', () => {
+    const w = bare();
+    expect(w.canStand(13, 0, -14, 0.4)).toBe(false); // under the 1 m part
+    expect(w.canStand(13, 0, -20, 0.4)).toBe(true); // under the 2.5 m part
+    expect(w.canStand(13, 1, -14, 0.4)).toBe(true); // on the ramp
+    w.nav.rebuild();
+    expect(w.nav.isWalkable(13, 0, -14)).toBe(false);
+    expect(w.nav.isWalkable(13, 1, -14)).toBe(true);
+    expect(w.nav.isWalkable(13, 0, -20)).toBe(true);
+    expect(w.nav.isWalkable(13, 2.5, -20)).toBe(true);
+    // floor route from west to east of the ramp passes north of n = 17.2 (under the tall end) or around it
+    const p = w.nav.findPath(planPos(6, 14), planPos(20, 14))!;
+    expect(p).not.toBeNull();
+    for (let i = 1; i < p.points.length; i++) {
+      const a = p.points[i - 1], b = p.points[i];
+      for (let t = 0; t <= 1; t += 0.05) {
+        const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t, y = a.y + (b.y - a.y) * t;
+        expect(w.canStand(x, w.groundAt(x, z, y, 0.4)!.y, z, 0.4)).toBe(true);
+      }
+    }
+    // an actor that somehow stands under the low part is not frozen: it can leave, then cannot re-enter
+    const out = walk(w, { x: 12, y: 0, z: -14 }, -1, 0, 4, 1.5);
+    expect(out.pos.x).toBeCloseTo(6, 5);
+    const back = walk(w, out.pos, 1, 0, 4, 2);
+    expect(back.pos.x).toBeLessThanOrEqual(10 + 1e-6);
+  });
+
+  it('a raised dais taller than a step is an obstacle from the floor', () => {
+    const w = world();
+    fxFloor(w, 0, 0, 20, 20, 0);
+    w.addSurface({ shape: { kind: 'disc', r: 4 }, x: 10, z: -10, y: 0.6 });
+    const r = walk(w, planPos(2, 10), 1, 0, 5, 3);
+    expect(r.pos.x).toBeLessThanOrEqual(6 + 1e-3);
+    expect(r.pos.x).toBeGreaterThan(5.9);
+    expect(r.pos.y).toBe(0);
+    // glancing push slides round the dais rim instead of sticking
+    const g = walk(w, planPos(2, 8.5), 1, 0.25, 5, 4);
+    expect(g.pos.x).toBeGreaterThan(12);
+    expect(g.path.every((p) => p.y === 0 && Math.hypot(p.x - 10, p.z + 10) >= 4 - 1e-3)).toBe(true);
+    // from on top you may step down (0.6 ≤ maxDrop)
+    const down = walk(w, { x: 10, y: 0.6, z: -10 }, 1, 0, 5, 2);
+    expect(down.pos.y).toBe(0);
+    expect(down.pos.x).toBeCloseTo(20, 5);
+  });
+});
+
 describe('moveCharacter — fall protection', () => {
   it('stops at a balcony edge and slides along it', () => {
     const w = world();
@@ -413,4 +495,74 @@ describe('moveCharacter — invariants under random input', () => {
       expect(spread).toBeGreaterThan(10); // the walker actually explored
     });
   }
+});
+
+describe('moveCharacter — random worlds', () => {
+  it('never tunnels, never ends inside a solid, never leaves the ground (dense random clutter)', () => {
+    let runs = 0;
+    for (const [seed, radius, count] of [[11, R, 220], [23, R, 220], [37, R, 220], [41, 0.2, 260], [53, 1.1, 60]] as const) {
+      const w = world();
+      const rng = mulberry32(seed);
+      fxFloor(w, 0, 0, 60, 60, 0);
+      w.addSurface({ shape: { kind: 'disc', r: 8, inner: 3 }, x: 30, z: -30, y: 0.3 }); // low annular dais
+      w.addSurface({ shape: { kind: 'rect', hx: 5, hz: 2 }, x: 12, z: -45, yaw: 0.5, y: 0, y1: 2.5 }); // skew ramp
+      for (let i = 0; i < count; i++) {
+        const x = 2 + rng() * 56, z = -(2 + rng() * 56);
+        const tall = rng() < 0.7;
+        const y0 = rng() < 0.15 ? 0.5 + rng() * 1.5 : 0;
+        const hy = (tall ? 1 + rng() * 2 : 0.1 + rng() * 0.5) / 2;
+        if (rng() < 0.25) {
+          w.addCollider({ shape: { kind: 'cyl', r: 0.15 + rng() * 1.2, hy }, x, y: y0 + hy, z });
+        } else {
+          const thin = rng() < 0.4;
+          w.addCollider({
+            shape: { kind: 'box', hx: thin ? 0.03 + rng() * 0.1 : 0.2 + rng() * 1.5, hy, hz: 0.3 + rng() * 3 },
+            x, y: y0 + hy, z, yaw: rng() * Math.PI,
+          });
+        }
+      }
+      const start = w.nearestStandable(30, 0, -12, radius, 25);
+      if (!start) continue;
+      runs++;
+      let pos: Vec3Like = start;
+      let moved = 0;
+      for (let i = 0; i < 12000; i++) {
+        const a = rng() * Math.PI * 2;
+        const speed = rng() < 0.2 ? 25 : 1 + rng() * 7;
+        const dt = rng() < 0.1 ? 0.1 : 1 / 60;
+        const hold = 1 + Math.floor(rng() * 30);
+        for (let k = 0; k < hold; k++, i++) {
+          const m = w.moveCharacter(pos, radius, Math.cos(a) * speed * dt, Math.sin(a) * speed * dt);
+          const g = w.groundAt(m.x, m.z, m.y, 1e-3);
+          if (!Number.isFinite(m.x + m.y + m.z) || !g || Math.abs(g.y - m.y) > 1e-6 || !w.canStand(m.x, m.y, m.z, radius - 1e-3)) {
+            throw new Error(`seed ${seed} step ${i}: invalid ${JSON.stringify(m)} from ${JSON.stringify(pos)}`);
+          }
+          // Oracle: replay the move as single sub-step calls. For one sub-step the chord p → q cannot touch a
+          // solid (both ends clear by r, |pq| < 2r), so a chest-height ray along it must be clear — and the
+          // replay must land exactly where the big move did (the solver's early-outs are pure shortcuts).
+          const mx = Math.cos(a) * speed * dt, mz = Math.sin(a) * speed * dt;
+          const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / (radius * 0.5)));
+          let q: Vec3Like = pos;
+          for (let j = 0; j < n; j++) {
+            const s1 = w.moveCharacter(q, radius, mx / n, mz / n);
+            const d = { x: s1.x - q.x, y: 0, z: s1.z - q.z };
+            const dl = Math.hypot(d.x, d.z);
+            if (dl > 1e-9) {
+              const hit = w.raycast({ x: q.x, y: Math.max(q.y, s1.y) + 1, z: q.z }, d, dl, 1);
+              if (hit) throw new Error(`seed ${seed} step ${i}.${j}: tunnelled through collider ${hit.collider?.id} moving ${JSON.stringify(q)} → ${JSON.stringify(s1)}`);
+            }
+            q = { x: s1.x, y: s1.y, z: s1.z };
+          }
+          if (Math.hypot(q.x - m.x, q.z - m.z) > 1e-6 || Math.abs(q.y - m.y) > 1e-6) {
+            throw new Error(`seed ${seed} step ${i}: sub-stepped replay diverged ${JSON.stringify(q)} vs ${JSON.stringify(m)} from ${JSON.stringify(pos)}`);
+          }
+          const len = Math.hypot(m.x - pos.x, m.z - pos.z);
+          moved += len;
+          pos = { x: m.x, y: m.y, z: m.z };
+        }
+      }
+      expect(moved).toBeGreaterThan(150);
+    }
+    expect(runs).toBeGreaterThanOrEqual(4);
+  });
 });

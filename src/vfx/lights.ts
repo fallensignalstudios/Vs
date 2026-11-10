@@ -7,7 +7,7 @@ import * as THREE from 'three';
 
 export const MAX_FLASHES = 4;
 /** candela per unit of API intensity (1 ≈ muzzle flash, 3 ≈ explosion, 6+ ≈ hero beat) */
-const CANDELA = 26;
+const CANDELA = 3.2;
 
 interface Flash {
   readonly light: THREE.PointLight;
@@ -68,7 +68,7 @@ export class FlashLights {
     pick.peak = peak;
     pick.light.color.setHex(color);
     pick.light.position.set(x, y, z);
-    pick.light.distance = 5 + 5 * Math.sqrt(Math.min(intensity, 12));
+    pick.light.distance = 4 + 4.5 * Math.sqrt(Math.min(intensity, 12));
     pick.light.intensity = reduce ? 0 : peak;
     pick.soft = reduce;
   }
@@ -125,8 +125,10 @@ export class FlashLights {
         ambient.x += l.color.r * l.intensity / Math.PI; ambient.y += l.color.g * l.intensity / Math.PI; ambient.z += l.color.b * l.intensity / Math.PI;
       }
     });
-    // image-based light is invisible to this probe: keep a floor so smoke never renders pitch black
-    ambient.x = Math.max(ambient.x, 0.035); ambient.y = Math.max(ambient.y, 0.035); ambient.z = Math.max(ambient.z, 0.04);
+    // image-based light is invisible to this probe: approximate it from the environment intensity, and keep a
+    // floor so smoke never renders pitch black
+    const env = scene.environment ? 0.3 * (Number.isFinite(scene.environmentIntensity) ? scene.environmentIntensity : 1) : 0;
+    ambient.x = Math.max(ambient.x + env, 0.035); ambient.y = Math.max(ambient.y + env, 0.035); ambient.z = Math.max(ambient.z + env, 0.04);
     if (best === 0) keyDir.set(0.3, 0.9, 0.3).normalize();
   }
 

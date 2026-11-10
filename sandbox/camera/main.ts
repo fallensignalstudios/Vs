@@ -224,7 +224,7 @@ function* demoCinematic(): Routine {
   input.setContext('cinematic');
   const p = player.pos;
   const skip = () => input.heldTime('skip') > 0.5;
-  rig.cine.cut({ pos: { x: p.x - 10, y: p.y + 7, z: p.z + 11 }, look: { x: p.x, y: p.y + 1.2, z: p.z - 4 }, fov: 30 });
+  rig.cine.cut({ pos: { x: p.x - 7.5, y: p.y + 4.4, z: Math.min(p.z + 5.5, 10.6) }, look: { x: p.x + 0.3, y: p.y + 0.9, z: p.z - 7 }, fov: 34 });
   rig.cine.handheld(0.4);
   yield { race: [0.8, skip] };
   rig.cine.move({ pos: { x: p.x + 2.4, y: p.y + 1.75, z: p.z + 2.8 }, look: { x: p.x - 0.5, y: p.y + 1.5, z: p.z - 6 }, fov: 44, roll: -3 }, 4.5, 'inOutCubic');
@@ -237,10 +237,14 @@ function* demoCinematic(): Routine {
   cinematic = false;
 }
 
-stage.onUpdate((dt) => {
+/** one frame in engine order: input → sim → camera */
+function tick(dt: number): void {
   input.update(dt);
   simulate(dt);
   rig.update(dt);
+}
+stage.onUpdate((dt) => {
+  tick(dt);
   const lock = lockIndex >= 0 ? arena.dummies[lockIndex] : null;
   hud.update({ lockPoint: lock ? lock.point : null, lockName: lock ? lock.name : '', cinematic, physics: physicsLabel });
 });
@@ -278,6 +282,8 @@ const api = {
   hud(v: boolean): void {
     hud.setVisible(v);
   },
+  /** advance input + sim + camera without rendering (stress tests) */
+  __tick: tick,
   state() {
     const c = rig.camera;
     const r = (n: number) => Math.round(n * 1000) / 1000;

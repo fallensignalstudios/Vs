@@ -22,25 +22,25 @@ const STRIDE = 14; // pos3 dir3 data0(4) data1(4)
 
 interface StyleDef { id: number; color: number; width: number; sag: number; intensity: number }
 const STYLES: Record<BeamStyle, StyleDef> = {
-  link: { id: 0, color: 0x8a4cff, width: 0.2, sag: 0.1, intensity: 2.6 },
-  laser: { id: 1, color: 0xff4a30, width: 0.05, sag: 0, intensity: 3.6 },
-  scan: { id: 2, color: 0xa8d8ff, width: 0.12, sag: 0, intensity: 2.0 },
-  tether: { id: 3, color: 0xcfeeff, width: 0.1, sag: 0.015, intensity: 2.4 },
-  command: { id: 4, color: 0xa8d8ff, width: 0.07, sag: 0, intensity: 2.6 },
-  relay: { id: 5, color: 0x9d8cff, width: 0.11, sag: 0, intensity: 2.4 },
-  trace: { id: 6, color: 0xffe2a8, width: 0.2, sag: 0, intensity: 2.2 },
-  gold: { id: 7, color: 0xffc56b, width: 0.1, sag: 0, intensity: 2.8 },
+  link: { id: 0, color: 0x8a4cff, width: 0.2, sag: 0.1, intensity: 1.6 },
+  laser: { id: 1, color: 0xff4a30, width: 0.05, sag: 0, intensity: 2.4 },
+  scan: { id: 2, color: 0xa8d8ff, width: 0.12, sag: 0, intensity: 1.0 },
+  tether: { id: 3, color: 0xcfeeff, width: 0.1, sag: 0.015, intensity: 1.3 },
+  command: { id: 4, color: 0xa8d8ff, width: 0.07, sag: 0, intensity: 1.5 },
+  relay: { id: 5, color: 0x9d8cff, width: 0.11, sag: 0, intensity: 1.3 },
+  trace: { id: 6, color: 0xffe2a8, width: 0.2, sag: 0, intensity: 1.1 },
+  gold: { id: 7, color: 0xffc56b, width: 0.1, sag: 0, intensity: 1.5 },
 };
 const TRACER_STYLE = 8;
 
 export type TracerStyle = 'warm' | 'cold' | 'drone' | 'violet' | 'rifle';
 interface TracerDef { color: number; width: number; speed: number; tail: number; intensity: number }
 const TRACERS: Record<TracerStyle, TracerDef> = {
-  warm: { color: 0xffa24a, width: 0.09, speed: 150, tail: 5, intensity: 5 },
-  cold: { color: 0xbfe6ff, width: 0.05, speed: 320, tail: 9, intensity: 5.5 },
-  drone: { color: 0x9ad0ff, width: 0.11, speed: 60, tail: 1.8, intensity: 4.5 },
-  violet: { color: 0x9a5cff, width: 0.14, speed: 34, tail: 1.6, intensity: 4 },
-  rifle: { color: 0xfff2dc, width: 0.07, speed: 520, tail: 16, intensity: 7 },
+  warm: { color: 0xffa24a, width: 0.09, speed: 150, tail: 5, intensity: 3 },
+  cold: { color: 0xbfe6ff, width: 0.05, speed: 320, tail: 9, intensity: 3.2 },
+  drone: { color: 0x9ad0ff, width: 0.11, speed: 60, tail: 1.8, intensity: 2.8 },
+  violet: { color: 0x9a5cff, width: 0.14, speed: 34, tail: 1.6, intensity: 2.6 },
+  rifle: { color: 0xfff2dc, width: 0.07, speed: 520, tail: 16, intensity: 4 },
 };
 
 const VERT = /* glsl */ `
@@ -54,6 +54,8 @@ varying vec4 vData;   // style, intensity, length, phase
 varying vec3 vColor;
 varying float vHead;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_vertex>
 #include <logdepthbuf_pars_vertex>
 void main() {
@@ -82,6 +84,8 @@ varying vec4 vData;
 varying vec3 vColor;
 varying float vHead;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 float h11(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
@@ -92,7 +96,7 @@ float vn(vec2 p) {
 }
 void main() {
   #include <logdepthbuf_fragment>
-  float u = vUv.x, v = vUv.y, style = vData.x, len = vData.z, phase = vData.w;
+  float u = clamp(vUv.x, 0.0, 1.0), v = clamp(vUv.y, -1.0, 1.0), style = vData.x, len = vData.z, phase = vData.w;
   float s = u * len;                 // metres from the 'from' end
   float av = abs(v);
   float t = uTime + phase;
@@ -105,8 +109,8 @@ void main() {
     float n = vn(vec2(s * 2.2 - t * 1.4, v * 2.0 + phase * 7.0));
     float n2 = vn(vec2(s * 5.0 + t * 0.7, v * 3.0));
     float sheath = exp(-av * av * 5.0) * smoothstep(0.25, 0.85, n * 0.7 + n2 * 0.5) * 0.7;
-    float beat = pow(0.5 + 0.5 * sin(6.2831853 * (t * 0.95)), 10.0) + 0.55 * pow(0.5 + 0.5 * sin(6.2831853 * (t * 0.95 - 0.18)), 10.0);
-    float run = pow(0.5 + 0.5 * sin(6.2831853 * (s * 0.35 - t * 0.95)), 8.0);
+    float beat = pw(0.5 + 0.5 * sin(6.2831853 * (t * 0.95)), 10.0) + 0.55 * pw(0.5 + 0.5 * sin(6.2831853 * (t * 0.95 - 0.18)), 10.0);
+    float run = pw(0.5 + 0.5 * sin(6.2831853 * (s * 0.35 - t * 0.95)), 8.0);
     m = core * (0.55 + 0.9 * run + 0.5 * beat) + sheath * (0.6 + 0.6 * beat);
     white = core * run * 0.75;
   } else if (style < 1.5) {
@@ -121,7 +125,7 @@ void main() {
     float band = exp(-av * av * 6.0) * 0.55;
     float core = exp(-av * av * 90.0) * 0.8;
     float ticks = step(0.82, fract(s * 4.0)) * step(av, 0.8) * 0.5;
-    float node = exp(-pow((u - (0.5 + 0.5 * sin(t * 1.3))) * len * 1.6, 2.0));
+    float node = exp(-pw((u - (0.5 + 0.5 * sin(t * 1.3))) * len * 1.6, 2.0));
     m = band + core + ticks + node * 1.4 * exp(-av * av * 8.0);
     white = node * 0.5;
   } else if (style < 3.5) {
@@ -130,7 +134,7 @@ void main() {
     float cell = fract(s / 0.55) - 0.5;
     float id = floor(s / 0.55);
     float dia = 1.0 - smoothstep(0.0, 0.05, abs(cell) * 0.55 * 2.4 + av * 0.5 - 0.42 * (0.4 + 0.6 * h11(id + phase * 31.0)));
-    float glint = pow(0.5 + 0.5 * sin(t * 0.8 + h11(id) * 30.0), 16.0);
+    float glint = pw(0.5 + 0.5 * sin(t * 0.8 + h11(id) * 30.0), 16.0);
     m = core * 0.9 + dia * (0.7 + glint * 1.6) + exp(-av * 3.0) * 0.12;
     white = dia * glint;
   } else if (style < 4.5) {
@@ -142,7 +146,7 @@ void main() {
     white = packet * 0.5 * exp(-av * av * 30.0);
   } else if (style < 5.5) {
     // relay — twin rails, paired packets
-    float rails = exp(-pow((av - 0.62) * 9.0, 2.0));
+    float rails = exp(-pw((av - 0.62) * 9.0, 2.0));
     float f = fract(s / 1.9 - t * 1.1);
     float pair = (smoothstep(0.7, 0.73, f) - smoothstep(0.77, 0.8, f)) + (smoothstep(0.86, 0.89, f) - smoothstep(0.93, 0.96, f));
     m = rails * 0.55 + pair * step(av, 0.5) * 1.5 * (1.0 - av);
@@ -157,7 +161,7 @@ void main() {
   } else if (style < 7.5) {
     // gold — hairline + gliding information blocks
     float core = exp(-av * av * 50.0);
-    float railsG = exp(-pow((av - 0.7) * 14.0, 2.0)) * 0.3;
+    float railsG = exp(-pw((av - 0.7) * 14.0, 2.0)) * 0.3;
     float cellS = s / 0.42 - t * 0.9;
     float blk = step(0.55, h11(floor(cellS) + phase * 13.0)) * step(0.12, fract(cellS)) * step(fract(cellS), 0.88);
     m = core * 0.85 + railsG + blk * step(av, 0.5) * 0.9;
@@ -167,7 +171,7 @@ void main() {
     float tail = max(0.05, phase);
     float behind = (vHead - u) * len;
     float body = behind >= 0.0 ? exp(-behind / tail * 3.2) : 0.0;
-    float head = exp(-pow(behind * 5.0, 2.0)) * step(-0.25, behind);
+    float head = exp(-pw(behind * 5.0, 2.0)) * step(-0.25, behind);
     float across = exp(-av * av * (10.0 + 30.0 * clamp(behind / tail, 0.0, 1.0)));
     m = (body * 0.8 + head * 1.8) * across;
     white = head * across * 0.9;

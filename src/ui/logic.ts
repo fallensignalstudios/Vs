@@ -74,15 +74,6 @@ export function bearingToEdge(bearing: number, w: number, h: number, mx: number,
   out.y = cy + dy / k;
 }
 
-const ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'] as const;
-
-/** 8-way arrow for a bearing (0 = ahead, + = right). */
-export function bearingArrow(bearing: number): string {
-  const tau = Math.PI * 2;
-  const a = ((bearing % tau) + tau) % tau;
-  return ARROWS[Math.round(a / (Math.PI / 4)) % 8] as string;
-}
-
 /** Words for a bearing — captions never rely on the arrow glyph alone. */
 export function bearingWord(bearing: number): string {
   const tau = Math.PI * 2;
@@ -185,12 +176,6 @@ export const FALLBACK_GLYPH: Record<ButtonAction, string> = {
   ability1: '1', ability2: '2', lockOn: 'Tab', scan: 'V', reload: 'R', swapShoulder: 'C', pause: 'Esc',
   skip: 'Space', confirm: 'Enter', cancel: 'Esc', menuUp: '↑', menuDown: '↓', menuLeft: '←', menuRight: '→',
 };
-
-/** m:ss */
-export function fmtClock(seconds: number): string {
-  const s = Math.max(0, Math.floor(num(seconds)));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
 
 /** Step a numeric setting and keep it on a clean grid (no 0.30000000000000004). */
 export function stepValue(v: number, dir: number, step: number, min: number, max: number): number {

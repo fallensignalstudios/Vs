@@ -51,6 +51,7 @@ export class Hud {
   private edge = 0;
   private edgePhase = 0;
   private protagonist: ProtagonistId | '' = '';
+  private noticesOn = true;
   private readonly view: Viewport = { w: 1280, h: 720, u: 0.75 };
   private viewDirty = true;
   private readonly frame: HudFrame;
@@ -143,8 +144,15 @@ export class Hud {
     }
   }
 
-  /** @param on effective HUD visibility (requested visibility and no covering screen) */
-  update(dt: number, on: boolean): void {
+  /**
+   * @param on effective HUD visibility (requested visibility and no covering screen)
+   * @param notices false while a full-screen menu is up (toasts / zone card wait underneath, unseen)
+   */
+  update(dt: number, on: boolean, notices = true): void {
+    if (notices !== this.noticesOn) {
+      this.noticesOn = notices;
+      this.noticeEl.style.visibility = notices ? 'visible' : 'hidden';
+    }
     if (this.viewDirty) {
       this.viewDirty = false;
       measureViewport(this.root, this.view);
@@ -179,23 +187,23 @@ export class Hud {
     this.toasts.update(dt);
     this.diagnostics.update(dt);
 
-    if (this.vis <= 0) {
-      this.edgeOpacity.set(0);
-      return;
-    }
-
-    if (s) {
-      this.vitals.update(f);
-      this.arsenal.update(f);
-    }
-    this.reticle.update(f);
-    this.ctx.update(f, on);
-    this.world.update(f, on);
+    // envelopes keep running while hidden (they are idle-cheap) so nothing "ghosts" back in after a cinematic
     this.objectiveW.update(dt);
     this.readoutW.update(dt);
     this.elite.update(f);
     this.hintW.update(dt);
     this.promptW.update(dt);
+    this.reticle.update(f);
+    this.ctx.update(f, on);
+    this.world.update(f, on);
+    if (this.vis <= 0) {
+      this.edgeOpacity.set(0);
+      return;
+    }
+    if (s) {
+      this.vitals.update(f);
+      this.arsenal.update(f);
+    }
 
     // low-health edge: grows below 35 % hp; slow breathing unless flashes are reduced
     let edge = 0;

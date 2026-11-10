@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { PhysicsWorld } from '@/core/api';
 import { createPhysicsWorld } from './index';
@@ -191,6 +192,42 @@ describe('colliders', () => {
     expect(w.coverNear(31, -12, 0.5)).toEqual([]);
   });
 
+  it('coverPoint finds a protected standing spot behind cover', () => {
+    const w = world();
+    const f = buildZ04(w);
+    // high cover 24..27 × 14..17, threat to the south → stand just north of it
+    const south = planPos(25.5, 5, 1.6);
+    const a = w.coverPoint(f.highCover[1], south)!;
+    expect(a.x).toBeCloseTo(25.5, 5);
+    expect(-a.z).toBeCloseTo(17 + 0.4 + 0.12, 5);
+    expect(a.y).toBe(0);
+    expect(w.canStand(a.x, a.y, a.z, 0.4)).toBe(true);
+    expect(w.lineOfFire(south, { x: a.x, y: 1.5, z: a.z })).toBe(false);
+    // threat from the north-east: the spot moves to the opposite (south-west) side
+    const ne = planPos(35, 24, 1.6);
+    const b = w.coverPoint(f.highCover[1], ne)!;
+    expect(b.x).toBeLessThan(25.5);
+    expect(-b.z).toBeLessThan(15.5);
+    expect(w.lineOfFire(ne, { x: b.x, y: 1.5, z: b.z })).toBe(false);
+    // low cover 29..32 × 6..9 hides a crouched body from a level shot…
+    const north = planPos(30.5, 20, 1.6);
+    const c = w.coverPoint(f.lowCover[2], north)!;
+    expect(-c.z).toBeCloseTo(6 - 0.52, 5);
+    expect(w.lineOfFire(north, { x: c.x, y: 0.9, z: c.z })).toBe(false);
+    expect(w.lineOfFire(north, { x: c.x, y: 1.6, z: c.z })).toBe(true); // standing up exposes the head
+    // …but not from almost directly above
+    expect(w.coverPoint(f.lowCover[2], planPos(30.5, 10.5, 9))).toBeNull();
+    // cover with no standable far side (boxed in) and bad handles
+    const w2 = world();
+    fxFloor(w2, 0, 0, 10, 10, 0);
+    const boxed = fxBox(w2, 4, 8.8, 6, 10, 0, 2.2, { cover: 'high' });
+    expect(w2.coverPoint(boxed, planPos(5, 2, 1.6))).toBeNull(); // far side is off the floor
+    expect(w.coverPoint({} as never, north)).toBeNull();
+    expect(w.coverPoint(f.lowCover[2], { x: NaN, y: 0, z: 0 })).toBeNull();
+    f.lowCover[2].remove();
+    expect(w.coverPoint(f.lowCover[2], north)).toBeNull();
+  });
+
   it('setPose moves a collider through the broadphase', () => {
     const w = world();
     fxFloor(w, 0, 0, 40, 10, 0);
@@ -325,5 +362,45 @@ describe('triggers', () => {
     expect(() => w.updateTriggers({ x: 80, y: 0, z: 0 })).not.toThrow();
     expect(w.counts.triggers).toBe(0);
     err.mockRestore();
+  });
+});
+
+describe('debugObject', () => {
+  it('returns one persistent group that refreshes itself when the world changes', () => {
+    const w = world();
+    const f = buildZ04(w);
+    const g = w.debugObject() as THREE.Group;
+    expect(g).toBeInstanceOf(THREE.Group);
+    expect(w.debugObject()).toBe(g);
+    const count = (name: string): number => {
+      const o = g.getObjectByName(name) as THREE.Mesh;
+      return o.geometry.getAttribute('position')?.count ?? 0;
+    };
+    expect(count('lines')).toBeGreaterThan(500);
+    expect(count('surfaces')).toBeGreaterThan(30);
+    expect(count('solids')).toBeGreaterThan(500);
+    expect(count('nav')).toBe(0); // nav not built yet
+    w.nav.rebuild();
+    g.updateMatrixWorld(); // what the renderer does every frame
+    expect(count('nav')).toBe(w.nav.nodeCount);
+
+    const lines = count('lines');
+    w.addTrigger({ kind: 'circle', x: 31, z: -19, r: 3 });
+    w.addCollider({ shape: { kind: 'cyl', r: 1, hy: 1 }, x: 20, y: 1, z: -5 });
+    g.updateMatrixWorld();
+    expect(count('lines')).toBeGreaterThan(lines);
+    // hidden groups do no work; they catch up when shown again
+    g.visible = false;
+    const before = count('lines');
+    f.door.remove();
+    g.updateMatrixWorld();
+    expect(count('lines')).toBe(before);
+    g.visible = true;
+    g.updateMatrixWorld();
+    expect(count('lines')).toBeLessThan(before);
+    w.clear();
+    g.updateMatrixWorld();
+    expect(count('lines')).toBe(0);
+    expect(count('nav')).toBe(0);
   });
 });

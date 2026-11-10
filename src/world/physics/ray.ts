@@ -7,7 +7,7 @@
  * box edges/corners are conservative by at most (√2 − 1)·radius — a camera never clips, it may stop a few
  * centimetres early at a sharp corner).
  */
-import { RAY_GROUND, RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
+import { RAY_GROUND, RAY_MOVE, RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
 import type { RayHit } from '@/core/api/physics';
 import type { Vec3Like } from '@/core/api/common';
 import { colliderContains, maskOf } from './shapes';
@@ -272,6 +272,7 @@ export function raycast(
     distance: t,
     collider: HIT.collider,
     ground: HIT.surface !== null,
+    surface: HIT.surface,
   };
 }
 
@@ -289,8 +290,13 @@ export function segmentClear(w: PhysicsCore, a: Vec3Like, b: Vec3Like, mask: num
   return HIT.t >= dist - 1e-6;
 }
 
-/** Allowed fraction 0..1 of a sphere sweep from→to. Default mask: RAY_SIGHT (what a camera must not enter). */
-export function sweepSphere(w: PhysicsCore, from: Vec3Like, to: Vec3Like, radius: number, mask: number = RAY_SIGHT): number {
+/**
+ * Allowed fraction 0..1 of a sphere sweep from→to. Default mask: RAY_SIGHT | RAY_MOVE — everything a camera
+ * must stay out of (walls, cover, glass, barriers, blocking volumes).
+ */
+export function sweepSphere(
+  w: PhysicsCore, from: Vec3Like, to: Vec3Like, radius: number, mask: number = RAY_SIGHT | RAY_MOVE,
+): number {
   if (!finite3(from) || !finite3(to)) return 0;
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
   const len = Math.hypot(dx, dy, dz);

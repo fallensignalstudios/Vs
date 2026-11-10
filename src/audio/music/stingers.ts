@@ -12,9 +12,9 @@ export type StingerKind = 'checkpoint' | 'encounterStart' | 'encounterClear' | '
 
 export const STINGER_KINDS: readonly StingerKind[] = ['checkpoint', 'encounterStart', 'encounterClear', 'sever', 'resonance', 'revelation', 'choice', 'death'];
 
-/** Relative level of each stinger against the bed (linear). */
-export const STINGER_LEVEL: Readonly<Record<StingerKind, number>> = {
-  checkpoint: 0.16, encounterStart: 0.34, encounterClear: 0.2, sever: 0.22, resonance: 0.4, revelation: 0.26, choice: 0.16, death: 0.34,
+/** Target output peak of each stinger, dBFS at reference settings. */
+export const STINGER_DB: Readonly<Record<StingerKind, number>> = {
+  checkpoint: -16, encounterStart: -9, encounterClear: -13, sever: -11, resonance: -7, revelation: -10, choice: -15, death: -9,
 };
 
 /**

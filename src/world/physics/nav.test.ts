@@ -487,3 +487,108 @@ describe('nav point queries', () => {
     expect(Math.hypot(end.x - 30.5, end.z + 7.5)).toBeLessThan(2.6);
   });
 });
+
+describe('nav endpoint snapping', () => {
+  it('reaches the closest connected point for a goal in a stray pocket, but never through solids', () => {
+    const w = world();
+    // two strips that only touch at a corner: their end nodes are diagonal neighbours without a link
+    fxFloor(w, 0, 0, 0.5, 3, 0);
+    fxFloor(w, 0.5, 3, 1, 6, 0);
+    w.nav.rebuild();
+    const a = planPos(0.25, 0.25);
+    const near = w.nav.findPath(a, planPos(0.75, 3.25))!; // 0.7 m from the last node of strip A
+    expect(near).not.toBeNull();
+    const end = near.points[near.points.length - 1];
+    expect(end.x).toBeCloseTo(0.25);
+    expect(-end.z).toBeCloseTo(2.75);
+    expect(near.points.length).toBe(2); // the one-node-wide strip collapses to a single straight leg
+    expect(w.nav.findPath(a, planPos(0.75, 5))).toBeNull(); // deeper into the other strip: unreachable
+    expect(w.nav.findPath(planPos(0.75, 3.25), planPos(0.25, 0.25))).not.toBeNull(); // start-side pocket
+
+    // a goal just behind a thin wall stays unreachable
+    const w2 = world();
+    fxFloor(w2, 0, 0, 20, 10, 0);
+    fxBox(w2, 9.9, 0, 10.1, 10, 0, 3);
+    w2.nav.rebuild();
+    for (const gx of [10.2, 10.4, 10.6, 10.75, 11.3]) expect(w2.nav.findPath(planPos(4, 5), planPos(gx, 5))).toBeNull();
+    expect(w2.nav.findPath(planPos(4, 5), planPos(9.8, 5))).not.toBeNull(); // near side, inside the wall margin
+  });
+});
+
+describe('wide agents (findPathFor / walkableFor / clearance)', () => {
+  it('routes a 1.2 m radius body through open ground only', () => {
+    const w = world();
+    buildZ08(w);
+    w.nav.rebuild();
+    const WIDE = 1.2;
+    // round the 18..21 × 13..16 low cover island
+    const from = planPos(19.5, 10.5), to = planPos(19.5, 19);
+    const thin = w.nav.findPath(from, to)!;
+    const wide = w.nav.findPathFor(from, to, WIDE)!;
+    expect(thin).not.toBeNull();
+    expect(wide).not.toBeNull();
+    const minClr = (p: NavPath): number => Math.min(...samples(p).map((q) => w.nav.clearance(q.x, q.y, q.z)));
+    expect(minClr(thin)).toBeLessThan(0.9); // the default agent cuts corners at 0.45 m
+    expect(minClr(wide)).toBeGreaterThanOrEqual(WIDE - 0.36);
+    const mid = samples(wide).slice(4, -4);
+    expect(Math.min(...mid.map((q) => w.nav.clearance(q.x, q.y, q.z)))).toBeGreaterThanOrEqual(WIDE - 1e-6);
+    expect(wide.length).toBeGreaterThan(thin.length + 0.5);
+    // the big body really walks it without touching anything
+    const dt = 1 / 60;
+    let pos: Vec3Like = { ...wide.points[0] };
+    let leg = 1, blocked = 0, guard = 0;
+    while (leg < wide.points.length && guard++ < 5000) {
+      const t = wide.points[leg];
+      const dx = t.x - pos.x, dz = t.z - pos.z, d = Math.hypot(dx, dz);
+      if (d < 0.02) { leg++; continue; }
+      const step = Math.min(d, 4 * dt);
+      const m = w.moveCharacter(pos, WIDE, (dx / d) * step, (dz / d) * step, { height: 3.6 });
+      if (m.blocked) blocked++;
+      pos = { x: m.x, y: m.y, z: m.z };
+    }
+    expect(leg).toBe(wide.points.length);
+    expect(blocked).toBe(0);
+    // radius at or below the build radius is just findPath
+    expect(w.nav.findPathFor(from, to, 0.3)).toEqual(thin);
+    // repeated wide queries are stable and do not disturb default queries
+    expect(w.nav.findPathFor(from, to, WIDE)).toEqual(wide);
+    expect(w.nav.findPath(from, to)).toEqual(thin);
+  });
+
+  it('refuses gaps narrower than the body and tracks door changes', () => {
+    const w = world();
+    fxFloor(w, 0, 0, 30, 12, 0);
+    fxBox(w, 14.5, 0, 15.5, 4.75, 0, 3);
+    fxBox(w, 14.5, 7.25, 15.5, 12, 0, 3); // 2.5 m gap at n 4.75..7.25
+    const plug = fxBox(w, 20, 0, 21, 12, 0, 3);
+    plug.enabled = false;
+    w.nav.rebuild();
+    const a = planPos(4, 6), b = planPos(26, 6);
+    expect(w.nav.findPath(a, b)).not.toBeNull();
+    expect(w.nav.findPathFor(a, b, 0.9)).not.toBeNull(); // 1.8 m body through a 2.5 m gap
+    expect(w.nav.findPathFor(a, b, 1.3)).toBeNull(); // 2.6 m body cannot
+    expect(w.nav.walkableFor(a, b, 0.9)).toBe(true);
+    expect(w.nav.walkableFor(a, b, 1.3)).toBe(false);
+    expect(w.nav.walkable(a, b)).toBe(true);
+    expect(w.nav.findPathFor(a, planPos(12, 3), 1.3)).not.toBeNull(); // same side is fine
+    plug.enabled = true;
+    w.nav.rebuild();
+    expect(w.nav.findPathFor(a, b, 0.9)).toBeNull(); // clearance data follows the rebuild
+    expect(w.nav.findPath(a, b)).toBeNull();
+  });
+
+  it('clearance reports the distance to the nearest solid at that level', () => {
+    const w = world();
+    const f = buildZ04(w);
+    w.nav.rebuild();
+    expect(w.nav.clearance(2.3, 0, -19)).toBeCloseTo(2, 5); // west wall inner face at 0.3
+    expect(w.nav.clearance(20, 0, -8)).toBe(3); // open floor: capped
+    expect(w.nav.clearance(30.5, 0, -7.5)).toBe(0); // inside cover: off nav
+    expect(w.nav.clearance(33, 0, -7.5)).toBeCloseTo(1, 5); // 1 m east of the 29..32 cover
+    // level aware: beside the balcony cover at deck height, but wide open on the floor beneath it
+    expect(w.nav.clearance(54, 3, -26)).toBeCloseTo(1, 5);
+    expect(w.nav.clearance(54, 0, -26)).toBeGreaterThan(2.5);
+    expect(w.nav.clearance(500, 0, 0)).toBe(0);
+    expect(f.lowCover[4].desc.y).toBeCloseTo(3.6);
+  });
+});

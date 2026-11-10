@@ -80,6 +80,11 @@ export interface RayHit {
   collider: ColliderHandle | null;
   /** true if the ray hit a walkable surface (floor) rather than a collider */
   ground: boolean;
+  /**
+   * ADDED (physics-nav): the surface that was hit when `ground` is true (its `desc.material` picks the impact
+   * decal / sound), otherwise null. Always set by the real physics world; optional so hand-built hits stay valid.
+   */
+  surface?: SurfaceHandle | null;
 }
 
 export interface MoveResult {
@@ -144,8 +149,14 @@ export interface PhysicsWorld {
   addCollider(desc: ColliderDesc): ColliderHandle;
   /**
    * Register a walkable surface. Characters stand on the HIGHEST surface within step-up of their feet, so a
-   * balcony over a floor is simply two surfaces. Surfaces carry no thickness: put a solid under anything a
-   * character could otherwise walk beneath and through (decks, the tall end of ramps).
+   * balcony over a floor is simply two surfaces.
+   *
+   * Surfaces carry no thickness, but a HEADROOM RULE keeps bodies out of them: a character may not move to a
+   * point where another surface hangs between step height and its body height above the ground it would
+   * stand on. So the low end of a ramp, or a 0.6 m dais, blocks a walker on the floor beside it; where the
+   * surface is ≥ body height up (a balcony, the tall end of a ramp) the walker passes underneath. The rule is
+   * tested at the feet point — add solids (deck slab, ramp under-fill, rails) wherever the body must not even
+   * overlap the side, and so that shots and sight are blocked too.
    */
   addSurface(desc: SurfaceDesc): SurfaceHandle;
   /**
@@ -166,8 +177,9 @@ export interface PhysicsWorld {
    * Behaviour notes (physics-nav):
    *  - Solids only block when they overlap the band (y + stepUp, y + height): anything ≤ stepUp tall is stepped
    *    over, anything starting above head height is walked under.
-   *  - Fall protection tests the FEET POINT (circle centre): it must stay on a surface and never drop more than
-   *    maxDrop in one step. At an edge the move slides along it (straight, curved or rotated edges alike).
+   *  - Fall protection tests the FEET POINT (circle centre): it must stay on a surface, never drop more than
+   *    maxDrop in one step, and keep headroom under overhanging surfaces (see addSurface). At an edge the move
+   *    slides along it (straight, curved or rotated edges alike).
    *  - Long moves are sub-stepped (≤ radius/2), so fast dodges and 20 m/s knock-backs cannot tunnel.
    *  - A character that starts inside a solid (door closed on it) is pushed out; one that starts off every
    *    surface moves freely until it reaches ground again. Use nearestStandable for hard un-sticking.
@@ -191,22 +203,34 @@ export interface PhysicsWorld {
   /**
    * Unobstructed sight line between two points (uses RAY_SIGHT). Solids that CONTAIN either endpoint are
    * ignored, so aiming at the centre of a device (or looking out of a scanner housing) is not blocked by that
-   * device's own collider.
+   * device's own collider. Consequently, test from an eye / chest point — not from a muzzle that may poke into
+   * a wall the actor is hugging (use raycast for the shot itself: it reports a start inside a solid as a hit).
    */
   lineOfSight(a: Vec3Like, b: Vec3Like): boolean;
   /** Unobstructed firing line (uses RAY_SHOT). Same endpoint rule as lineOfSight. */
   lineOfFire(a: Vec3Like, b: Vec3Like): boolean;
   /**
    * Push a sphere out of solids (camera collision). Returns the allowed fraction 0..1 along from→to.
-   * Default mask = RAY_SIGHT (opaque geometry; glass, rails, energy barriers and invisible blockers are ignored);
-   * add RAY_GROUND to also stop at floors/ramps. Returns 0 when `from` already overlaps a solid. The sphere
-   * stops 1 cm short of contact so consecutive sweeps never start inside.
+   * Default mask = RAY_SIGHT | RAY_MOVE: everything a camera must stay out of — walls and cover, but also
+   * glass, energy barriers and invisible blocking volumes (a 1.1 m rail only matters when the sphere dips below
+   * its top). Pass RAY_SIGHT alone to collide with opaque geometry only; add RAY_GROUND to also stop at
+   * floors/ramps. Returns 0 when `from` already overlaps a solid. The sphere stops 1 cm short of contact so
+   * consecutive sweeps never start inside. Box edges are treated conservatively (the sphere may stop up to
+   * 0.4 × radius early at a sharp box corner; it never clips).
    */
   sweepSphere(from: Vec3Like, to: Vec3Like, radius: number, mask?: number): number;
   /** Colliders overlapping a circle (xz) within the y range */
   queryColliders(x: number, z: number, radius: number, yMin: number, yMax: number): ColliderHandle[];
   /** Cover colliders near a point, nearest first */
   coverNear(x: number, z: number, radius: number): ColliderHandle[];
+  /**
+   * ADDED (physics-nav): a standing point (feet, y on the ground) tucked behind `cover` that is hidden from
+   * `threat` — the threat's eye or muzzle position. Low cover hides a crouched body (tested at 0.9 m), high
+   * cover a standing one (1.5 m). Tries the spot directly opposite the threat first, then fans out along the
+   * far side; null when nothing behind this cover is both standable and protected. `radius` defaults to 0.4.
+   * Typical use: `for (const c of physics.coverNear(x, z, 12)) { const p = physics.coverPoint(c, enemyEye); … }`.
+   */
+  coverPoint(cover: ColliderHandle, threat: Vec3Like, radius?: number): Vec3Like | null;
 
   readonly nav: NavGrid;
 
@@ -246,8 +270,9 @@ export interface NavGrid {
   /**
    * (Re)build from current surfaces + colliders. Cheap enough to call when a door/barrier toggles.
    * Defaults: cell 0.5 m, agentRadius 0.45 m (options persist for later calls). When only a few
-   * colliders/surfaces changed since the last build, only the cells they touch are re-evaluated (≈ 0.1 ms for a
-   * door); with no changes it is a no-op. The first query on an unbuilt grid builds it automatically.
+   * colliders/surfaces changed since the last build, only the cells they touch are re-evaluated (well under
+   * 1 ms for a door; a full 70 × 48 m build is ~12 ms warm); with no changes it is a no-op. The first query on
+   * an unbuilt grid builds it automatically.
    */
   rebuild(opts?: { cell?: number; agentRadius?: number }): void;
   /**
@@ -270,6 +295,23 @@ export interface NavGrid {
    */
   walkable(a: Vec3Like, b: Vec3Like): boolean;
   readonly built: boolean;
+
+  /**
+   * ADDED (physics-nav): findPath for a WIDE agent (the elite, anything with radius > agentRadius). Only uses
+   * nav nodes whose distance to the nearest movement-blocking solid is ≥ `radius` (up to 3 m), so a 1.2 m body
+   * is routed down the middle of a 3 m loop and never asked to squeeze between cover islands. Endpoints snap to
+   * the nearest node that fits. null when no route is wide enough. Because clearance is sampled at node
+   * centres, a passage is only guaranteed usable when it is at least 2 · radius + one cell wide.
+   */
+  findPathFor(from: Vec3Like, to: Vec3Like, radius: number): NavPath | null;
+  /** ADDED (physics-nav): walkable() for a wide agent of the given radius. */
+  walkableFor(a: Vec3Like, b: Vec3Like, radius: number): boolean;
+  /**
+   * ADDED (physics-nav): free radius at a nav point — distance (m, capped at 3) to the nearest
+   * movement-blocking solid at that level; 0 when the point is off the nav grid. Use it to pick open ground
+   * (spawn points, retreat spots, where a large creature can turn).
+   */
+  clearance(x: number, y: number, z: number): number;
 
   /** ADDED (physics-nav): true when colliders/surfaces changed since the last rebuild (call rebuild()). */
   readonly stale: boolean;

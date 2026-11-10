@@ -11,6 +11,7 @@ attribute vec4 iColor;
 attribute vec4 iMisc;
 attribute vec4 iVel;
 uniform vec2 uGrid;
+uniform float uPixel; // world metres per pixel at unit depth
 varying vec2 vUv;
 varying vec2 vQuad;
 varying vec4 vColor;
@@ -29,6 +30,11 @@ void main() {
   vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
   vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
   vec3 world;
+  // never let a sprite shrink below ~1.3 px: widen it and give the energy back as lower alpha (no shimmer)
+  float viewDepth = -(viewMatrix * vec4(center, 1.0)).z;
+  float minSize = max(viewDepth, 0.0) * uPixel * 1.3;
+  float thin = clamp(size / max(minSize, 1e-6), 0.0, 1.0);
+  size = max(size, minSize);
 #ifdef STRETCH
   vec3 vv = (viewMatrix * vec4(iVel.xyz, 0.0)).xyz;
   float l2 = length(vv.xy);
@@ -56,7 +62,7 @@ void main() {
   vec2 cell = vec2(mod(frame, uGrid.x), floor(frame / uGrid.x));
   vUv = (cell + uv) / uGrid;
   vQuad = corner;
-  vColor = iColor;
+  vColor = vec4(iColor.rgb, iColor.a * thin);
   vWorld = world;
   vCenter = center;
 #ifdef STRETCH
@@ -111,8 +117,9 @@ void main() {
   vec2 p = vQuad * 2.0;
   vec3 n = normalize(vec3(p, sqrt(max(0.0, 1.0 - dot(p, p))) + 0.4));
   vec3 keyV = normalize((viewMatrix * vec4(uKeyDir, 0.0)).xyz);
-  float nl = dot(n, keyV) * 0.5 + 0.5;
-  vec3 light = uAmbient + uKeyColor * nl * nl;
+  // smoke and dust are translucent: the shaded side still receives most of the key light (forward scattering)
+  float nl = mix(0.6, 1.0, dot(n, keyV) * 0.5 + 0.5);
+  vec3 light = uAmbient + uKeyColor * nl;
   for (int i = 0; i < 4; i++) {
     vec3 d = uFlashPos[i].xyz - vCenter;
     float d2 = dot(d, d);

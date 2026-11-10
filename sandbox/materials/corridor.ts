@@ -37,9 +37,25 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   const floorL = add(box(9, 0.4, 24), mats.clone('whiteGoldFloor'), [-5.5, -0.2, -4], undefined, false);
   const floorR = add(box(9, 0.4, 24), mats.clone('blackStoneFloor'), [5.5, -0.2, -4], undefined, false);
   const floorMid = add(box(2, 0.4, 24), mats.clone('blackStoneFloor'), [0, -0.2, -4], undefined, false);
-  if (!h.params.has('nomirror')) {
+  // Reflections: ?refl=core drives render-core's real PlanarReflections (the production injection) when that
+  // module is available; otherwise a sandbox mirror that patches the floors the same way (plain assignment of
+  // onBeforeCompile on top of the library's own patches).
+  let ready: Promise<void> | undefined;
+  const floors = [floorL, floorR, floorMid];
+  const useMock = (): void => {
     mirror.register(floorL, 0.85); mirror.register(floorR, 1); mirror.register(floorMid, 1);
     h.onUpdate(() => mirror.update());
+  };
+  if (h.params.get('refl') === 'core') {
+    ready = import('@/render/reflections').then(({ PlanarReflections }) => {
+      const pr = new PlanarReflections(true);
+      const size = h.renderer.getDrawingBufferSize(new THREE.Vector2());
+      pr.setSize(size.x, size.y, 0.5);
+      for (const f of floors) pr.register(f, { y: 0 });
+      h.onUpdate((dt) => { pr.render(h.renderer, h.scene, h.camera, dt); });
+    }).catch((err: unknown) => { console.warn('[sandbox] render-core reflections unavailable — using the sandbox mirror', err); useMock(); });
+  } else if (!h.params.has('nomirror')) {
+    useMock();
   }
 
   // ---------------------------------------------------------------- left bay: white-gold
@@ -53,21 +69,21 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
     add(box(0.04, 6.2, 0.07), 'goldChannel', [-9.57, 3.6, z], undefined, false);
     add(box(0.52, 0.16, 0.94), 'goldTrim', [-9.85, 0.5, z]);
     add(box(0.52, 0.1, 0.94), 'goldTrim', [-9.85, 6.9, z]);
-    const pl = new THREE.PointLight(0xffc56b, 5, 7, 1.8); pl.position.set(-9.1, 2.4, z); root.add(pl);
+    const pl = new THREE.PointLight(0xffc56b, 1.4, 6, 1.8); pl.position.set(-8.9, 2.4, z); root.add(pl);
   }
   // ribs spanning the bay with a warm strip on the inner face
   const rib = ribSegment(4.2, 0.5, 0.7);
   for (const z of [-9.6, -0]) {
     add(rib, 'whiteGold', [-9.9, 3.2, z]);
     const r2 = add(rib, 'whiteGold', [-1.3, 3.2, z]); r2.scale.x = -1;
-    add(box(8.3, 0.06, 0.12), 'whiteLight', [-5.6, 7.38, z], undefined, false);
+    add(box(8.3, 0.04, 0.06), 'whiteLight', [-5.6, 7.38, z], undefined, false);
   }
   // door at the end with the "white point" above it
   add(box(3.6, 4.2, 0.2), 'goldDark', [-5.5, 2.1, -15.95]);
   add(box(3.0, 3.7, 0.1), 'whiteGold', [-5.5, 1.85, -15.82]);
   add(box(0.05, 3.7, 0.06), 'goldChannel', [-5.5, 1.85, -15.76], undefined, false);
-  add(box(0.5, 0.5, 0.1), 'whiteLight', [-5.5, 5.2, -15.9], undefined, false);
-  const wp = new THREE.PointLight(0xfff0d2, 30, 16, 1.8); wp.position.set(-5.5, 5.2, -15.2); root.add(wp);
+  add(box(0.3, 0.3, 0.1), 'whiteLight', [-5.5, 5.2, -15.9], undefined, false);
+  const wp = new THREE.PointLight(0xfff0d2, 9, 16, 1.8); wp.position.set(-5.5, 5.2, -14.6); root.add(wp);
   // floor inlay
   strip('goldTrim', [-3.2, 0.004, -16], [-3.2, 0.004, 8], 0.07, 0.01);
   strip('goldTrim', [-7.8, 0.004, -16], [-7.8, 0.004, 8], 0.07, 0.01);
@@ -84,7 +100,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   };
   crate(-8.2, 0, 3.4, 1, 0.2); crate(-8.3, 0.8, 3.45, 0.9, 0.05); crate(-6.9, 0, 3.9, 1, -0.3);
   add(box(0.5, 1.5, 0.4), 'refSlate', [-2.4, 0.75, 2.6]);
-  add(box(0.42, 0.9, 0.03), 'refBlueGlow', [-2.4, 0.9, 2.82], undefined, false);
+  add(box(0.3, 0.5, 0.03), 'refBlueGlow', [-2.4, 1.1, 2.82], undefined, false);
   add(box(0.56, 0.05, 0.46), 'refSteel', [-2.4, 1.52, 2.6]);
 
   // frost panel in front of a glowing conduit
@@ -93,7 +109,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
     add(new THREE.CylinderGeometry(0.07, 0.07, 6, 16), 'goldTrim', [conduitX, 3, conduitZ + dz]);
     add(new THREE.CylinderGeometry(0.035, 0.035, 2.4, 12), mats.emissive(0xffd27a, 6), [conduitX + 0.08, 1.6, conduitZ + dz], undefined, false);
   }
-  const conduitLight = new THREE.PointLight(0xffc56b, 22, 6, 1.6); conduitLight.position.set(conduitX + 0.1, 1.6, conduitZ); root.add(conduitLight);
+  const conduitLight = new THREE.PointLight(0xffc56b, 5, 6, 1.6); conduitLight.position.set(conduitX + 0.15, 1.6, conduitZ); root.add(conduitLight);
   const ice = add(box(0.3, 3.2, 3.0), 'frostIce', [-8.55, 1.6, -4.8], undefined, false); ice.renderOrder = 5;
   add(box(0.5, 0.5, 3.4), 'frostRime', [-8.7, 0.25, -4.8]);
   add(box(0.34, 0.5, 1.2), 'frostRime', [-8.5, 3.4, -5.4], [0, 0, 0.2]);
@@ -124,11 +140,11 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   chan([[2.2, 0.006, 8], [2.2, 0.006, -6], [4.2, 0.006, -8], [4.2, 0.006, -16]]);
   chan([[8.6, 0.006, 8], [8.6, 0.006, -2], [6.8, 0.006, -3.8], [6.8, 0.006, -16]]);
   chan([[2.2, 0.006, 1.5], [8.6, 0.006, 1.5]]);
-  for (const z of [-12.5, -6.5, -0.5, 5]) { const pl = new THREE.PointLight(0xffc56b, 3.5, 6, 1.8); pl.position.set(9.3, 1.6, z); root.add(pl); }
+  for (const z of [-12.5, -6.5, -0.5, 5]) { const pl = new THREE.PointLight(0xffc56b, 1.6, 6, 1.8); pl.position.set(9.0, 1.6, z); root.add(pl); }
   // end wall: tall slit of white light
-  add(box(0.5, 7, 0.1), 'whiteLight', [5.5, 3.6, -15.95], undefined, false);
+  add(box(0.14, 7, 0.1), 'whiteLight', [5.5, 3.6, -15.95], undefined, false);
   add(box(1.3, 7.6, 0.16), 'goldDark', [5.5, 3.8, -16.0]);
-  const slit = new THREE.PointLight(0xfff0d2, 26, 18, 1.7); slit.position.set(5.5, 3.2, -15); root.add(slit);
+  const slit = new THREE.PointLight(0xfff0d2, 9, 18, 1.7); slit.position.set(5.5, 3.2, -14.4); root.add(slit);
 
   // Dominion gear: barricade + lamp + banner
   const bx = 4.2, bz = 3.2;
@@ -138,11 +154,14 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   add(box(0.16, 1.9, 0.16), mats.getLocal('domBlack'), [bx + 1.9, 0.95, bz - 0.6]);
   add(box(0.24, 0.42, 0.24), 'domAmberGlow', [bx + 1.9, 2.05, bz - 0.6], undefined, false);
   add(box(0.3, 0.06, 0.3), mats.getLocal('domBronze'), [bx + 1.9, 2.3, bz - 0.6]);
-  const amber = new THREE.PointLight(0xffa033, 9, 7, 1.8); amber.position.set(bx + 1.9, 2.05, bz - 0.6); root.add(amber);
+  const amber = new THREE.PointLight(0xffa033, 3, 7, 1.8); amber.position.set(bx + 1.9, 2.05, bz - 0.6); root.add(amber);
   add(box(1.1, 2.6, 0.03), 'domCloth', [8.4, 3.2, -11.8], [0, -1.2, 0]);
 
   // corruption: a patch of wall + floor, tissue and veins growing out of a channel junction
-  const cw = mats.corrupt(corruptWall, { amount: 0.6, scale: 2.2 });
+  const corruptPale = mats.clone('whiteGold');
+  add(box(1.1, 3.4, 1.1), corruptPale, [7.4, 1.7, -6.2]);
+  const cp = mats.corrupt(corruptPale, { amount: 0.45, scale: 2.2 });
+  const cw = mats.corrupt(corruptWall, { amount: 0.45, scale: 2.2 });
   const cf = mats.corrupt(corruptFloor, { amount: 0.0, scale: 2.2 });
   const tissueGeo = new THREE.IcosahedronGeometry(1, 5);
   for (const [x, y, z, s] of [[9.75, 0.5, -3.4, 0.75], [9.6, 0.22, -2.2, 0.5], [9.8, 1.7, -4.2, 0.45], [9.85, 3.0, -3.0, 0.3]] as const) {
@@ -155,11 +174,11 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   vein([[9.9, 0.3, -3.4], [9.9, 1.4, -3.9], [9.92, 2.6, -3.2], [9.95, 4.4, -4.0], [9.95, 5.8, -3.1]]);
   vein([[9.7, 0.05, -3.0], [8.8, 0.03, -2.4], [8.0, 0.03, -2.9], [7.2, 0.03, -2.2]]);
   add(box(0.9, 1.3, 0.12), 'eclipsePlate', [9.55, 0.7, -1.1], [0.1, -1.1, 0.25]);
-  const violet = new THREE.PointLight(0x7a3cff, 7, 6, 1.8); violet.position.set(9.0, 1.3, -3.2); root.add(violet);
+  const violet = new THREE.PointLight(0x7a3cff, 2.2, 6, 1.8); violet.position.set(9.0, 1.3, -3.2); root.add(violet);
 
   // ---------------------------------------------------------------- lighting
-  root.add(new THREE.HemisphereLight(0xdfe6ff, 0x14110e, 0.35));
-  const key = new THREE.DirectionalLight(0xfff0dc, 2.2);
+  root.add(new THREE.HemisphereLight(0xdfe6ff, 0x14110e, 0.3));
+  const key = new THREE.DirectionalLight(0xfff0dc, 1.5);
   key.position.set(-4, 14, 9); key.target.position.set(0, 0, -6);
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0006; key.shadow.normalBias = 0.03;
   const sc = key.shadow.camera; sc.left = -16; sc.right = 16; sc.top = 16; sc.bottom = -16; sc.far = 50;
@@ -170,7 +189,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
     whitegold: [[-4.2, 1.7, 9.5], [-6.6, 2.3, -8], 50],
     blackstone: [[4.6, 1.6, 10], [6.4, 1.9, -8], 50],
     frost: [[-5.2, 1.7, -2.2], [-9.2, 1.6, -4.8], 42],
-    corrupt: [[5.6, 1.8, 0.6], [10, 1.9, -3.4], 46],
+    corrupt: [[4.6, 1.8, 0.2], [9.6, 1.8, -4.4], 50],
     gear: [[-5.2, 1.3, 6.6], [-8, 0.8, 3.4], 40],
     dominion: [[2.6, 1.4, 6.4], [4.6, 0.9, 3.0], 42],
     wallClose: [[-8.6, 1.6, 0.6], [-10, 1.7, -1.2], 40],
@@ -178,7 +197,8 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   };
   h.setCam(views.wide[0], views.wide[1], views.wide[2]);
   return {
+    __ready: ready,
     __view: (name: string): string => { const v = views[name] ?? views.wide; h.setCam(v[0], v[1], v[2]); return name; },
-    __corrupt: (amount: number, floor = amount * 0.8): number => { cw.amount = amount; cf.amount = floor; return cw.amount; },
+    __corrupt: (amount: number, floor = amount * 0.8): number => { cw.amount = amount; cp.amount = amount; cf.amount = floor; return cw.amount; },
   };
 }

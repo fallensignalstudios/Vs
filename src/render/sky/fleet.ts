@@ -1,7 +1,7 @@
 /**
  * Fleet silhouettes. Capital ships sit at infinity, so the direction they are seen from never changes: every
  * hull is baked once into a flat, back-face-culled, depth-sorted (painter's order) impostor mesh in its own
- * view frame. The whole fleet is ONE draw call with no depth interaction, correct self-occlusion, and it can
+ * view frame. The whole fleet is ONE draw call pinned to the far plane, with correct self-occlusion, and it can
  * be re-aimed by the preset (battle direction / spread) with two uniforms.
  *
  * "Battle plane" coordinates: (u, v) in [-1, 1]² around the battle direction, scaled by the preset spread.
@@ -12,7 +12,7 @@ import { mulberry32 } from '@/core/mathx';
 import { GLSL_HAZE } from './glsl';
 import { GeoBuilder } from './scenic/geo';
 import { PartSink, buildHull, paletteFor, type ShipKind } from './scenic/hulls';
-import type { SharedUniforms } from './shared';
+import { SKY_ORDER, type SharedUniforms } from './shared';
 
 export interface FleetShip {
   /** battle-plane position */
@@ -55,6 +55,7 @@ attribute vec3 aNormal;
 attribute vec3 aColor;
 attribute vec2 aMeta;
 uniform float uFleet;
+uniform float uFarZ;
 uniform vec3 uRedDir;
 uniform vec3 uWhiteDir;
 uniform vec3 uRedLight;
@@ -78,7 +79,7 @@ void main() {
   vCol = albedo * (uWhiteLight * kw + uRedLight * kr + vec3(0.16, 0.17, 0.21) * kf * (0.55 + 0.45 * sky)) + aColor * aMeta.x;
   vDir = dir;
   vec4 p = projectionMatrix * vec4(mat3(viewMatrix) * dir, 1.0);
-  gl_Position = vec4(p.xy, 0.0, p.w);
+  gl_Position = vec4(p.xy, p.w * uFarZ, p.w);
 }
 `;
 
@@ -161,7 +162,9 @@ export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
       aLocal.push(v.x, v.y);
       aCenter.push(u, vv);
       aNormal.push(n.x, n.y, n.z);
-      aColor.push(hull.col[i * 3], hull.col[i * 3 + 1], hull.col[i * 3 + 2]);
+      // Reformation trusses are thin and dark: lift them so both fleets read at the same distance
+      const lift = faction === 1 ? 2.1 : 1;
+      aColor.push(hull.col[i * 3] * lift, hull.col[i * 3 + 1] * lift, hull.col[i * 3 + 2] * lift);
       // thin light strips are sub-pixel at fleet scale (they would shimmer): keep engines, mute the rest;
       // running lights are drawn as size-clamped sprites instead
       aMeta.push(hull.glow[i] >= 5 ? hull.glow[i] : hull.glow[i] * 0.08, rank);
@@ -209,6 +212,7 @@ export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
     name: 'SkyFleet',
     uniforms: {
       ...uniforms,
+      uFarZ: shared.uFarZ,
       uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
       uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite,
       uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall,
@@ -216,14 +220,14 @@ export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
     vertexShader: SHIP_VERTEX,
     fragmentShader: SHIP_FRAGMENT,
     side: THREE.DoubleSide,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     fog: false,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'sky:fleet';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -990;
+  mesh.renderOrder = SKY_ORDER.fleet;
   mesh.matrixAutoUpdate = false;
 
   return {

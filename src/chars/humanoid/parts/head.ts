@@ -25,7 +25,7 @@ export interface HeadLook {
 const g = (x: number, c: number, s: number): number => { const d = (x - c) / s; return Math.exp(-d * d); };
 
 /** Skull + face sections (head-joint local y). */
-function skullSecs(jaw: number): Sec[] {
+export function skullSecs(jaw = 1): Sec[] {
   return [
     { y: -0.05, rx: 0.046, rz: 0.05, rzb: 0.052, cz: 0.004 },
     { y: -0.028, rx: 0.05 * jaw, rz: 0.078, rzb: 0.056, n: 2.2 },
@@ -43,14 +43,15 @@ function skullSecs(jaw: number): Sec[] {
 function faceFn(th: number, _v: number, y: number): number {
   const a = Math.abs(th);
   let m = 1;
-  m -= 0.075 * g(a, 0.4, 0.2) * g(y, 0.103, 0.022);          // eye sockets
-  m += 0.045 * g(a, 0.34, 0.42) * g(y, 0.132, 0.016);        // brow ridge
-  m += 0.05 * g(a, 0, 0.13) * g(y, 0.085, 0.035);            // nose bridge root
-  m += 0.03 * g(a, 0.72, 0.22) * g(y, 0.07, 0.03);           // cheekbones
+  m -= 0.095 * g(a, 0.42, 0.21) * g(y, 0.1, 0.021);          // eye sockets
+  m += 0.05 * g(a, 0.36, 0.44) * g(y, 0.128, 0.015);         // brow ridge
+  m += 0.02 * g(a, 0, 0.14) * g(y, 0.09, 0.03);              // nose root
+  m += 0.04 * g(a, 0.78, 0.22) * g(y, 0.068, 0.028);         // cheekbones
   m -= 0.03 * g(a, 1.25, 0.3) * g(y, 0.12, 0.04);            // temples
-  m += 0.03 * g(a, 0, 0.3) * g(y, 0.018, 0.022);             // mouth mound
-  m += 0.035 * g(a, 0, 0.25) * g(y, -0.024, 0.016);          // chin
-  m -= 0.025 * g(a, 0.55, 0.25) * g(y, 0.012, 0.03);         // under the cheeks
+  m += 0.03 * g(a, 0, 0.32) * g(y, 0.018, 0.022);            // mouth mound
+  m += 0.04 * g(a, 0, 0.26) * g(y, -0.024, 0.016);           // chin
+  m -= 0.03 * g(a, 0.6, 0.24) * g(y, 0.012, 0.03);           // hollow under the cheeks
+  m += 0.025 * g(a, 1.05, 0.2) * g(y, -0.012, 0.022);        // jaw angle
   return m;
 }
 
@@ -63,45 +64,51 @@ export function buildHead(b: MeshBuilder, rig: RigView, look: HeadLook): void {
   b.scope(() => {
     b.translate(hx, hy, hz);
     b.surf(skin);
-    loft(b, skullSecs(jaw), { seg: 26, smooth: 4, capB: { dome: 0.014, k: 2 }, fn: faceFn });
+    loft(b, skullSecs(jaw), { seg: 28, smooth: 4, capB: { dome: 0.014, k: 2 }, fn: faceFn });
 
-    // nose
+    // nose: a broad wedge that grows out of the brow rather than a stick
     b.scope(() => {
-      b.at(0, 0.062, -0.094, -14, 0, 0);
+      b.at(0, 0.06, -0.0925, -9, 0, 0);
       loft(b, [
-        { y: 0.052, rx: 0.0075, rz: 0.008, rzb: 0.012 },
-        { y: 0.02, rx: 0.01, rz: 0.015, rzb: 0.012 },
-        { y: -0.004, rx: 0.0145, rz: 0.021, rzb: 0.012 },
-        { y: -0.016, rx: 0.0135, rz: 0.015, rzb: 0.012 },
-      ], { seg: 8, smooth: 2, capA: 'dome', capB: { dome: 0.006, k: 1 } });
+        { y: 0.05, rx: 0.0085, rz: 0.004, rzb: 0.012 },
+        { y: 0.022, rx: 0.0105, rz: 0.0125, rzb: 0.012 },
+        { y: -0.001, rx: 0.0165, rz: 0.0215, rzb: 0.012 },
+        { y: -0.0135, rx: 0.015, rz: 0.014, rzb: 0.012 },
+      ], { seg: 8, smooth: 2, capA: 'dome', capB: { dome: 0.005, k: 1 } });
     });
-    // lips
-    b.surf({ ...skin, color: mixHex(look.skin.color, 0x7a3030, 0.4), rough: 0.42 });
-    b.scope(() => { b.translate(0, 0.02, -0.0905); ball(b, 0.021 * (0.6 + 0.4 * jaw), 0.0058, 0.008, 10, 4); });
+    // mouth: a quiet line, slightly darker than the skin
+    b.surf({ ...skin, color: mixHex(look.skin.color, 0x5a2a26, 0.38), rough: 0.45 });
+    b.scope(() => { b.translate(0, 0.0205, -0.0915); ball(b, 0.0205 * (0.6 + 0.4 * jaw), 0.0042, 0.0072, 10, 4); });
+    b.surf({ ...skin, color: mixHex(look.skin.color, 0x5a2a26, 0.16), rough: 0.5 });
+    b.scope(() => { b.translate(0, 0.0125, -0.09); ball(b, 0.0165 * (0.6 + 0.4 * jaw), 0.005, 0.0075, 10, 4); });
     // ears
     b.surf(skin);
     for (const s of [-1, 1]) b.scope(() => { b.at(s * 0.0745, 0.082, 0.012, 0, s * -18, s * -6); ball(b, 0.007, 0.026, 0.015, 8, 5); });
 
-    // eyes: sclera + iris, recessed in the sockets
+    // eyes: dark almonds set back under the brow (lit eyes for the coerced)
     for (const s of [-1, 1]) {
       b.scope(() => {
-        b.translate(s * 0.0315, 0.1035, -0.0795);
+        b.at(s * 0.0312, 0.1005, -0.0818, 0, s * -10, s * 4);
         if (look.eyeGlow) {
           b.surf({ color: 0x100818, rough: 0.3, part: PART.glow, zone: ZONE.head, emissive: look.eyeGlow.color, glow: look.eyeGlow.glow });
-          ball(b, 0.0125, 0.0075, 0.0075, 8, 4);
+          ball(b, 0.0125, 0.0072, 0.0072, 8, 4);
         } else {
-          b.surf({ color: 0xd9d4cc, rough: 0.22, part: PART.glass, zone: ZONE.head });
-          ball(b, 0.0125, 0.0068, 0.007, 8, 4);
-          b.surf({ color: look.eye ?? 0x2a1c12, rough: 0.12, part: PART.glass, zone: ZONE.head });
-          b.translate(0, 0, -0.0042);
-          ball(b, 0.0058, 0.0058, 0.0042, 8, 4);
+          b.surf({ color: 0xcfc8be, rough: 0.25, part: PART.glass, zone: ZONE.head });
+          ball(b, 0.0128, 0.0056, 0.006, 10, 4);
+          b.surf({ color: look.eye ?? 0x2a1c12, rough: 0.1, part: PART.glass, zone: ZONE.head });
+          b.translate(-s * 0.0008, 0, -0.0026);
+          ball(b, 0.0066, 0.0056, 0.0046, 8, 4);
+          // upper lid: a sliver of skin that gives the eye its shape
+          b.surf(skin);
+          b.translate(s * 0.0008, 0.0046, 0.0012);
+          ball(b, 0.0145, 0.0034, 0.0062, 10, 4);
         }
       });
     }
     // brows
     const hair: Surf = { part: PART.hair, rough: 0.6, zone: ZONE.head, ...look.hair };
     b.surf({ ...hair, color: mixHex(look.hair.color, 0x000000, 0.25) });
-    for (const s of [-1, 1]) b.scope(() => { b.at(s * 0.032, 0.1235, -0.0905, 8, s * -20, s * -7); box(b, 0.034, 0.0065, 0.009, { bevel: 0.002, edge: 0 }); });
+    for (const s of [-1, 1]) b.scope(() => { b.at(s * 0.032, 0.1195, -0.0895, 12, s * -22, s * -5); box(b, 0.036, 0.0075, 0.01, { bevel: 0.0025, edge: 0 }); });
 
     if (look.style !== 'bald') buildHair(b, look.style, hair);
     if (look.beard) buildBeard(b, hair, jaw);
@@ -121,12 +128,12 @@ function buildHair(b: MeshBuilder, style: HairStyle, hair: Surf): void {
     { y: 0.192, rx: 0.068 + T, rz: 0.083 + T, rzb: 0.094 + T, tilt: tilt * 0.12, cz: 0.004 },
     { y: 0.218, rx: 0.048 + T, rz: 0.058 + T, rzb: 0.066 + T, cz: 0.003 },
   ];
-  loft(b, cap, { seg: 22, smooth: 3, capB: { dome: 0.016 + T * 0.4, k: 2 }, fn: (th, v) => 1 + 0.012 * Math.sin(th * 9 + v * 5) * (style === 'buzz' ? 0 : 1) });
+  loft(b, cap, { seg: 22, smooth: 3, capB: { dome: 0.016 + T * 0.4, k: 2 }, fn: (th, v) => 1 + (style === 'buzz' ? 0 : 0.012 * Math.sin(th * 9 + v * 5) + 0.035 * g(th, 0, 0.8) * (1 - v)) });
 
   if (style === 'bun' || style === 'tied') {
     // swept-back knot
-    const y = style === 'bun' ? 0.17 : 0.085, z = style === 'bun' ? 0.108 : 0.118;
-    b.scope(() => { b.translate(0, y, z); ball(b, 0.038, 0.036, 0.034, 12, 6); });
+    const y = style === 'bun' ? 0.142 : 0.085, z = style === 'bun' ? 0.122 : 0.118;
+    b.scope(() => { b.translate(0, y, z); ball(b, style === 'bun' ? 0.046 : 0.038, style === 'bun' ? 0.044 : 0.036, 0.038, 12, 6); });
     b.scope(() => { b.at(0, y + 0.004, z - 0.028, 90, 0, 0); loft(b, [{ y: -0.01, rx: 0.026, rz: 0.026 }, { y: 0.012, rx: 0.03, rz: 0.03 }], { seg: 10, thick: 0.01 }); });
     // loose side strands frame the face
     for (const s of [-1, 1]) {
@@ -151,24 +158,24 @@ function buildHair(b: MeshBuilder, style: HairStyle, hair: Surf): void {
       { y: -0.035, rx: 0.084, rz: 0.03, rzb: 0.104, cz: 0.014 },
     ], { seg: 16, arc: [62, 298], thick: 0.014, smooth: 2, inner: true });
   } else if (style === 'crop') {
-    // short textured fringe
-    for (let i = -2; i <= 2; i++) {
-      const x = i * 0.024;
-      const pts: V3[] = [[x, 0.198, -0.062], [x * 1.08, 0.186, -0.09], [x * 1.1, 0.165, -0.1]];
-      tube(b, pts, [0.014, 0.012, 0.006], { seg: 5, flat: 0.55 });
-    }
+    // a second, shorter layer swept back over the crown: volume without a helmet silhouette
+    loft(b, [
+      { y: 0.168, rx: 0.073, rz: 0.1, rzb: 0.086, tilt: 20, cz: -0.004 },
+      { y: 0.2, rx: 0.07, rz: 0.092, rzb: 0.09, tilt: 10, cz: 0.0 },
+      { y: 0.229, rx: 0.05, rz: 0.062, rzb: 0.066, tilt: 2, cz: 0.004 },
+    ], { seg: 20, smooth: 3, capB: { dome: 0.016, k: 2 }, fn: (th, v) => 1 + 0.02 * Math.sin(th * 11 + v * 9) + 0.04 * g(th, 0, 0.5) * (1 - v) });
   }
 }
 
 function buildBeard(b: MeshBuilder, hair: Surf, jaw: number): void {
   b.surf({ ...hair, color: mixHex(hair.color, 0x000000, 0.12) });
   // jaw wrap: open shell across the front half, from the cheeks down under the chin
-  const S = (y: number, rx: number, rz: number, a: number): Sec => ({ y, rx: rx * (0.55 + 0.45 * jaw), rz, rzb: rz, a0: -a, a1: a, cz: 0.002 });
-  loft(b, [S(0.058, 0.075, 0.097, 112), S(0.03, 0.074, 0.101, 108), S(0.004, 0.068, 0.101, 100), S(-0.022, 0.057, 0.092, 92), S(-0.042, 0.042, 0.072, 84)],
-    { seg: 14, smooth: 2, thick: 0.012, bevel: 0.004, fn: (th, _v, y) => 1 - 0.07 * g(Math.abs(th), 0, 0.3) * g(y, 0.022, 0.012) });
+  const S = (y: number, rx: number, rz: number): Sec => ({ y, rx: rx * (0.55 + 0.45 * jaw) + 0.003, rz: rz + 0.003, rzb: rz, a0: -106, a1: 106, cz: 0.002 });
+  loft(b, [S(0.052, 0.076, 0.098), S(0.03, 0.075, 0.101), S(0.004, 0.069, 0.102), S(-0.022, 0.058, 0.094), S(-0.044, 0.043, 0.074)],
+    { seg: 18, smooth: 3, thick: 0.014, bevel: 0.005, fn: (th, _v, y) => 1 - 0.075 * g(Math.abs(th), 0, 0.3) * g(y, 0.021, 0.011) });
   // moustache
   for (const s of [-1, 1]) {
-    const pts: V3[] = [[s * 0.003, 0.036, -0.1], [s * 0.016, 0.034, -0.098], [s * 0.03, 0.024, -0.09]];
+    const pts: V3[] = [[s * 0.003, 0.035, -0.101], [s * 0.016, 0.033, -0.099], [s * 0.03, 0.022, -0.091]];
     tube(b, pts, [0.006, 0.0058, 0.003], { seg: 5 });
   }
 }

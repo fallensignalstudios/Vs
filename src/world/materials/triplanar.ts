@@ -136,27 +136,27 @@ AurTp aurTpAxis( vec2 uvm, vec2 gx, vec2 gy ) {
 
 const SURFACE = /* glsl */ `
 {
-	vec3 tpW = aurTriWeights( aurGeoN );
-	vec3 tpGx = dFdx( aurPos ), tpGy = dFdy( aurPos );
+	vec3 tpW = aurTriWeights( mxGeoN );
+	vec3 tpGx = dFdx( mxPos ), tpGy = dFdy( mxPos );
 	vec3 tAlb = vec3( 0.0 ), tN = vec3( 0.0 ), tAux = vec3( 0.0 );
 	vec4 tPbr = vec4( 0.0 );
 	if ( tpW.x > 0.0 ) {
-		AurTp s = aurTpAxis( aurPos.zy, tpGx.zy, tpGy.zy );
+		AurTp s = aurTpAxis( mxPos.zy, tpGx.zy, tpGy.zy );
 		tAlb += s.alb * tpW.x; tPbr += s.pbr * tpW.x; tAux += s.aux * tpW.x;
-		tN += vec3( abs( s.tn.z ) * aurGeoN.x, s.tn.y + aurGeoN.y, s.tn.x + aurGeoN.z ) * tpW.x;
+		tN += vec3( abs( s.tn.z ) * mxGeoN.x, s.tn.y + mxGeoN.y, s.tn.x + mxGeoN.z ) * tpW.x;
 	}
 	if ( tpW.y > 0.0 ) {
-		AurTp s = aurTpAxis( aurPos.xz, tpGx.xz, tpGy.xz );
+		AurTp s = aurTpAxis( mxPos.xz, tpGx.xz, tpGy.xz );
 		tAlb += s.alb * tpW.y; tPbr += s.pbr * tpW.y; tAux += s.aux * tpW.y;
-		tN += vec3( s.tn.x + aurGeoN.x, abs( s.tn.z ) * aurGeoN.y, s.tn.y + aurGeoN.z ) * tpW.y;
+		tN += vec3( s.tn.x + mxGeoN.x, abs( s.tn.z ) * mxGeoN.y, s.tn.y + mxGeoN.z ) * tpW.y;
 	}
 	if ( tpW.z > 0.0 ) {
-		AurTp s = aurTpAxis( aurPos.xy, tpGx.xy, tpGy.xy );
+		AurTp s = aurTpAxis( mxPos.xy, tpGx.xy, tpGy.xy );
 		tAlb += s.alb * tpW.z; tPbr += s.pbr * tpW.z; tAux += s.aux * tpW.z;
-		tN += vec3( s.tn.x + aurGeoN.x, s.tn.y + aurGeoN.y, abs( s.tn.z ) * aurGeoN.z ) * tpW.z;
+		tN += vec3( s.tn.x + mxGeoN.x, s.tn.y + mxGeoN.y, abs( s.tn.z ) * mxGeoN.z ) * tpW.z;
 	}
-	aurN = normalize( tN );
-	aurMask = tPbr.a;
+	mxN = normalize( tN );
+	mxMask = tPbr.a;
 	float tRough = roughnessFactor + tPbr.g;
 	float tMetal = metalnessFactor * tPbr.b;
 	float tAo = mix( 1.0, tPbr.r, tpA.w );
@@ -180,7 +180,7 @@ const SURFACE = /* glsl */ `
 	#endif
 	roughnessFactor = clamp( tRough, 0.03, 1.0 );
 	metalnessFactor = saturate( tMetal );
-	aurAO *= tAo;
+	mxAO *= tAo;
 }
 `;
 

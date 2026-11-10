@@ -68,17 +68,20 @@ export const FEEDBACK_SFX: RecipeTable = {
     k.fm(1760, 3.5, [3, 0.3], { a: 0.002, d: 0.6, g: 0.3 }, { at: 0.2 });
   }),
   playerHit: sfx(-8, { gap: 0.09, max: 2, prio: 3, send: 0.15 }, (k) => {
-    thump(k, 150, 58, 0.16, 1);
-    crack(k, 0.5, 0, 700, 0.02);
-    k.noise('brown', { a: 0.002, d: 0.12, g: 0.8 }, { lp: [1500, 300] });
+    thump(k, 150, 58, 0.16, 0.9);
+    crack(k, 0.8, 0, 700, 0.02);
+    k.noise('pink', { a: 0.002, d: 0.12, g: 0.8 }, { lp: [3200, 500] });
     // a thin ring left in the ear
     k.osc('sine', 3150, { a: 0.01, d: 0.45, g: 0.05 }, { fixed: true });
   }),
   playerLow: sfx(-15, { gap: 0.7, max: 1, prio: 2, send: 0.05, vary: 5 }, (k) => {
-    thump(k, 70, 44, 0.16, 1);
-    thump(k, 62, 40, 0.2, 0.75, 0.24);
-    k.noise('brown', { a: 0.005, d: 0.1, g: 0.3 }, { lp: 160 });
-    k.noise('brown', { a: 0.005, d: 0.1, g: 0.2 }, { at: 0.24, lp: 140 });
+    // lub-dub, with enough second harmonic to survive small speakers
+    thump(k, 96, 58, 0.16, 1);
+    thump(k, 84, 52, 0.2, 0.75, 0.24);
+    k.osc('triangle', [190, 116, 0.06], { a: 0.004, d: 0.1, g: 0.3 });
+    k.osc('triangle', [168, 104, 0.06], { a: 0.004, d: 0.12, g: 0.22 }, { at: 0.24 });
+    k.noise('brown', { a: 0.005, d: 0.1, g: 0.3 }, { lp: 260 });
+    k.noise('brown', { a: 0.005, d: 0.1, g: 0.2 }, { at: 0.24, lp: 220 });
   }),
   playerDeath: sfx(-8, { gap: 2, max: 1, prio: 3, send: 0.5, vary: 0 }, (k) => {
     k.osc('sine', [220, 55, 1.4], { a: 0.01, d: 1.8, g: 0.8 });

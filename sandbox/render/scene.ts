@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RENDER_LAYERS, type RenderSystem } from '@/core/api';
+import { RENDER_LAYERS, type MaterialLibrary, type RenderSystem } from '@/core/api';
 
 export interface Showcase {
   floor: THREE.Mesh;
@@ -91,23 +91,46 @@ const box = (w: number, h: number, d: number, x: number, y: number, z: number, r
   return g;
 };
 
-export function buildShowcase(scene: THREE.Scene, render: RenderSystem, opts: { reflect: boolean; strength: number }): Showcase {
+export interface ShowcaseOpts {
+  reflect: boolean;
+  strength: number;
+  /** leave out the ceiling and the far wall so a sky is visible (and mirrored in the floor) */
+  open: boolean;
+  /** use the real material library instead of the built-in stand-ins (integration check) */
+  mats: MaterialLibrary | null;
+}
+
+export function buildShowcase(scene: THREE.Scene, render: RenderSystem, opts: ShowcaseOpts): Showcase {
   const root = new THREE.Group();
   root.name = 'showcase';
   scene.add(root);
 
   // ---- materials --------------------------------------------------------------------------------------
-  const maps = stoneMaps(256);
-  const blackStone = new THREE.MeshStandardMaterial({
-    color: 0x0b0c10, roughness: 1, metalness: 0, roughnessMap: maps.rough, normalMap: maps.normal,
-    normalScale: new THREE.Vector2(0.18, 0.18),
-  });
-  const blackWall = new THREE.MeshStandardMaterial({ color: 0x0c0d11, roughness: 0.28, metalness: 0.05 });
-  const whiteGold = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.42, metalness: 0.35 });
-  const goldTrim = new THREE.MeshStandardMaterial({ color: 0xc9a45c, roughness: 0.22, metalness: 1 });
+  const lib = opts.mats;
   const emissive = (color: number, intensity: number) =>
     new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: intensity, roughness: 1, metalness: 0 });
-  const channel = emissive(0xffc56b, 3);
+  let blackStone: THREE.Material;
+  let blackWall: THREE.Material;
+  let whiteGold: THREE.Material;
+  let goldTrim: THREE.Material;
+  let channel: THREE.Material;
+  if (lib) {
+    blackStone = lib.get('blackStoneFloor');
+    blackWall = lib.get('blackStone');
+    whiteGold = lib.get('whiteGold');
+    goldTrim = lib.get('goldTrim');
+    channel = lib.get('goldChannel');
+  } else {
+    const maps = stoneMaps(256);
+    blackStone = new THREE.MeshStandardMaterial({
+      color: 0x0b0c10, roughness: 1, metalness: 0, roughnessMap: maps.rough, normalMap: maps.normal,
+      normalScale: new THREE.Vector2(0.18, 0.18),
+    });
+    blackWall = new THREE.MeshStandardMaterial({ color: 0x0c0d11, roughness: 0.28, metalness: 0.05 });
+    whiteGold = new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.42, metalness: 0.35 });
+    goldTrim = new THREE.MeshStandardMaterial({ color: 0xc9a45c, roughness: 0.22, metalness: 1 });
+    channel = emissive(0xffc56b, 3);
+  }
   const seam = emissive(0xffe2a8, 3);
 
   // ---- floors -----------------------------------------------------------------------------------------
@@ -182,10 +205,9 @@ export function buildShowcase(scene: THREE.Scene, render: RenderSystem, opts: { 
   root.add(new THREE.Mesh(mergeGeometries(seams), seam));
 
   // dark outer walls + far wall so the hall closes and the floor has something to mirror
-  const walls = new THREE.Mesh(
-    mergeGeometries([box(1, 26, 90, -22.5, 13, -14), box(1, 26, 90, 22.5, 13, -14), box(46, 26, 1, 0, 13, -52), box(46, 1, 90, 0, 26, -14)]),
-    blackWall,
-  );
+  const wallParts = [box(1, 26, 90, -22.5, 13, -14), box(1, 26, 90, 22.5, 13, -14)];
+  if (!opts.open) wallParts.push(box(46, 26, 1, 0, 13, -52), box(46, 1, 90, 0, 26, -14));
+  const walls = new THREE.Mesh(mergeGeometries(wallParts), blackWall);
   walls.receiveShadow = true;
   root.add(walls);
 
@@ -219,7 +241,7 @@ export function buildShowcase(scene: THREE.Scene, render: RenderSystem, opts: { 
   const sphere = new THREE.SphereGeometry(0.6, 64, 32);
   const balls: Array<[number, number, THREE.Material]> = [
     [-1.8, -1.5, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.04, metalness: 1 })],
-    [-0.4, -2.2, goldTrim],
+    [-0.4, -2.2, new THREE.MeshStandardMaterial({ color: 0xc9a45c, roughness: 0.22, metalness: 1 })],
     [1.0, -1.6, new THREE.MeshStandardMaterial({ color: 0xd9d2c0, roughness: 0.75, metalness: 0 })],
     [2.4, -2.4, new THREE.MeshStandardMaterial({ color: 0x0b0c10, roughness: 0.12, metalness: 0 })],
   ];

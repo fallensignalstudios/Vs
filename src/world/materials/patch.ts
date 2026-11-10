@@ -9,8 +9,9 @@
  * Chaining: the host installs accessors for `onBeforeCompile` and `customProgramCacheKey` on the material
  * instance. Anything another subsystem assigns to those properties afterwards (the renderer's reflective-floor
  * injection, a character shader) is captured and run AFTER the host's patches; a hook that was already present
- * when the host was installed is preserved the same way. A foreign hook that itself chains by calling the
- * "previous" hook cannot recurse (re-entry guard). The cache key combines every patch key with the foreign key.
+ * when the host was installed is preserved the same way. A foreign hook or key function that itself chains by
+ * calling the "previous" one cannot recurse (re-entry guards). The cache key combines every patch key with the
+ * foreign key. Fragment-stage locals use the `mx` prefix so they cannot collide with other subsystems' code.
  */
 import * as THREE from 'three';
 
@@ -34,12 +35,12 @@ export interface SurfacePatch {
   lightPars?: string;
   /**
    * Runs before lighting with the mapping-space surface in scope:
-   * `aurPos`, `aurGeoN`, `aurViewM`, `aurN` (perturbable), `aurAO`, `aurMask`, `diffuseColor`, `roughnessFactor`,
-   * `metalnessFactor`, `totalEmissiveRadiance` (lit); unlit materials get `aurPos`, `aurGeoN` (mapping space),
-   * `aurWorldN`, `aurV`, `aurNdotV` and write `diffuseColor` directly.
+   * `mxPos`, `mxGeoN`, `mxViewM`, `mxN` (perturbable), `mxAO`, `mxMask`, `diffuseColor`, `roughnessFactor`,
+   * `metalnessFactor`, `totalEmissiveRadiance` (lit); unlit materials get `mxPos`, `mxGeoN` (mapping space),
+   * `mxWorldN`, `mxV`, `mxNdotV` and write `diffuseColor` directly.
    */
   surface?: string;
-  /** Runs once the view-space `normal` is final: `aurV`, `aurNdotV` available (lit materials only). */
+  /** Runs once the view-space `normal` is final: `mxV`, `mxNdotV` available (lit materials only). */
   post?: string;
   /** Named scalar parameters → uniform component, for `setParam()` and `clone()` overrides. */
   params?: Record<string, ParamBinding>;
@@ -179,55 +180,55 @@ varying vec3 vAurPos;
 `;
 
 const LIT_SURFACE_BEGIN = /* glsl */ `
-vec3 aurPos = vAurPos;
+vec3 mxPos = vAurPos;
 #ifdef AUR_LOCAL
-	mat3 aurM = mat3( normalize( vAurM0 ), normalize( vAurM1 ), normalize( vAurM2 ) );
-	vec3 aurGeoN = normalize( normal * aurM );
-	vec3 aurViewM = normalize( vViewPosition * aurM );
+	mat3 mxM = mat3( normalize( vAurM0 ), normalize( vAurM1 ), normalize( vAurM2 ) );
+	vec3 mxGeoN = normalize( normal * mxM );
+	vec3 mxViewM = normalize( vViewPosition * mxM );
 #else
-	vec3 aurGeoN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
-	vec3 aurViewM = normalize( ( vec4( vViewPosition, 0.0 ) * viewMatrix ).xyz );
+	vec3 mxGeoN = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );
+	vec3 mxViewM = normalize( ( vec4( vViewPosition, 0.0 ) * viewMatrix ).xyz );
 #endif
-vec3 aurN = aurGeoN;
-float aurAO = 1.0;
-float aurMask = 0.0;
+vec3 mxN = mxGeoN;
+float mxAO = 1.0;
+float mxMask = 0.0;
 `;
 
 const LIT_SURFACE_END = /* glsl */ `
 #ifdef AUR_LOCAL
-	normal = normalize( aurM * aurN );
+	normal = normalize( mxM * mxN );
 #else
-	normal = normalize( ( viewMatrix * vec4( aurN, 0.0 ) ).xyz );
+	normal = normalize( ( viewMatrix * vec4( mxN, 0.0 ) ).xyz );
 #endif
-vec3 aurV = normalize( vViewPosition );
-float aurNdotV = saturate( dot( normal, aurV ) );
+vec3 mxV = normalize( vViewPosition );
+float mxNdotV = saturate( dot( normal, mxV ) );
 {
 	// specular anti-aliasing: widen the lobe by the normal variance inside the pixel footprint
-	vec3 aurDx = dFdx( normal ), aurDy = dFdy( normal );
-	float aurVar = min( 0.25 * ( dot( aurDx, aurDx ) + dot( aurDy, aurDy ) ), 0.18 );
-	roughnessFactor = sqrt( saturate( roughnessFactor * roughnessFactor + aurVar ) );
+	vec3 mxDx = dFdx( normal ), mxDy = dFdy( normal );
+	float mxVar = min( 0.25 * ( dot( mxDx, mxDx ) + dot( mxDy, mxDy ) ), 0.18 );
+	roughnessFactor = sqrt( saturate( roughnessFactor * roughnessFactor + mxVar ) );
 }
 `;
 
 const LIT_AO = /* glsl */ `
 {
-	reflectedLight.indirectDiffuse *= aurAO;
+	reflectedLight.indirectDiffuse *= mxAO;
 	#if defined( USE_ENVMAP ) && defined( STANDARD )
-		float aurDotNV = saturate( dot( geometryNormal, geometryViewDir ) );
-		reflectedLight.indirectSpecular *= computeSpecularOcclusion( aurDotNV, aurAO, material.roughness );
+		float mxDotNV = saturate( dot( geometryNormal, geometryViewDir ) );
+		reflectedLight.indirectSpecular *= computeSpecularOcclusion( mxDotNV, mxAO, material.roughness );
 	#endif
 }
 `;
 
 const UNLIT_SURFACE_BEGIN = /* glsl */ `
-vec3 aurPos = vAurPos;
-vec3 aurV = normalize( cameraPosition - vAurWPos );
+vec3 mxPos = vAurPos;
+vec3 mxV = normalize( cameraPosition - vAurWPos );
 // geometry without normals falls back to a camera-facing normal (no fresnel) instead of NaN
-bool aurHasN = dot( vAurWN, vAurWN ) > 1e-8;
-float aurFace = gl_FrontFacing ? 1.0 : - 1.0;
-vec3 aurWorldN = aurHasN ? normalize( vAurWN ) * aurFace : aurV;
-vec3 aurGeoN = aurHasN ? normalize( vAurMN ) * aurFace : vec3( 0.0, 0.0, 1.0 );
-float aurNdotV = saturate( dot( aurWorldN, aurV ) );
+bool mxHasN = dot( vAurWN, vAurWN ) > 1e-8;
+float mxFace = gl_FrontFacing ? 1.0 : - 1.0;
+vec3 mxWorldN = mxHasN ? normalize( vAurWN ) * mxFace : mxV;
+vec3 mxGeoN = mxHasN ? normalize( vAurMN ) * mxFace : vec3( 0.0, 0.0, 1.0 );
+float mxNdotV = saturate( dot( mxWorldN, mxV ) );
 `;
 
 function compose(host: HostImpl, shader: Shader): void {
@@ -266,6 +267,7 @@ class HostImpl implements PatchHost {
   foreignHook: Hook | null = null;
   foreignKey: (() => string) | null = null;
   private running = false;
+  private keying = false;
 
   constructor(readonly material: THREE.Material, readonly lit: boolean) {}
 
@@ -296,8 +298,16 @@ class HostImpl implements PatchHost {
 
   readonly cacheKey = (): string => {
     let k = `aur:${this.local ? 'L' : 'W'}${this.lit ? '' : 'U'}:` + this.patches.map((p) => p.key).join(',');
-    if (this.foreignKey) k += '|' + this.foreignKey.call(this.material);
-    else if (this.foreignHook) k += '|' + hashText(this.foreignHook.toString());
+    if (this.keying) return k; // a foreign key function chained back into us
+    this.keying = true;
+    try {
+      if (this.foreignKey) k += '|' + this.foreignKey.call(this.material);
+      else if (this.foreignHook) k += '|' + hashText(this.foreignHook.toString());
+    } catch (err) {
+      warnOnce(`foreign customProgramCacheKey failed on "${this.material.name}": ${String(err)}`);
+    } finally {
+      this.keying = false;
+    }
     return k;
   };
 }

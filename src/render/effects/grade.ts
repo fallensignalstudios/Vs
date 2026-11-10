@@ -2,7 +2,7 @@
  * Colour pipeline effects for the main EffectPass (all merged into one fullscreen shader by `postprocessing`):
  *
  *   ChromaEffect  — subtle radial chromatic aberration (re-samples the pass input, so it must run first)
- *   GradeEffect   — scene-referred grade: exposure, tint, split-toning, saturation, contrast, lift, vignette
+ *   GradeEffect   — scene-referred grade: exposure, saturation, contrast, tint, split-toning, lift, vignette
  *   ToneMapEffect — filmic tone map + sRGB encode (everything after it works on display-referred values)
  *   FinishEffect  — film grain + triangular dither (kills banding in fog gradients; blacks stay black)
  */
@@ -58,20 +58,22 @@ const vec3 GRADE_LUMA = vec3(0.2126, 0.7152, 0.0722);
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   // argument order matters: max(0, NaN) = 0, so NaN / Inf from a broken material never reach the tone map
   vec3 c = min(vec3(4096.0), max(vec3(0.0), inputColor.rgb)) * gradeExposure;
-  c *= gradeTint;
 
-  // split toning on a compressed luminance scale (0.5 = mid grey); tints are hue-only multipliers
+  // saturation first, so a desaturated look can still carry the tint below (the Witness gold-white)
   float l = dot(c, GRADE_LUMA);
-  float t = l / (l + 0.18);
-  float ws = 1.0 - smoothstep(0.0, 0.5, t);
-  float wh = smoothstep(0.5, 0.95, t);
-  c *= mix(vec3(1.0), gradeShadows, ws) * mix(vec3(1.0), gradeHighlights, wh);
-
-  l = dot(c, GRADE_LUMA);
   c = max(mix(vec3(l), c, gradeSaturation), vec3(0.0));
 
   // filmic contrast: power curve pivoting on mid grey
   c = 0.18 * pow(c * (1.0 / 0.18), vec3(gradeContrast));
+
+  // white balance, then split toning on a compressed luminance scale (0.5 = mid grey);
+  // the shadow / highlight tints are hue-only multipliers, so black stays black
+  c *= gradeTint;
+  l = dot(c, GRADE_LUMA);
+  float t = l / (l + 0.18);
+  float ws = 1.0 - smoothstep(0.0, 0.5, t);
+  float wh = smoothstep(0.5, 0.95, t);
+  c *= mix(vec3(1.0), gradeShadows, ws) * mix(vec3(1.0), gradeHighlights, wh);
 
   c = max(c + gradeLift, vec3(0.0));
 

@@ -60,6 +60,10 @@ export interface CreatureSpec {
   eclipse?: boolean;
   /** baseline corruption the creature is authored with (setCorruption adds on top, clamped) */
   baseCorruption?: number;
+  /** vein pattern frequency multiplier (default 1; big bodies < 1) */
+  veinScale?: number;
+  /** uniform scale from authored model units to metres (default 1); `height`/`radius` are already in metres */
+  modelScale?: number;
 }
 
 const GENERIC: ActionDef = { dur: 0.6 };
@@ -74,6 +78,7 @@ export abstract class CreatureBase implements CharacterVisual {
   protected readonly rig: Rig;
   protected readonly u: StateUniforms;
   protected readonly cadence: Cadence;
+  /** rig scale: model units → metres (CharacterCreateOpts.scale × the archetype's modelScale) */
   protected readonly scale: number;
   protected readonly seed: number;
   protected readonly variant: number;
@@ -106,6 +111,7 @@ export abstract class CreatureBase implements CharacterVisual {
   private readonly slots: Slot[] = [];
   private flashT = 0;
   private flashDur = 0.12;
+  private flashGain = 1;
   private extDissolve = 0;
   /** dissolve driven by the creature's own death animation (max'ed with the external value) */
   protected autoDissolve = 0;
@@ -116,11 +122,12 @@ export abstract class CreatureBase implements CharacterVisual {
   protected constructor(protected readonly game: Game | null, spec: CreatureSpec, opts: CharacterCreateOpts = {}) {
     this.spec = spec;
     this.archetype = spec.archetype;
-    this.scale = Number.isFinite(opts.scale) && (opts.scale as number) > 0 ? (opts.scale as number) : 1;
+    const userScale = Number.isFinite(opts.scale) && (opts.scale as number) > 0 ? (opts.scale as number) : 1;
+    this.scale = userScale * (spec.modelScale ?? 1);
     this.seed = (opts.seed ?? 1) >>> 0;
     this.variant = opts.variant ?? 0;
-    this.height = spec.height * this.scale;
-    this.radius = spec.radius * this.scale;
+    this.height = spec.height * userScale;
+    this.radius = spec.radius * userScale;
     let bump = true;
     try {
       if (game && !isStub(game.render) && game.render.quality?.level === 'low') bump = false;
@@ -134,6 +141,7 @@ export abstract class CreatureBase implements CharacterVisual {
     this.root.add(this.rig.group);
     if (spec.frostOrigin) this.u.uFrostOrigin.value.set(spec.frostOrigin[0], spec.frostOrigin[1], spec.frostOrigin[2]);
     this.u.uFrostRange.value = spec.frostRange ?? spec.template.radius;
+    this.u.uVeinScale.value = spec.veinScale ?? 1;
     this.cadence = cadenceFor(game);
     cadenceRetain();
     this.corruption = clamp01(opts.corruption ?? 0);
@@ -227,6 +235,11 @@ export abstract class CreatureBase implements CharacterVisual {
     this.u.uFlash.value.set(c.r, c.g, c.b, 1);
     this.flashDur = Math.max(0.02, seconds);
     this.flashT = this.flashDur;
+    this.flashGain = 1;
+    try {
+      // accessibility contract: whole-figure flashes are toned down, never removed (they confirm hits)
+      if (this.game && !isStub(this.game.settings) && this.game.settings.get('reduceFlash') === true) this.flashGain = 0.35;
+    } catch { /* settings unavailable */ }
   }
 
   setFrozen(amount: number): void {
@@ -321,7 +334,7 @@ export abstract class CreatureBase implements CharacterVisual {
     u.uTime.value = this.time;
     if (this.flashT > 0) {
       this.flashT = Math.max(0, this.flashT - dt);
-      u.uFlash.value.w = this.flashT / this.flashDur;
+      u.uFlash.value.w = (this.flashT / this.flashDur) * this.flashGain;
     }
     u.uFrozen.value = this.frozen;
     u.uCorruption.value = clamp01((this.spec.baseCorruption ?? 0) + this.corruption);

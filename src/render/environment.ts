@@ -37,9 +37,10 @@ void main() {
   float h = normalize(vDir).y;
   vec3 c = mix(uGround, uSky, smoothstep(-0.35, 0.5, h));
   // broad overhead lobe: a soft "ceiling" so polished metal always has a highlight to catch
-  c += uSky * 1.6 * pow(max(h, 0.0), 5.0);
-  // neutral floor so no surface ever reflects pure black
-  gl_FragColor = vec4(c * uGain + vec3(uFloor), 1.0);
+  float lobe = pow(max(h, 0.0), 4.0);
+  c += uSky * 1.6 * lobe;
+  // neutral floor (strongest overhead) so no metal ever reflects pure black, whatever the look
+  gl_FragColor = vec4(c * uGain + vec3(1.0, 0.96, 0.9) * uFloor * (0.3 + lobe), 1.0);
 }`;
 
 export class EnvironmentBaker {
@@ -61,7 +62,7 @@ export class EnvironmentBaker {
           uSky: { value: new THREE.Color() },
           uGround: { value: new THREE.Color() },
           uGain: { value: 0.25 },
-          uFloor: { value: 0.004 },
+          uFloor: { value: 0.012 },
         },
         side: THREE.BackSide,
         blending: THREE.AdditiveBlending,
@@ -93,7 +94,7 @@ export class EnvironmentBaker {
     (u.uGround.value as THREE.Color).copy(req.groundColor);
     // Fill radiance relative to the hemisphere light: bright enough to read on metal, dim enough that the
     // sky and the scene's own emissives dominate.
-    u.uGain.value = 0.22 * Math.max(0, req.ambientIntensity) + 0.03;
+    u.uGain.value = 0.25 * Math.max(0, req.ambientIntensity) + 0.05;
 
     const renderer = this.renderer;
     const prevTarget = renderer.getRenderTarget();

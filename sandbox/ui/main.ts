@@ -369,8 +369,15 @@ const SCENES: Record<string, () => void> = {
     ], { title: 'Meridian · 5 / 5' });
     step(5);
   },
-  'board-partial'() { SCENES.board?.(); build(); backdrop('crownmark'); ui.setHudVisible(false); ui.fade(0.55, 0, 'black');
-    ui.statusBoard([{ label: 'Boundary', value: 'Closed', tone: 'ok' }, { label: 'Stability', value: 'Recovering', tone: 'ok' }, { label: 'Authority', value: 'Available', tone: 'warn' }], { title: 'Meridian · 5 / 5' });
+  'board-partial'() {
+    backdrop('crownmark');
+    ui.setHudVisible(false);
+    ui.fade(0.55, 0, 'black');
+    ui.statusBoard([
+      { label: 'Boundary', value: 'Closed', tone: 'ok' },
+      { label: 'Stability', value: 'Recovering', tone: 'ok' },
+      { label: 'Authority', value: 'Available', tone: 'warn' },
+    ], { title: 'Meridian · 5 / 5' });
     step(1.4);
   },
   'card-context'() {

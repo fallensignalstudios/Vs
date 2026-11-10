@@ -18,12 +18,18 @@ import { warnOnce } from './shapes';
 import { DEF_HEIGHT, DEF_STEP_UP } from './world';
 import type { PhysicsCore } from './world';
 import { DIR_X, DIR_Z, GridSearch, LEVELS } from './navsearch';
+import { stringPull, toNavPath } from './navsmooth';
 
-const MAX_CELLS = 600_000;
+/** grid cells before the cell size is doubled (keeps the link table ≤ ~20 MB) */
+const MAX_CELLS = 160_000;
 /** level tolerance when mapping an arbitrary point onto a node of its cell */
 const LEVEL_TOL = 0.9;
 /** smoothed paths stay within this of the true ground height (keeps waypoints at ramp ends) */
 const GROUND_FOLLOW = 0.3;
+/** re-snap distance for endpoints stranded in a disconnected pocket, in agent radii (must stay < 2) */
+const POCKET_SNAP = 1.9;
+/** solid clearance is measured up to this distance (the widest agent radius supported) */
+const CLEARANCE_CAP = 3;
 const TAU = Math.PI * 2;
 
 export class NavGridImpl implements NavGrid {
@@ -46,6 +52,11 @@ export class NavGridImpl implements NavGrid {
   private readonly pathSlots: number[] = [];
   private readonly heights = new Float64Array(16);
   private queue = new Int32Array(0);
+  /** per-node distance to the nearest movement-blocking solid (lazy; valid when clrBuild === buildId) */
+  private clr = new Float32Array(0);
+  private clrBuild = -1;
+  /** clearance every node touched by the current query must have (0 = default agent) */
+  private need = 0;
 
   constructor(private readonly core: PhysicsCore) {
     core.onClear = () => this.reset();
@@ -177,8 +188,9 @@ export class NavGridImpl implements NavGrid {
     let used = 0;
     for (let i = 0; i < n; i++) {
       const h = hs[i];
-      // a level is only stable if nothing sits within step-up above it (the character would snap up)
-      if (i + 1 < n && hs[i + 1] <= h + DEF_STEP_UP + 1e-6) continue;
+      // a level is only stable if nothing sits within step-up above it (the character would snap up),
+      // and only usable with headroom to the next surface above
+      if (i + 1 < n && (hs[i + 1] <= h + DEF_STEP_UP + 1e-6 || hs[i + 1] < h + DEF_HEIGHT - 1e-6)) continue;
       if (!core.standClear(x, z, h, this.agentRadius, DEF_STEP_UP, DEF_HEIGHT)) continue;
       if (used === LEVELS) { warnOnce('nav-levels', `more than ${LEVELS} walkable levels in one nav cell; extra levels ignored`); break; }
       ny[base + used++] = h;
@@ -199,6 +211,25 @@ export class NavGridImpl implements NavGrid {
       if (d <= bestD) { bestD = d; best = base + l; }
     }
     return best;
+  }
+
+  /** findSlot restricted to nodes wide enough for the current query. */
+  private wideSlot(ix: number, iz: number, y: number, tol: number): number {
+    const s = this.findSlot(ix, iz, y, tol);
+    return s >= 0 && this.need > 0 && this.clr[s] < this.need ? -1 : s;
+  }
+
+  /** Fill the per-node solid clearance (exact distance from each node centre, capped at CLEARANCE_CAP). */
+  private ensureClearance(): void {
+    if (this.clrBuild === this.buildId) return;
+    const slots = this.cols * this.rows * LEVELS;
+    if (this.clr.length !== slots) this.clr = new Float32Array(slots);
+    const ny = this.ny, clr = this.clr, core = this.core;
+    for (let s = 0; s < slots; s++) {
+      const h = ny[s];
+      clr[s] = h === h ? core.solidDistance(this.slotX(s), this.slotZ(s), h, CLEARANCE_CAP, DEF_STEP_UP, DEF_HEIGHT) : 0;
+    }
+    this.clrBuild = this.buildId;
   }
 
   private linkCell(ix: number, iz: number): void {
@@ -274,10 +305,14 @@ export class NavGridImpl implements NavGrid {
     return this.findSlot(Math.floor((x - this.minX) * inv), Math.floor((z - this.minZ) * inv), y, tol);
   }
 
-  /** Nearest node to a point, preferring the point's own level. -1 when none within maxDist. */
-  private nodeNear(x: number, y: number, z: number, maxDist: number): number {
+  /**
+   * Nearest node to a point, preferring the point's own level. -1 when none within maxDist.
+   * `comp` ≥ 0 restricts the search to one connected component.
+   */
+  private nodeNear(x: number, y: number, z: number, maxDist: number, comp = -1): number {
     const here = this.slotAt(x, y, z, LEVEL_TOL);
-    if (here >= 0) return here;
+    const need = this.need, clr = this.clr, comps = this.comp;
+    if (here >= 0 && (need <= 0 || clr[here] >= need) && (comp < 0 || comps[here] === comp)) return here;
     const inv = 1 / this.cell;
     const cx = Math.floor((x - this.minX) * inv), cz = Math.floor((z - this.minZ) * inv);
     const R = Math.ceil(maxDist * inv);
@@ -304,7 +339,7 @@ export class NavGridImpl implements NavGrid {
               const h = ny[base + l];
               if (h !== h) break;
               const dy = Math.abs(h - y);
-              if (dy > dyLimit) continue;
+              if (dy > dyLimit || (need > 0 && clr[base + l] < need) || (comp >= 0 && comps[base + l] !== comp)) continue;
               const score = d2 + dy * dy * 2.25;
               if (score < bestD) { bestD = score; best = base + l; }
             }
@@ -339,19 +374,19 @@ export class NavGridImpl implements NavGrid {
       const dA = len * t, dB = len - dA;
       let h: number;
       if (dA < cell || dB < cell) {
-        const s = this.findSlot(Math.floor((x - this.minX) * inv), Math.floor((z - this.minZ) * inv), cur, i === 0 ? LEVEL_TOL : tol);
+        const s = this.wideSlot(Math.floor((x - this.minX) * inv), Math.floor((z - this.minZ) * inv), cur, i === 0 ? LEVEL_TOL : tol);
         if (s < 0) return NaN;
         h = ny[s];
       } else {
         const u = (x - this.minX) * inv - 0.5, v = (z - this.minZ) * inv - 0.5;
         const ix = Math.floor(u), iz = Math.floor(v);
-        const s00 = this.findSlot(ix, iz, cur, tol);
+        const s00 = this.wideSlot(ix, iz, cur, tol);
         if (s00 < 0) return NaN;
-        const s10 = this.findSlot(ix + 1, iz, cur, tol);
+        const s10 = this.wideSlot(ix + 1, iz, cur, tol);
         if (s10 < 0) return NaN;
-        const s01 = this.findSlot(ix, iz + 1, cur, tol);
+        const s01 = this.wideSlot(ix, iz + 1, cur, tol);
         if (s01 < 0) return NaN;
-        const s11 = this.findSlot(ix + 1, iz + 1, cur, tol);
+        const s11 = this.wideSlot(ix + 1, iz + 1, cur, tol);
         if (s11 < 0) return NaN;
         const fu = u - ix, fv = v - iz;
         h = (ny[s00] * (1 - fu) + ny[s10] * fu) * (1 - fv) + (ny[s01] * (1 - fu) + ny[s11] * fu) * fv;
@@ -363,24 +398,52 @@ export class NavGridImpl implements NavGrid {
   }
 
   walkable(a: Vec3Like, b: Vec3Like): boolean {
-    if (!a || !b || !Number.isFinite(a.x + a.y + a.z + b.x + b.y + b.z) || !this.ensure()) return false;
+    return this.straight(a, b, 0);
+  }
+
+  walkableFor(a: Vec3Like, b: Vec3Like, radius: number): boolean {
+    return this.straight(a, b, radius);
+  }
+
+  /** Arm the clearance requirement for an agent radius (0 for the default agent). False when unbuildable. */
+  private begin(radius: number): boolean {
+    this.need = 0;
+    if (!this.ensure()) return false;
+    if (radius > this.agentRadius) {
+      this.ensureClearance();
+      this.need = Math.min(radius, CLEARANCE_CAP);
+    }
+    return true;
+  }
+
+  private straight(a: Vec3Like, b: Vec3Like, radius: number): boolean {
+    if (!a || !b || !Number.isFinite(a.x + a.y + a.z + b.x + b.y + b.z) || !this.begin(radius)) return false;
     let ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
+    let ok = false;
     let s = this.slotAt(ax, ay, az, LEVEL_TOL);
-    if (s < 0) {
+    if (s < 0 || (this.need > 0 && this.clr[s] < this.need)) {
       s = this.nodeNear(ax, ay, az, 1);
-      if (s < 0) return false;
-      ax = this.slotX(s); az = this.slotZ(s);
+      if (s >= 0) { ax = this.slotX(s); az = this.slotZ(s); }
     }
-    ay = this.ny[s];
     let e = this.slotAt(bx, by, bz, LEVEL_TOL);
-    if (e < 0) {
+    if (e < 0 || (this.need > 0 && this.clr[e] < this.need)) {
       e = this.nodeNear(bx, by, bz, 1);
-      if (e < 0) return false;
-      bx = this.slotX(e); bz = this.slotZ(e);
+      if (e >= 0) { bx = this.slotX(e); bz = this.slotZ(e); }
     }
-    by = this.ny[e];
-    const end = this.lineWalk(ax, ay, az, bx, by, bz, false);
-    return end === end && Math.abs(end - by) <= DEF_STEP_UP;
+    if (s >= 0 && e >= 0) {
+      ay = this.ny[s]; by = this.ny[e];
+      const end = this.lineWalk(ax, ay, az, bx, by, bz, false);
+      ok = end === end && Math.abs(end - by) <= DEF_STEP_UP;
+    }
+    this.need = 0;
+    return ok;
+  }
+
+  clearance(x: number, y: number, z: number): number {
+    if (!Number.isFinite(x + y + z) || !this.ensure()) return 0;
+    const s = this.slotAt(x, y, z, LEVEL_TOL);
+    if (s < 0) return 0;
+    return this.core.solidDistance(x, z, this.ny[s], CLEARANCE_CAP, DEF_STEP_UP, DEF_HEIGHT);
   }
 
   isWalkable(x: number, y: number, z: number): boolean {
@@ -424,12 +487,40 @@ export class NavGridImpl implements NavGrid {
   // path finding
   // -------------------------------------------------------------------------------------------------------
   findPath(from: Vec3Like, to: Vec3Like): NavPath | null {
-    if (!from || !to || !Number.isFinite(from.x + from.y + from.z + to.x + to.y + to.z) || !this.ensure()) return null;
-    const s = this.nodeNear(from.x, from.y, from.z, 3);
-    const t = this.nodeNear(to.x, to.y, to.z, 3);
-    if (s < 0 || t < 0 || this.comp[s] !== this.comp[t]) return null;
+    return this.route(from, to, 0);
+  }
+
+  findPathFor(from: Vec3Like, to: Vec3Like, radius: number): NavPath | null {
+    return this.route(from, to, radius);
+  }
+
+  private route(from: Vec3Like, to: Vec3Like, radius: number): NavPath | null {
+    if (!from || !to || !Number.isFinite(from.x + from.y + from.z + to.x + to.y + to.z) || !this.begin(radius)) return null;
+    const path = this.solve(from, to);
+    this.need = 0;
+    return path;
+  }
+
+  private solve(from: Vec3Like, to: Vec3Like): NavPath | null {
+    const wide = this.need > 0;
+    let s = this.nodeNear(from.x, from.y, from.z, wide ? 3 + this.need : 3);
+    let t = this.nodeNear(to.x, to.y, to.z, wide ? 3 + this.need : 3);
+    if (s < 0 || t < 0) return null;
+    if (this.comp[s] !== this.comp[t]) {
+      // An endpoint that snapped into a stray pocket (a marker nudged inside dressing, an actor shoved into a
+      // nook) may still have connected nav within arm's reach. The reach is below the node spacing across any
+      // solid (2 · agentRadius + thickness), so this never bridges a wall or a closed door.
+      const reach = Math.min(0.85, this.agentRadius * POCKET_SNAP);
+      const t2 = this.nodeNear(to.x, to.y, to.z, reach, this.comp[s]);
+      if (t2 >= 0) t = t2;
+      else {
+        const s2 = this.nodeNear(from.x, from.y, from.z, reach, this.comp[t]);
+        if (s2 < 0) return null;
+        s = s2;
+      }
+    }
     const slots = this.pathSlots;
-    if (!this.search.run(s, t, this.nbr, this.cols, this.cell, slots)) return null;
+    if (!this.search.run(s, t, this.nbr, this.cols, this.cell, slots, wide ? this.clr : null, this.need)) return null;
 
     const ny = this.ny;
     const px: number[] = [], py: number[] = [], pz: number[] = [];
@@ -441,25 +532,8 @@ export class NavGridImpl implements NavGrid {
     if (this.slotAt(to.x, to.y, to.z, LEVEL_TOL) === t) {
       px.push(to.x); py.push(this.groundNear(to.x, to.z, ny[t])); pz.push(to.z);
     }
-    this.smooth(px, py, pz);
-
-    const points: Vec3Like[] = [];
-    let length = 0;
-    const last = px.length - 1;
-    for (let i = 0; i <= last; i++) {
-      const prev = points.length > 0 ? points[points.length - 1] : null;
-      if (prev) {
-        const d = Math.hypot(px[i] - prev.x, py[i] - prev.y, pz[i] - prev.z);
-        // drop zero-length hops, but always keep a distinct start and goal entry
-        if (d < 1e-6 && (i < last || points.length > 1)) {
-          if (i === last) { prev.x = px[i]; prev.y = py[i]; prev.z = pz[i]; }
-          continue;
-        }
-        length += d;
-      }
-      points.push({ x: px[i], y: py[i], z: pz[i] });
-    }
-    return { points, length };
+    stringPull(px, py, pz, (i, j) => this.visible(px, py, pz, i, j));
+    return toNavPath(px, py, pz);
   }
 
   private visible(px: number[], py: number[], pz: number[], i: number, j: number): boolean {
@@ -468,44 +542,16 @@ export class NavGridImpl implements NavGrid {
     // One-node-wide corridors can never pass the four-centre test; a run of path nodes that is already a
     // straight grid line (constant step, constant slope) is still safe to collapse.
     if (j - i < 2) return false;
-    const sx = px[i + 1] - px[i], sz = pz[i + 1] - pz[i];
+    let sx = NaN, sz = 0;
     const span = j - i;
     for (let k = i + 1; k <= j; k++) {
-      if (Math.abs(px[k] - px[k - 1] - sx) > 1e-6 || Math.abs(pz[k] - pz[k - 1] - sz) > 1e-6) return false;
+      const dx = px[k] - px[k - 1], dz = pz[k] - pz[k - 1];
+      if (Math.abs(dx) < 1e-9 && Math.abs(dz) < 1e-9) continue; // duplicate point (start on a node centre)
+      if (sx !== sx) { sx = dx; sz = dz; }
+      else if (Math.abs(dx - sx) > 1e-6 || Math.abs(dz - sz) > 1e-6) return false;
       if (Math.abs(py[k] - (py[i] + ((py[j] - py[i]) * (k - i)) / span)) > GROUND_FOLLOW) return false;
     }
-    return true;
-  }
-
-  /** String-pull in place: gallop + bisect for the furthest visible waypoint, then prune leftovers. */
-  private smooth(px: number[], py: number[], pz: number[]): void {
-    const n = px.length;
-    if (n <= 2) return;
-    const keep: number[] = [0];
-    let i = 0;
-    while (i < n - 1) {
-      let good = i + 1, step = 1, bad = -1;
-      while (bad < 0) {
-        const probe = Math.min(n - 1, good + step);
-        if (probe === good) break;
-        if (this.visible(px, py, pz, i, probe)) { good = probe; step *= 2; } else bad = probe;
-      }
-      while (bad - good > 1) {
-        const mid = (good + bad) >> 1;
-        if (this.visible(px, py, pz, i, mid)) good = mid; else bad = mid;
-      }
-      keep.push(good);
-      i = good;
-    }
-    for (let pass = 0; pass < 3 && keep.length > 2; pass++) {
-      let removed = false;
-      for (let k = 1; k < keep.length - 1; k++) {
-        if (this.visible(px, py, pz, keep[k - 1], keep[k + 1])) { keep.splice(k, 1); removed = true; k--; }
-      }
-      if (!removed) break;
-    }
-    for (let k = 0; k < keep.length; k++) { px[k] = px[keep[k]]; py[k] = py[keep[k]]; pz[k] = pz[keep[k]]; }
-    px.length = keep.length; py.length = keep.length; pz.length = keep.length;
+    return sx === sx;
   }
 
   /** Append every node position as x,y,z triples (debug drawing). */

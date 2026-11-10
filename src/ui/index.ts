@@ -6,9 +6,14 @@
  * touched when a value changes.
  */
 import './styles/base.css';
-import './styles/hud.css';
+import './styles/hud-player.css';
+import './styles/hud-centre.css';
+import './styles/hud-world.css';
+import './styles/hud-info.css';
 import './styles/narrative.css';
 import './styles/menus.css';
+import './styles/settings.css';
+import './styles/screens.css';
 
 import type {
   Actor, CaptionKind, ChoiceHandle, ChoiceOpts, DialogueLine, Game, MissionSummary, TitleOpts, UiSystem, Vec3Like,
@@ -17,7 +22,7 @@ import type {
 import { reportError } from '@/core/events';
 import { h } from './dom';
 import { Hud } from './hud';
-import type { HitKind } from './logic';
+import { subtitleSeconds, type HitKind } from './logic';
 import { MenuInput, ModalStack } from './menu';
 import { StatusBoard, type BoardRow } from './narrative/board';
 import { ChoicePanel } from './narrative/choice';
@@ -66,14 +71,15 @@ class UiSystemImpl implements UiSystem {
   private readonly pause: PauseScreen;
   private readonly settings: SettingsScreen;
 
-  private hudVisible = true;
+  private hudWanted = true;
   /** the title flow hid the HUD; give it back when the title closes */
   private hudBorrowedByTitle = false;
   private objectiveText: string | null = null;
   private readonly failed = new Set<string>();
 
-  constructor(private readonly game: Game) {
+  constructor(game: Game) {
     this.root = h('div', 'aur');
+    this.root.setAttribute('aria-label', 'Game interface');
     this.root.dataset.prot = 'tarrik';
     this.menu = new MenuInput(game);
     this.stack = new ModalStack(game, this.menu);
@@ -105,7 +111,7 @@ class UiSystemImpl implements UiSystem {
 
     game.events.on('objective:changed', (e) => this.objective(e?.text ?? null));
     // a new zone never inherits world-bound UI from the previous one
-    game.events.on('zone:loading', () => this.clearZoneState());
+    game.events.on('zone:loading', () => this.clearWorldHud());
   }
 
   async init(): Promise<void> {
@@ -120,7 +126,7 @@ class UiSystemImpl implements UiSystem {
     await Promise.race([Promise.allSettled(tasks), new Promise<void>((resolve) => setTimeout(resolve, 2500))]);
   }
 
-  private clearZoneState(): void {
+  clearWorldHud(): void {
     this.hud.clearMarkers();
     this.hud.prompt(null);
     this.hud.hint(null);
@@ -133,12 +139,20 @@ class UiSystemImpl implements UiSystem {
   // ------------------------------------------------------------------------------------------ screens
   showTitle(opts: TitleOpts): void {
     if (!opts) return;
-    if (!this.hudVisible) this.hudBorrowedByTitle = true;
+    if (!this.hudWanted) this.hudBorrowedByTitle = true;
     this.pause.hide();
     this.death.hide();
     this.complete.hide();
     this.settings.hide();
-    if (this.choiceW.open) this.choiceW.dismiss();
+    // a session that ended mid-scene must not leak its staging into the next one
+    this.clearWorldHud();
+    this.objective(null);
+    this.talk.show(null);
+    this.cardW.set(null);
+    this.board.set(null);
+    this.skip.set(false);
+    this.letterbox(false, 0);
+    this.fadeW.fade(0, 0);
     this.title.show(opts);
   }
 
@@ -147,7 +161,7 @@ class UiSystemImpl implements UiSystem {
     this.title.hide();
     if (this.hudBorrowedByTitle) {
       this.hudBorrowedByTitle = false;
-      this.hudVisible = true;
+      this.hudWanted = true;
     }
   }
 
@@ -179,8 +193,12 @@ class UiSystemImpl implements UiSystem {
 
   // ------------------------------------------------------------------------------------------ HUD
   setHudVisible(visible: boolean): void {
-    this.hudVisible = visible === true;
+    this.hudWanted = visible === true;
     this.hudBorrowedByTitle = false;
+  }
+
+  get hudVisible(): boolean {
+    return this.hudWanted;
   }
 
   objective(text: string | null): void {
@@ -231,6 +249,10 @@ class UiSystemImpl implements UiSystem {
   // ------------------------------------------------------------------------------------------ narrative
   subtitle(line: DialogueLine | null): void {
     this.talk.show(line);
+  }
+
+  estimateSubtitleSeconds(text: string): number {
+    return subtitleSeconds(String(text ?? ''));
   }
 
   caption(text: string, kind: CaptionKind, bearing?: number): void {
@@ -300,8 +322,9 @@ class UiSystemImpl implements UiSystem {
       this.choiceW.update(d);
     });
     this.run('hud', () => {
-      const covered = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown || this.choiceW.open;
-      this.hud.update(d, this.hudVisible && !covered);
+      const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
+      this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open, !screen);
+      this.talk.setCovered(this.death.shown || this.pause.shown);
     });
     this.run('narrative', () => {
       this.letterboxW.update(d);

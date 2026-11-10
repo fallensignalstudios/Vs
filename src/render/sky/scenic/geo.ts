@@ -211,26 +211,6 @@ export class GeoBuilder {
     return this.loft(forward ? rings.map((r) => [...r].reverse()) : rings, caps);
   }
 
-  /** Append another builder's contents (already transformed) under the current matrix. */
-  append(other: GeoBuilder): this {
-    const base = this.pos.length / 3;
-    const n = other.pos.length / 3;
-    const nm = new THREE.Matrix3().getNormalMatrix(this.m);
-    for (let i = 0; i < n; i++) {
-      _v.set(other.pos[i * 3], other.pos[i * 3 + 1], other.pos[i * 3 + 2]).applyMatrix4(this.m);
-      this.pos.push(_v.x, _v.y, _v.z);
-      _v.set(other.nrm[i * 3], other.nrm[i * 3 + 1], other.nrm[i * 3 + 2]).applyMatrix3(nm).normalize();
-      this.nrm.push(_v.x, _v.y, _v.z);
-      this.col.push(other.col[i * 3], other.col[i * 3 + 1], other.col[i * 3 + 2]);
-      this.glow.push(other.glow[i]);
-    }
-    for (let i = 0; i < other.idx.length; i += 3) {
-      if (this.flip) this.idx.push(base + other.idx[i], base + other.idx[i + 2], base + other.idx[i + 1]);
-      else this.idx.push(base + other.idx[i], base + other.idx[i + 1], base + other.idx[i + 2]);
-    }
-    return this;
-  }
-
   /** Raw arrays (for baking impostors). */
   raw(): { pos: readonly number[]; nrm: readonly number[]; col: readonly number[]; glow: readonly number[]; idx: readonly number[] } {
     return { pos: this.pos, nrm: this.nrm, col: this.col, glow: this.glow, idx: this.idx };

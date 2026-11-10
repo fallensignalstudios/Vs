@@ -54,11 +54,15 @@ export interface DeckShared {
   irregular: number;
   /** King identity resolved (meridianComplete) */
   resolved: boolean;
+  /** context time of the last gameplay-supplied cadence beat */
+  externalCadenceAt: number;
 }
 
 export class Deck {
-  /** when this deck stops scheduling (set by fadeOut) */
+  /** when this deck stops scheduling new notes (set by fadeOut: the bar line it is leaving on) */
   endAt = Infinity;
+  /** when its tails have faded and it can leave the graph */
+  disposeAt = Infinity;
   private readonly dry: GainNode;
   private readonly wet: GainNode;
   private readonly fDry: Fader;
@@ -96,7 +100,7 @@ export class Deck {
     this.stepsPerBar = def.beats * 4;
     this.env = {
       ac, res, rnd: mulberry32(seed), tonic: def.tonic, stepDur, barDur: stepDur * this.stepsPerBar,
-      intensity: this.intensityNow(), irregular: shared.irregular,
+      intensity: this.intensityNow(), irregular: shared.irregular, externalCadenceAt: shared.externalCadenceAt,
     };
     this.layers = def.layers.map((l) => makeLayer(l, this.env, this.dry, this.wet, startAt));
     this.lastGain = this.layers.map(() => -1);
@@ -137,10 +141,15 @@ export class Deck {
     this.fWet.fade(now, at, seconds, this.gain);
   }
 
+  /**
+   * Leave on the boundary `at`: rhythm stops there (two tempi never overlap), while whatever is already
+   * sounding — pads, bells, drum tails — fades over `seconds` underneath the incoming state.
+   */
   fadeOut(now: number, at: number, seconds: number): void {
     this.fDry.fade(now, at, seconds, 0);
     this.fWet.fade(now, at, seconds, 0);
-    this.endAt = Math.max(now, at) + seconds;
+    this.endAt = Math.max(now, at);
+    this.disposeAt = this.endAt + seconds + 0.3;
   }
 
   /** Follow intensity / resolution with the per-layer levels. */
@@ -148,6 +157,7 @@ export class Deck {
     const I = this.intensityNow();
     this.env.intensity = I;
     this.env.irregular = this.shared.irregular;
+    this.env.externalCadenceAt = this.shared.externalCadenceAt;
     const resolved = this.shared.resolved;
     for (let i = 0; i < this.layers.length; i++) {
       const l = this.layers[i];
@@ -210,6 +220,18 @@ export class Deck {
     if (d.when !== undefined && (d.when === 'resolved') !== this.shared.resolved) return true;
     if (!d.mask) return false;
     return d.mask[bar % d.mask.length] !== 'x';
+  }
+
+  /** Sound the cadence layer now (a beat supplied by gameplay). Returns false if this deck has none. */
+  pulseCadence(t: number, irregular: boolean): boolean {
+    let any = false;
+    for (const l of this.layers) {
+      if (!l.pulse) continue;
+      this.env.externalCadenceAt = t;
+      l.pulse(t, irregular);
+      any = true;
+    }
+    return any;
   }
 
   /** Stop everything and leave the graph. */

@@ -29,36 +29,51 @@ uniform vec3 corDark;
 
 const SURFACE = /* glsl */ `
 if ( corA.x > 0.001 ) {
-	vec3 cW = aurTriWeights( aurGeoN );
-	vec3 cQ = aurPos * corA.y;
+	vec3 cW = aurTriWeights( mxGeoN );
+	vec3 cQ = mxPos * corA.y;
 	vec3 cGx = dFdx( cQ ), cGy = dFdy( cQ );
-	vec4 c = vec4( 0.0 );
-	if ( cW.x > 0.0 ) c += textureGrad( aurVeinTex, cQ.zy, cGx.zy, cGy.zy ) * cW.x;
-	if ( cW.y > 0.0 ) c += textureGrad( aurVeinTex, cQ.xz, cGx.xz, cGy.xz ) * cW.y;
-	if ( cW.z > 0.0 ) c += textureGrad( aurVeinTex, cQ.xy, cGx.xy, cGy.xy ) * cW.z;
-	float cTh = corA.x * 1.3 - 0.14;
-	float cGrown = smoothstep( c.g - 0.1, c.g + 0.05, cTh );
-	float cFront = cGrown * ( 1.0 - smoothstep( c.g + 0.02, c.g + 0.26, cTh ) );
-	// tendrils run ahead of the tissue along the vein network
-	float cLead = smoothstep( 0.5, 0.95, c.r ) * smoothstep( c.g - 0.3, c.g - 0.06, cTh );
-	float cVein = max( smoothstep( 0.22, 0.8, c.r ) * cGrown, cLead );
-	float cTissue = cGrown * ( 0.5 + 0.5 * c.b );
-	float cCover = saturate( cTissue * 0.94 + cVein * 0.7 );
-	diffuseColor.rgb = mix( diffuseColor.rgb, corDark * ( 0.5 + 0.9 * c.b ), cCover );
-	roughnessFactor = mix( roughnessFactor, 0.2 + 0.32 * c.b, cTissue );
-	metalnessFactor *= 1.0 - cTissue * 0.85;
-	aurAO *= 1.0 - cTissue * 0.3;
-	totalEmissiveRadiance *= 1.0 - cCover * 0.85;
-	float cBeat = 0.5 + 0.5 * sin( aurTime * corA.w - c.a * 25.0 );
+	// c = the vein network at its own scale; cb = the same texture at a larger, incommensurate scale, used only
+	// to modulate WHERE growth happens so the patch shape never repeats with the tile
+	vec4 c = vec4( 0.0 ), cb = vec4( 0.0 );
+	const float CB = 0.193;
+	if ( cW.x > 0.0 ) {
+		c += textureGrad( aurVeinTex, cQ.zy, cGx.zy, cGy.zy ) * cW.x;
+		cb += textureGrad( aurVeinTex, cQ.zy * CB + 0.37, cGx.zy * CB, cGy.zy * CB ) * cW.x;
+	}
+	if ( cW.y > 0.0 ) {
+		c += textureGrad( aurVeinTex, cQ.xz, cGx.xz, cGy.xz ) * cW.y;
+		cb += textureGrad( aurVeinTex, cQ.xz * CB + 0.37, cGx.xz * CB, cGy.xz * CB ) * cW.y;
+	}
+	if ( cW.z > 0.0 ) {
+		c += textureGrad( aurVeinTex, cQ.xy, cGx.xy, cGy.xy ) * cW.z;
+		cb += textureGrad( aurVeinTex, cQ.xy * CB + 0.37, cGx.xy * CB, cGy.xy * CB ) * cW.z;
+	}
+	float cOrder = c.g * 0.5 + cb.g * 0.6 - 0.05;
+	float cTh = corA.x * 1.35 - 0.12;
+	vec3 cSx = dFdx( mxPos ), cSy = dFdy( mxPos );
+	// metric distance behind the growth front (order units ÷ order gradient per metre): keeps the rim a thin
+	// line of constant width instead of a blob wherever the order field happens to be flat
+	float cSlope = length( vec2( dFdx( cOrder ), dFdy( cOrder ) ) ) / max( 0.5 * ( length( cSx ) + length( cSy ) ), 1e-6 );
+	float cDist = ( cTh - cOrder ) / max( cSlope, 0.35 );
+	float cGrown = smoothstep( - 0.012, 0.012, cDist );                                     // wet tissue coverage
+	float cRim = smoothstep( - 0.012, 0.004, cDist ) * ( 1.0 - smoothstep( 0.006, 0.04, cDist ) ); // thin creeping edge
+	float cLead = smoothstep( 0.45, 0.9, c.r ) * smoothstep( - 0.5, - 0.08, cDist );      // tendrils run ahead
+	float cVein = max( smoothstep( 0.35, 0.9, c.r ) * cGrown, cLead );
+	diffuseColor.rgb = mix( diffuseColor.rgb, corDark * ( 0.4 + 1.2 * c.b ), saturate( cGrown * 0.97 + cLead * 0.85 ) );
+	roughnessFactor = mix( roughnessFactor, 0.26 + 0.32 * c.b, cGrown );
+	metalnessFactor *= 1.0 - cGrown * 0.9;
+	mxAO *= 1.0 - cGrown * 0.4 * ( 1.0 - c.b );
+	totalEmissiveRadiance *= 1.0 - cGrown * 0.9;
+	float cBeat = 0.5 + 0.5 * sin( aurTime * corA.w - c.a * 25.0 - cb.a * 9.0 );
 	cBeat *= cBeat;
-	totalEmissiveRadiance += corGlow * ( corA.z * ( cVein * ( 0.3 + 0.95 * cBeat ) + cFront * 0.45 ) );
-	// raise the veins and tissue: bump from the screen-space gradient of the overlay height
-	float cH = ( cVein * 0.012 + cTissue * c.b * 0.006 );
-	vec3 cSx = dFdx( aurPos ), cSy = dFdy( aurPos );
-	vec3 cR1 = cross( cSy, aurN ), cR2 = cross( aurN, cSx );
+	totalEmissiveRadiance += corGlow * ( corA.z * ( cVein * ( 0.22 + 0.9 * cBeat ) + cRim * 0.4 ) );
+	// relief: the tissue swells off the surface and the veins stand proud of it (bump from the screen-space
+	// gradient of the overlay height, scaled by the true pixel footprint)
+	float cH = cGrown * ( 0.006 + c.b * 0.012 ) + cVein * 0.007;
+	vec3 cR1 = cross( cSy, mxN ), cR2 = cross( mxN, cSx );
 	float cDet = dot( cSx, cR1 );
 	vec3 cGrad = sign( cDet ) * ( dFdx( cH ) * cR1 + dFdy( cH ) * cR2 );
-	aurN = normalize( abs( cDet ) * aurN - cGrad );
+	mxN = normalize( abs( cDet ) * mxN - cGrad );
 }
 `;
 

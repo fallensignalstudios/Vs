@@ -3,16 +3,19 @@
  * the Wound (true-black disc with lensing, orbiting debris and restrained violet movement).
  *
  * The vertex stage ignores camera translation, so the dome sits at infinity for ANY camera (main view, planar
- * reflection camera, PMREM cube faces) without having to follow anything on the CPU.
+ * reflection camera, PMREM cube faces) without having to follow anything on the CPU. It is pinned to the far
+ * plane and drawn after the opaque scene with a depth test and no depth write, so interiors that hide the sky
+ * pay nothing for this (fairly rich) fragment shader.
  */
 import { GLSL_DITHER, GLSL_HAZE, GLSL_NOISE } from './glsl';
 
 export const DOME_VERTEX = /* glsl */ `
+uniform float uFarZ;
 varying vec3 vDir;
 void main() {
   vDir = position;
   vec4 p = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
-  gl_Position = vec4(p.xy, 0.0, p.w);
+  gl_Position = vec4(p.xy, p.w * uFarZ, p.w); // pinned to the far plane: only pixels nothing else covered are shaded
 }
 `;
 
@@ -110,7 +113,7 @@ vec4 redRemnant(vec3 d, float px) {
   float cr = dot(d, uRedDir);
   float ang = acos(clamp(cr, -1.0, 1.0));
   float r = ang / uRedR;
-  if (r > 8.5) return vec4(0.0);
+  if (r > 7.0) return vec4(0.0);
   // which way is the Wound from here: the mass and the bright limb lean toward it (being drawn in)
   vec3 er = d - uRedDir * cr;
   vec3 en = er / max(length(er), 1e-5);
@@ -122,7 +125,7 @@ vec4 redRemnant(vec3 d, float px) {
   vec3 w = vec3(vnoise(q * 0.55 + 11.0), vnoise(q * 0.55 + 37.0), vnoise(q * 0.55 + 71.0)) - 0.5;
   float n1 = fbm5(q + w * 2.4);
   float billow = 1.0 - abs(2.0 * fbm3(q * 1.9 - w * 1.7 + 5.0) - 1.0);
-  float fall = exp(-max(r - 0.9, 0.0) * (0.34 - 0.10 * max(side, 0.0))) * (1.0 - smoothstep(4.0, 8.5, r));
+  float fall = exp(-max(r - 0.9, 0.0) * (0.34 - 0.10 * max(side, 0.0))) * (1.0 - smoothstep(3.6, 7.0, r));
   float dens = smoothstep(0.47 - 0.22 * fall, 0.80 - 0.18 * fall, n1 * 0.75 + billow * 0.25) * fall;
   float heat = dens * (0.3 + 0.7 * billow) * fall;
   vec3 col = mix(vec3(0.10, 0.004, 0.004), vec3(0.50, 0.024, 0.012), smoothstep(0.05, 0.5, heat));
@@ -181,10 +184,26 @@ float debrisField(vec3 p, float seed) {
 vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   float R = uWoundR;
   float rn = th / R;
-  if (rn > 4.6) return col;
+  if (rn > 3.3) return col;
   vec3 W = uWoundDir;
   float pxn = px / R;
   vec3 base = col;
+  float settle = 1.0 - 0.88 * uClosed;
+  float act = uActivity * settle;
+
+  // --- behind the boundary: movement that fades to true black toward the core
+  vec3 inner = vec3(0.0);
+  if (rn < 1.0 + 2.0 * pxn && rn > 0.42) {
+    float depth = smoothstep(0.42, 1.0, rn);
+    vec3 qi = rotAxis(d, W, -uTime * 0.010 - 2.4 * rn);
+    float m = fbm3(qi * (2.2 / R) + W * (uTime * 0.018));
+    float veil = smoothstep(0.50, 0.86, m) * depth * depth;
+    inner = vec3(0.085, 0.028, 0.22) * veil * act * 0.42;
+    float surge = vnoise(qi * (1.1 / R) + vec3(uTime * 0.11, 3.0, -uTime * 0.07));
+    inner += vec3(0.30, 0.11, 0.80) * pow(max(surge - 0.70, 0.0) / 0.30, 2.0) * veil * act * 0.5;
+  }
+  // well inside the disc nothing else can contribute (dust, debris and the rim all start at 0.8 R)
+  if (rn < 0.78) return mix(base, inner, uWoundVis);
   float outside = smoothstep(1.0 - pxn, 1.0 + pxn, rn);
 
   vec3 tr = uRedDir - W * dot(uRedDir, W);
@@ -205,8 +224,6 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   col += haloCol * halo * 2.4;
 
   // --- violet: thin filaments riding the swirl, alive only in a few drifting arcs, slow swell (never a strobe)
-  float settle = 1.0 - 0.88 * uClosed;
-  float act = uActivity * settle;
   float v1 = vnoise(q * fq * 1.6 + vec3(0.0, uTime * 0.045, 3.0));
   float v2 = vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0));
   float ridge = 1.0 - abs(2.0 * (0.64 * v1 + 0.36 * v2) - 1.0);
@@ -218,14 +235,6 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * act * 0.42;
   col += violet * outside;
 
-  // --- behind the boundary: movement that fades to true black toward the core
-  float depth = smoothstep(0.42, 1.0, rn);
-  vec3 qi = rotAxis(d, W, -uTime * 0.010 - 2.4 * rn);
-  float m = fbm3(qi * (2.2 / R) + W * (uTime * 0.018));
-  float veil = smoothstep(0.50, 0.86, m) * depth * depth;
-  vec3 inner = vec3(0.085, 0.028, 0.22) * veil * act * 0.42;
-  float surge = vnoise(qi * (1.1 / R) + vec3(uTime * 0.11, 3.0, -uTime * 0.07));
-  inner += vec3(0.30, 0.11, 0.80) * pow(max(surge - 0.70, 0.0) / 0.30, 2.0) * veil * act * 0.5;
   col = mix(inner, col, outside);
 
   // --- the boundary itself: a hairline of light bent around the rim, brightest toward each remnant
@@ -245,7 +254,7 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
     float n = debrisField(p, 1.7);
     float thr = mix(0.36, 0.80, smoothstep(0.92, 1.75 + 0.5 * stream, rn));
     float aa = clamp(5.2 / R * px * 1.4, 0.02, 0.3);
-    float w = smoothstep(0.80, 0.94, rn) * (1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn)));
+    float w = smoothstep(0.80, 0.94, rn) * (1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn))) * (1.0 - smoothstep(1.85, 2.2, rn));
     float mk = w * smoothstep(thr - aa, thr + aa, n);
     float n2 = debrisField(p + toWhite * 0.22, 1.7);
     lit += mk * clamp((n - n2) * 5.0, 0.0, 1.0) * (1.0 - smoothstep(thr + 0.02, thr + 0.16, n));
@@ -257,7 +266,7 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
     float n = debrisField(p, 9.2);
     float thr = mix(0.60, 0.84, smoothstep(1.0, 2.3 + 0.4 * stream, rn)) - 0.05 * stream;
     float aa = clamp(11.5 / R * px * 1.4, 0.02, 0.3);
-    float w = smoothstep(0.95 + 0.12 * uClosed, 1.12 + 0.16 * uClosed, rn) * (1.0 - smoothstep(2.0 + 0.3 * stream, 2.6 + 0.3 * stream, rn));
+    float w = smoothstep(0.95 + 0.12 * uClosed, 1.12 + 0.16 * uClosed, rn) * (1.0 - smoothstep(2.0 - 0.15 * stream, 2.6 - 0.5 * stream, rn));
     float mk = w * smoothstep(thr - aa, thr + aa, n);
     float n2 = debrisField(p + toWhite * 0.25, 9.2);
     lit += mk * clamp((n - n2) * 5.0, 0.0, 1.0) * (1.0 - smoothstep(thr + 0.02, thr + 0.14, n));
@@ -303,11 +312,16 @@ void main() {
   // --- deep space
   float up = clamp(d.y, 0.0, 1.0);
   vec3 col = mix(uHorizon, uZenith, pow(up, 0.55));
-  col += nebula(dl) * uNebula;
-  vec4 red = uRedVis > 0.002 ? redRemnant(dl, pxl) * uRedVis : vec4(0.0);
-  col += starField(dl, pxl) * uStars * (1.0 - red.a);
-  col += red.rgb;
-  if (uWoundVis > 0.002) col = woundComposite(col, d, th, e, px);
+  // nothing behind the Wound's disc or under an opaque ground needs shading
+  bool buried = uGround > 0.999 && d.y < -0.04;
+  bool hidden = buried || (uWoundVis > 0.999 && rn < 0.97);
+  if (!hidden) {
+    col += nebula(dl) * uNebula;
+    vec4 red = uRedVis > 0.002 ? redRemnant(dl, pxl) * uRedVis : vec4(0.0);
+    col += starField(dl, pxl) * uStars * (1.0 - red.a);
+    col += red.rgb;
+  }
+  if (uWoundVis > 0.002 && !buried) col = woundComposite(col, d, th, e, px);
 
   // --- horizon haze, then whatever lies below the horizon
   vec3 hz = skyHaze(d);

@@ -78,7 +78,8 @@ export interface ParticleDef {
 }
 
 export type EmitShape = 'point' | 'sphere' | 'shell' | 'disc' | 'ring' | 'box' | 'line';
-export type EmitVelocity = 'radial' | 'cone' | 'ring' | 'inward' | 'none';
+/** 'tangent' = perpendicular to the radius in the effect plane (with `attract` this gives inward spirals) */
+export type EmitVelocity = 'radial' | 'cone' | 'ring' | 'inward' | 'tangent' | 'none';
 
 export interface EmitterDef {
   p: ParticleDef;

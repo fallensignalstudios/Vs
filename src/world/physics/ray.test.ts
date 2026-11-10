@@ -111,12 +111,14 @@ describe('raycast vs walkable surfaces (RAY_GROUND)', () => {
     expect(floor.distance).toBeCloseTo(1.6, 9);
     expect(floor.ground).toBe(true);
     expect(floor.collider).toBeNull();
+    expect(floor.surface?.desc.tag).toBe('floor');
     expect(floor.normal).toEqual({ x: 0, y: 1, z: 0 });
     expect(w.raycast(planPos(5, 5, 1.6), v(0, -1, 0), 10)).toBeNull(); // floors are opt-in
 
     // south ramp: 0 at n = 11 → 3 at n = 23; at n = 17 the surface is at 1.5
     const ramp = w.raycast(planPos(54, 17, 5), v(0, -1, 0), 10, RAY_GROUND)!;
     expect(ramp.distance).toBeCloseTo(3.5, 6);
+    expect(ramp.surface?.desc.tag).toBe('ramp');
     const nl = Math.hypot(1, 0.25);
     expect(ramp.normal.x).toBeCloseTo(0, 9);
     expect(ramp.normal.y).toBeCloseTo(1 / nl, 6);
@@ -136,6 +138,7 @@ describe('raycast vs walkable surfaces (RAY_GROUND)', () => {
     // combined with solids the nearest of both wins
     const both = w.raycast(planPos(30.5, 7.5, 4), v(0, -1, 0), 10, RAY_GROUND | RAY_SHOT)!;
     expect(both.ground).toBe(false);
+    expect(both.surface).toBeNull();
     expect(both.distance).toBeCloseTo(2.8, 6); // top of the 1.2 m cover
     // the balcony deck is hit from below as well (floors are two-sided)
     const below = w.raycast(planPos(51, 30, 1), v(0, 1, 0), 10, RAY_GROUND)!;
@@ -238,6 +241,15 @@ describe('sweepSphere', () => {
     // floors only when asked
     expect(w.sweepSphere(v(10, 2, -10), v(10, -1, -10), 0.25)).toBe(1);
     expect(w.sweepSphere(v(10, 2, -10), v(10, -1, -10), 0.25, RAY_SIGHT | RAY_GROUND)).toBeCloseTo((1.75 - 0.01) / 3, 6);
+    // default mask stops at glass and invisible blockers too; RAY_SIGHT alone passes them
+    const glass = fxBox(w, 12, 17, 12.1, 20, 0, 3, { blocksSight: false });
+    const blocker = fxBox(w, 16, 17, 16.1, 20, 0, 3, { blocksSight: false, blocksShots: false });
+    expect(w.sweepSphere(v(10, 1.5, -18.5), v(19, 1.5, -18.5), 0.25)).toBeCloseTo((2 - 0.25 - 0.01) / 9, 6);
+    expect(w.sweepSphere(v(10, 1.5, -18.5), v(19, 1.5, -18.5), 0.25, RAY_SIGHT)).toBe(1);
+    glass.enabled = false;
+    expect(w.sweepSphere(v(10, 1.5, -18.5), v(19, 1.5, -18.5), 0.25)).toBeCloseTo((6 - 0.25 - 0.01) / 9, 6);
+    blocker.enabled = false;
+    expect(w.sweepSphere(v(10, 1.5, -18.5), v(19, 1.5, -18.5), 0.25)).toBe(1);
     expect(w.sweepSphere(v(NaN, 2, -10), v(10, -1, -10), 0.25)).toBe(0);
   });
 
@@ -253,13 +265,13 @@ describe('sweepSphere', () => {
     // stopping there and sweeping again never starts inside
     const again = w.sweepSphere(v(camX, 1.8, -10), v(camX, 1.8, -14), 0.25);
     expect(again).toBe(1);
-    // on the balcony the see-through rail (x = 58) does not push the camera in, the outer wall (x = 61.7) does
+    // on the balcony a camera at head height clears the 1.1 m rail (x = 58); the outer wall (x = 61.7) stops it
     const p2 = planPos(56, 30, 4.55), w2 = planPos(59.4, 30, 4.9);
     expect(w.sweepSphere(p2, w2, 0.25)).toBe(1);
     expect(w.sweepSphere(p2, planPos(63, 30, 4.9), 0.25)).toBeCloseTo((61.7 - 0.25 - 0.01 - 56) / 7, 3);
-    // …unless movement blockers are requested (a sweep at rail height)
-    expect(w.sweepSphere(planPos(56, 30, 3.9), planPos(59.4, 30, 3.9), 0.25, RAY_MOVE)).toBeCloseTo((57.95 - 0.25 - 0.01 - 56) / 3.4, 6);
-    expect(w.sweepSphere(planPos(56, 30, 3.9), planPos(59.4, 30, 3.9), 0.25)).toBe(1);
+    // a low camera (looking up) is held inside the rail; RAY_SIGHT alone ignores the see-through rail
+    expect(w.sweepSphere(planPos(56, 30, 3.9), planPos(59.4, 30, 3.9), 0.25)).toBeCloseTo((57.95 - 0.25 - 0.01 - 56) / 3.4, 6);
+    expect(w.sweepSphere(planPos(56, 30, 3.9), planPos(59.4, 30, 3.9), 0.25, RAY_SIGHT)).toBe(1);
   });
 });
 

@@ -25,8 +25,6 @@ export interface PlateResult {
   height: Field;
   /** flat random value per plate */
   id: Field;
-  /** distance to the nearest seam in texels (capped at 255) */
-  edge: Field;
   /** 0 at the bottom seam of the plate → 1 at its top seam (for drip / grime gradients) */
   v01: Field;
 }
@@ -35,7 +33,6 @@ export interface PlateResult {
 export function plates(size: number, o: PlateOpts): PlateResult {
   const height = new Float32Array(size * size);
   const id = new Float32Array(size * size);
-  const edge = new Float32Array(size * size);
   const v01 = new Float32Array(size * size);
   const cw = size / o.cols, ch = size / o.rows;
   const split = o.split ?? 0;
@@ -49,7 +46,6 @@ export function plates(size: number, o: PlateOpts): PlateResult {
       for (let xs = Math.ceil(x0); xs < x1; xs++) {
         const d = Math.min(xs - x0, x1 - xs, dyMin);
         const i = yo + ((xs - shift) & m);
-        edge[i] = d < 255 ? d : 255;
         height[i] = sstep(o.seam, o.seam + o.bevel, d);
         id[i] = pid;
         v01[i] = v;
@@ -76,7 +72,7 @@ export function plates(size: number, o: PlateOpts): PlateResult {
       }
     }
   }
-  return { height: { size, data: height }, id: { size, data: id }, edge: { size, data: edge }, v01: { size, data: v01 } };
+  return { height: { size, data: height }, id: { size, data: id }, v01: { size, data: v01 } };
 }
 
 export interface ScratchOpts {
@@ -130,6 +126,8 @@ export function scratches(size: number, o: ScratchOpts): Field {
 export interface VeinOpts {
   /** winding scale: lattice cells across the tile */
   freq: number;
+  /** lattice cells along v if different from `freq` — unequal values give veins a prevailing direction */
+  freqY?: number;
   seed: number;
   /** domain-warp distance as a fraction of the tile (more = more meander) */
   warp: number;
@@ -137,6 +135,15 @@ export interface VeinOpts {
   width: number;
   /** 0 … 1: how much veins fade in and out along their length */
   breakup?: number;
+  /** 0 … 1: how much veins swell and pinch along their length (default 0.6) */
+  swell?: number;
+  /**
+   * Prevailing direction: integer cycles across the tile along u and v. When set, veins are the level lines of
+   * a ramp bent by the noise, so they run as long sub-parallel strands (the way real marble veins do) instead of
+   * closing into loops. `amp` is how far the noise pushes them, in vein spacings (default 0.7).
+   */
+  flow?: [number, number];
+  amp?: number;
 }
 
 /** Full-resolution warp and fade fields shared by all vein layers of one texture (see {@link veins}). */
@@ -155,20 +162,24 @@ export function veinFields(size: number, seed: number): VeinFields {
 }
 
 /**
- * Stone veining: the 0.5 iso-line of a smooth noise field looked up through a domain warp. The distance to the
- * iso-line is estimated from the field gradient, so veins keep a controlled width instead of ballooning where
- * the field is flat. Thin, meandering, occasionally branching where the field saddles. Returns 0 … 1.
+ * Stone veining: iso-lines of a smooth noise field (optionally riding on a directional ramp, see `flow`) looked
+ * up through a domain warp. The distance to the iso-line is estimated from the field gradient, so veins keep a
+ * controlled width instead of ballooning where the field is flat. Thin, meandering, occasionally branching
+ * where the field saddles. Returns 0 … 1.
  * Pass the same {@link VeinFields} to several calls to layer vein systems cheaply.
  */
 export function veins(size: number, o: VeinOpts, fields: VeinFields = veinFields(size, o.seed)): Field {
   const bs = Math.min(size, 256), bm = bs - 1;
-  const base = fbm(bs, { freq: o.freq, octaves: 2, gain: 0.45, seed: o.seed }).data;
+  const base = fbm(bs, { freq: o.freq, freqY: o.freqY ?? o.freq, octaves: 2, gain: 0.45, seed: o.seed }).data;
   const out = new Float32Array(size * size);
   const m = size - 1;
   const k = bs / size;
   const warpPx = o.warp * size;
-  const widthPx = Math.max(0.6, o.width * size);
+  const widthPx = Math.max(1.25, o.width * size); // thinner than this and a vein aliases into dashes
   const breakup = o.breakup ?? 0.7;
+  const swell = o.swell ?? 0.6;
+  const ku = o.flow ? Math.round(o.flow[0]) / size : 0, kv = o.flow ? Math.round(o.flow[1]) / size : 0;
+  const amp = o.flow ? (o.amp ?? 0.7) : 1;
   // decorrelate layers that share warp fields by reading them at a per-seed offset
   const ox = Math.floor(hash2(o.seed, 1, 77) * size), oy = Math.floor(hash2(o.seed, 2, 77) * size);
   const wx = fields.wx.data, wy = fields.wy.data, fade = fields.fade.data;
@@ -176,21 +187,25 @@ export function veins(size: number, o: VeinOpts, fields: VeinFields = veinFields
     const wo = ((y + oy) & m) * size;
     for (let x = 0; x < size; x++) {
       const wi = wo + ((x + ox) & m);
-      const sx = (x + (wx[wi] - 0.5) * warpPx) * k;
-      const sy = (y + (wy[wi] - 0.5) * warpPx) * k;
+      const px = x + (wx[wi] - 0.5) * warpPx, py = y + (wy[wi] - 0.5) * warpPx;
+      const sx = px * k, sy = py * k;
       const x0 = Math.floor(sx), y0 = Math.floor(sy);
       const tx = sx - x0, ty = sy - y0;
       const xa = x0 & bm, xb = (x0 + 1) & bm, ya = (y0 & bm) * bs, yb = ((y0 + 1) & bm) * bs;
       const a = base[ya + xa], b = base[ya + xb], c = base[yb + xa], d = base[yb + xb];
       const top = a + (b - a) * tx, bot = c + (d - c) * tx;
-      const n = top + (bot - top) * ty;
+      let n = (top + (bot - top) * ty) * amp + px * ku + py * kv;
+      n -= Math.floor(n);
       // gradient in output texels
-      const gx = ((b - a) + ((d - c) - (b - a)) * ty) * k;
-      const gy = (bot - top) * k;
+      const gx = ((b - a) + ((d - c) - (b - a)) * ty) * k * amp + ku;
+      const gy = (bot - top) * k * amp + kv;
       const dist = Math.abs(n - 0.5) / Math.sqrt(gx * gx + gy * gy + 1e-12);
-      if (dist >= widthPx) continue;
-      const t = 1 - dist / widthPx;
+      if (dist >= widthPx * 2.2) continue;
+      // veins swell and pinch along their length, and fade out where the breakup field is low
       const f = fade[y * size + x];
+      const w = widthPx * (1 - swell + swell * 2.2 * f * f);
+      if (dist >= w) continue;
+      const t = 1 - dist / w;
       out[y * size + x] = t * t * (3 - 2 * t) * (1 - breakup + breakup * sstep(0.3, 0.7, f));
     }
   }
@@ -309,9 +324,10 @@ export function edgeWear(height: Field, radius: number, breakup: Field, amount: 
     const by = (Math.floor(y * k) & bm) * bs;
     for (let x = 0; x < s; x++) {
       const i = y * s + x;
-      const convex = Math.max(0, height.data[i] - b.data[i]) * 4;
+      const convex = Math.min(1, Math.max(0, height.data[i] - b.data[i]) * 4);
       const n = breakup.data[by + (Math.floor(x * k) & bm)];
-      out[i] = sstep(1 - amount, 1 - amount + 0.25, convex * (0.4 + n) + (n - 0.5) * 0.5);
+      // wear only where the edge is exposed AND the breakup noise allows it: chips and rubbed runs, not outlines
+      out[i] = convex * sstep(1 - amount, 1 - amount + 0.12, n);
     }
   }
   return { size: s, data: out };

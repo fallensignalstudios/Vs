@@ -75,6 +75,16 @@ export class RigBuilder {
   private readonly skinI: number[] = [];
   private readonly skinW: number[] = [];
   private parts = 0;
+  private warp: ((p: [number, number, number]) => void) | null = null;
+
+  /**
+   * Install a model-space position warp (proportion edits: e.g. lengthen the legs of an authored figure).
+   * It is applied to every part as it is added — normals are computed after it — and to bones and sockets at
+   * build(). Authoring coordinates (`at()`, part placement) stay un-warped.
+   */
+  setWarp(fn: (p: [number, number, number]) => void): void {
+    this.warp = fn;
+  }
 
   /** Declare a bone at a model-space bind position. Parents must be declared first. */
   bone(name: string, parent: string | null, at: Pt3): string {
@@ -178,9 +188,19 @@ export class RigBuilder {
     this.addSkinned(chain, paint, tube(pts, radius, sides, true, flatten), undefined, opts, joints);
   }
 
-  private emit(s: Soup, paint: Paint, opts: PartOpts, bone: () => number, skin: ((v: number, out: number[]) => void) | null): void {
+  private emit(soupIn: Soup, paint: Paint, opts: PartOpts, bone: () => number, skin: ((v: number, out: number[]) => void) | null): void {
+    let s = soupIn;
     const nv = s.p.length / 3;
     if (nv === 0) return;
+    if (this.warp) {
+      if (s === soupIn) s = cloneSoup(s);
+      const q: [number, number, number] = [0, 0, 0];
+      for (let v = 0; v < nv; v++) {
+        q[0] = s.p[v * 3]!; q[1] = s.p[v * 3 + 1]!; q[2] = s.p[v * 3 + 2]!;
+        this.warp(q);
+        s.p[v * 3] = q[0]; s.p[v * 3 + 1] = q[1]; s.p[v * 3 + 2] = q[2];
+      }
+    }
     const n = computeNormals(s.p, opts.crease ?? 60);
     _c.setHex(paint.c); // sRGB hex → linear working space
     const rnd = opts.rand ?? ((this.parts * 0.6180339887) % 1);
@@ -214,7 +234,24 @@ export class RigBuilder {
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.skinW, 4));
     g.computeBoundingSphere();
     const bs = g.boundingSphere ?? new THREE.Sphere(new THREE.Vector3(), 1);
-    return { geometry: g, bones: this.bones.slice(), sockets: this.sockets.slice(), triangles: this.pos.length / 9, center: bs.center.clone(), radius: bs.radius };
+    let bones = this.bones.slice();
+    let sockets = this.sockets.slice();
+    const w = this.warp;
+    if (w) {
+      const wp = (p: Pt3): Pt3 => {
+        const q: [number, number, number] = [p[0], p[1], p[2]];
+        w(q);
+        return q;
+      };
+      const src = bones;
+      bones = src.map((b) => ({ ...b, at: wp(b.at) }));
+      sockets = sockets.map((s) => {
+        const o = src[s.bone]!.at, n = bones[s.bone]!.at;
+        const m = wp([o[0] + s.offset[0], o[1] + s.offset[1], o[2] + s.offset[2]]);
+        return { ...s, offset: [m[0] - n[0], m[1] - n[1], m[2] - n[2]] as Pt3 };
+      });
+    }
+    return { geometry: g, bones, sockets, triangles: this.pos.length / 9, center: bs.center.clone(), radius: bs.radius };
   }
 }
 

@@ -7,6 +7,9 @@
  * and the white remnant to its RIGHT (east). A zone whose vista faces another way calls `sky.setHeading(yaw)`
  * (engine yaw convention) and gives its scenic pieces the same `rotation.y`.
  *
+ * `SKY_PRESET_IDS` (all preset ids, mission order) and `SKY_PRESETS` (the authored table) are exported from
+ * '@/render/sky' for debug menus.
+ *
  * TYPICAL ZONE USE
  *   game.sky.setPreset('woundVista');                       // snap during loading (or { blendSeconds } in play)
  *   const vista = game.sky.scenic.terminalVista();          // built facing −Z, origin = overlook floor
@@ -71,6 +74,8 @@ export interface SkySystem {
    * Add to scene by Game (the system also adds itself to `game.scene` when constructed with a real scene).
    * The root never moves: dome and fleet shaders ignore camera translation (infinite distance for any camera,
    * including reflection and PMREM cameras); the carrier is a child at true world coordinates.
+   * Everything in it lives in the OPAQUE render list (so it shows through transmissive glass), pinned to the far
+   * plane and drawn after ordinary opaque geometry with a depth test and no depth write — hidden sky costs nothing.
    */
   readonly root: THREE.Object3D;
   readonly preset: SkyPreset;

@@ -12,15 +12,22 @@ import { SFX } from './sfx';
 import { AMB_NORM, MUSIC_NORM, SFX_NORM } from './calibration';
 import { MusicEngine, type StingerKind } from './music/engine';
 import { AmbienceEngine } from './ambience/engine';
-import { speakTick, type SpeakChannel } from './speak';
+import { speakCue, type SpeakChannel } from './speak';
 
 export interface EngineOpts {
   /** seed for all non-gameplay variation (deterministic offline renders) */
   seed?: number;
   /** output node (default: context destination) */
   destination?: AudioNode;
-  /** ignore the measured normalisation tables (used by the calibration pass itself) */
-  raw?: boolean;
+  /** override the measured normalisation tables (the calibration pass iterates on these) */
+  norm?: Partial<NormTables>;
+}
+
+/** Normalisation gains per id — see calibration.ts. */
+export interface NormTables {
+  sfx: Readonly<Record<string, number>>;
+  music: Readonly<Record<string, number>>;
+  amb: Readonly<Record<string, number>>;
 }
 
 const MIN_LOOKAHEAD = 0.2;
@@ -40,9 +47,9 @@ export class AudioEngine {
     this.rnd = mulberry32(seed);
     this.res = makeShared(ac);
     this.mixer = new Mixer(ac, this.res, opts.destination);
-    this.voices = new Voices(ac, this.mixer, this.res, this.rnd, SFX, opts.raw ? {} : SFX_NORM);
-    this.music = new MusicEngine(ac, this.res, this.mixer, seed ^ 0x51ed, opts.raw ? {} : MUSIC_NORM);
-    this.ambience = new AmbienceEngine(ac, this.res, this.mixer, seed ^ 0x2c1b, opts.raw ? {} : AMB_NORM);
+    this.voices = new Voices(ac, this.mixer, this.res, this.rnd, SFX, opts.norm?.sfx ?? SFX_NORM);
+    this.music = new MusicEngine(ac, this.res, this.mixer, seed ^ 0x51ed, opts.norm?.music ?? MUSIC_NORM);
+    this.ambience = new AmbienceEngine(ac, this.res, this.mixer, this.voices, seed ^ 0x2c1b, opts.norm?.amb ?? AMB_NORM);
   }
 
   /** scheduling horizon: grows when frames are long so rhythm survives a slow renderer */
@@ -67,8 +74,9 @@ export class AudioEngine {
     this.ambience.set(id, fadeSeconds);
   }
 
-  setIntensity(n: number): void {
-    this.music.setIntensity(clamp01(Number.isFinite(n) ? n : 0));
+  /** `snap` skips the slew (offline renders, state restore). */
+  setIntensity(n: number, snap = false): void {
+    this.music.setIntensity(clamp01(Number.isFinite(n) ? n : 0), snap);
   }
 
   stinger(kind: StingerKind): void {
@@ -76,7 +84,8 @@ export class AudioEngine {
   }
 
   speak(speaker: string, channel: SpeakChannel = 'voice'): void {
-    speakTick(this, speaker, channel);
+    const cue = speakCue(speaker, channel);
+    this.voices.play(cue.id, { pitch: cue.pitch });
   }
 
   duck(amount: number, seconds: number): void {
@@ -89,6 +98,7 @@ export class AudioEngine {
 
   cadenceTick(pos?: Vec3Like, irregular = false): void {
     this.voices.play(irregular ? 'cadenceTickOff' : 'cadenceTick', pos ? { pos } : undefined);
+    this.music.cadencePulse(irregular);
   }
 
   setListener(pos: Vec3Like, forward: Vec3Like): void {
@@ -109,16 +119,11 @@ export class AudioEngine {
     const ahead = this.lookahead;
     this.voices.update(ahead);
     this.music.update(dt, ahead);
-    this.ambience.update(ahead);
+    this.ambience.update();
   }
 
   /** Zone unload: stop loops. Music and ambience are left to the next zone's setEnv to change. */
   clear(): void {
     this.voices.stopLoops();
-  }
-
-  /** Live counts for debug overlays and the sandbox meter. */
-  stats(): { voices: number; music: MusicState; ambience: AmbienceId; intensity: number } {
-    return { voices: this.voices.count, music: this.music.state, ambience: this.ambience.current, intensity: this.music.intensity };
   }
 }

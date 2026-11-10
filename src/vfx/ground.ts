@@ -23,6 +23,8 @@ varying vec2 vP;
 varying vec4 vColor;
 varying vec4 vParam;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_vertex>
 #include <logdepthbuf_pars_vertex>
 void main() {
@@ -42,6 +44,8 @@ varying vec2 vP;
 varying vec4 vColor;
 varying vec4 vParam;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 
@@ -52,11 +56,22 @@ float vn(vec2 p) {
 }
 float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s / 0.9375; }
 float line(float d, float w) { float aa = fwidth(d) + 1e-4; return 1.0 - smoothstep(w - aa, w + aa, abs(d)); }
+// radial needles: an even number of angular cells, each with one needle of hashed length and jittered heading
+float needles(float ang, float r, float count, float seed, float lenBase, float width) {
+  float cell = ang / 6.2831853 * count;
+  float id = floor(cell);
+  float h = h21(vec2(id, seed * 31.0 + count));
+  float da = (fract(cell) - 0.5 - (h - 0.5) * 0.6) * 6.2831853 / count;
+  float len = lenBase * (0.45 + 0.55 * h21(vec2(id * 1.7 + 3.0, seed + count)));
+  float across = abs(da) * r;
+  float w = width * max(0.0, 1.0 - r / len) + 0.003;
+  return (1.0 - smoothstep(w * 0.5, w, across)) * step(r, len);
+}
 
 void main() {
   #include <logdepthbuf_fragment>
   float kind = vParam.x, prog = vParam.y, seed = vParam.z, aux = vParam.w;
-  vec2 p = vP;
+  vec2 p = clamp(vP, -1.0, 1.0);
   float r = length(p);
   float ang = atan(p.y, p.x);
   vec3 col = vec3(0.0);
@@ -65,28 +80,27 @@ void main() {
   float fade = vColor.a;
 
   if (kind < 0.5) {
-    // ---- scorch: soot disc with radial streaks, ember-hot heart that cools (aux = heat)
+    // ---- scorch: mottled soot with radial rays, a smooth ember-hot heart that cools (aux = heat), live specks
     float n = fbm(p * 2.6 + seed * 13.0);
-    float streak = vn(vec2(ang * 5.0 + seed * 3.0, r * 1.5)) * 0.35;
-    float m = smoothstep(1.0, 0.18, r + (n - 0.5) * 0.7 + streak * r);
-    alpha = m * 0.9 * fade;
-    col = vec3(0.012, 0.01, 0.01) * alpha;
-    float heart = smoothstep(0.65, 0.0, r + (n - 0.5) * 0.5) * aux;
-    float crackle = smoothstep(0.42, 0.5, fbm(p * 7.0 + seed)) * smoothstep(0.9, 0.2, r) * aux;
-    col += tint * (heart * heart * 2.6 + crackle * 1.4) * fade;
+    float n2 = fbm(p * 6.0 - seed * 7.0);
+    float rays = vn(vec2(ang * 7.0 + seed * 3.0, r * 1.2));
+    float edge = r + (n - 0.5) * 0.45 + (rays - 0.5) * 0.45 * r;
+    float m = smoothstep(1.0, 0.25, edge);
+    alpha = m * (0.5 + 0.45 * n2) * 0.92 * fade;
+    col = vec3(0.01, 0.009, 0.008) * alpha;
+    float heart = exp(-r * r * 7.5) * (0.7 + 0.6 * n) * aux;
+    vec2 cellId = floor(p * 38.0);
+    float specks = step(0.94, h21(cellId + seed)) * smoothstep(0.8, 0.1, r) * aux * (0.5 + 0.5 * sin(uTime * 6.0 + h21(cellId) * 30.0));
+    col += tint * (heart * 1.5 + specks * 2.2) * fade;
   } else if (kind < 1.5) {
-    // ---- frost: six-fold crystalline rime, feathered spikes, cold sparkle
-    float sector = 1.0471976;
-    float a2 = abs(mod(ang + seed, sector) - sector * 0.5);
-    vec2 f = vec2(cos(a2), sin(a2)) * r;
-    float spikeLen = 0.55 + 0.4 * vn(vec2(floor((ang + seed) / sector) + seed * 7.0, 1.0));
-    float spine = line(f.y, 0.012 + 0.03 * (1.0 - f.x)) * step(f.x, spikeLen);
-    float barbs = line(fract(f.x * 7.0) - 0.5 - f.y * 3.5, 0.06) * step(f.y, 0.2 * (spikeLen - f.x)) * step(f.x, spikeLen);
-    float rime = smoothstep(0.75, 0.1, r + (fbm(p * 5.0 + seed) - 0.5) * 0.5);
-    float sparkle = step(0.965, h21(floor(p * 46.0) + seed)) * rime * (0.5 + 0.5 * sin(uTime * 3.0 + h21(floor(p * 46.0)) * 40.0));
-    float body = clamp(rime * 0.42 + spine * 0.8 + barbs * 0.45, 0.0, 1.0) * smoothstep(1.0, 0.85, r);
-    alpha = body * 0.62 * fade;
-    col = tint * (body * 0.75 + sparkle * 2.5) * fade;
+    // ---- frost: rime patch — needles of varied length at jittered angles, finer under-growth, cold sparkle
+    float frostN = needles(ang, r, 18.0, seed, 0.96, 0.034) + 0.6 * needles(ang, r, 42.0, seed + 3.0, 0.62, 0.018);
+    float rime = smoothstep(0.7, 0.05, r + (fbm(p * 5.0 + seed) - 0.5) * 0.6);
+    vec2 sc = floor(p * 46.0);
+    float sparkle = step(0.965, h21(sc + seed)) * rime * (0.5 + 0.5 * sin(uTime * 3.0 + h21(sc) * 40.0));
+    float body = clamp(rime * 0.32 + frostN * 0.8, 0.0, 1.0) * smoothstep(1.0, 0.85, r);
+    alpha = body * 0.5 * fade;
+    col = tint * (body * 0.38 + sparkle * 1.6) * fade;
   } else if (kind < 2.5) {
     // ---- violet stain: dark tissue patch with thin live veins running outwards
     float n = fbm(p * 3.0 + seed * 9.0);
@@ -126,6 +140,12 @@ void main() {
     float m = clamp(outer + inner + ticks * 0.7 + major + chev + glow, 0.0, 1.5);
     col = tint * m * fade * (0.8 + 0.2 * sin(uTime * 1.7 + r * 9.0));
     alpha = 0.0;
+  }
+  if (kind < 4.5) {
+    // decals never reach the quad edge (no visible square), whatever their noise does
+    float win = smoothstep(1.0, 0.9, r);
+    col *= win;
+    alpha *= win;
   } else if (kind < 10.5) {
     // ---- shockwave: sharp leading edge, soft trailing wake, angular breakup
     float front = prog;
@@ -159,13 +179,13 @@ void main() {
       coord = r;
     }
     float fill = min(prog, 1.0);
-    float done = step(1.0, prog);
+    float done = step(1.005, prog); // the CPU sends 1.01 once complete (never compare an interpolated value to 1.0)
     float filled = inside * (1.0 - smoothstep(fill - 0.004, fill + 0.004, coord));
-    float front = inside * exp(-pow((coord - fill) * 26.0, 2.0)) * (1.0 - done);
+    float front = inside * exp(-pw((coord - fill) * 26.0, 2.0)) * (1.0 - done);
     float hatch = 0.55 + 0.45 * step(0.5, fract((p.x + p.y) * 5.0 - uTime * 0.6));
     float pulse = 0.85 + 0.15 * sin(uTime * 9.0);
-    float m = bound * (1.1 * pulse) + filled * (0.2 + 0.12 * hatch) + front * 1.4 + inside * 0.035;
-    m += done * inside * 1.3;
+    float m = bound * (1.1 * pulse) + filled * (0.2 + 0.12 * hatch) + front * 0.9 + inside * 0.035;
+    m += done * inside * 0.32;
     vec3 c = mix(tint, vec3(1.0, 0.96, 0.9) * max(tint.r, max(tint.g, tint.b)), done * 0.7 + front * 0.4);
     col = c * m * fade;
     // slight darkening under the shape keeps it readable on bright white-gold floors
@@ -254,7 +274,12 @@ interface Shock {
   r: number; g: number; b: number;
 }
 
-class Telegraph implements VfxHandle {
+/** A telegraph's handle also exposes its fill (0..1, exactly 1 at the announced time). */
+export interface TelegraphHandle extends VfxHandle {
+  readonly fill: number;
+}
+
+class Telegraph implements TelegraphHandle {
   alive = true;
   age = 0;
   /** seconds since stop() / completion fade began; <0 = not fading */
@@ -266,7 +291,7 @@ class Telegraph implements VfxHandle {
   }
   /** 0..1 linear fill; exactly 1 at `seconds` */
   get fill(): number {
-    return Math.min(1, this.age / this.seconds);
+    return this.age >= this.seconds - 1e-5 ? 1 : this.age / this.seconds;
   }
   place(): void {
     const s = this.shape;
@@ -384,7 +409,7 @@ export class GroundMarks {
     this.shocks.push(s);
   }
 
-  telegraph(shape: TelegraphShape, seconds: number, color: number): VfxHandle {
+  telegraph(shape: TelegraphShape, seconds: number, color: number): TelegraphHandle {
     const kind = shape.kind === 'circle' ? K_CIRCLE : shape.kind === 'line' ? K_LINE : K_CONE;
     // own copies: callers often pass live vectors
     const own: TelegraphShape = shape.kind === 'line'
@@ -452,7 +477,7 @@ export class GroundMarks {
         continue;
       }
       this.telegraphs[w++] = t;
-      if (n < MARK_CAP) this.markBatch.write(n++, t.m, t.r * 1.7, t.g * 1.7, t.b * 1.7, fade, t.kind, t.age / t.seconds, t.seed, t.aux);
+      if (n < MARK_CAP) this.markBatch.write(n++, t.m, t.r * 1.2, t.g * 1.2, t.b * 1.2, fade, t.kind, t.age >= t.seconds - 1e-5 ? 1.01 : t.age / t.seconds, t.seed, t.aux);
     }
     this.telegraphs.length = w;
     this.markBatch.commit(n);

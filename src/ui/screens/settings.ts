@@ -89,7 +89,7 @@ export class SettingsScreen implements Layer {
         this.hints.el,
       ),
     );
-    this.fader = new Fader(this.el, { in: 0.25, out: 0.2 });
+    this.fader = new Fader(this.el, { in: 0.25, out: 0.2, interactive: true });
 
     game.events.on('settings:changed', () => {
       if (!this.fader.visible) return;
@@ -229,6 +229,8 @@ export class SettingsScreen implements Layer {
     const state = h('span', 'aur-toggle-state aur-label');
     const ctl = h('div', 'aur-toggle', state, h('i', 'aur-toggle-track', h('b')));
     const el = this.rowShell(def, ctl);
+    el.setAttribute('role', 'switch');
+    el.setAttribute('aria-label', def.label);
     const on = new Flag(ctl, 'is-on');
     const txt = new Txt(state);
     const s = this.game.settings;
@@ -236,7 +238,11 @@ export class SettingsScreen implements Layer {
     return {
       view: {
         def, el,
-        refresh: () => { const v = s.get(def.key) === true; on.set(v); txt.set(v ? 'On' : 'Off'); },
+        refresh: () => {
+          const v = s.get(def.key) === true;
+          if (on.set(v)) el.setAttribute('aria-checked', v ? 'true' : 'false');
+          txt.set(v ? 'On' : 'Off');
+        },
         desc: () => def.desc,
       },
       item: { el, onConfirm: flip, onAdjust: (dir) => { if ((dir > 0) !== (s.get(def.key) === true)) { sfx(this.game, 'uiMove'); flip(); } } },
@@ -284,6 +290,10 @@ export class SettingsScreen implements Layer {
     const val = h('span', 'aur-slider-val aur-num');
     const ctl = h('div', 'aur-slider', track, val);
     const el = this.rowShell(def, ctl);
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', def.label);
+    el.setAttribute('aria-valuemin', String(def.min));
+    el.setAttribute('aria-valuemax', String(def.max));
     const txt = new Txt(val);
     const fmt = (v: number): string => (def.format === 'percent' ? `${Math.round(v * 100)}` : `${v.toFixed(1)}×`);
     const fromPointer = (e: PointerEvent): void => {
@@ -312,7 +322,7 @@ export class SettingsScreen implements Layer {
           const t = clamp01((v - def.min) / (def.max - def.min));
           fill.style.transform = `scaleX(${t.toFixed(4)})`;
           thumb.style.left = `${(t * 100).toFixed(2)}%`;
-          txt.set(fmt(v));
+          if (txt.set(fmt(v))) el.setAttribute('aria-valuenow', String(v));
         },
         desc: () => def.desc,
       },

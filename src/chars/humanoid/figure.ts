@@ -15,9 +15,30 @@ import type { V3 } from './geo/prims';
 export interface Mount {
   /** bone the item hangs from */
   parent: string;
-  /** local position / Euler degrees in that bone's frame */
+  /** local position in that bone's frame */
   pos: V3;
-  rot: V3;
+  /** orientation as Euler degrees (XYZ) … */
+  rot?: V3;
+  /** … or as the directions two of the item's own axes should point (in the parent bone's frame) */
+  axes?: { x?: V3; y?: V3; z?: V3 };
+}
+
+const _mx = new THREE.Vector3(), _my = new THREE.Vector3(), _mz = new THREE.Vector3();
+const _mm = new THREE.Matrix4();
+const _me = new THREE.Euler();
+
+/** Orientation of a mount as a quaternion. */
+export function mountQuat(m: Mount, out: THREE.Quaternion): THREE.Quaternion {
+  const a = m.axes;
+  if (!a) {
+    const r = m.rot ?? [0, 0, 0];
+    return out.setFromEuler(_me.set((r[0] * Math.PI) / 180, (r[1] * Math.PI) / 180, (r[2] * Math.PI) / 180, 'XYZ'));
+  }
+  if (a.z && a.x) { _mz.set(...a.z).normalize(); _my.crossVectors(_mz, _mx.set(...a.x)).normalize(); _mx.crossVectors(_my, _mz); }
+  else if (a.z && a.y) { _mz.set(...a.z).normalize(); _mx.crossVectors(_my.set(...a.y), _mz).normalize(); _my.crossVectors(_mz, _mx); }
+  else if (a.x && a.y) { _my.set(...a.y).normalize(); _mz.crossVectors(_mx.set(...a.x), _my).normalize(); _mx.crossVectors(_my, _mz); }
+  else return out.identity();
+  return out.setFromRotationMatrix(_mm.makeBasis(_mx, _my, _mz));
 }
 
 export interface ItemDef {

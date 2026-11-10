@@ -117,7 +117,12 @@ export function createHud(input: InputSystem, rig: CameraRig, instant = false): 
       stick.style.transform = `translate(${(input.move.x * 12).toFixed(1)}px,${(-input.move.y * 12).toFixed(1)}px)`;
 
       let held = '';
-      for (const a of ACTIONS) if (input.down(a)) held += `<span class="cs-chip"><b>${input.glyph(a)}</b>${a}</span>`;
+      const inGame = input.context === 'game';
+      for (const a of ACTIONS) {
+        // in play the stick / WASD also read as menu directions; that is noise on this panel
+        if (inGame && (a.startsWith('menu') || a === 'confirm' || a === 'cancel' || a === 'skip')) continue;
+        if (input.down(a)) held += `<span class="cs-chip"><b>${input.glyph(a)}</b>${a}</span>`;
+      }
       if (held !== lastChips) chips.innerHTML = lastChips = held;
 
       let text = `<kbd>${input.device === 'kbm' ? 'WASD' : 'L-Stick'}</kbd>move`;

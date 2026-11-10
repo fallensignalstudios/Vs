@@ -4,8 +4,7 @@
 import type { Game } from '@/core/api';
 import { Fader, Txt, h, svg, warnOnce } from '../dom';
 import { clamp01, num } from '../logic';
-import { CAPTION_ICON, ICON, MARKER_ICON, icon, isGamepad, keycap, setKeycap } from '../theme';
-import { sfx } from '../menu';
+import { CAPTION_ICON, ICON, MARKER_ICON, isGamepad, keycap, setKeycap } from '../theme';
 
 // ---------------------------------------------------------------------------------------------- toasts
 export type ToastKind = 'checkpoint' | 'info' | 'echo' | 'record' | 'warning';
@@ -35,7 +34,7 @@ export class Toasts {
   private readonly pool: Toast[] = [];
   private order = 0;
 
-  constructor(private readonly game: Game) {
+  constructor(game: Game) {
     this.el = h('div', 'aur-toasts');
     for (let i = 0; i < TOAST_MAX; i++) {
       const text = h('span', 'aur-toast-text');
@@ -78,7 +77,6 @@ export class Toasts {
     slot.age = 0;
     slot.el.style.order = String(this.order++);
     slot.fader.show(true);
-    if (k === 'checkpoint') sfx(this.game, 'uiCheckpoint');
   }
 
   update(dt: number): void {

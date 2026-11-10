@@ -14,6 +14,14 @@ import type { Vec3Like } from './common';
 // Input
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * Actions and their default bindings (keyboard-mouse / gamepad, standard mapping). Implementation notes:
+ *  - Gamepad: RT fires ('attack') only while LT ('aim') is held; otherwise RT is the modifier that turns RB
+ *    into 'ability2' (D-pad right also works). 'reload' = D-pad down or hold X 0.45 s. 'scan' = D-pad up or View.
+ *    'sprint' = click L3 (latched until the stick relaxes). P is a second 'pause' key on keyboard.
+ *  - Keyboard confirm = Enter / Space / E, cancel = Esc / Backspace, skip = Enter / Space (gamepad B).
+ *  - Arrow keys rotate the camera during play and are menu directions in menus.
+ */
 export type ButtonAction =
   | 'attack'      // LMB / X      — light melee; fires when aiming
   | 'heavy'       // F / Y        — heavy attack; also confirms Resonance windows
@@ -56,7 +64,11 @@ export interface VirtualInput {
 export interface InputSystem {
   /** camera-relative move intent, |v| <= 1. y = forward. */
   readonly move: { x: number; y: number };
-  /** If set (autoplay), absolute world-space move direction (unit) that bypasses the camera basis. */
+  /**
+   * If set (autoplay), absolute world-space move direction (unit) that bypasses the camera basis.
+   * (A vector shorter than 1 passed to `virtual.setMoveWorld` is kept as a slower walk; longer ones are
+   * normalised. While set, `move` reads (0, |moveWorld|).)
+   */
   readonly moveWorld: { x: number; z: number } | null;
   /** look delta for this frame in radians (already scaled by sensitivity / invert settings) */
   readonly look: { x: number; y: number };
@@ -72,6 +84,15 @@ export interface InputSystem {
   heldTime(a: ButtonAction): number;
   /** swallow a press so later consumers this tick do not see it */
   consume(a: ButtonAction): void;
+  /**
+   * ADDED. Accessibility-aware hold: identical to `down(a)` normally; with `settings.holdToToggle` on, the
+   * action latches instead — press once to engage, press again to release (the latch also clears on a context
+   * switch). Use this instead of `down()` for sustained holds (guard, aim, sprint, hold-to-interact) and call
+   * `disengage(a)` when the hold has done its job (interaction completed, guard broken).
+   */
+  engaged(a: ButtonAction): boolean;
+  /** ADDED. Clear the press-to-toggle latch of `a` (no-op when not toggling). */
+  disengage(a: ButtonAction): void;
   /**
    * ADDED. Duration (s) of the most recently completed hold of `a` — read it on the tick `released(a)` is true
    * (tap vs hold, charge release). Stays valid until the action is released again.
@@ -101,10 +122,16 @@ export interface InputSystem {
    * held must be released first — except sprint / aim / guard, which resume (without a `pressed` edge) when
    * returning to 'game'. Because a switch can hide a held action, poll `down()` for holds rather than waiting
    * for `released()`. Virtual holds are exempt.
+   * DOM note for menus: Enter / Space on a FOCUSED <button>/<a> keeps its native click and is NOT also reported
+   * as `confirm` (no double activation); with nothing focused, `confirm` is reported. Typing in form fields is
+   * never seen by the game.
    */
   setContext(ctx: InputContext): void;
   readonly context: InputContext;
-  /** Pointer lock is requested on canvas click while in 'game' context; falls back to drag-look if denied. */
+  /**
+   * Pointer lock is requested on canvas click while in 'game' context; falls back to drag-look if denied.
+   * (The click that captures the mouse is not reported as 'attack'. A denied request never throws; see `lookMode`.)
+   */
   requestPointerLock(): void;
   exitPointerLock(): void;
   rumble(strong: number, weak: number, ms: number): void;
@@ -173,6 +200,17 @@ export interface CinematicCamera {
   finish(): void;
 }
 
+/**
+ * The camera rig. Division of labour (so nothing is done twice or not at all):
+ *  - The PLAYER CONTROLLER calls setTarget / setAim / setLockOn — the rig never reads 'aim' or 'lockOn' input.
+ *  - The rig applies `input.look` itself while in follow mode, and toggles the shoulder on 'swapShoulder'
+ *    (skipped if the press was consumed or setShoulder() was called that tick).
+ *  - Sprint FOV (+4°) is inferred from the target's speed; nobody needs to signal sprinting.
+ *  - The rig never shakes on its own: combat / VFX call shake(), kick(), fovPunch() where an impact happens.
+ *  - Collision uses `game.physics.sweepSphere` (0.25 m probe, default mask) + `groundAt`; with stub physics the
+ *    camera simply does not collide.
+ *  - 'zone:loading' cancels any shake / blend and re-seats the follow camera.
+ */
 export interface CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   readonly mode: 'follow' | 'cinematic' | 'free';
@@ -189,6 +227,10 @@ export interface CameraRig {
    */
   readonly targetDistance: number;
 
+  /**
+   * Follow this body (its `pos` is read live every frame). Switching from one body to another glides the camera
+   * across in ~0.85 s (protagonist hand-over); call snapBehind() right after to cut instead.
+   */
   setTarget(target: CameraFollowTarget | null): void;
   /** over-the-shoulder aim framing */
   setAim(active: boolean): void;
@@ -197,23 +239,32 @@ export interface CameraRig {
   setShoulder(side: 1 | -1): void;
   /** instantly place the follow camera behind the target (after teleports / handoffs) */
   snapBehind(yaw?: number): void;
-  /** ADDED. Turn the follow orbit so the camera looks at a world point (bots, scripted "look there" beats). */
-  aimAt(point: Vec3Like): void;
+  /**
+   * ADDED. Turn the follow orbit so the camera looks at a world point. `seconds` 0 (default) = instantly (bots);
+   * > 0 = a gentle guided turn over roughly that long, for "frame the next destination" beats — the player
+   * cancels it by touching look, and it never fights lock-on or aim.
+   */
+  aimAt(point: Vec3Like, seconds?: number): void;
   /** ADDED. Override the follow framing, eased over `blendSeconds` (default 1). null restores the defaults. */
   setFraming(framing: FollowFraming | null, blendSeconds?: number): void;
 
-  /** Trauma-style shake. amplitude ~0..1. Honours settings.reduceShake. */
+  /**
+   * Trauma-style shake. amplitude ~0..1. Honours settings.reduceShake.
+   * (Decays linearly to exactly zero over `duration`, default 0.4 s. Rough guide: light hit 0.15, heavy 0.5,
+   * slam / elite impact 0.9. Overlapping shakes combine as a root-sum-square; re-issuing the same shake every
+   * frame sustains it without stacking.)
+   */
   shake(amplitude: number, duration?: number): void;
-  /** recoil-style impulse (degrees) */
+  /** recoil-style impulse (degrees) — positive pitch kicks up, positive yaw kicks left; springs back in ~0.25 s */
   kick(pitchDeg: number, yawDeg?: number): void;
-  /** transient FOV change that eases back */
+  /** transient FOV change that eases back (snaps in over the first 18 % of `seconds`, default 0.35 s) */
   fovPunch(deltaDeg: number, seconds?: number): void;
 
   readonly cine: CinematicCamera;
   /** Leave cinematic mode and blend back to follow over `seconds` (0 = cut; default 0.6). */
   release(seconds?: number): void;
 
-  /** Free debug camera (screenshots). */
+  /** Free debug camera (screenshots). Applied immediately; no shake/breathing. null returns to the previous mode. */
   setFree(pose: CamPose | null): void;
 
   /** Flattened camera forward (unit, y=0) — basis for camera-relative movement. */

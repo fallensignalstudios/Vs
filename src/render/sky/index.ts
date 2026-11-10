@@ -3,12 +3,13 @@
  * and the ScenicFactory. See src/core/api/sky.ts for the contract.
  */
 import * as THREE from 'three';
-import type { Game, ScenicFactory, SkyLight, SkyPreset, SkySystem, Vec3Like } from '@/core/api';
+import type { Game, SkyLight, SkyPreset, SkySystem, Vec3Like } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { EASE, clamp01, damp } from '@/core/mathx';
 import { createFleetBattle, type FleetBattle } from './battle';
 import { createCarrier, type Carrier } from './carrier';
 import { createSkyDome, type SkyDome } from './dome';
+import { createScenicFactory, type ScenicRuntime } from './scenic';
 import { SKY_PRESETS, SkyState, blendSkyStates, rotateSkyState } from './presets';
 import { applySharedState, createSharedUniforms, type SharedUniforms } from './shared';
 
@@ -34,7 +35,7 @@ class SkySystemImpl implements SkySystem {
   readonly battleGlow = new THREE.Color(0, 0, 0);
   readonly hazeColor = new THREE.Color(0, 0, 0);
   readonly carrier: Carrier;
-  scenic!: ScenicFactory;
+  readonly scenic: ScenicRuntime;
 
   private readonly shared: SharedUniforms = createSharedUniforms();
   private readonly dome: SkyDome;
@@ -60,10 +61,12 @@ class SkySystemImpl implements SkySystem {
     this.root.name = 'sky';
     this.dome = createSkyDome(this.shared);
     this.root.add(this.dome.mesh);
-    this.battle = createFleetBattle(this.shared, game.flags?.seed ?? 7283);
+    const seed = typeof game.flags?.seed === 'number' ? game.flags.seed : 7283;
+    this.battle = createFleetBattle(this.shared, seed);
     this.root.add(this.battle.object);
-    this.carrier = createCarrier(this.shared, game.flags?.seed ?? 7283);
+    this.carrier = createCarrier(this.shared, seed);
     this.root.add(this.carrier.object, this.carrier.sparks);
+    this.scenic = createScenicFactory(game, this.shared);
     this.to.setFromDef(SKY_PRESETS.void);
     this.from.copy(this.to);
     this.cur.copy(this.to);
@@ -142,12 +145,14 @@ class SkySystemImpl implements SkySystem {
     this.battle.update(step, this.view, this.battleNow, this.reduceFlash());
     this.battleGlow.copy(this.battle.glow);
     this.carrier.update(step, this.view.keyDir);
+    this.scenic.update(this.shared.uTime.value);
   }
 
   dispose(): void {
     this.dome.dispose();
     this.battle.dispose();
     this.carrier.dispose();
+    this.scenic.dispose();
     this.root.removeFromParent();
   }
 

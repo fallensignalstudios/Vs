@@ -12,7 +12,7 @@ import { clamp, clamp01, damp, smoothstep, TAU } from '@/core/mathx';
 import { gaitFoot, gaitRate, impact, keys, Limb2, move, noise1, rot, win, type GaitOut } from '../core/anim';
 import { CreatureBase, type ActionDef, type Slot } from '../core/base';
 import { getTemplate } from '../core/rig';
-import { buildElite, E, ELITE_GROUPS, TENDRIL_BONES, TENDRIL_COUNT } from './build';
+import { buildElite, ELITE_GROUPS, ELITE_MODEL_SCALE, EW as E, TENDRIL_BONES, TENDRIL_COUNT } from './build';
 
 const ACTIONS: Record<string, ActionDef> = {
   idle: { dur: 4, loop: true },
@@ -40,7 +40,7 @@ const ALIASES: Record<string, string> = {
 
 const STRIDE_DUTY = 0.64;
 const _t = new THREE.Vector3(), _pole = new THREE.Vector3(), _p = new THREE.Vector3(), _mi = new THREE.Matrix4();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _m4 = new THREE.Matrix4();
 const _g: GaitOut = { along: 0, lift: 0, planted: 1 };
 const v3 = (p: readonly [number, number, number]): THREE.Vector3 => new THREE.Vector3(p[0], p[1], p[2]);
 
@@ -95,8 +95,8 @@ export class Elite extends CreatureBase implements EliteVisual {
       archetype: 'elite', height: 3.6, radius: 1.3,
       template: getTemplate('elite', buildElite),
       actions: ACTIONS, aliases: ALIASES, groups: ELITE_GROUPS,
-      frostOrigin: [E.shR[0] + 0.1, E.shR[1] + 0.1, E.shR[2]], frostRange: 3.3,
-      eclipse: true, baseCorruption: 0.62,
+      frostOrigin: [E.shR[0] + 0.1, E.shR[1] + 0.1, E.shR[2]], frostRange: 3.6,
+      eclipse: true, baseCorruption: 0.62, veinScale: 0.5, modelScale: ELITE_MODEL_SCALE,
     }, opts);
     const r = this.rig;
     this.hips = r.b('hips'); this.spine = r.b('spine'); this.chest = r.b('chest');
@@ -147,7 +147,7 @@ export class Elite extends CreatureBase implements EliteVisual {
   }
 
   protected override lookHeight(): number {
-    return 3.0;
+    return 3.35;
   }
 
   protected override onPlay(name: string): void {
@@ -288,9 +288,14 @@ export class Elite extends CreatureBase implements EliteVisual {
     this.hasPrev = true;
     const life = (1 - this.limp) * alive;
     const flare = this.flare;
+    // gravity: undo most of the chest's lean at each root so the tendrils hang, whatever the torso is doing
+    this.armL.updateWorldMatrix(true, false);
+    _q2.setFromRotationMatrix(_m4.multiplyMatrices(_mi, this.armL.matrixWorld)).invert();
+    _q.setFromRotationMatrix(_m4.multiplyMatrices(_mi, chest.matrixWorld)).invert();
     for (let i = 0; i < TENDRIL_COUNT; i++) {
       const ch = this.tendrils[i]!;
       const side = i % 2 === 0 ? 1 : -1;
+      ch[0]!.quaternion.identity().slerp(ch[0]!.parent === this.armL ? _q2 : _q, 0.85);
       for (let j = 0; j < TENDRIL_BONES; j++) {
         const v = this.chestVel[Math.min(2, j)]!;
         const amp = 0.07 + j * 0.06;
@@ -325,7 +330,7 @@ export class Elite extends CreatureBase implements EliteVisual {
       if (this.petalBurst > 1.2) this.petalBurst = -1;
     }
     this.jointCore.scale.setScalar(1 - 0.5 * fr);
-    this.stumpHeat = damp(this.stumpHeat, this.isFractured ? 0.14 : 0, 0.9, adt);
+    this.stumpHeat = damp(this.stumpHeat, this.isFractured ? 0.07 : 0, 1.5, adt);
 
     // ---- shader groups
     const deathW = this.weight('death');
@@ -333,10 +338,10 @@ export class Elite extends CreatureBase implements EliteVisual {
     this.groupGlow('eye', (0.8 + beat * 0.8 + noise1(t * 3.1) * 0.15) * on);
     this.groupGlow('core', Math.max(0, 0.75 + beat * 0.7 + this.coreGlow) * on);
     this.groupGlow('joint', this.isFractured ? 0 : (0.0 + open * (1.05 + beat * 0.5 + Math.sin(t * 5.2) * 0.08)) * on);
-    this.groupGlow('stump', this.isFractured ? this.stumpHeat * (8 + Math.sin(t * 9) * 1.2) : 0);
+    this.groupGlow('stump', this.isFractured ? this.stumpHeat * (6.5 + Math.sin(t * 9) * 1.2) : 0);
     this.groupGlow('nodes', (0.6 + beat * 1.3) * on);
     this.u.uKnit.value.set(0.06 * alive + regen * 0.05, this.knitWave * 0.9, t * 2.6, this.knitLift);
-    this.rig.setBoundsCenter(hips.position.x, 2.0 + (hips.position.y - E.hips[1]) * 0.5, hips.position.z, 1.5);
+    this.rig.setBoundsCenter(hips.position.x, 2.3 + (hips.position.y - E.hips[1]) * 0.5, hips.position.z, 1.5);
   }
 
   /** applies one action layer; returns the joint-open amount the action itself drives */
@@ -383,8 +388,8 @@ export class Elite extends CreatureBase implements EliteVisual {
         rot(jaw, -0.4 * rear, 0, 0);
         for (const c of this.clawR) rot(c, -0.4 * rear + 0.3 * slam, 0, 0);
         const ik = keys(t, [1.5, 0, 1.62, 1, 2.35, 1, 2.9, 0]) * w;
-        this.arms[0]!.w = ik; this.arms[0]!.target.set(0.62, 0.42, -1.75);
-        this.arms[1]!.w = ik; this.arms[1]!.target.set(-0.56, 0.36, -1.66);
+        this.arms[0]!.w = ik; this.arms[0]!.target.set(0.62, 0.62, -1.8);
+        this.arms[1]!.w = ik; this.arms[1]!.target.set(-0.56, 0.5, -1.7);
         this.knitLift += impact(t, 1.62, 0.3) * 0.5 * w;
         this.flare += rear * 0.5;
         this.coreGlow += rear * 0.8;
@@ -420,8 +425,8 @@ export class Elite extends CreatureBase implements EliteVisual {
         rot(foreR, 0.5 * gather + 0.35 * open, 0, 0);
         rot(armL, 0.4 * gather - 0.35 * open, 0, -1.0 * open);
         rot(foreL, 0.6 * gather + 0.5 * open, 0, 0);
-        rot(neck, -0.2 * gather + 0.3 * open, 0, 0);
-        rot(head, -0.3 * gather + 0.6 * open + shake * 0.03, shake * 0.04, -0.12 * open);
+        rot(neck, -0.2 * gather + 0.22 * open, 0, 0);
+        rot(head, -0.3 * gather + 0.38 * open + shake * 0.03, shake * 0.04, -0.12 * open);
         rot(jaw, -0.75 * open, 0, 0);
         rot(ribR, 0, -0.45 * open, 0);
         rot(ribL, 0, 0.45 * open, 0);
@@ -496,7 +501,7 @@ export class Elite extends CreatureBase implements EliteVisual {
         rot(armL, 0.5 * recoil + 0.4 * kneel, 0, -0.5 * recoil);
         rot(foreL, 0.4 * kneel, 0, 0);
         this.arms[1]!.w = keys(t, [0.9, 0, 1.3, 1, 2.3, 1, 2.9, 0]) * w;
-        this.arms[1]!.target.set(-0.95, 0.34, -0.75);
+        this.arms[1]!.target.set(-0.95, 0.5, -0.8);
         legR.off.z += k([0.08, 0, 0.32, 0.75, 2.6, 0.75, 3.2, 0]);
         legR.off.y += win(t, 0.08, 0.16, 0.22, 0.32) * 0.2 * w;
         legL.off.z += k([0.3, 0, 0.6, 0.95, 2.6, 0.95, 3.2, 0]);
@@ -572,8 +577,8 @@ export class Elite extends CreatureBase implements EliteVisual {
         rot(armL, -0.4 * arch + 0.8 * fall, 0, -0.8 * arch - 0.4 * settle);
         rot(foreL, 0.6 * fall, 0, 0);
         const ik = keys(t, [1.3, 0, 1.9, 1]) * w;
-        this.arms[0]!.w = ik; this.arms[0]!.target.set(1.1 + 0.3 * settle, 0.4, -1.35 - 0.2 * settle);
-        this.arms[1]!.w = ik; this.arms[1]!.target.set(-1.0 - 0.3 * settle, 0.36, -1.2 - 0.25 * settle);
+        this.arms[0]!.w = ik; this.arms[0]!.target.set(1.1 + 0.3 * settle, 0.6, -1.4 - 0.2 * settle);
+        this.arms[1]!.w = ik; this.arms[1]!.target.set(-1.0 - 0.3 * settle, 0.5, -1.25 - 0.25 * settle);
         this.limp = Math.max(this.limp, keys(t, [0.6, 0, 1.6, 1]) * w);
         this.flare += arch * 1.0 - fall * 0.6;
         this.knitLift += keys(t, [1.9, 0, 3.4, 1.5]) * w;

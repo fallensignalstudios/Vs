@@ -88,7 +88,7 @@ function resolve(w: PhysicsCore, x: number, z: number, r: number, lo: number, hi
  */
 function edgeNormal(
   w: PhysicsCore, surf: SurfaceRec | null, ex: number, ez: number, y: number, stepUp: number, maxDrop: number,
-  r: number, fx: number, fz: number,
+  height: number, head: boolean, r: number, fx: number, fz: number,
 ): void {
   if (surf) {
     const dx = ex - surf.cx, dz = ez - surf.cz;
@@ -113,8 +113,8 @@ function edgeNormal(
   const eps = Math.min(0.12, r * 0.5);
   let ox = 0, oz = 0;
   for (let k = 0; k < RING; k++) {
-    const g = w.groundY(ex + RING_COS[k] * eps, ez + RING_SIN[k] * eps, y, stepUp);
-    if (!(g === g && y - g <= maxDrop)) { ox += RING_COS[k]; oz += RING_SIN[k]; }
+    const g = w.walkY(ex + RING_COS[k] * eps, ez + RING_SIN[k] * eps, y, stepUp, maxDrop, height, head);
+    if (g !== g) { ox += RING_COS[k]; oz += RING_SIN[k]; }
   }
   let ol = Math.hypot(ox, oz);
   if (ol < 1e-6) { ox = fx; oz = fz; ol = Math.hypot(ox, oz); }
@@ -153,10 +153,12 @@ export function moveCharacter(
 
   // Ground state at the start. An actor that begins off every surface moves freely (solids only) until it
   // reaches ground again — the graceful recovery for a badly placed spawn.
-  let grounded = false;
+  // `head` enables the headroom rule; it is waived for an actor that already stands somewhere without
+  // headroom (shoved or spawned under a ramp) so it can always walk back out.
+  let grounded = false, head = false;
   if (!flying) {
     const gy = w.groundY(x, z, y, stepUp);
-    if (gy === gy) { y = gy; grounded = true; }
+    if (gy === gy) { y = gy; grounded = true; head = w.headroom(x, z, gy, stepUp, height); }
   }
 
   let blocked = false;
@@ -174,8 +176,8 @@ export function moveCharacter(
       if (st === 1) {
         if (flying || !grounded) { x = S.rx; z = S.rz; clear = true; }
         else {
-          const g = w.groundY(S.rx, S.rz, y, stepUp);
-          if (g === g && y - g <= maxDrop) { x = S.rx; z = S.rz; y = g; clear = true; }
+          const g = w.walkY(S.rx, S.rz, y, stepUp, maxDrop, height, head);
+          if (g === g) { x = S.rx; z = S.rz; y = g; clear = true; }
         }
       }
     }
@@ -206,11 +208,11 @@ export function moveCharacter(
       x = qx; z = qz; clear = true;
       if (!flying) {
         const gy = w.groundY(x, z, y, stepUp);
-        if (gy === gy) { y = gy; grounded = true; }
+        if (gy === gy) { y = gy; grounded = true; head = w.headroom(x, z, gy, stepUp, height); }
       }
     } else {
-      const gy = w.groundY(qx, qz, y, stepUp);
-      if (gy === gy && y - gy <= maxDrop) {
+      const gy = w.walkY(qx, qz, y, stepUp, maxDrop, height, head);
+      if (gy === gy) {
         x = qx; z = qz; y = gy; clear = true;
       } else {
         // ---- fall protection: stop at the edge, then slide along it ----
@@ -219,19 +221,19 @@ export function moveCharacter(
         let tLo = 0, tHi = 1;
         for (let it = 0; it < 6; it++) {
           const m = (tLo + tHi) * 0.5;
-          const g = w.groundY(x + mdx * m, z + mdz * m, y, stepUp);
-          if (g === g && y - g <= maxDrop) tLo = m; else tHi = m;
+          const g = w.walkY(x + mdx * m, z + mdz * m, y, stepUp, maxDrop, height, head);
+          if (g === g) tLo = m; else tHi = m;
         }
         let bx = x, bz = z, by = y;
         if (tLo > 0) {
           const cx = x + mdx * tLo, cz = z + mdz * tLo;
           if (resolve(w, cx, cz, r, lo, hi) === 0) {
-            const g = w.groundY(cx, cz, y, stepUp);
-            if (g === g && y - g <= maxDrop) { bx = cx; bz = cz; by = g; }
+            const g = w.walkY(cx, cz, y, stepUp, maxDrop, height, head);
+            if (g === g) { bx = cx; bz = cz; by = g; }
           }
         }
         w.groundY(bx, bz, by, stepUp);
-        edgeNormal(w, w.lastSurface, x + mdx * tHi, z + mdz * tHi, y, stepUp, maxDrop, r, mdx, mdz);
+        edgeNormal(w, w.lastSurface, x + mdx * tHi, z + mdz * tHi, y, stepUp, maxDrop, height, head, r, mdx, mdz);
         const ox = S.ox, oz = S.oz;
         S.nx = -ox; S.nz = -oz; S.hasN = true;
         // tangential remainder of this sub-step
@@ -240,18 +242,18 @@ export function moveCharacter(
         if (dot > 0) { tx -= dot * ox; tz -= dot * oz; }
         if (tx * tx + tz * tz > 1e-10 && resolve(w, bx + tx, bz + tz, r, lo, hi) !== 2) {
           let cx = S.rx, cz = S.rz;
-          let g = w.groundY(cx, cz, by, stepUp);
-          let ok = g === g && by - g <= maxDrop;
+          let g = w.walkY(cx, cz, by, stepUp, maxDrop, height, head);
+          let ok = g === g;
           if (!ok) {
             // a convex edge curves away from the tangent: pull the candidate back in to the closest valid point
             const ix = cx - ox * EDGE_PULL, iz = cz - oz * EDGE_PULL;
-            g = w.groundY(ix, iz, by, stepUp);
-            if (g === g && by - g <= maxDrop) {
+            g = w.walkY(ix, iz, by, stepUp, maxDrop, height, head);
+            if (g === g) {
               let kLo = 0, kHi = 1;
               for (let it = 0; it < 5; it++) {
                 const m = (kLo + kHi) * 0.5;
-                const gm = w.groundY(ix + (cx - ix) * m, iz + (cz - iz) * m, by, stepUp);
-                if (gm === gm && by - gm <= maxDrop) { kLo = m; g = gm; } else kHi = m;
+                const gm = w.walkY(ix + (cx - ix) * m, iz + (cz - iz) * m, by, stepUp, maxDrop, height, head);
+                if (gm === gm) { kLo = m; g = gm; } else kHi = m;
               }
               cx = ix + (cx - ix) * kLo; cz = iz + (cz - iz) * kLo;
               ok = resolve(w, cx, cz, r, lo, hi) === 0;

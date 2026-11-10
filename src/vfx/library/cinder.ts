@@ -8,7 +8,7 @@ export const CINDER: Record<string, EffectDef> = {
     emitters: [
       { p: star(C.cinderHot, 12, 1.0, 0.1), burst: 1 },
       { p: flashGlow(C.cinder, 5, 1.6, 0.18), burst: 1 },
-      { p: flame({ life: [0.2, 0.4], size: [0.2, 0.5, 0.7] }), burst: [7, 9], shape: 'sphere', radius: 0.12, vel: 'cone', cone: 1.2, speed: [1.2, 4.5] },
+      { p: flame({ life: [0.18, 0.38], size: [0.16, 0.42, 0.6] }), burst: [9, 11], shape: 'sphere', radius: 0.1, vel: 'cone', cone: 0.6, speed: [1.5, 7] },
       { p: sparks(C.cinder), burst: [16, 20], vel: 'cone', cone: 1.3, speed: [3, 11] },
       { p: embers(), burst: [10, 14], shape: 'sphere', radius: 0.2, vel: 'cone', cone: 1.4, speed: [0.5, 2.6] },
       { p: smoke(C.smokeWarm, { life: [0.8, 1.4], size: [0.25, 0.7, 1.0], alpha: 0.26, glow: 1.6 }), burst: 2, at: 0.05, vel: 'cone', cone: 0.6, speed: [0.3, 0.8] },
@@ -22,8 +22,8 @@ export const CINDER: Record<string, EffectDef> = {
    */
   cinderSlam: {
     emitters: [
-      { p: flashGlow(C.cinderHot, 9, 3.4, 0.2, { floorFade: true }), burst: 1, offset: [0, 0.25, 0] },
-      { p: star(C.heat, 14, 2.2, 0.12), burst: 1, offset: [0, 0.2, 0] },
+      { p: flashGlow(C.cinderHot, 8, 2.6, 0.2, { floorFade: true }), burst: 1, offset: [0, 0.25, 0] },
+      { p: star(C.heat, 12, 1.7, 0.12), burst: 1, offset: [0, 0.2, 0] },
       // radial ground fire
       { p: flame({ life: [0.3, 0.55], size: [0.35, 0.8, 1.05], gravity: -1.2, drag: 3.2, floorFade: true }), burst: [30, 36], shape: 'ring', radius: 0.5, vel: 'ring', speed: [7, 12.5], up: [0.2, 1.2], offset: [0, 0.2, 0] },
       // centre jet
@@ -39,7 +39,7 @@ export const CINDER: Record<string, EffectDef> = {
       { p: smoke(C.smoke, { life: [1.4, 2.2], alpha: 0.24, glow: 1.4 }), burst: 4, at: 0.12, shape: 'disc', radius: 1.2, vel: 'cone', cone: 0.5, speed: [0.4, 1.0], offset: [0, 0.3, 0] },
     ],
     events: [
-      { at: 0, kind: 'flash', color: C.cinder, intensity: 6, seconds: 0.35, offset: [0, 0.6, 0] },
+      { at: 0, kind: 'flash', color: C.cinder, intensity: 5, seconds: 0.35, offset: [0, 0.6, 0] },
       { at: 0, kind: 'shock', radius: 3.2, color: C.heat, seconds: 0.26 },
       { at: 0.03, kind: 'shock', radius: 4.8, color: C.cinder, seconds: 0.5 },
       { at: 0, kind: 'decal', decal: 'scorch', size: 5.2, life: 18 },
@@ -51,8 +51,8 @@ export const CINDER: Record<string, EffectDef> = {
   cinderEmbers: {
     sustain: 1.4,
     emitters: [
-      { p: embers({ life: [0.8, 1.8], follow: false }), rate: 22, shape: 'sphere', radius: 0.22, vel: 'cone', cone: 0.9, speed: [0.2, 1.2] },
-      { p: flashGlow(C.cinder, 1.6, 0.55, 0.5, { follow: true, color: [[C.cinder, 1.6], [C.cinder, 1.2], [C.cinderDeep, 0]], fadeIn: 0.3 }), burst: 1, every: 0.4 },
+      { p: embers({ life: [0.8, 1.8], size: [0.07, 0.06, 0.02] }), rate: 34, shape: 'sphere', radius: 0.22, vel: 'cone', cone: 0.9, speed: [0.3, 1.5] },
+      { p: flashGlow(C.cinder, 3, 0.7, 0.5, { follow: true, color: [[C.cinder, 3], [C.cinder, 2.4], [C.cinderDeep, 0]], fadeIn: 0.3 }), burst: 1, every: 0.4 },
     ],
   },
 
@@ -85,8 +85,8 @@ export const CINDER: Record<string, EffectDef> = {
   /** Sticky blast: tight fireball, fast radial sparks, lit smoke, scorch */
   cinderStickyBlast: {
     emitters: [
-      { p: flashGlow(C.cinderHot, 10, 3.8, 0.18), burst: 1 },
-      { p: star(C.heat, 14, 2.4, 0.1), burst: 1 },
+      { p: flashGlow(C.cinderHot, 9, 3.0, 0.18), burst: 1 },
+      { p: star(C.heat, 12, 1.8, 0.1), burst: 1 },
       { p: flame({ life: [0.28, 0.55], size: [0.45, 1.05, 1.4], drag: 4.5 }), burst: [14, 17], shape: 'sphere', radius: 0.2, vel: 'radial', speed: [2.5, 7] },
       { p: sparks(C.cinder, { life: [0.4, 1.0] }), burst: [38, 46], vel: 'cone', cone: PI, speed: [5, 16] },
       { p: embers({ life: [1.0, 2.2] }), burst: [20, 26], shape: 'sphere', radius: 0.5, vel: 'radial', speed: [0.6, 3.2] },

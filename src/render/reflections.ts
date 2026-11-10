@@ -47,6 +47,7 @@ export class PlanarReflections {
   private activeY: number | null = null;
   private fade = 0;
   private warnedMaterial = false;
+  private warnedMesh = false;
 
   private readonly frustum = new THREE.Frustum();
   private readonly projScreen = new THREE.Matrix4();
@@ -72,7 +73,10 @@ export class PlanarReflections {
 
   register(mesh: THREE.Mesh, opts: ReflectiveFloorOpts = {}): void {
     if (!mesh || (mesh as THREE.Mesh).isMesh !== true || !mesh.geometry) {
-      console.warn('[render] registerReflectiveFloor: not a mesh — ignored');
+      if (!this.warnedMesh) {
+        this.warnedMesh = true;
+        console.warn('[render] registerReflectiveFloor: not a mesh — ignored');
+      }
       return;
     }
     const y = typeof opts.y === 'number' && Number.isFinite(opts.y) ? opts.y : null;
@@ -166,13 +170,16 @@ export class PlanarReflections {
     }
     const step = Math.min(1, Math.max(0, dt) * FADE_RATE);
     if (this.activeY === null) {
+      // a floor just came into view (zone start, camera cut): no cross-fade needed
       this.activeY = wanted;
+      this.fade = 1;
     } else if (Math.abs(wanted - this.activeY) > 0.02) {
-      // cross-fade through the env map when the camera moves to another floor height
+      // the camera moved to another floor height: cross-fade through the env map
       this.fade = Math.max(0, this.fade - step);
       if (this.fade <= 0) this.activeY = wanted;
+    } else {
+      this.fade = Math.min(1, this.fade + step);
     }
-    if (Math.abs(wanted - this.activeY) <= 0.02) this.fade = Math.min(1, this.fade + (dt > 0 ? step : 1));
     if (camY - this.activeY < 0.02) {
       g.uReflOn.value = 0;
       return false;
@@ -242,6 +249,9 @@ export class PlanarReflections {
       const geo = mesh.geometry;
       if (!geo.boundingBox) geo.computeBoundingBox();
       if (!geo.boundingBox) continue;
+      // this runs before the frame's scene traversal: a floor added or moved since the last frame still has
+      // a stale world matrix, which would put the mirror at the wrong height for a frame
+      mesh.updateWorldMatrix(true, false);
       entry.box.copy(geo.boundingBox).applyMatrix4(mesh.matrixWorld);
       if (!this.frustum.intersectsBox(entry.box)) continue;
       const y = entry.y ?? entry.box.max.y;

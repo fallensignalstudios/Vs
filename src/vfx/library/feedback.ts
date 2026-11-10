@@ -37,10 +37,10 @@ export const FEEDBACK: Record<string, EffectDef> = {
   checkpointPulse: {
     emitters: [
       { p: motes(C.gold, 3.2, { sprite: ['diamond', 'dot'], life: [1.2, 2.2], size: [0.05, 0.07, 0.03], gravity: -0.7, drag: 0.4, flicker: 0.3 }), rate: 30, until: 0.9, shape: 'disc', radius: 1.3, vel: 'cone', cone: 0.1, speed: [0.3, 1.0], offset: [0, 0.05, 0] },
-      { p: flashGlow(C.gold, 2.2, 2.6, 0.9, { color: [[C.goldLight, 2.2], [C.gold, 1.4], [C.gold, 0]], fadeIn: 0.2, fadeOut: 0.4, floorFade: true }), burst: 1, offset: [0, 0.5, 0] },
+      { p: flashGlow(C.gold, 1.6, 2.0, 0.9, { color: [[C.goldLight, 2.2], [C.gold, 1.4], [C.gold, 0]], fadeIn: 0.2, fadeOut: 0.4, floorFade: true }), burst: 1, offset: [0, 0.5, 0] },
     ],
     events: [
-      { at: 0, kind: 'shape', shape: { kind: 'column', life: 1.6, color: [C.gold, 1.5], color2: [C.goldLight, 2.6], radius: [0.35, 0.6], height: 5.5, attack: 0.25 } },
+      { at: 0, kind: 'shape', shape: { kind: 'column', life: 1.6, color: [C.gold, 0.6], color2: [C.goldLight, 1.1], radius: [0.3, 0.5], height: 5.5, attack: 0.25 } },
       { at: 0, kind: 'shock', radius: 3, color: C.gold, seconds: 0.9 },
       { at: 0, kind: 'decal', decal: 'goldRing', size: 3.2, life: 4.5 },
       { at: 0, kind: 'flash', color: C.gold, intensity: 1.6, seconds: 0.8, offset: [0, 1.2, 0] },

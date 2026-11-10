@@ -27,6 +27,8 @@ export interface SharedUniforms {
   uHazeFall: { value: number };
   /** drawing-buffer size of the pass being rendered (kept current by ViewportTracker) */
   uViewport: { value: THREE.Vector2 };
+  /** NDC depth of the far plane for the active renderer: 1, or 0 with a reversed depth buffer */
+  uFarZ: { value: number };
 }
 
 export function createSharedUniforms(): SharedUniforms {
@@ -47,6 +49,7 @@ export function createSharedUniforms(): SharedUniforms {
     uHazeAmt: { value: 0 },
     uHazeFall: { value: 9 },
     uViewport: { value: new THREE.Vector2(1280, 720) },
+    uFarZ: { value: 1 },
   };
 }
 
@@ -72,12 +75,20 @@ const _size = new THREE.Vector2();
 
 /**
  * Returns an `onBeforeRender` hook that records the size of the target being drawn into `uViewport`, so
- * pixel-footprint clamps (minimum sprite size) stay correct in the main pass, reflections and PMREM faces alike.
+ * pixel-footprint clamps (minimum sprite size) stay correct in the main pass, reflections and PMREM faces alike,
+ * and which way the depth buffer runs (`uFarZ`).
  */
 export function viewportTracker(u: SharedUniforms): THREE.Object3D['onBeforeRender'] {
   return (renderer) => {
     const rt = renderer.getRenderTarget();
     if (rt) u.uViewport.value.set(rt.width, rt.height);
     else u.uViewport.value.copy(renderer.getDrawingBufferSize(_size));
+    u.uFarZ.value = renderer.capabilities.reversedDepthBuffer ? 0 : 1;
   };
 }
+
+/**
+ * Draw order of the far field inside the OPAQUE list (so it also shows through transmissive glass): after all
+ * ordinary opaque geometry (early-z hides it for free), dome → fleet → battle light → scenic light cards.
+ */
+export const SKY_ORDER = { dome: 1000, fleet: 1001, battleFx: 1002, lightCards: 1010 } as const;

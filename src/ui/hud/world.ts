@@ -50,6 +50,11 @@ interface Marker {
   vis: number;
   x: number;
   y: number;
+  /** last position written to the DOM */
+  sx: number;
+  sy: number;
+  /** which side of the centre column a bottom-edge marker keeps to (hysteresis) */
+  side: -1 | 1;
   placed: boolean;
   label: Txt;
   dist: Txt;
@@ -87,7 +92,8 @@ export class WorldHud {
   }
 
   // ------------------------------------------------------------------------------------------ markers
-  marker(id: string, pos: Vec3Like | null, opts: WorldMarkerOpts = {}): void {
+  marker(id: string, pos: Vec3Like | null, options?: WorldMarkerOpts | null): void {
+    const opts = options ?? {};
     const key = String(id);
     let m = this.markers.get(key);
     if (!pos) {
@@ -139,7 +145,7 @@ export class WorldHud {
       hideWithin: 0,
       removing: false,
       vis: 0,
-      x: 0, y: 0, placed: false,
+      x: 0, y: 0, sx: -1e9, sy: -1e9, side: -1, placed: false,
       label: new Txt(label),
       dist: new Txt(dist),
       edge: new Flag(el, 'is-edge'),
@@ -201,7 +207,7 @@ export class WorldHud {
     // safe rectangle for edge-clamped markers: clear of the corner panels and the subtitle band
     const mx = 84 * f.u;
     const myTop = 96 * f.u;
-    const myBottom = 196 * f.u;
+    const myBottom = 250 * f.u;
     for (const m of this.markers.values()) {
       let want = visible && !m.removing ? 1 : 0;
       let edge = false;
@@ -239,6 +245,13 @@ export class WorldHud {
         if (edge && !nav && (m.kind === 'objective' || m.kind === 'optional' || m.kind === 'return')) want = 0;
         tx = tmpE.x;
         ty = tmpE.y;
+        // bottom edge: the centre column belongs to prompts and captions — slide out to one side of it
+        if (edge && ty >= f.h * 0.5 + (f.h * 0.5 - myBottom) - 1) {
+          const half = f.w * 0.17;
+          const dx = tx - f.w * 0.5;
+          if (Math.abs(dx) > half * 0.3) m.side = dx < 0 ? -1 : 1;
+          if (Math.abs(dx) < half) tx = f.w * 0.5 + m.side * half;
+        }
       }
       m.vis += Math.sign(want - m.vis) * Math.min(Math.abs(want - m.vis), f.dt * 5);
       if (m.vis <= 0 && m.removing) {
@@ -261,7 +274,11 @@ export class WorldHud {
         m.y += (ty - m.y) * k;
       }
       m.placed = true;
-      m.el.style.transform = `translate3d(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px, 0)`;
+      if (Math.abs(m.x - m.sx) > 0.15 || Math.abs(m.y - m.sy) > 0.15) {
+        m.sx = m.x;
+        m.sy = m.y;
+        m.el.style.transform = `translate3d(${m.x.toFixed(1)}px, ${m.y.toFixed(1)}px, 0)`;
+      }
       m.edge.set(edge);
       if (edge) m.arrow.set(Math.atan2(m.x - f.w * 0.5, -(m.y - f.h * 0.5)));
       m.dist.set(origin ? fmtDistance(dist) : '');
@@ -334,7 +351,7 @@ export class WorldHud {
       const n = list ? list.length : 0;
       for (let i = 0; i < n; i++) {
         const a = (list as readonly Actor[])[i] as Actor;
-        if (!a || !a.alive) continue;
+        if (!a || !a.alive || !a.pos) continue;
         const pinned = a === this.focus;
         if (!pinned) {
           if (!a.targetable || a === player || a.protectedNpc) continue;

@@ -11,7 +11,7 @@ import type { Mixer } from '../mixer';
 import { dbToGain } from '../sfx/recipe';
 import { MUSIC } from './defs';
 import { Deck, boundaryFor, type DeckShared } from './deck';
-import { STINGER_LEVEL, playStinger, type StingerKind } from './stingers';
+import { STINGER_DB, playStinger, type StingerKind } from './stingers';
 import type { Family, MusicDef } from './types';
 
 export type { StingerKind } from './stingers';
@@ -27,12 +27,13 @@ export class MusicEngine {
   private current: MusicState = 'silence';
   private deck: Deck | null = null;
   private readonly fading: Deck[] = [];
-  private readonly shared: DeckShared = { intensity: 0, irregular: 0, resolved: false };
+  private readonly shared: DeckShared = { intensity: 0, irregular: 0, resolved: false, externalCadenceAt: -Infinity };
   private target = 0;
   private readonly warned = new Set<string>();
   private readonly lastStinger = new Map<string, number>();
   private readonly stingerBus: GainNode;
   private serial = 0;
+  private lead: 'dominion' | 'reformation' = 'dominion';
   private readonly rnd: () => number;
   private readonly stingers: Array<{ out: GainNode; end: number }> = [];
 
@@ -79,6 +80,17 @@ export class MusicEngine {
     return this.deck?.def.family ?? 'neutral';
   }
 
+  /** Instrumentation for a stinger: the bed's own identity, or the current protagonist's over a shared bed. */
+  private stingerFamily(): Family {
+    const f = this.family();
+    return f === 'neutral' || f === 'king' ? this.lead : f;
+  }
+
+  /** Whose mission this currently is — flavours encounter stingers when the bed itself is neutral. */
+  setLead(lead: 'dominion' | 'reformation'): void {
+    this.lead = lead;
+  }
+
   /** Cross-fade to a state on the next bar line (next beat for very short fades). */
   setState(state: MusicState, fadeSeconds = 2): void {
     if (state === this.current) return;
@@ -104,8 +116,9 @@ export class MusicEngine {
   }
 
   /** Target intensity 0..1; the audible value slews toward it. */
-  setIntensity(n: number): void {
+  setIntensity(n: number, snap = false): void {
     this.target = clamp01(n);
+    if (snap) this.shared.intensity = this.target;
   }
 
   /** The King identity resolves (meridianComplete) — or is reset for a reload before that beat. */
@@ -118,8 +131,20 @@ export class MusicEngine {
     this.shared.irregular = clamp01(amount);
   }
 
+  /**
+   * A cadence beat from gameplay (the linked bodies' shared clock). In an Eclipse state the score's cadence
+   * layer sounds it and stops ticking on its own grid, so music and enemies never run two clocks.
+   */
+  cadencePulse(irregular: boolean): void {
+    if (!this.deck) return;
+    const t = this.ac.currentTime + 0.005;
+    // several bodies report the same beat: sound it once
+    if (t - this.shared.externalCadenceAt < 0.12) return;
+    if (this.deck.pulseCadence(t, irregular)) this.shared.externalCadenceAt = t;
+  }
+
   stinger(kind: StingerKind): void {
-    if (!(kind in STINGER_LEVEL)) {
+    if (!(kind in STINGER_DB)) {
       if (!this.warned.has(`stinger:${kind}`)) {
         this.warned.add(`stinger:${kind}`);
         console.warn(`[audio] unknown stinger "${kind}" — ignored`);
@@ -136,10 +161,10 @@ export class MusicEngine {
     if (kind === 'resonance' || kind === 'revelation') this.mixer.duck(0.35, 2.5);
 
     const out = this.ac.createGain();
-    out.gain.value = STINGER_LEVEL[kind];
+    out.gain.value = (this.norm[`stinger:${kind}`] ?? 0.2) * dbToGain(STINGER_DB[kind]);
     out.connect(this.stingerBus);
     const k = new Kit(this.ac, this.res, out, now + 0.01, 1, this.rnd, false);
-    playStinger(kind, k, this.deck?.def.tonic ?? 38, this.family());
+    playStinger(kind, k, this.deck?.def.tonic ?? 38, kind === 'encounterStart' || kind === 'encounterClear' ? this.stingerFamily() : this.family());
     k.seal();
     this.stingers.push({ out, end: now + k.end + 0.3 });
   }
@@ -158,7 +183,7 @@ export class MusicEngine {
     }
     for (let i = this.fading.length - 1; i >= 0; i--) {
       const d = this.fading[i];
-      if (now >= d.endAt + 0.25) {
+      if (now >= d.disposeAt) {
         d.dispose();
         this.fading.splice(i, 1);
       } else {

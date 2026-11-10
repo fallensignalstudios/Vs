@@ -32,7 +32,7 @@ uniform vec4 glowB; // x pattern period m · y flicker · z,w unused
 const GLOW_SURFACE = /* glsl */ `
 {
 	// distance along the strip: skewed weights so no common strip direction is degenerate
-	float gs = dot( aurPos, vec3( 1.0, 0.8, 0.618 ) );
+	float gs = dot( mxPos, vec3( 1.0, 0.8, 0.618 ) );
 	float gPh = ( gs - aurTime * glowA.y ) / glowA.z;
 	float g = 1.0;
 	#if AUR_GLOW == 0
@@ -48,22 +48,23 @@ const GLOW_SURFACE = /* glsl */ `
 		g = 1.0 - glowA.x * ( 0.5 + 0.5 * sin( aurTime * 0.7 + gs * 0.4 ) );
 	#elif AUR_GLOW == 2
 		// Dominion amber: hot filament louvres with a slow heat waver
-		float gBars = 0.5 + 0.5 * cos( aurPos.y / glowB.x * 6.2831853 );
-		float gFoot = fwidth( aurPos.y ) / glowB.x;
+		float gBars = 0.5 + 0.5 * cos( mxPos.y / glowB.x * 6.2831853 );
+		float gFoot = fwidth( mxPos.y ) / glowB.x;
 		gBars = mix( gBars, 0.5, saturate( gFoot * 1.6 - 0.3 ) );
 		float gHeat = sin( aurTime * 3.1 + gs * 2.0 ) * sin( aurTime * 1.3 + gs * 0.7 );
 		g = ( 1.0 - glowA.w + glowA.w * 2.0 * gBars * gBars ) * ( 1.0 + glowB.y * gHeat ) * ( 1.0 - glowA.x * ( 0.5 + 0.5 * sin( aurTime * 0.9 ) ) );
 	#elif AUR_GLOW == 3
 		// Reformation blue-white: segmented diode bar, clinical and steady
-		float gSeg = abs( fract( aurPos.y / glowB.x ) - 0.5 ) * 2.0;
-		float gFoot = fwidth( aurPos.y ) / glowB.x;
+		float gSeg = abs( fract( mxPos.y / glowB.x ) - 0.5 ) * 2.0;
+		float gFoot = fwidth( mxPos.y ) / glowB.x;
 		float gCell = mix( smoothstep( 0.95, 0.72, gSeg ), 0.8, saturate( gFoot * 1.6 - 0.3 ) );
-		g = ( 1.0 - glowA.w + glowA.w * gCell ) * ( 1.0 - glowA.x * ( 0.5 + 0.5 * sin( aurTime * 1.1 + floor( aurPos.y / glowB.x ) * 0.6 ) ) );
+		g = ( 1.0 - glowA.w + glowA.w * gCell ) * ( 1.0 - glowA.x * ( 0.5 + 0.5 * sin( aurTime * 1.1 + floor( mxPos.y / glowB.x ) * 0.6 ) ) );
 	#else
 		// Eclipse vein: a double heartbeat pushed along the vein
 		float gBeatA = pow( 0.5 + 0.5 * sin( gPh * 6.2831853 ), 6.0 );
 		float gBeatB = pow( 0.5 + 0.5 * sin( gPh * 6.2831853 - 1.3 ), 6.0 ) * 0.6;
-		g = 1.0 - glowA.x + glowA.x * 1.7 * max( gBeatA, gBeatB ) + ( aurHash31( floor( aurPos * 9.0 ) ) - 0.5 ) * glowA.w;
+		float gKnot = 0.5 + 0.5 * sin( gs * 9.0 + sin( gs * 3.7 ) * 2.0 );
+		g = 1.0 - glowA.x + glowA.x * 1.7 * max( gBeatA, gBeatB ) + ( gKnot - 0.5 ) * glowA.w;
 	#endif
 	totalEmissiveRadiance *= max( g, 0.0 );
 }
@@ -124,22 +125,22 @@ float aurIceCloud( vec3 p, vec3 w ) {
 
 const ICE_POST = /* glsl */ `
 {
-	float iNdv = max( dot( aurGeoN, aurViewM ), 0.3 );
-	vec3 iW = abs( aurGeoN );
+	float iNdv = max( dot( mxGeoN, mxViewM ), 0.3 );
+	vec3 iW = abs( mxGeoN );
 	// two parallax layers marched into the slab along the view ray: trapped cloud at depth
-	float iC1 = aurIceCloud( aurPos - aurViewM * ( iceA.w / iNdv ), iW );
-	float iC2 = aurIceCloud( ( aurPos - aurViewM * ( iceA.w * 2.7 / iNdv ) ) * 0.63 + 1.7, iW );
-	float iCloud = saturate( aurMask * 0.4 + iC1 * 0.4 + iC2 * 0.35 );
-	float iFres = pow( 1.0 - aurNdotV, 3.0 );
+	float iC1 = aurIceCloud( mxPos - mxViewM * ( iceA.w / iNdv ), iW );
+	float iC2 = aurIceCloud( ( mxPos - mxViewM * ( iceA.w * 2.7 / iNdv ) ) * 0.63 + 1.7, iW );
+	float iCloud = saturate( mxMask * 0.5 + iC1 * 0.38 + iC2 * 0.3 );
+	float iFres = pow( 1.0 - mxNdotV, 3.0 );
 	diffuseColor.rgb *= mix( iceDeep, vec3( 1.0 ), iCloud );
 	diffuseColor.a = saturate( diffuseColor.a * ( iceA.x + iCloud * iceA.y ) + iFres * iceA.z );
 	totalEmissiveRadiance += iceRim * ( iFres * iceA.z * 0.5 + iCloud * iCloud * iceB.z );
 	// sparkle: sparse view-dependent glints on a 3-D lattice, faded before they alias
-	vec3 iP = aurPos * iceB.y;
+	vec3 iP = mxPos * iceB.y;
 	float iH = aurHash31( floor( iP ) );
-	float iTw = fract( iH * 61.7 + dot( aurViewM, vec3( 2.3, 3.7, 5.1 ) ) * 2.1 );
+	float iTw = fract( iH * 61.7 + dot( mxViewM, vec3( 2.3, 3.7, 5.1 ) ) * 2.1 );
 	float iDot = smoothstep( 0.5, 0.12, length( fract( iP ) - 0.5 ) );
-	float iFoot = length( fwidth( aurPos ) ) * iceB.y;
+	float iFoot = length( fwidth( mxPos ) ) * iceB.y;
 	totalEmissiveRadiance += iceRim * ( step( 0.82, iH ) * smoothstep( 0.86, 1.0, iTw ) * iDot * saturate( 1.3 - iFoot ) * iceB.x );
 }
 `;
@@ -150,8 +151,8 @@ export function icePatch(p: IceParams = {}): SurfacePatch {
     key: 'ice',
     order: 60,
     uniforms: {
-      iceA: { value: new THREE.Vector4(p.opacity ?? 0.3, p.cloud ?? 0.55, p.rim ?? 0.6, p.depth ?? 0.12) },
-      iceB: { value: new THREE.Vector4(p.sparkle ?? 2.5, p.sparkleDensity ?? 90, p.inner ?? 0.06, 0) },
+      iceA: { value: new THREE.Vector4(p.opacity ?? 0.26, p.cloud ?? 0.66, p.rim ?? 0.85, p.depth ?? 0.14) },
+      iceB: { value: new THREE.Vector4(p.sparkle ?? 3, p.sparkleDensity ?? 110, p.inner ?? 0.07, 0) },
       iceRim: { value: new THREE.Color(p.rimColor ?? 0xcfeeff) },
       iceDeep: { value: new THREE.Color(p.deepColor ?? 0x6fb4dc) },
     },
@@ -181,12 +182,12 @@ uniform vec3 spkCol;
 `,
     post: /* glsl */ `
 {
-	vec3 sP = aurPos * spkA.y;
+	vec3 sP = mxPos * spkA.y;
 	float sH = aurHash31( floor( sP ) );
-	float sTw = fract( sH * 61.7 + dot( aurViewM, vec3( 2.3, 3.7, 5.1 ) ) * 2.1 );
+	float sTw = fract( sH * 61.7 + dot( mxViewM, vec3( 2.3, 3.7, 5.1 ) ) * 2.1 );
 	float sDot = smoothstep( 0.5, 0.12, length( fract( sP ) - 0.5 ) );
-	float sFoot = length( fwidth( aurPos ) ) * spkA.y;
-	totalEmissiveRadiance += spkCol * ( step( 0.8, sH ) * smoothstep( 0.86, 1.0, sTw ) * sDot * saturate( 1.3 - sFoot ) * spkA.x * ( 0.3 + aurMask ) );
+	float sFoot = length( fwidth( mxPos ) ) * spkA.y;
+	totalEmissiveRadiance += spkCol * ( step( 0.8, sH ) * smoothstep( 0.86, 1.0, sTw ) * sDot * saturate( 1.3 - sFoot ) * spkA.x * ( 0.3 + mxMask ) );
 }
 `,
     params: { sparkle: { uniform: 'spkA', comp: 'x' } },
@@ -204,7 +205,7 @@ uniform vec4 glassA; // x rim opacity · y fresnel power
 `,
     post: /* glsl */ `
 {
-	float gFres = pow( 1.0 - aurNdotV, glassA.y );
+	float gFres = pow( 1.0 - mxNdotV, glassA.y );
 	diffuseColor.a = saturate( diffuseColor.a + gFres * glassA.x );
 }
 `,

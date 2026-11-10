@@ -51,6 +51,15 @@ export interface SrcOpts {
 }
 
 const MIN = 1e-4;
+
+/**
+ * Set a biquad's resonance from a conventional (linear) Q. WebAudio takes Q in decibels for low-/high-pass
+ * filters — a plain `Q = 0.707` there is a +0.7 dB resonance, not Butterworth, and inside a feedback loop
+ * that difference is enough to make a comb run away. Everything in this subsystem speaks linear Q.
+ */
+export function setQ(f: BiquadFilterNode, q: number): void {
+  f.Q.value = f.type === 'lowpass' || f.type === 'highpass' ? 20 * Math.log10(Math.max(q, 0.05)) : q;
+}
 /** preview length when a sustaining recipe is played as a one-shot */
 const PREVIEW_HOLD = 1.1;
 
@@ -119,12 +128,6 @@ export class Kit {
     }
   }
 
-  /** Linear breakpoint automation relative to the kit start: `[[t, v], …]`. */
-  ramp(p: AudioParam, pts: readonly Pt[]): void {
-    p.setValueAtTime(pts[0][1], this.t + pts[0][0]);
-    for (let i = 1; i < pts.length; i++) p.linearRampToValueAtTime(pts[i][1], this.t + pts[i][0]);
-  }
-
   private envLen(e: Env): number {
     const h = e.h === Infinity ? (this.sustain ? Infinity : PREVIEW_HOLD) : (e.h ?? 0);
     return Math.max(e.a ?? 0.002, 0.001) + h + Math.max(e.d, 0.005);
@@ -183,7 +186,7 @@ export class Kit {
     const add = (type: BiquadFilterType, s: Sweep): void => {
       const f = this.ac.createBiquadFilter();
       f.type = type;
-      f.Q.value = o.q ?? (type === 'bandpass' ? 1 : 0.707);
+      setQ(f, o.q ?? (type === 'bandpass' ? 1 : 0.707));
       this.sweep(f.frequency, s, t0, len, mul);
       n.connect(f);
       n = f;
@@ -283,11 +286,6 @@ export class Kit {
     }
   }
 
-  /** Short broadband transient (stick, snap, contact). */
-  click(g: number, o?: SrcOpts & { d?: number }): void {
-    this.noise('white', { a: 0.0006, d: o?.d ?? 0.006, g }, o);
-  }
-
   /** Low-frequency oscillator into a param. `dur` omitted = lives until the voice ends. */
   lfo(rate: number, depth: number, target: AudioParam, o?: { type?: OscillatorType; at?: number; dur?: number }): OscillatorNode {
     const t0 = this.t + (o?.at ?? 0);
@@ -318,7 +316,7 @@ export class Kit {
   filter(type: BiquadFilterType, f: Sweep, q = 0.707, o?: { to?: AudioNode; at?: number; len?: number; fixed?: boolean; gain?: number }): BiquadFilterNode {
     const n = this.ac.createBiquadFilter();
     n.type = type;
-    n.Q.value = q;
+    setQ(n, q);
     if (o?.gain !== undefined) n.gain.value = o.gain;
     this.sweep(n.frequency, f, this.t + (o?.at ?? 0), o?.len ?? 0.3, o?.fixed ? 1 : this.pitch);
     n.connect(o?.to ?? this.out);
@@ -375,6 +373,7 @@ export class Kit {
     const lp = this.ac.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = o?.damp ?? 3500;
+    setQ(lp, 0.707); // maximally flat: loop gain can never exceed `feedback`
     const fb = this.ac.createGain();
     fb.gain.value = clamp(feedback, 0, 0.97);
     const out = this.ac.createGain();

@@ -71,9 +71,13 @@ export class GridSearch {
 
   /**
    * Shortest path start → goal over `nbr` (8 links per slot, -1 = none). Fills `out` with the slot sequence
-   * (start first) and returns true, or returns false when the goal is unreachable.
+   * (start first) and returns true, or returns false when the goal is unreachable. With `clr`, only nodes
+   * whose clearance is ≥ minClr are entered (wide agents).
    */
-  run(start: number, goal: number, nbr: Int32Array, cols: number, cell: number, out: number[]): boolean {
+  run(
+    start: number, goal: number, nbr: Int32Array, cols: number, cell: number, out: number[],
+    clr: Float32Array | null = null, minClr = 0,
+  ): boolean {
     out.length = 0;
     if (start < 0 || goal < 0 || start >= this.g.length || goal >= this.g.length) return false;
     if (start === goal) { out.push(start); return true; }
@@ -105,6 +109,7 @@ export class GridSearch {
       for (let d = 0; d < 8; d++) {
         const nb = nbr[base + d];
         if (nb < 0 || closed[nb] === id) continue;
+        if (clr !== null && clr[nb] < minClr) continue;
         const ng = gc + (d < 4 ? cell : diagCost);
         if (mark[nb] === id) {
           if (ng >= g[nb]) continue;

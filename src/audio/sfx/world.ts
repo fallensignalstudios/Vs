@@ -21,7 +21,7 @@ function seat(k: Kit, at: number, g: number): void {
 }
 
 export const DEVICE_SFX: RecipeTable = {
-  emitterHum: sfx(-23, { loop: true, max: 2, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
+  emitterHum: sfx(-19, { loop: true, max: 2, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
     // command emitter: a clean chord with an exact sync pulse — the thing the drones are listening to
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     const sync = k.gain(0.6);
@@ -38,11 +38,11 @@ export const DEVICE_SFX: RecipeTable = {
     // the sync tone loses its footing: stuttered downward steps
     const st = k.gain(0.6);
     k.lfo(13, 0.4, st.gain, { type: 'square' });
-    k.fm([[0, 660], [0.1, 660], [0.12, 440], [0.25, 440], [0.27, 220], [0.5, 110]], 2, 1.2, { a: 0.003, d: 0.6, g: 0.6 }, { to: st });
+    k.fm([[0, 660], [0.1, 660], [0.12, 440], [0.25, 440], [0.27, 220], [0.5, 110]], 2, 1.2, { a: 0.003, d: 0.6, g: 0.9 }, { to: st });
     blast(k, 0.6, 0.7, 0.05);
     struck(k, 'glass', 2400, 0.4, 0.25, { at: 0.03 });
   }),
-  relayHum: sfx(-23, { loop: true, max: 3, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
+  relayHum: sfx(-19, { loop: true, max: 3, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
     // contaminated relay: a clean carrier with something riding it a few hertz off
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     k.osc('triangle', 140, { ...e, g: 0.6 });
@@ -100,10 +100,11 @@ export const DEVICE_SFX: RecipeTable = {
   }),
   fireControlFire: sfx(-4.5, { gap: 0.6, max: 1, prio: 3, send: 0.65, ref: 16 }, (k) => {
     crack(k, 1, 0, 800, 0.03);
-    thump(k, 105, 28, 0.8, 1.1);
-    brass(k, 73.4, { a: 0.005, h: 0.05, d: 0.7, g: 0.6 }, 16);
-    roar(k, { a: 0.005, h: 0.1, d: 1.1, g: 0.9 }, 380);
-    k.osc('sine', 36, { a: 0.02, d: 1.3, g: 0.7 }, { at: 0.03 });
+    thump(k, 118, 34, 0.8, 1);
+    brass(k, 73.4, { a: 0.005, h: 0.05, d: 0.7, g: 0.8 }, 22);
+    roar(k, { a: 0.005, h: 0.1, d: 1.1, g: 0.9 }, 520);
+    k.noise('white', { a: 0.002, d: 0.25, g: 0.6 }, { bp: [3000, 700], q: 0.7 });
+    k.osc('sine', 42, { a: 0.02, d: 1.3, g: 0.45 }, { at: 0.03 });
     zap(k, 0.4, 0.35, 0.02, 70);
     embers(k, 1.0, 0.3, 0.1);
   }),
@@ -209,10 +210,10 @@ export const WORLD_SFX: RecipeTable = {
   }),
   fleetImpact: sfx(-11, { gap: 0.8, max: 2, prio: 1, send: 0.75, ref: 60, vary: 120 }, (k) => {
     // kilometres away, through the hull: no highs survive, and the second arrival comes through the structure
-    k.noise('brown', { a: 0.04, d: 1.7, g: 1 }, { lp: [300, 110, 1.2], q: 0.9 });
-    k.osc('sine', [52, 28, 0.5], { a: 0.03, d: 1.5, g: 0.9 });
-    k.noise('brown', { a: 0.2, d: 1.6, g: 0.5 }, { at: k.rr(0.32, 0.5), lp: 150 });
-    k.osc('sine', [41, 27, 0.6], { a: 0.1, d: 1.4, g: 0.5 }, { at: 0.4 });
+    k.noise('brown', { a: 0.04, d: 1.7, g: 1 }, { lp: [700, 180, 1.2], q: 0.9 });
+    k.osc('sine', [66, 38, 0.5], { a: 0.03, d: 1.5, g: 0.6 });
+    k.noise('brown', { a: 0.2, d: 1.6, g: 0.5 }, { at: k.rr(0.32, 0.5), lp: 240 });
+    k.osc('sine', [52, 34, 0.6], { a: 0.1, d: 1.4, g: 0.35 }, { at: 0.4 });
     struck(k, 'plate', k.rr(48, 60), 1.6, 0.14, { at: 0.45, tilt: 2 });
   }),
   structuralGroan: sfx(-13, { gap: 1.5, max: 1, prio: 1, send: 0.75, ref: 40, vary: 160 }, (k) => {
@@ -234,7 +235,7 @@ export const WORLD_SFX: RecipeTable = {
     k.osc('sine', [[0, 36], [3, 34], [7, 26]], { ...e, g: 0.8 });
     const flut = k.gain(0.5);
     k.lfo(11, 0.3, flut.gain);
-    k.noise('pink', { ...e, g: 0.35 }, { to: flut, bp: [[0, 500], [3.2, 1500], [7, 380]], q: 0.9 });
+    k.noise('pink', { ...e, g: 0.7 }, { to: flut, bp: [[0, 500], [3.2, 1500], [7, 380]], q: 0.9 });
   }),
   carrierClip: sfx(-5.5, { gap: 3, max: 1, prio: 3, send: 0.8, ref: 90, vary: 0 }, (k) => {
     // hull meets tower, a long way up: the scream of the scrape, then the boom arrives late
@@ -270,10 +271,10 @@ export const WORLD_SFX: RecipeTable = {
   }),
   liftMove: sfx(-15, { loop: true, max: 1, prio: 1, send: 0.4, vary: 0, ref: 8 }, (k) => {
     const e = { a: 0.5, h: Infinity, d: 0.8 };
-    k.osc('sine', 60, { ...e, g: 0.7 });
-    k.osc('triangle', 120.4, { ...e, g: 0.3 });
-    pure(k, 220, { ...e, g: 0.07 });
-    k.noise('pink', { ...e, g: 0.35 }, { bp: 380, q: 1.5 });
+    k.osc('sine', 60, { ...e, g: 0.3 });
+    k.osc('triangle', 120.4, { ...e, g: 0.4 });
+    pure(k, 220, { ...e, g: 0.1 });
+    k.noise('pink', { ...e, g: 0.7 }, { bp: 380, q: 1.5 });
     const rail = k.gain(0);
     k.lfo(1.6, 0.6, rail.gain, { type: 'square' });
     k.noise('white', { ...e, g: 0.07 }, { to: rail, bp: 2100, q: 7 });

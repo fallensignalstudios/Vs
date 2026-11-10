@@ -11,7 +11,7 @@ export const SELENE_SFX: RecipeTable = {
     const flut = k.gain(0.6);
     k.lfo(k.rr(20, 25), 0.4, flut.gain);
     whoosh(k, [[0, 900], [0.1, 2700], [0.22, 1300]], { a: 0.07, h: 0.02, d: 0.14, g: 1 }, 3.2, { to: flut });
-    k.noise('pink', { a: 0.06, d: 0.14, g: 0.3 }, { bp: [500, 1100], q: 1 });
+    k.noise('pink', { a: 0.06, d: 0.14, g: 0.55 }, { bp: [500, 1100], q: 1 });
     k.fm([1900, 2500, 0.12], 2.01, 0.5, { a: 0.07, d: 0.12, g: 0.07 });
   }),
   verityHit: sfx(-9, { gap: 0.05, max: 3, prio: 2, send: 0.3 }, (k) => {
@@ -23,10 +23,11 @@ export const SELENE_SFX: RecipeTable = {
   }),
   deflect: sfx(-7, { gap: 0.08, max: 2, prio: 3, send: 0.55, vary: 20 }, (k) => {
     // crystalline ping with the projectile's pitch bending away — colder and higher than Tarrik's counter
-    crack(k, 0.8, 0, 4500, 0.005);
-    glass(k, 2093, { a: 0.002, d: 0.7, g: 0.8 });
-    glass(k, 3136, { a: 0.002, d: 0.5, g: 0.4 }, { at: 0.012 });
-    k.fm([2600, 900, 0.09], 1.5, [4, 0.3], { a: 0.002, d: 0.14, g: 0.5 });
+    crack(k, 0.8, 0, 3500, 0.005);
+    glass(k, 1568, { a: 0.002, d: 0.7, g: 0.8 });
+    glass(k, 2349.3, { a: 0.002, d: 0.5, g: 0.4 }, { at: 0.012 });
+    k.fm([2600, 900, 0.09], 1.5, [3, 0.3], { a: 0.002, d: 0.14, g: 0.5 });
+    thump(k, 240, 130, 0.05, 0.35);
     k.noise('white', { a: 0.03, d: 0.25, g: 0.05 }, { hp: 8000 });
   }),
   axiomShot: sfx(-7, { gap: 0.1, max: 2, prio: 2, send: 0.5, ref: 6, vary: 25 }, (k) => {
@@ -74,7 +75,7 @@ export const SELENE_SFX: RecipeTable = {
     struck(k, 'blade', 1700, 0.35, 0.4, { at: 0.14 });
     glass(k, 2349, { a: 0.004, d: 0.5, g: 0.15 }, { at: 0.16 });
   }),
-  frostArrest: sfx(-11, { gap: 0.15, max: 2, prio: 3, send: 0.6, vary: 6 }, (k) => {
+  frostArrest: sfx(-15, { gap: 0.15, max: 2, prio: 3, send: 0.6, vary: 6 }, (k) => {
     // the arrested tone: an ice tick, then a perfectly still chord that simply holds
     crack(k, 0.6, 0, 5000, 0.004);
     k.noise('crackle', { a: 0.001, d: 0.12, g: 0.5 }, { hp: 4500 });
@@ -85,13 +86,14 @@ export const SELENE_SFX: RecipeTable = {
     k.osc('sine', 196, { a: 0.05, h: 0.6, d: 0.6, g: 0.12 });
   }),
   frostShatter: sfx(-8, { gap: 0.1, max: 2, prio: 2, send: 0.5 }, (k) => {
-    crack(k, 1, 0, 2600, 0.01);
-    k.noise('crackle', { a: 0.001, d: 0.35, g: 1 }, { hp: 3200 });
+    crack(k, 1, 0, 1800, 0.012);
+    k.noise('crackle', { a: 0.001, d: 0.35, g: 0.8 }, { hp: 3200 });
+    k.noise('crackle', { a: 0.001, d: 0.25, g: 0.8 }, { bp: 1500, q: 0.8, rate: 0.6 }); // the thick pieces
     k.noise('white', { a: 0.001, d: 0.1, g: 0.5 }, { bp: [7000, 3500], q: 1.2 });
-    for (let i = 0; i < 7; i++) {
-      struck(k, 'glass', k.rr(1800, 5200), k.rr(0.08, 0.3), k.rr(0.15, 0.4), { at: k.rr(0, 0.16), pan: k.jit(0.7) });
+    for (let i = 0; i < 8; i++) {
+      struck(k, 'glass', k.rr(700, 4200), k.rr(0.08, 0.3), k.rr(0.15, 0.4), { at: k.rr(0, 0.16), pan: k.jit(0.7) });
     }
-    thump(k, 140, 70, 0.1, 0.5);
+    thump(k, 150, 76, 0.1, 0.6);
   }),
   scanPulse: sfx(-15, { gap: 0.3, max: 1, prio: 2, send: 0.5, vary: 6 }, (k) => {
     // tactical read: one clean outward ping and the room answering

@@ -31,17 +31,24 @@ const mixn = (a: number, b: number, t: number): number => a + (b - a) * t;
 /** seconds per full stride (two steps) for a planar speed in reference-scale m/s */
 export function cycleTime(s: number): number {
   if (s <= 0.3) return 1.3;
-  if (s < 2.2) return mixn(1.3, 0.92, (s - 0.3) / 1.9);
-  if (s < 5.2) return mixn(0.92, 0.68, (s - 2.2) / 3.0);
-  if (s < 7.2) return mixn(0.68, 0.58, (s - 5.2) / 2.0);
-  return 0.58;
+  if (s < 1.2) return mixn(1.3, 1.0, (s - 0.3) / 0.9);
+  if (s < 2.2) return mixn(1.0, 0.8, (s - 1.2) / 1.0);
+  if (s < 5.2) return mixn(0.8, 0.66, (s - 2.2) / 3.0);
+  if (s < 7.2) return mixn(0.66, 0.56, (s - 5.2) / 2.0);
+  return 0.56;
 }
 
-/** fraction of the stride a foot spends on the ground */
+/** longest distance a planted foot can travel under the hips with this leg length */
+export const MAX_STANCE_TRAVEL = 0.95;
+
+/**
+ * Fraction of the stride a foot spends on the ground. Walking keeps double support (> 0.5); as speed rises the
+ * contact shortens so the foot never has to reach farther than the leg allows — which is exactly what turns a
+ * walk into a run with a flight phase.
+ */
 export function dutyFactor(s: number): number {
-  if (s < 2.2) return 0.62;
-  if (s < 5.2) return mixn(0.62, 0.38, ss(2.2, 5.2, s));
-  return mixn(0.38, 0.32, ss(5.2, 7.2, s));
+  if (s < 0.05) return 0.62;
+  return Math.min(0.62, MAX_STANCE_TRAVEL / (s * cycleTime(s)));
 }
 
 /** distance a planted foot travels under the body during one stance */
@@ -129,7 +136,7 @@ export class Locomotion {
   evaluate(out: Pose, st: StanceSet): void {
     const s = this.speed;
     const mv = ss(0.08, 0.7, s);
-    const run = ss(2.6, 4.6, s);
+    const run = ss(2.4, 4.4, s);
     const spr = ss(5.8, 7.0, s);
     const guard = this.guardW, aim = this.aimW, limp = this.limpW;
 
@@ -137,7 +144,9 @@ export class Locomotion {
     if (mv > 0) { out.mix(st.walk, mv * (1 - run)); if (run > 0) out.mix(st.run, mv * run); }
 
     const d = dutyFactor(s);
-    const travel = Math.min(1.32, stanceTravel(s));
+    const travel = stanceTravel(s);
+    // a walker's foot lands as far ahead as it leaves behind; a runner lands under the body and pushes off long
+    const front = mixn(0.47, 0.37, run);
     const ph = this.phase;
     const my = this.moveYaw;
     // hips twist toward the travel direction when strafing; the chest untwists
@@ -158,14 +167,14 @@ export class Locomotion {
       let along: number, lift = 0, pitch: number, toeScale = 1;
       if (p < di) {
         const u = p / di;
-        along = (0.5 - u) * travel;
+        along = (front - u) * travel;
         const strike = mixn(15, 7, run) * (1 - ss(0, 0.24, u));
         const heelOff = -mixn(36, 50, run) * ss(0.52, 1, u);
         pitch = (strike + heelOff) * Math.max(0, fwdness);
       } else {
         const w = (p - di) / (1 - di);
         const e = w * w * (3 - 2 * w);
-        along = (-0.5 + mixn(e, w, 0.35)) * travel;
+        along = (front - 1 + mixn(e, w, 0.35)) * travel;
         const H = mixn(0.075, 0.2, run) + spr * 0.07 - guard * 0.02;
         // early high heel (back-kick) then reach
         lift = H * Math.sin(Math.PI * Math.pow(w, 0.8)) + run * 0.1 * Math.sin(Math.PI * Math.min(1, w * 1.7));

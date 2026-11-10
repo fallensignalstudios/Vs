@@ -79,6 +79,8 @@ export class ActionStates {
   private readonly held = new Float32Array(ACTION_COUNT);
   private readonly lastHeld = new Float32Array(ACTION_COUNT);
   private readonly repeat = new Float32Array(MENU_DIRS.length);
+  /** press-to-toggle latches for `engaged()` (accessibility: settings.holdToToggle) */
+  private readonly latched = new Uint8Array(ACTION_COUNT);
   private allow = CONTEXT_MASK.game;
   private ctx: InputContext = 'game';
 
@@ -86,9 +88,9 @@ export class ActionStates {
     return this.ctx;
   }
 
-  /** Latch edges for this tick from `raw`. */
-  latch(dt: number): void {
-    const { raw, virt, eff, press, release, consumed, blocked, held, lastHeld, allow } = this;
+  /** Latch edges for this tick from `raw`. `toggle` = settings.holdToToggle. */
+  latch(dt: number, toggle = false): void {
+    const { raw, virt, eff, press, release, consumed, blocked, held, lastHeld, allow, latched } = this;
     for (let i = 0; i < ACTION_COUNT; i++) {
       if (!raw[i]) blocked[i] = 0;
       const was = eff[i];
@@ -104,6 +106,8 @@ export class ActionStates {
         lastHeld[i] = held[i];
         held[i] = 0;
       }
+      if (!toggle || !allow[i]) latched[i] = 0;
+      else if (press[i]) latched[i] ^= 1;
     }
     // Key-repeat for menu navigation: a held direction pulses `pressed` again after a delay.
     for (let k = 0; k < MENU_DIRS.length; k++) {
@@ -137,6 +141,7 @@ export class ActionStates {
     this.ctx = ctx;
     this.allow = allow;
     const { raw, virt, eff, press, release, blocked, held, lastHeld } = this;
+    this.latched.fill(0);
     for (let i = 0; i < ACTION_COUNT; i++) {
       const was = eff[i];
       const carries = ctx === 'game' && CARRY_INTO_GAME[i] === 1;
@@ -177,6 +182,16 @@ export class ActionStates {
 
   consume(i: number): void {
     if (i >= 0) this.consumed[i] = 1;
+  }
+
+  /** hold state that honours press-to-toggle: the latch when toggling, plain `down` otherwise */
+  engaged(i: number, toggle: boolean): boolean {
+    if (i < 0) return false;
+    return toggle ? this.latched[i] === 1 : this.eff[i] === 1;
+  }
+
+  disengage(i: number): void {
+    if (i >= 0) this.latched[i] = 0;
   }
 
 }

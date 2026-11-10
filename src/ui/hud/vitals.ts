@@ -17,6 +17,8 @@ interface EchoTick {
   key: Txt;
   ready: Flag;
   hidden: Flag;
+  lo: Flag;
+  hi: Flag;
   pos: Num;
 }
 
@@ -123,6 +125,8 @@ export class Vitals {
         key: new Txt(key),
         ready: new Flag(el, 'is-ready'),
         hidden: new Flag(el, 'is-hidden'),
+        lo: new Flag(el, 'is-lo'),
+        hi: new Flag(el, 'is-hi'),
         pos: new Num((v) => { el.style.left = `${(v * 100).toFixed(2)}%`; }),
       });
     }
@@ -233,6 +237,9 @@ export class Vitals {
     this.gainOpacity.set(clamp01(this.gainLife / 0.5));
 
     const abilities = s.abilities;
+    const c0 = abilities ? num(abilities[0]?.cost) : 0;
+    const c1 = abilities ? num(abilities[1]?.cost) : 0;
+    const close = c0 > 0 && c1 > 0 && c0 !== c1 && Math.abs(c0 - c1) / echoMax < 0.14;
     for (let i = 0; i < this.ticks.length; i++) {
       const t = this.ticks[i] as EchoTick;
       const a = abilities ? abilities[i] : undefined;
@@ -245,6 +252,9 @@ export class Vitals {
       t.pos.set(cost / echoMax);
       t.key.set(glyphText(this.game, i === 0 ? 'ability1' : 'ability2'));
       t.ready.set(echo >= cost);
+      const other = i === 0 ? c1 : c0;
+      t.lo.set(close && cost < other);
+      t.hi.set(close && cost > other);
     }
 
     // bounded local threat

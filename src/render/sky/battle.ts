@@ -10,7 +10,7 @@ import { clamp01, mulberry32 } from '@/core/mathx';
 import { FLEET_VERTEX, battleFrame, battlePlaneCoords, createFleet, type Fleet, type FleetShip } from './fleet';
 import { GLSL_NOISE } from './glsl';
 import type { SkyState } from './presets';
-import { viewportTracker, type SharedUniforms } from './shared';
+import { SKY_ORDER, viewportTracker, type SharedUniforms } from './shared';
 
 const MAX_TRACERS = 120;
 const MAX_FLASHES = 40;
@@ -23,6 +23,7 @@ attribute vec4 iB;
 attribute vec4 iC;
 attribute vec4 iD;
 uniform vec2 uViewport;
+uniform float uFarZ;
 uniform float uHazeAmt;
 uniform float uHazeFall;
 varying vec2 vQ;
@@ -60,7 +61,7 @@ void main() {
     : mix(p0, p1, position.x * 0.5 + 0.5) + dir * position.x * sizePx + nrm * position.y * sizePx;
   float band = exp(-max(normalize(d0).y, 0.0) * uHazeFall) * uHazeAmt;
   vCol = iC.rgb * comp * (1.0 - 0.75 * band);
-  gl_Position = vec4(p / half_, 0.0, 1.0);
+  gl_Position = vec4(p / half_, uFarZ, 1.0);
 }
 `;
 
@@ -146,20 +147,20 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
     name: 'SkyBattleFx',
     uniforms: {
       uFrame: fleet.uniforms.uFrame, uSpread: fleet.uniforms.uSpread,
-      uViewport: shared.uViewport, uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall,
+      uViewport: shared.uViewport, uFarZ: shared.uFarZ, uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall,
     },
     vertexShader: FX_VERTEX,
     fragmentShader: FX_FRAGMENT,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     fog: false,
   });
   const fx = new THREE.Mesh(geometry, material);
   fx.name = 'sky:battleFx';
   fx.frustumCulled = false;
-  fx.renderOrder = -980;
+  fx.renderOrder = SKY_ORDER.battleFx;
   fx.matrixAutoUpdate = false;
   fx.onBeforeRender = viewportTracker(shared);
   object.add(fx);

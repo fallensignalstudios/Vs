@@ -23,10 +23,10 @@ export function createMannequin(): Mannequin {
     mats.push(m);
     return m;
   };
-  const black = mat(0x15131a, 0.55, 0.5);
+  const black = mat(0x2b2832, 0.5, 0.45);
   const bronze = mat(0x8a5a2b, 0.36, 0.85);
-  const oxblood = mat(0x5a1616, 0.62, 0.25);
-  const cloth = mat(0x2a1014, 0.85, 0.05);
+  const oxblood = mat(0x6a1a1a, 0.6, 0.25);
+  const cloth = mat(0x3a141a, 0.85, 0.05);
   const amber = mat(0x000000, 1, 0, 0xffa033, 3);
   const cinder = mat(0x000000, 1, 0, 0xff6a1a, 2.2);
   const steel = mat(0x3a3a40, 0.3, 0.9);

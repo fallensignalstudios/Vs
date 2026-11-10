@@ -101,7 +101,8 @@ export class Reticle {
 
     game.events.on('player:damaged', (e) => {
       const d = e.dir;
-      if (!d) return;
+      // undirected damage (environment) has no source to point at
+      if (!d || Math.abs(num(d.x)) + Math.abs(num(d.z)) < 1e-4) return;
       this.damageFromWorld(-num(d.x), -num(d.z), clampN(num(e.amount, 10) / 24, 0.45, 1));
     });
     game.events.on('actor:hit', (e) => {
@@ -213,7 +214,7 @@ export class Reticle {
   private updateLock(f: HudFrame, target: Actor | null): void {
     let ok = false;
     const cam = this.game.camera;
-    if (target && target.alive !== false && !isStub(cam) && typeof target.aimPoint === 'function') {
+    if (target && !isStub(target) && target.alive !== false && !isStub(cam) && typeof target.aimPoint === 'function') {
       try {
         target.aimPoint(tmpAim);
         ok = cam.worldToScreen(tmpAim, tmpScreen) === true;

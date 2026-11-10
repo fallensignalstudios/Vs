@@ -111,16 +111,23 @@ const shard = (pts: readonly number[], ridge: readonly [number, number, number, 
   o.l = sat(facet + bevel + Math.exp(-rd * rd * 900) * 0.6);
 };
 
-const chip = (seed: number): SpriteFn => (x, y, o) => {
-  const ang = Math.atan2(y, x);
-  const r = Math.hypot(x, y);
-  // faceted rock outline: radius quantised over a handful of angular facets
-  const k = 5 + (seed % 3);
-  const a0 = Math.floor((ang / (Math.PI * 2) + 0.5) * k);
-  const rr = 0.42 + 0.3 * hash2(a0, seed, 3) + 0.08 * Math.cos((ang * k) / 1 + seed);
-  o.a = sstep(rr + 0.03, rr - 0.03, r);
-  const n = fbm(x * 5 + seed, y * 5, seed + 3, 3);
-  o.l = sat(0.35 + 0.5 * n + 0.25 * (y - x * 0.5));
+const chip = (seed: number): SpriteFn => {
+  // an irregular convex polygon: 5–6 vertices on a jittered ellipse
+  const n = 5 + (seed % 2);
+  const pts: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.6 * (hash2(i, seed, 9) - 0.5)) / n) * Math.PI * 2;
+    const rr = 0.5 + 0.28 * hash2(i, seed, 4);
+    pts.push(Math.cos(a) * rr * 1.1, Math.sin(a) * rr * 0.8);
+  }
+  return (x, y, o) => {
+    const d = polyDist(x, y, pts);
+    o.a = sstep(0.015, -0.015, d);
+    const nz = fbm(x * 5 + seed, y * 5, seed + 3, 3);
+    // one lit facet, one in shade, a chipped bright edge
+    const facet = x * 0.6 + y * 0.8 > 0.05 * (seed - 4) ? 0.72 : 0.4;
+    o.l = sat(facet + 0.3 * (nz - 0.5) + sstep(-0.07, 0, d) * 0.25);
+  };
 };
 
 /** King-era glyph marks: orthogonal / 45° strokes with small terminal squares — "light as information". */
@@ -162,7 +169,7 @@ const SPRITE_FNS: Record<SpriteName, SpriteFn> = {
     const r2 = x * x + y * y;
     const core = Math.exp(-r2 * 46);
     const rays = Math.exp(-Math.abs(x) * 34) * Math.exp(-Math.abs(y) * 3.6) + Math.exp(-Math.abs(y) * 34) * Math.exp(-Math.abs(x) * 3.6);
-    o.a = sat(core + rays * 0.7 + Math.exp(-r2 * 7) * 0.22) * sstep(1, 0.75, Math.sqrt(r2));
+    o.a = sat(core + rays * 0.75 + Math.exp(-r2 * 9) * 0.07) * sstep(1, 0.75, Math.sqrt(r2));
     o.l = 1;
   },
   streak: (x, y, o) => {
@@ -209,9 +216,9 @@ const SPRITE_FNS: Record<SpriteName, SpriteFn> = {
   wisp0: wisp(1), wisp1: wisp(2.7),
   dust: (x, y, o) => {
     const r = Math.hypot(x, y);
-    const grain = vnoise(x * 22 + 3, y * 22 - 7, 5) * vnoise(x * 9, y * 9, 6);
+    const grain = fbm(x * 9 + 3, y * 9 - 7, 5, 3);
     const cloud = fbm(x * 2.2, y * 2.2, 7, 3);
-    o.a = sat(sstep(0.16, 0.5, grain) * 0.9 + cloud * 0.28) * sstep(0.95, 0.25, r);
+    o.a = sat(sstep(0.5, 0.72, grain) * 0.8 + cloud * 0.22) * sstep(0.95, 0.25, r);
     o.l = 1;
   },
   flare: (x, y, o) => {

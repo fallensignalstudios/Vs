@@ -20,6 +20,8 @@ const MOUSE_SPIKE = 600;
 /** consecutive pointer-lock denials before canvas clicks stop retrying (sandboxed iframes) */
 const MAX_LOCK_STRIKES = 3;
 const LOCK_RETRY_COOLDOWN = 1.5;
+/** a request that neither resolves nor errors (old engines) stops blocking new ones after this long */
+const LOCK_PENDING_TIMEOUT = 1.5;
 
 type Listener = (e: Event) => void;
 interface Listenable {
@@ -68,7 +70,7 @@ const isTextTarget = (t: unknown): boolean => {
   const tag = tagOf(t);
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t as { isContentEditable?: boolean } | null)?.isContentEditable === true;
 };
-/** focused buttons/links keep their native Enter/Space activation */
+/** focusable controls with native Enter/Space activation */
 const isActivatable = (t: unknown): boolean => {
   const tag = tagOf(t);
   return tag === 'BUTTON' || tag === 'A' || tag === 'SUMMARY';
@@ -99,11 +101,13 @@ export class InputSystemImpl implements InputSystem {
   private keyLook = 0;
   private locked = false;
   private lockPending = false;
+  private lockPendingLeft = 0;
   private lockDenied = false;
   private lockStrikes = 0;
   private lockCooldown = 0;
   private padProbe = 0;
   private worldActive = false;
+  private toggleHolds = false;
 
   constructor(private readonly game: Game, private readonly env: InputEnv) {
     this.pad = new GamepadReader(env.getGamepads);
@@ -166,6 +170,14 @@ export class InputSystemImpl implements InputSystem {
     this.states.consume(actionIndex(a));
   }
 
+  engaged(a: ButtonAction): boolean {
+    return this.states.engaged(actionIndex(a), this.toggleHolds);
+  }
+
+  disengage(a: ButtonAction): void {
+    this.states.disengage(actionIndex(a));
+  }
+
   glyph(a: ButtonAction): string {
     return glyphFor(a, this._device, this.pad.style);
   }
@@ -196,6 +208,7 @@ export class InputSystemImpl implements InputSystem {
     }
     if (this.locked || this.lockPending) return;
     this.lockPending = true;
+    this.lockPendingLeft = LOCK_PENDING_TIMEOUT;
     this.tryLock(true);
   }
 
@@ -230,13 +243,15 @@ export class InputSystemImpl implements InputSystem {
     if (this.mouseTravel > 4) this._device = 'kbm';
     this.mouseTravel = 0;
     if (this.lockCooldown > 0) this.lockCooldown -= d;
+    if (this.lockPending && (this.lockPendingLeft -= d) <= 0) this.lockPending = false;
 
     // Buttons.
     this.mergePhysical();
     this.tap.fill(0);
     const virt = this.states.virt;
     for (let i = 0; i < ACTION_COUNT; i++) virt[i] = v.holds[i] | v.presses[i];
-    this.states.latch(d);
+    this.toggleHolds = this.game.settings.get('holdToToggle') === true;
+    this.states.latch(d, this.toggleHolds);
 
     // Move (camera-relative; y = forward).
     let mx = 0;
@@ -350,9 +365,11 @@ export class InputSystemImpl implements InputSystem {
     const bound = KEY_BINDINGS[code];
     if (!bound) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return; // browser / OS shortcut, not ours
-    const nativeActivation = isActivatable(e.target) && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space');
-    if (!nativeActivation) e.preventDefault();
     this._device = 'kbm';
+    // In menus a focused button/link keeps its native Enter/Space activation and that is the ONLY activation
+    // (no `confirm` as well). During play the game owns those keys even if a stale UI element holds focus.
+    if (this.states.context === 'menu' && isActivatable(e.target) && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
+    e.preventDefault();
     if (e.repeat || this.keys.has(code)) return;
     this.keys.add(code);
     for (let i = 0; i < bound.length; i++) {

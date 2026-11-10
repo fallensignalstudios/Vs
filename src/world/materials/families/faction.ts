@@ -14,19 +14,19 @@ import { fbm, sstep } from '../noise';
  */
 export function bronze(size: number): PbrLayers {
   const L = newLayers(size, 0.006);
-  const [br, bg, bb] = linearRgb(0xb07a41);
-  const [pr, pg, pb] = linearRgb(0x241710);
-  const dimple = hammered(size, 26, 61).data;
-  const pl = plates(size, { cols: 2, rows: 2, seam: size / 340, bevel: size / 130, seed: 62, split: 0.45 });
+  const [br, bg, bb] = linearRgb(0xa06a36);
+  const [pr, pg, pb] = linearRgb(0x21140d);
+  const dimple = hammered(size, 64, 61).data;
+  const pl = plates(size, { cols: 2, rows: 2, seam: size / 480, bevel: size / 130, seed: 62, split: 0.45 });
   const blot = fbm(size, { freq: 5, octaves: 5, gain: 0.6, seed: 63 }).data;
   const fine = fbm(size, { freq: 32, octaves: 3, gain: 0.6, seed: 64 }).data;
   const h = new Float32Array(size * size);
-  for (let i = 0; i < h.length; i++) h[i] = pl.height.data[i] * 0.6 + dimple[i] * 0.3 + (fine[i] - 0.5) * 0.06;
+  for (let i = 0; i < h.length; i++) h[i] = pl.height.data[i] * 0.6 + dimple[i] * 0.14 + (fine[i] - 0.5) * 0.05;
   const cav = cavity({ size, data: h }, size / 90, 5).data;
   for (let i = 0; i < h.length; i++) {
     const seam = 1 - pl.height.data[i];
     const low = 1 - dimple[i];
-    const pat = Math.min(1, low * low * 0.7 + seam * 0.9 + sstep(0.5, 0.8, blot[i]) * 0.45 + (1 - cav[i]) * 0.6);
+    const pat = Math.min(1, low * low * 0.22 + seam * 0.9 + sstep(0.45, 0.8, blot[i]) * 0.5 + (1 - cav[i]) * 0.7);
     const k = pat * 0.8;
     const t = (1 + (fine[i] - 0.5) * 0.14) * (0.94 + pl.id.data[i] * 0.12);
     L.r[i] = (br + (pr - br) * k) * t;
@@ -50,12 +50,12 @@ export function lacquer(size: number): PbrLayers {
   const peel = fbm(size, { freq: 36, octaves: 3, gain: 0.5, seed: 71 }).data;
   const smudge = fbm(size, { freq: 4, octaves: 5, gain: 0.6, seed: 72 }).data;
   const depth = fbm(size, { freq: 3, octaves: 4, seed: 73 }).data;
-  const chipA = fbm(size, { freq: 9, octaves: 5, gain: 0.65, seed: 74 }).data;
-  const chipB = fbm(size, { freq: 3, octaves: 3, seed: 75 }).data;
+  const chipA = fbm(size, { freq: 26, octaves: 4, gain: 0.65, seed: 74 }).data;
+  const chipB = fbm(size, { freq: 4, octaves: 3, seed: 75 }).data;
   const nib = pits(size, 40, 76, 0.08, 0.14).data;
   const scr = scratches(size, { count: Math.round(size * 0.12), minLen: size * 0.02, maxLen: size * 0.14, seed: 77 }).data;
   for (let i = 0; i < L.r.length; i++) {
-    const chip = sstep(0.7, 0.76, chipA[i]) * sstep(0.45, 0.6, chipB[i]);
+    const chip = sstep(0.76, 0.82, chipA[i]) * sstep(0.74, 0.82, chipB[i]);
     const t = 0.82 + (depth[i] - 0.5) * 0.36 - chip * 0.2;
     L.r[i] = t; L.g[i] = t * (0.92 + (depth[i] - 0.5) * 0.2); L.b[i] = t * (0.92 + (depth[i] - 0.5) * 0.2);
     L.height[i] = 0.5 + (peel[i] - 0.5) * 0.3 + nib[i] * 0.35 - chip * 0.45 - scr[i] * 0.15;
@@ -73,26 +73,30 @@ export function lacquer(size: number): PbrLayers {
  */
 export function coated(size: number): PbrLayers {
   const L = newLayers(size, 0.005);
-  const pl = plates(size, { cols: 2, rows: 3, seam: size / 380, bevel: size / 170, seed: 81, split: 0.4 });
+  const pl = plates(size, { cols: 2, rows: 2, seam: size / 420, bevel: size / 200, seed: 81, split: 0.35 });
   const grain = fbm(size, { freq: 96, octaves: 2, gain: 0.6, seed: 82 }).data;
   const tone = fbm(size, { freq: 4, octaves: 4, gain: 0.55, seed: 83 }).data;
   const smudge = fbm(size, { freq: 6, octaves: 4, gain: 0.6, seed: 84 }).data;
   const breakup = fbm(size, { freq: 14, octaves: 4, gain: 0.65, seed: 85 });
-  const wear = edgeWear(pl.height, size / 110, breakup, 0.55).data;
-  const scr = scratches(size, { count: Math.round(size * 0.08), minLen: size * 0.02, maxLen: size * 0.12, seed: 86 }).data;
+  const wear = edgeWear(pl.height, size / 140, breakup, 0.3).data;
+  const scr = scratches(size, { count: Math.round(size * 0.04), minLen: size * 0.02, maxLen: size * 0.1, seed: 86 }).data;
+  const streak = fbm(size, { freq: 30, freqY: 2, octaves: 3, gain: 0.6, seed: 87 }).data;
   const h = new Float32Array(size * size);
   for (let i = 0; i < h.length; i++) h[i] = pl.height.data[i] * 0.7 + (grain[i] - 0.5) * 0.1 - wear[i] * 0.05;
   const cav = cavity({ size, data: h }, size / 120, 4).data;
   for (let i = 0; i < h.length; i++) {
     const seam = 1 - pl.height.data[i];
-    const dust = (1 - cav[i]) * 0.5 + seam * 0.2;
-    const t = (0.84 + (tone[i] - 0.5) * 0.2 + (pl.id.data[i] - 0.5) * 0.1) * (1 - seam * 0.45) + dust * 0.12 - scr[i] * 0.06;
+    const dust = (1 - cav[i]) * 0.4 * smudge[i];
+    // grime gradient: streaks that start under each plate's top seam and thin out as they run down
+    const v = pl.v01.data[i];
+    const grime = v * v * v * sstep(0.4, 0.85, streak[i]) * 0.55;
+    const t = (0.84 + (tone[i] - 0.5) * 0.2 + (pl.id.data[i] - 0.5) * 0.1) * (1 - seam * 0.7) * (1 - grime * 0.4) + dust * 0.08 - scr[i] * 0.06;
     L.r[i] = t; L.g[i] = t; L.b[i] = t;
     L.height[i] = h[i] - scr[i] * 0.05;
-    L.rough[i] = 0.5 + (smudge[i] - 0.5) * 0.4 + (grain[i] - 0.5) * 0.2 + dust * 0.3 - wear[i] * 0.2 + scr[i] * 0.2;
+    L.rough[i] = 0.5 + (smudge[i] - 0.5) * 0.4 + (grain[i] - 0.5) * 0.2 + dust * 0.3 + grime * 0.35 - wear[i] * 0.2 + scr[i] * 0.2;
     L.metal[i] = 1;
     L.ao[i] = Math.min(1, cav[i] + 0.2) * (1 - seam * 0.55);
-    L.mask[i] = Math.min(1, wear[i] + scr[i] * 0.5);
+    L.mask[i] = Math.min(1, wear[i] * (1 - seam) + scr[i] * 0.12);
   }
   return L;
 }

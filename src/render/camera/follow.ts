@@ -35,6 +35,13 @@ export const FOLLOW = {
   minDistance: 0.3,
   lockDistance: 0.45,
   /**
+   * Anticipation whiskers: two thinner probes fanned to either side of the arm. When one finds an obstacle
+   * the arm eases most of the way in (`whiskerPull`) before the obstacle reaches the arm itself, so ribs,
+   * corners and cover produce a short settle instead of a full-length pop.
+   */
+  whiskerAngle: 0.38,
+  whiskerPull: 0.65,
+  /**
    * Looking up: the camera body stops sinking behind the player once the view passes `orbitKnee` and
    * settles toward `orbitMax`, while the view keeps tilting. The figure slides to the bottom of the frame
    * instead of filling it from below, leaving the architecture overhead unobstructed.
@@ -101,7 +108,8 @@ export class FollowCamera {
   private readonly sideBlend = new Damped(1);
   private readonly lockBlend = new Damped(0);
   private sprintBlend = 0;
-  private armLimit = 50;
+  /** smoothed arm length (≤ the swept limit) */
+  private armSmooth: number = FOLLOW.distance;
   private sideLimit = 1;
   private squeeze = 0;
   private lift = 0;
@@ -117,6 +125,12 @@ export class FollowCamera {
   private readonly fHeight = new Damped(0);
   private framing: FollowFraming | null = null;
   private framingTime = 0.35;
+
+  private readonly guide = new THREE.Vector3();
+  private guideLeft = 0;
+  private guideRate = 0;
+  private bearingYaw = 0;
+  private bearingPitch = 0;
 
   private readonly pivot = new THREE.Vector3();
   private readonly anchor = new THREE.Vector3();
@@ -138,11 +152,6 @@ export class FollowCamera {
     return this.target;
   }
 
-  /** world position the orbit pivots around (smoothed target + height) */
-  get pivotPoint(): THREE.Vector3 {
-    return this.pivot;
-  }
-
   setTarget(t: CameraFollowTarget | null): void {
     this.target = t && isFiniteVec(t.pos) ? t : null;
     this.fresh = true;
@@ -154,12 +163,13 @@ export class FollowCamera {
     this.nudgeYaw = this.nudgePitch = 0;
   }
 
-  get locked(): boolean {
-    return this.lockFn !== null;
-  }
-
   setFraming(f: FollowFraming | null, blendSeconds: number): void {
-    this.framing = f;
+    // Copy and sanitise: a bad number here would otherwise poison every smoother.
+    const pick = (v: number | undefined, lo: number, hi: number): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : undefined;
+    this.framing = f
+      ? { distance: pick(f.distance, 0.6, 40), shoulder: pick(f.shoulder, 0, 3), fov: pick(f.fov, 20, 110), heightOffset: pick(f.heightOffset, -1.5, 6) }
+      : null;
     this.framingTime = Math.max(0.01, (Number.isFinite(blendSeconds) ? blendSeconds : 1) * 0.35);
   }
 
@@ -168,17 +178,33 @@ export class FollowCamera {
     this.fresh = true;
   }
 
-  /** Point the orbit at a world point from the current pivot. */
-  aimAt(p: Vec3Like): void {
+  /**
+   * Point the orbit at a world point from the current pivot: instantly, or as a guided turn of roughly
+   * `seconds` that the player can cancel by looking.
+   */
+  aimAt(p: Vec3Like, seconds = 0): void {
     const t = this.target;
     if (!t || !isFiniteVec(p)) return;
-    const py = t.pos.y + this.heightOf(t);
+    this.guide.set(p.x, p.y, p.z);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      this.guideRate = 3.2 / seconds;
+      this.guideLeft = seconds * 2.5;
+      return;
+    }
+    this.guideLeft = 0;
+    this.bearingTo(this.guide, t);
+    this.yaw = this.bearingYaw;
+    this.pitch = this.bearingPitch;
+    this.idle = 0;
+  }
+
+  /** yaw / pitch from the target's pivot to a point → bearingYaw / bearingPitch */
+  private bearingTo(p: Vec3Like, t: CameraFollowTarget): void {
     const dx = p.x - t.pos.x;
     const dz = p.z - t.pos.z;
     const hd = Math.hypot(dx, dz);
-    if (hd > 1e-4) this.yaw = Math.atan2(-dx, -dz);
-    this.pitch = clamp(Math.atan2(p.y - py, Math.max(hd, 1e-4)), FOLLOW.pitchMin, FOLLOW.pitchMax);
-    this.idle = 0;
+    this.bearingYaw = hd > 1e-4 ? Math.atan2(-dx, -dz) : this.yaw;
+    this.bearingPitch = clamp(Math.atan2(p.y - (t.pos.y + this.heightOf(t)), Math.max(hd, 1e-4)), FOLLOW.pitchMin, FOLLOW.pitchMax);
   }
 
   update(dt: number, input: FollowInput, world: FollowWorld): void {
@@ -194,7 +220,6 @@ export class FollowCamera {
       this.py.snap(tp.y);
       this.pz.snap(tp.z);
       this.velX = this.velZ = this.speed = 0;
-      this.armLimit = 50;
       this.sideLimit = 1;
       this.squeeze = 0;
       this.lift = 0;
@@ -259,13 +284,23 @@ export class FollowCamera {
     }
 
     // --- orbit angles ----------------------------------------------------------------------------
+    if (looking || lockPoint || this.aim) this.guideLeft = 0; // the player (or a lock) always outranks a guide
     if (lockPoint) {
       this.updateLock(dt, lockPoint, lx, ly, looking, dist, shoulder, sideK);
     } else {
       this.yaw += lx;
       this.pitch += ly;
       this.nudgeYaw = this.nudgePitch = 0;
-      if (!this.aim) this.recentre(dt, input.assisted);
+      if (this.guideLeft > 0) {
+        this.guideLeft -= dt;
+        this.bearingTo(this.guide, t);
+        this.yaw = dampAngle(this.yaw, this.bearingYaw, this.guideRate, dt);
+        this.pitch = damp(this.pitch, this.bearingPitch, this.guideRate, dt);
+        this.idle = 0; // do not let auto-recentre undo the framing straight away
+        if (Math.abs(angleDelta(this.yaw, this.bearingYaw)) < 0.01 && Math.abs(this.pitch - this.bearingPitch) < 0.01) this.guideLeft = 0;
+      } else if (!this.aim) {
+        this.recentre(dt, input.assisted);
+      }
     }
     this.yaw = wrapAngle(this.yaw);
     this.pitch = clamp(this.pitch, FOLLOW.pitchMin, FOLLOW.pitchMax);
@@ -299,22 +334,31 @@ export class FollowCamera {
       this.sideLimit = open < this.sideLimit ? open : Math.min(open, this.sideLimit + (open - this.sideLimit) * (1 - Math.exp(-5 * dt)) + 0.2 * dt);
       const s = shoulder * this.sideLimit;
       anchor.set(pivot.x + rx * s, pivot.y + rise * this.sideLimit, pivot.z + rz * s);
-      // 2) spring arm: pull in instantly, ease back out slowly
+      // 2) spring arm: the swept limit applies instantly (never clip through cover)…
       cam.set(anchor.x - dir.x * dist, anchor.y - dir.y * dist, anchor.z - dir.z * dist);
       const k = world.sweep(anchor, cam, FOLLOW.probe);
-      const allowed = k !== null && k < 1 ? Math.max(FOLLOW.minDistance, dist * clamp01(k)) : 50;
-      if (allowed < this.armLimit) {
-        this.armLimit = allowed;
-      } else if (this.armLimit < dist) {
-        const goal = Math.min(allowed, dist);
-        this.armLimit = Math.min(allowed, this.armLimit + clamp((goal - this.armLimit) * 3.2, 0.7, 5) * dt);
-      } else {
-        this.armLimit = allowed;
+      // (no minimum here: against a wall the camera closes right up to the shoulder rather than poke through;
+      //  the player figure is expected to fade by `targetDistance`)
+      const hard = k !== null && k < 1 ? dist * clamp01(k) : dist;
+      // 3) …while anticipation whiskers ease the arm in ahead of obstacles about to cross it
+      let want = hard;
+      const cp = Math.sqrt(Math.max(0, 1 - dir.y * dir.y));
+      for (let side = -1; side <= 1; side += 2) {
+        const wy = yaw + side * FOLLOW.whiskerAngle;
+        cam.set(anchor.x + Math.sin(wy) * cp * dist, anchor.y - dir.y * dist, anchor.z + Math.cos(wy) * cp * dist);
+        const w = world.sweep(anchor, cam, FOLLOW.probe * 0.6);
+        if (w === null || w >= 1) continue;
+        const hit = dist * clamp01(w);
+        if (hit < hard) want = Math.min(want, hard + (hit - hard) * FOLLOW.whiskerPull);
       }
-      arm = Math.min(dist, this.armLimit);
+      // one smoothed length: quick to settle in, slow to ease back out, cut short by the hard limit
+      if (this.fresh || want < this.armSmooth) this.armSmooth = this.fresh ? want : damp(this.armSmooth, want, 7, dt);
+      else this.armSmooth = Math.min(want, this.armSmooth + clamp((want - this.armSmooth) * 3.2, 0.7, 5) * dt);
+      if (this.armSmooth > hard) this.armSmooth = hard;
+      arm = this.armSmooth;
     } else {
       this.sideLimit = 1;
-      this.armLimit = 50;
+      this.armSmooth = dist;
       anchor.set(pivot.x + rx * shoulder, pivot.y + rise, pivot.z + rz * shoulder);
     }
     this.squeeze = damp(this.squeeze, 1 - clamp01(arm / Math.max(dist, 1e-3)), 9, dt);

@@ -12,7 +12,7 @@ import type { SkyPreset } from '@/core/api';
 import { createSkySystem } from '@/render/sky';
 import { createHarness, miniGame } from '../harness';
 
-const h = createHarness({ bloom: true, env: 'none', background: 0x000000, lights: false });
+const h = createHarness({ bloom: true, env: 'dark', background: 0x000000, lights: false });
 const p = h.params;
 h.renderer.toneMappingExposure = Number(p.get('exposure') ?? 1);
 const game = miniGame(h);
@@ -33,19 +33,30 @@ function syncLights(): void {
   fill.intensity = sky.fillLight.intensity;
 }
 
-// Foreground: a slab of overlook floor and a 1.8 m human-scale reference figure.
+// Foreground: the lip of an overlook floor with a low parapet, and a 1.8 m human-scale reference figure.
 const foreground = new THREE.Group();
-const slab = new THREE.Mesh(new THREE.BoxGeometry(14, 0.4, 9), new THREE.MeshStandardMaterial({ color: 0x0b0c10, roughness: 0.7, metalness: 0.1 }));
-slab.position.set(0, -0.2, -1.5);
-const rail = new THREE.Mesh(new THREE.BoxGeometry(14, 1.1, 0.35), new THREE.MeshStandardMaterial({ color: 0x1a1b20, roughness: 0.5, metalness: 0.3 }));
-rail.position.set(0, 0.55, -6);
-const strip = new THREE.Mesh(new THREE.BoxGeometry(14, 0.03, 0.05), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc56b, emissiveIntensity: 3 }));
-strip.position.set(0, 0.012, -5.6);
+const stone = new THREE.MeshStandardMaterial({ color: 0x0b0c10, roughness: 1, metalness: 0 });
+const slab = new THREE.Mesh(new THREE.BoxGeometry(18, 0.6, 9), stone);
+slab.position.set(0, -0.3, -0.5);
+const rail = new THREE.Mesh(new THREE.BoxGeometry(18, 0.9, 0.3), stone);
+rail.position.set(0, 0.45, -4.85);
+const strip = new THREE.Mesh(new THREE.BoxGeometry(18, 0.02, 0.04), new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc56b, emissiveIntensity: 1.6 }));
+strip.position.set(0, 0.01, -4.4);
 if (p.get('deck') !== '0') foreground.add(slab, rail, strip);
-const ref = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.8, 0.3), new THREE.MeshStandardMaterial({ color: 0xb8442e, roughness: 0.7 }));
-ref.position.set(2.2, 0.9, -4.6);
+const ref = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.8, 0.3), new THREE.MeshStandardMaterial({ color: 0xb8442e, roughness: 0.8 }));
+ref.position.set(2.4, 0.9, -3.9);
 if (p.get('ref') !== '0') foreground.add(ref);
 h.scene.add(foreground);
+
+// Near-field (PBR) pieces are shown on open ground instead of behind the overlook parapet.
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.9, metalness: 0 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+ground.visible = false;
+const viewFill = new THREE.DirectionalLight(0xdfe6ff, 0);
+viewFill.position.set(-14, 16, 24);
+h.scene.add(ground, viewFill);
+const NEAR = ['dominionShuttle', 'reformationTransport', 'wreckDominion', 'wreckReformation'];
 
 let scenicRoot = new THREE.Group();
 h.scene.add(scenicRoot);
@@ -56,6 +67,11 @@ function buildScenic(list: string): void {
   scenicRoot = new THREE.Group();
   scenicRoot.rotation.y = sky.heading;
   h.scene.add(scenicRoot);
+  const near = NEAR.some((n) => list.includes(n));
+  ground.visible = near;
+  viewFill.intensity = near ? 1.4 : 0;
+  slab.visible = rail.visible = strip.visible = !near;
+  ref.position.set(near ? 7.5 : 2.4, 0.9, near ? -17 : -3.9);
   for (const name of list.split(',').map((s) => s.trim()).filter(Boolean)) {
     const f = sky.scenic;
     if (!f) continue;
@@ -64,9 +80,9 @@ function buildScenic(list: string): void {
     else if (name === 'atriumShell') o = f.atriumShell();
     else if (name === 'crownmarkArm') o = f.crownmarkArm();
     else if (name === 'megaRibs') o = f.megaRibs();
-    else if (name === 'dominionShuttle' || name === 'reformationTransport') { o = f.ship(name); o.position.set(0, 0, -22); o.rotation.y = 0.9; }
+    else if (name === 'dominionShuttle' || name === 'reformationTransport') { o = f.ship(name); o.position.set(-3, 0, -30); o.rotation.y = -0.95; }
     else if (name === 'dominionCapital' || name === 'reformationCapital') { o = f.ship(name); o.position.set(0, 260, -1400); o.rotation.y = 1.1; }
-    else if (name === 'wreckDominion' || name === 'wreckReformation') { o = f.wreck(name === 'wreckDominion' ? 'dominion' : 'reformation'); o.position.set(0, 0, -14); o.rotation.y = 0.5; }
+    else if (name === 'wreckDominion' || name === 'wreckReformation') { o = f.wreck(name === 'wreckDominion' ? 'dominion' : 'reformation'); o.position.set(-1, 0, -19); o.rotation.y = 0.75; }
     else console.warn(`[sandbox] unknown scenic "${name}"`);
     if (o) scenicRoot.add(o);
   }
@@ -114,10 +130,15 @@ Object.assign(window, {
   },
   __preset: (id: SkyPreset, blend = 0) => { sky.setPreset(id, { blendSeconds: blend }); syncLights(); },
   __scenic: (list: string) => buildScenic(list),
+  /** draw calls / triangles of one direct scene render (no post passes) */
   __stats: () => {
-    h.render();
     const i = h.renderer.info;
-    return { calls: i.render.calls, triangles: i.render.triangles, programs: i.programs?.length ?? 0 };
+    i.autoReset = false;
+    i.reset();
+    h.renderer.render(h.scene, h.camera);
+    const out = { calls: i.render.calls, triangles: i.render.triangles };
+    i.autoReset = true;
+    return out;
   },
 });
 h.step(2);

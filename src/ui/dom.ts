@@ -114,6 +114,8 @@ export interface FaderOpts {
   display?: string;
   /** keep the element's box while hidden (visibility instead of display) so reveals never shift layout */
   keepLayout?: boolean;
+  /** interactive layer: stop capturing the pointer the moment it starts to leave (not when the fade ends) */
+  interactive?: boolean;
 }
 
 /**
@@ -131,8 +133,10 @@ export class Fader {
   private readonly tout: number;
   private readonly display: string;
   private readonly keepLayout: boolean;
+  private readonly interactive: boolean;
 
   constructor(readonly el: HTMLElement, opts: FaderOpts = {}) {
+    this.interactive = opts.interactive === true;
     this.tin = opts.in ?? 0.28;
     this.tout = opts.out ?? 0.22;
     this.display = opts.display ?? 'block';
@@ -156,7 +160,9 @@ export class Fader {
   }
 
   show(on: boolean, instant = false): void {
-    this.target = on ? 1 : 0;
+    const target = on ? 1 : 0;
+    if (this.interactive && target !== this.target) this.el.style.pointerEvents = on ? '' : 'none';
+    this.target = target;
     if (instant) {
       this.level = this.target;
       this.apply();

@@ -32,5 +32,5 @@ export function measureViewport(root: HTMLElement, out: Viewport): void {
   const hh = root.clientHeight || globalThis.innerHeight || 720;
   out.w = w;
   out.h = hh;
-  out.u = Math.min(32, Math.max(13.6, Math.min(hh * 0.014815, w * 0.008334))) / 16;
+  out.u = Math.min(32, Math.max(Math.min(13.6, hh * 0.01889, w * 0.010625), Math.min(hh * 0.014815, w * 0.008334))) / 16;
 }

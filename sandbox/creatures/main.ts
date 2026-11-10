@@ -170,28 +170,32 @@ if (view === 'lineup') {
   h.setCam([-1.5, 2.1, -13.5], [-1.2, 1.7, 0], 34);
 } else if (view === 'sheet') {
   const times = (q.get('times') ?? '0.3,0.7,1.2').split(',').map(Number).filter((n) => Number.isFinite(n));
-  const span = Number(q.get('gap') ?? (who === 'elite' ? 6.2 : who === 'weaver' ? 3.4 : 2.6));
+  const span = Number(q.get('gap') ?? (who === 'elite' ? 5.6 : who === 'weaver' ? 3.4 : who === 'wallrunner' ? 3.0 : 1.9));
+  const yaw = Number(q.get('yaw') ?? 0.55);
+  const isDrone = who === 'secDrone' || who === 'contamDrone';
   times.forEach((t, i) => {
-    const x = (i - (times.length - 1) / 2) * span;
-    const v = spawn(who, x, 0, { yaw: Number(q.get('yaw') ?? 0.5) });
+    // time runs left → right on screen (the camera looks toward +Z, so +X is screen-left)
+    const x = -(i - (times.length - 1) / 2) * span;
+    const v = spawn(who, x, 0, { yaw });
     seek(v, action || 'idle', t);
-    label(`${action || 'idle'}  ${t.toFixed(2)} s`, x, -0.08, 0);
+    label(`${action || 'idle'}  ${t.toFixed(2)} s`, x, isDrone ? 1.1 : -0.08, 0);
   });
-  const [pos, look] = camFor(who);
-  const d = Math.max(1, (times.length * span) / 5.2);
-  h.setCam([0.6, look[1] + 0.5, pos[2] * d * 1.25], [0, look[1], 0], 36);
+  const [, look] = camFor(who);
+  const width = times.length * span;
+  const dist = Math.max(width * 1.02, (who === 'elite' ? 5 : 2.2) * 1.9);
+  h.setCam([0, look[1] + dist * 0.1, -dist], [0, look[1] * (isDrone ? 0.86 : 1.0), 0], 36);
 } else if (view === 'joint') {
   const states = ['closed', 'exposed', 'frozen', 'fractured'];
   states.forEach((s, i) => {
-    const x = (i - 1.5) * 5.4;
-    const v = spawn('elite', x, 0, { yaw: -0.75 });
+    const x = -(i - 1.5) * 5.4;
+    const v = spawn('elite', x, 0, { yaw: 0.8 });
     if (s === 'exposed') { v.setExposed('joint', 1); seek(v, 'exposeJoint', 1.6); }
-    else if (s === 'frozen') { v.setExposed('joint', 1); seek(v, 'exposeJoint', 1.6); v.setFrozen(0.38); v.update(0); }
-    else if (s === 'fractured') { seek(v, 'fracture', 2.6); }
+    else if (s === 'frozen') { v.setExposed('joint', 1); seek(v, 'exposeJoint', 1.6); v.setFrozen(0.3); v.update(0); }
+    else if (s === 'fractured') { seek(v, 'fracture', 3.15); }
     else seek(v, 'idle', 0.5);
     label(s, x, -0.08, 0);
   });
-  h.setCam([0, 3.0, -15.5], [0, 2.1, 0], 36);
+  h.setCam([0, 3.4, -19], [0, 2.0, 0], 36);
 } else if (view === 'drones') {
   spawn('secDrone', -0.85, 0, { yaw: 0.6 });
   spawn('contamDrone', 0.85, 0, { yaw: 0.6 });

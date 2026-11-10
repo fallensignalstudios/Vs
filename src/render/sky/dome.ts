@@ -1,8 +1,8 @@
-/** The sky dome mesh: one inside-out box drawn first with no depth interaction. */
+/** The sky dome mesh: one inside-out box pinned to the far plane (depth-tested, never written). */
 import * as THREE from 'three';
 import { DOME_FRAGMENT, DOME_VERTEX } from './domeShader';
 import type { SkyState } from './presets';
-import type { SharedUniforms } from './shared';
+import { SKY_ORDER, viewportTracker, type SharedUniforms } from './shared';
 
 export interface SkyDome {
   readonly mesh: THREE.Mesh;
@@ -13,7 +13,7 @@ export interface SkyDome {
 
 export function createSkyDome(shared: SharedUniforms): SkyDome {
   const uniforms = {
-    uTime: shared.uTime,
+    uTime: shared.uTime, uFarZ: shared.uFarZ,
     uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite,
     uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
     uWoundR: { value: 0.1 }, uWoundVis: { value: 0 }, uWoundLens: { value: 0.55 }, uWoundDebris: { value: 1 },
@@ -29,7 +29,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     vertexShader: DOME_VERTEX,
     fragmentShader: DOME_FRAGMENT,
     side: THREE.DoubleSide,
-    depthTest: false,
+    depthTest: true,
     depthWrite: false,
     fog: false,
   });
@@ -37,7 +37,8 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'sky:dome';
   mesh.frustumCulled = false;
-  mesh.renderOrder = -1000;
+  mesh.renderOrder = SKY_ORDER.dome;
+  mesh.onBeforeRender = viewportTracker(shared);
   mesh.matrixAutoUpdate = false;
 
   return {

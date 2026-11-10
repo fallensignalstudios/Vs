@@ -27,14 +27,16 @@ export function bakeMacro(size: number): Uint8Array {
 }
 
 export function bakeDetail(size: number): Uint8Array {
-  const grain = fbm(size, { freq: 20, octaves: 4, gain: 0.65, seed: 311 }).data;
+  const grain = fbm(size, { freq: 40, octaves: 3, gain: 0.7, seed: 311 }).data;
   const rough = fbm(size, { freq: 12, octaves: 5, gain: 0.7, seed: 312 }).data;
   const speck = fbm(size, { freq: 32, octaves: 3, gain: 0.7, seed: 313 }).data;
-  const pit = pits(size, 30, 314, 0.35, 0.2).data;
+  const pit = pits(size, 40, 314, 0.3, 0.16).data;
   const scr = scratches(size, { count: Math.round(size * 0.3), minLen: size * 0.05, maxLen: size * 0.4, seed: 315 }).data;
   const h = new Float32Array(size * size);
-  for (let i = 0; i < h.length; i++) h[i] = grain[i] * 0.6 - pit[i] * 0.5 - scr[i] * 0.35;
-  const n = normalsFromHeight({ size, data: h }, 0.01);
+  // normals carry only fine grain and tiny pits; scratches live in the roughness channel, where they read as
+  // hairlines in a highlight rather than as wrinkles in the surface
+  for (let i = 0; i < h.length; i++) h[i] = grain[i] * 0.5 - pit[i] * 0.5;
+  const n = normalsFromHeight({ size, data: h }, 0.008);
   const out = new Uint8Array(size * size * 4);
   for (let i = 0; i < h.length; i++) {
     const o = i * 4, p = i * 3;

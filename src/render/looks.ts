@@ -20,7 +20,7 @@ export const DEFAULT_LOOK: Look = {
   vignette: 0.35,
   grain: 0.3,
   chromaticAberration: 0.2,
-  ao: { intensity: 2.2, radius: 1.2 },
+  ao: { intensity: 3.0, radius: 1.2 },
   ambient: { sky: 0x8d93a3, ground: 0x241f1a, intensity: 0.45 },
   envIntensity: 1,
 };
@@ -37,39 +37,39 @@ function look(over: DeepPartial<Look>): Look {
 export const LOOKS: Readonly<Record<LookName, Look>> = {
   neutral: look({}),
 
-  // Z00 — fractured white-gold landing: smoke haze, amber emergency practicals, cool shadows.
+  // Z00 — fractured white-gold landing: smoke haze, amber emergency practicals, teal shadows.
   crash: look({
-    exposure: 1.0,
-    bloom: { intensity: 0.8, threshold: 1.0, radius: 0.74 },
-    fog: { color: 0x2b2420, density: 0.019 },
-    grade: { tint: 0xfff0de, saturation: 0.94, contrast: 1.1, lift: 0.006, shadowsTint: 0xc4d8ff, highlightsTint: 0xffdcae },
-    vignette: 0.45, grain: 0.42, chromaticAberration: 0.3,
-    ao: { intensity: 2.6, radius: 1.3 },
-    ambient: { sky: 0x8a7b6c, ground: 0x2a1c14, intensity: 0.5 },
+    exposure: 0.96,
+    bloom: { intensity: 0.82, threshold: 1.0, radius: 0.76 },
+    fog: { color: 0x33261c, density: 0.022 },
+    grade: { tint: 0xffe6c6, saturation: 0.9, contrast: 1.12, lift: 0.008, shadowsTint: 0x9cc4ff, highlightsTint: 0xffc98a },
+    vignette: 0.5, grain: 0.45, chromaticAberration: 0.32,
+    ao: { intensity: 3.2, radius: 1.3 },
+    ambient: { sky: 0x8a7663, ground: 0x2a1a10, intensity: 0.5 },
     envIntensity: 0.85,
   }),
 
-  // Z01 — long ivory hall: clean, readable lanes; warm ancient strips against cold security light.
+  // Z01 — long ivory hall: bright, clean, a touch cool so the cold security light and warm strips both read.
   pressureHall: look({
-    exposure: 1.04,
-    bloom: { intensity: 0.68, threshold: 1.0, radius: 0.68 },
-    fog: { color: 0x39352f, density: 0.0095 },
-    grade: { tint: 0xfff6ea, saturation: 1.0, contrast: 1.08, lift: 0, shadowsTint: 0xd2defa, highlightsTint: 0xffeccc },
-    vignette: 0.36, grain: 0.28, chromaticAberration: 0.18,
-    ao: { intensity: 2.4, radius: 1.4 },
-    ambient: { sky: 0xb9b0a0, ground: 0x3a3026, intensity: 0.62 },
+    exposure: 1.1,
+    bloom: { intensity: 0.62, threshold: 1.0, radius: 0.66 },
+    fog: { color: 0x4a4c50, density: 0.008 },
+    grade: { tint: 0xf2f6ff, saturation: 1.0, contrast: 1.06, lift: 0.002, shadowsTint: 0xbdd0ff, highlightsTint: 0xfff4e0 },
+    vignette: 0.3, grain: 0.26, chromaticAberration: 0.16,
+    ao: { intensity: 3.0, radius: 1.4 },
+    ambient: { sky: 0xbdb9b0, ground: 0x3a332b, intensity: 0.68 },
     envIntensity: 1.0,
   }),
 
-  // Z02 — survivor bend: subdued, low warm practicals, gentle contrast; a breath after the fight.
+  // Z02 — survivor bend: muted and low-key; soft contrast, lifted blacks, warm practicals. A breath after E1.
   survivorBend: look({
-    exposure: 0.94,
-    bloom: { intensity: 0.62, threshold: 0.98, radius: 0.72 },
-    fog: { color: 0x241e1a, density: 0.02 },
-    grade: { tint: 0xffeeda, saturation: 0.86, contrast: 1.02, lift: 0.012, shadowsTint: 0xcfd9ee, highlightsTint: 0xffd9a6 },
-    vignette: 0.52, grain: 0.38, chromaticAberration: 0.16,
-    ao: { intensity: 2.6, radius: 1.1 },
-    ambient: { sky: 0x7a6c5e, ground: 0x241a14, intensity: 0.42 },
+    exposure: 0.88,
+    bloom: { intensity: 0.6, threshold: 0.98, radius: 0.74 },
+    fog: { color: 0x2a2420, density: 0.024 },
+    grade: { tint: 0xffe8cc, saturation: 0.72, contrast: 0.98, lift: 0.018, shadowsTint: 0xb8c6dd, highlightsTint: 0xffd096 },
+    vignette: 0.6, grain: 0.4, chromaticAberration: 0.16,
+    ao: { intensity: 3.2, radius: 1.1 },
+    ambient: { sky: 0x786a5c, ground: 0x241a14, intensity: 0.42 },
     envIntensity: 0.8,
   }),
 
@@ -77,83 +77,83 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   frozen: look({
     exposure: 1.06,
     bloom: { intensity: 0.9, threshold: 0.94, radius: 0.8 },
-    fog: { color: 0x54798c, density: 0.026 },
-    grade: { tint: 0xe2f3ff, saturation: 0.82, contrast: 1.06, lift: 0.01, shadowsTint: 0xa9dcff, highlightsTint: 0xf1fbff },
+    fog: { color: 0x6b93a3, density: 0.024 },
+    grade: { tint: 0xdff2ff, saturation: 0.8, contrast: 1.06, lift: 0.01, shadowsTint: 0xa8dcf8, highlightsTint: 0xeefaff },
     vignette: 0.4, grain: 0.3, chromaticAberration: 0.24,
-    ao: { intensity: 2.0, radius: 1.2 },
+    ao: { intensity: 2.6, radius: 1.2 },
     ambient: { sky: 0x9cc9e2, ground: 0x22323e, intensity: 0.72 },
     envIntensity: 0.95,
   }),
 
-  // Z04 — relay overlook: silver daylight through the ribs, marble, long hazy sight lines.
+  // Z04 — relay overlook: silver daylight through the ribs, pale marble, long hazy sight lines (relay concept).
   relay: look({
-    exposure: 1.1,
-    bloom: { intensity: 0.58, threshold: 1.05, radius: 0.66 },
-    fog: { color: 0x7f8a96, density: 0.0062 },
-    grade: { tint: 0xf7f9ff, saturation: 0.95, contrast: 1.07, lift: 0.004, shadowsTint: 0xd0dcf2, highlightsTint: 0xfff3dc },
-    vignette: 0.3, grain: 0.24, chromaticAberration: 0.15,
-    ao: { intensity: 2.5, radius: 1.5 },
-    ambient: { sky: 0xcdd5e2, ground: 0x4a4236, intensity: 0.9 },
-    envIntensity: 1.05,
+    exposure: 1.18,
+    bloom: { intensity: 0.5, threshold: 1.08, radius: 0.64 },
+    fog: { color: 0x8f9aa8, density: 0.007 },
+    grade: { tint: 0xf0f5ff, saturation: 0.9, contrast: 1.04, lift: 0.01, shadowsTint: 0xbfd2f5, highlightsTint: 0xfff6e6 },
+    vignette: 0.28, grain: 0.22, chromaticAberration: 0.14,
+    ao: { intensity: 3.0, radius: 1.5 },
+    ambient: { sky: 0xd2dae8, ground: 0x4e463a, intensity: 1.0 },
+    envIntensity: 1.1,
   }),
 
-  // Z05 — meeting atrium: vast volume, hard contrast, cool ambient under amber / blue / violet battle light.
+  // Z05 — meeting atrium: vast, saturated, hard contrast; blue shadows under amber / blue-white battle light.
   atrium: look({
     exposure: 1.0,
-    bloom: { intensity: 0.78, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x1a1f2e, density: 0.0034 },
-    grade: { tint: 0xfbf8ff, saturation: 1.06, contrast: 1.12, lift: 0, shadowsTint: 0xc6d2ff, highlightsTint: 0xffe6c2 },
-    vignette: 0.4, grain: 0.28, chromaticAberration: 0.2,
-    ao: { intensity: 2.4, radius: 1.6 },
-    ambient: { sky: 0x7c8ab0, ground: 0x2a231a, intensity: 0.55 },
+    bloom: { intensity: 0.8, threshold: 1.0, radius: 0.78 },
+    fog: { color: 0x141a30, density: 0.004 },
+    grade: { tint: 0xf4f2ff, saturation: 1.12, contrast: 1.18, lift: 0, shadowsTint: 0xa9b8ff, highlightsTint: 0xffd9a8 },
+    vignette: 0.42, grain: 0.28, chromaticAberration: 0.2,
+    ao: { intensity: 3.0, radius: 1.6 },
+    ambient: { sky: 0x7482b4, ground: 0x2a2218, intensity: 0.55 },
     envIntensity: 1.0,
   }),
 
-  // Z06 — breach rescue: dark and gritty; shadows lean violet-blue, highlights stay warm so people read.
+  // Z06 — breach rescue: dark, gritty, drained; shadows lean violet, highlights stay warm so people read.
   breach: look({
-    exposure: 0.96,
-    bloom: { intensity: 0.84, threshold: 0.98, radius: 0.74 },
-    fog: { color: 0x130f1b, density: 0.021 },
-    grade: { tint: 0xfaf4ff, saturation: 0.92, contrast: 1.14, lift: 0, shadowsTint: 0xcfc4ff, highlightsTint: 0xffe4c0 },
-    vignette: 0.52, grain: 0.45, chromaticAberration: 0.36,
-    ao: { intensity: 2.8, radius: 1.2 },
-    ambient: { sky: 0x57526e, ground: 0x18121a, intensity: 0.4 },
+    exposure: 0.9,
+    bloom: { intensity: 0.86, threshold: 0.98, radius: 0.74 },
+    fog: { color: 0x150f20, density: 0.024 },
+    grade: { tint: 0xf2ecff, saturation: 0.85, contrast: 1.18, lift: -0.006, shadowsTint: 0xb9a6ff, highlightsTint: 0xffdfc0 },
+    vignette: 0.58, grain: 0.5, chromaticAberration: 0.4,
+    ao: { intensity: 3.4, radius: 1.2 },
+    ambient: { sky: 0x554e72, ground: 0x18111a, intensity: 0.38 },
     envIntensity: 0.85,
   }),
 
-  // Z07 — capture-control gallery: dim technical space below grade; amber and blue consoles carry the colour.
+  // Z07 — capture-control gallery: dim technical space below grade; teal shadows, amber console highlights.
   gallery: look({
-    exposure: 0.98,
+    exposure: 0.94,
     bloom: { intensity: 0.8, threshold: 1.0, radius: 0.7 },
-    fog: { color: 0x0f1318, density: 0.016 },
-    grade: { tint: 0xf6f8ff, saturation: 1.0, contrast: 1.12, lift: 0, shadowsTint: 0xcad6f0, highlightsTint: 0xffe8c8 },
-    vignette: 0.48, grain: 0.34, chromaticAberration: 0.24,
-    ao: { intensity: 2.7, radius: 1.1 },
-    ambient: { sky: 0x525a6a, ground: 0x16130f, intensity: 0.38 },
+    fog: { color: 0x0c1418, density: 0.017 },
+    grade: { tint: 0xeaf4f6, saturation: 0.95, contrast: 1.14, lift: 0, shadowsTint: 0xa8d0d8, highlightsTint: 0xffe0b0 },
+    vignette: 0.5, grain: 0.34, chromaticAberration: 0.24,
+    ao: { intensity: 3.3, radius: 1.1 },
+    ambient: { sky: 0x4c5c66, ground: 0x14130f, intensity: 0.38 },
     envIntensity: 0.9,
   }),
 
   // Z08 — quarantine crucible: luminous white-gold arena over a wet dark floor (quarantine concept).
   crucible: look({
-    exposure: 1.05,
-    bloom: { intensity: 0.86, threshold: 1.0, radius: 0.74 },
-    fog: { color: 0x2c2823, density: 0.0078 },
-    grade: { tint: 0xfff5e6, saturation: 1.06, contrast: 1.12, lift: 0, shadowsTint: 0xd0d0f6, highlightsTint: 0xffe6bc },
+    exposure: 1.1,
+    bloom: { intensity: 0.95, threshold: 1.0, radius: 0.76 },
+    fog: { color: 0x3a322a, density: 0.008 },
+    grade: { tint: 0xfff2dc, saturation: 1.08, contrast: 1.12, lift: 0, shadowsTint: 0xc8c4f0, highlightsTint: 0xffe0a8 },
     vignette: 0.4, grain: 0.3, chromaticAberration: 0.24,
-    ao: { intensity: 2.5, radius: 1.5 },
-    ambient: { sky: 0xb2a794, ground: 0x2c241c, intensity: 0.6 },
+    ao: { intensity: 3.0, radius: 1.5 },
+    ambient: { sky: 0xb6aa94, ground: 0x2e251c, intensity: 0.62 },
     envIntensity: 1.05,
   }),
 
-  // Z09 — wound gallery: near-black, deep contrast, cold; the sky does the talking (wound-overlook concept).
+  // Z09 — wound gallery: near-black, crushed, cold; the sky does the talking (wound-overlook concept).
   woundGallery: look({
-    exposure: 0.96,
+    exposure: 0.92,
     bloom: { intensity: 0.8, threshold: 1.0, radius: 0.72 },
-    fog: { color: 0x09090f, density: 0.0058 },
-    grade: { tint: 0xf8f6ff, saturation: 1.02, contrast: 1.16, lift: -0.012, shadowsTint: 0xcbd0ff, highlightsTint: 0xffe2bc },
-    vignette: 0.5, grain: 0.32, chromaticAberration: 0.22,
-    ao: { intensity: 2.6, radius: 1.3 },
-    ambient: { sky: 0x48485f, ground: 0x0d0b0f, intensity: 0.3 },
+    fog: { color: 0x07070d, density: 0.0058 },
+    grade: { tint: 0xeef0ff, saturation: 0.96, contrast: 1.2, lift: -0.015, shadowsTint: 0xb0b8ff, highlightsTint: 0xffe6cc },
+    vignette: 0.55, grain: 0.32, chromaticAberration: 0.22,
+    ao: { intensity: 3.2, radius: 1.3 },
+    ambient: { sky: 0x464862, ground: 0x0c0a0e, intensity: 0.3 },
     envIntensity: 1.1,
   }),
 
@@ -161,46 +161,46 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   core: look({
     exposure: 1.0,
     bloom: { intensity: 0.92, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x07070a, density: 0.0066 },
-    grade: { tint: 0xfff8ee, saturation: 1.05, contrast: 1.16, lift: -0.01, shadowsTint: 0xd6d8f2, highlightsTint: 0xffe2b0 },
+    fog: { color: 0x060608, density: 0.0066 },
+    grade: { tint: 0xfff6e8, saturation: 1.08, contrast: 1.18, lift: -0.012, shadowsTint: 0xc9cdea, highlightsTint: 0xffdca0 },
     vignette: 0.48, grain: 0.28, chromaticAberration: 0.2,
-    ao: { intensity: 2.6, radius: 1.4 },
+    ao: { intensity: 3.2, radius: 1.4 },
     ambient: { sky: 0x57524a, ground: 0x0b0a0c, intensity: 0.28 },
     envIntensity: 1.15,
   }),
 
-  // Z11 — observation gallery: quiet, warm interior against the cold exterior.
+  // Z11 — observation gallery: quiet and warm inside, soft bloom, a little lifted; the cold stays outside.
   observation: look({
-    exposure: 1.0,
-    bloom: { intensity: 0.7, threshold: 1.0, radius: 0.74 },
-    fog: { color: 0x0c0c12, density: 0.0095 },
-    grade: { tint: 0xfff2e2, saturation: 0.96, contrast: 1.06, lift: 0.008, shadowsTint: 0xccd4f4, highlightsTint: 0xffdfb4 },
-    vignette: 0.46, grain: 0.34, chromaticAberration: 0.16,
-    ao: { intensity: 2.4, radius: 1.0 },
-    ambient: { sky: 0x69636e, ground: 0x1a1410, intensity: 0.4 },
+    exposure: 0.98,
+    bloom: { intensity: 0.75, threshold: 1.0, radius: 0.8 },
+    fog: { color: 0x100e12, density: 0.01 },
+    grade: { tint: 0xffeeda, saturation: 0.9, contrast: 1.04, lift: 0.012, shadowsTint: 0xbcc6e8, highlightsTint: 0xffd49a },
+    vignette: 0.5, grain: 0.36, chromaticAberration: 0.16,
+    ao: { intensity: 3.0, radius: 1.0 },
+    ambient: { sky: 0x6b626c, ground: 0x1c1410, intensity: 0.4 },
     envIntensity: 1.0,
   }),
 
-  // Z12 — outer-ring hangar: wide, hazy, neutral-cool; both fleets' light at wary distance.
+  // Z12 — outer-ring hangar: wide, blue-grey haze, neutral-cool; both fleets' light at wary distance.
   hangar: look({
-    exposure: 1.02,
+    exposure: 1.04,
     bloom: { intensity: 0.72, threshold: 1.0, radius: 0.7 },
-    fog: { color: 0x1b1f27, density: 0.0088 },
-    grade: { tint: 0xf8faff, saturation: 0.95, contrast: 1.08, lift: 0.004, shadowsTint: 0xcfdaf2, highlightsTint: 0xffeed6 },
+    fog: { color: 0x232a34, density: 0.011 },
+    grade: { tint: 0xf2f6ff, saturation: 0.9, contrast: 1.06, lift: 0.008, shadowsTint: 0xbcd0f0, highlightsTint: 0xfff0da },
     vignette: 0.38, grain: 0.3, chromaticAberration: 0.18,
-    ao: { intensity: 2.4, radius: 1.5 },
-    ambient: { sky: 0x8a92a2, ground: 0x26211c, intensity: 0.56 },
+    ao: { intensity: 3.0, radius: 1.5 },
+    ambient: { sky: 0x8a94a6, ground: 0x26211c, intensity: 0.56 },
     envIntensity: 1.0,
   }),
 
   // The historical sequence — a remembered image: desaturated gold-white, blooming, grainy.
   witness: look({
-    exposure: 1.22,
-    bloom: { intensity: 1.3, threshold: 0.72, radius: 0.85 },
-    fog: { color: 0xa89a78, density: 0.016 },
-    grade: { tint: 0xfff0d2, saturation: 0.3, contrast: 0.96, lift: 0.03, shadowsTint: 0xffe6b8, highlightsTint: 0xfff5dc },
-    vignette: 0.62, grain: 0.7, chromaticAberration: 0.5,
-    ao: { intensity: 1.6, radius: 1.4 },
+    exposure: 1.25,
+    bloom: { intensity: 1.3, threshold: 0.7, radius: 0.85 },
+    fog: { color: 0xb8a67c, density: 0.018 },
+    grade: { tint: 0xffecc4, saturation: 0.22, contrast: 0.94, lift: 0.04, shadowsTint: 0xffe2b0, highlightsTint: 0xfff3d6 },
+    vignette: 0.65, grain: 0.75, chromaticAberration: 0.55,
+    ao: { intensity: 2.0, radius: 1.4 },
     ambient: { sky: 0xfff0d0, ground: 0x8a7a5a, intensity: 0.85 },
     envIntensity: 0.8,
   }),

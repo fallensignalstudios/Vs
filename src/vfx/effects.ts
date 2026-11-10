@@ -355,6 +355,8 @@ export class EffectRuntime {
         vx = Math.cos(a2) * sz * sp; vy = cz * sp; vz = Math.sin(a2) * sz * sp;
       } else if (velMode === 'ring') {
         vx = Math.cos(ang) * sp; vz = Math.sin(ang) * sp;
+      } else if (velMode === 'tangent') {
+        vx = -Math.sin(ang) * sp; vz = Math.cos(ang) * sp;
       }
       vy += sample(up, P.rand());
       if (d.flip) { ly = -ly; vy = -vy; }

@@ -8,6 +8,8 @@ import { FocusList, sfx, type Layer, type MenuInput, type MenuKeys, type ModalSt
 import { ICON, glyphText, icon, isGamepad, keycap, setKeycap } from '../theme';
 
 const ARM_DELAY = 0.4;
+/** the press that opened the panel (E / Space are also `confirm`) must not select a card */
+const OPEN_DELAY = 0.45;
 const LAYER_ID = 'choice';
 
 interface CardView {
@@ -52,6 +54,7 @@ export class ChoicePanel implements Layer {
   private ticket: Handle | null = null;
   private armed: CardView | null = null;
   private armT = 0;
+  private age = 0;
   private commitLevel = 0;
   private closing = 0;
 
@@ -92,7 +95,7 @@ export class ChoicePanel implements Layer {
       this.browseHint.style.opacity = (1 - v).toFixed(2);
     }, 0.01);
     this.done = new Flag(this.el, 'is-done');
-    this.fader = new Fader(this.el, { in: 0.7, out: 0.7 });
+    this.fader = new Fader(this.el, { in: 0.7, out: 0.7, interactive: true });
 
     this.cards = new FocusList(game, menu, 'h');
     this.confirm = new FocusList(game, menu, 'h');
@@ -112,6 +115,7 @@ export class ChoicePanel implements Layer {
     this.ticket = handle;
     this.armed = null;
     this.armT = 0;
+    this.age = 0;
     this.commitLevel = 0;
     this.closing = 0;
     this.done.set(false);
@@ -136,22 +140,31 @@ export class ChoicePanel implements Layer {
         h('div', 'aur-cc-state aur-label', icon(ICON.check) as unknown as HTMLElement, 'Selected'),
         h('i', 'aur-cc-corner tl'), h('i', 'aur-cc-corner br'),
       );
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-pressed', 'false');
       this.cardsEl.appendChild(el);
       const view: CardView = { option, el, chosen: new Flag(el, 'is-chosen'), dimmed: new Flag(el, 'is-dimmed') };
       this.views.push(view);
       this.cards.add({ el, onConfirm: () => this.arm(view) });
+      // with the mouse, clicking the other card while one is selected simply moves the selection
+      el.addEventListener('click', () => {
+        if (!this.open || !this.armed || this.armed === view) return;
+        this.menu.noteClick();
+        this.arm(view);
+      });
     });
     if (options.length === 0) {
       warnOnce('choice:empty', `choice "${String(opts?.id)}" has no options — nothing to decide`);
       this.ticket = null;
       return handle;
     }
-    this.cards.active = true;
+    this.cards.active = false;
     this.confirm.active = false;
     this.confirm.blur();
     this.cards.index = -1;
     this.cards.focus(0);
     this.refreshKeys();
+    this.el.style.pointerEvents = '';
     this.fader.show(true);
     this.stack.push(this);
     sfx(this.game, 'uiChoice');
@@ -174,6 +187,7 @@ export class ChoicePanel implements Layer {
     for (const v of this.views) {
       v.chosen.set(v === view);
       v.dimmed.set(v !== view);
+      v.el.setAttribute('aria-pressed', v === view ? 'true' : 'false');
     }
     const tag = String(view.option.tag ?? '').trim();
     this.commitLine.set(`${tag ? `${tag} — ` : ''}${String(view.option.label ?? view.option.id)}`);
@@ -190,6 +204,7 @@ export class ChoicePanel implements Layer {
     for (const v of this.views) {
       v.chosen.set(false);
       v.dimmed.set(false);
+      v.el.setAttribute('aria-pressed', 'false');
     }
     this.confirm.active = false;
     this.confirm.blur();
@@ -222,6 +237,7 @@ export class ChoicePanel implements Layer {
     this.cards.active = false;
     this.confirm.active = false;
     this.closing = 0.9;
+    this.el.style.pointerEvents = 'none';
     this.stack.remove(LAYER_ID);
     sfx(this.game, 'uiCommit');
   }
@@ -235,7 +251,7 @@ export class ChoicePanel implements Layer {
   }
 
   handle(k: MenuKeys): void {
-    if (!this.open) return;
+    if (!this.open || this.age < OPEN_DELAY) return;
     if (this.armed) {
       this.confirm.handle(k);
       if (k.cancel) this.disarm();
@@ -250,6 +266,10 @@ export class ChoicePanel implements Layer {
       if (this.closing <= 0) this.fader.show(false);
     }
     if (!this.fader.update(dt)) return;
+    if (this.open && this.age < OPEN_DELAY) {
+      this.age += dt;
+      if (this.age >= OPEN_DELAY && !this.armed) this.cards.active = true;
+    }
     if (this.armed && this.open) {
       this.armT += dt;
       this.armFill.set(Math.min(1, this.armT / ARM_DELAY));

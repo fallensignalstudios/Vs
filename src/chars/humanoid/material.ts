@@ -117,7 +117,7 @@ fgPart = vCode - fgZone * 16.0;
     float dn = hFbm( vRest * 11.0 ) * 0.8 + hNoise( vRest * 41.0 ) * 0.2;
     float th = uDissolve * 1.12 - 0.06;
     if ( dn < th ) discard;
-    fgEdge = smoothstep( th + 0.085, th, dn );
+    fgEdge = smoothstep( th + 0.04, th, dn );
   }
 
   // frost shell
@@ -131,14 +131,17 @@ fgPart = vCode - fgZone * 16.0;
     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.72, 0.86, 0.96 ), fgFrost * 0.85 );
   }
 
-  // Eclipse corruption: dark tissue patches with thin luminous veins
+  // Eclipse corruption: it has a direction — it climbs from one flank, and clean plate survives beside it
   fgCorr = 0.0; fgVein = 0.0;
   if ( uCorruption > 0.001 ) {
     float m = hFbm( vRest * 3.6 + 11.0 );
-    fgCorr = smoothstep( 1.02 - uCorruption * 0.95, 1.14 - uCorruption * 0.8, m + 0.15 );
-    float v1 = abs( hNoise( vRest * 13.0 + vec3( 0.0, uTime * 0.05, 0.0 ) ) - 0.5 );
-    float v2 = abs( hNoise( vRest * 29.0 + 5.0 ) - 0.5 );
-    fgVein = ( smoothstep( 0.045, 0.0, v1 ) + 0.5 * smoothstep( 0.03, 0.0, v2 ) ) * smoothstep( 0.0, 0.5, fgCorr + uCorruption * 0.25 );
+    float dir = clamp( 0.5 - vRest.x * 1.5 + ( vRest.y - 1.0 ) * 0.35 + vRest.z * 0.9, 0.0, 1.0 );
+    float reach = uCorruption * 1.35;
+    fgCorr = smoothstep( 1.0 - reach, 1.16 - reach, m * 0.55 + dir * 0.45 );
+    float v1 = abs( hNoise( vRest * 17.0 + vec3( 0.0, uTime * 0.05, 0.0 ) ) - 0.5 );
+    float v2 = abs( hNoise( vRest * 37.0 + 5.0 ) - 0.5 );
+    // veins live inside the tissue and feather out a little past its edge
+    fgVein = ( smoothstep( 0.02, 0.0, v1 ) + 0.45 * smoothstep( 0.014, 0.0, v2 ) ) * smoothstep( 0.02, 0.45, fgCorr );
     diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.035, 0.012, 0.07 ), fgCorr * 0.82 );
   }
 }
@@ -174,7 +177,7 @@ const FRAG_EMISSIVE = /* glsl */ `
   // sheen on cloth so capes read against dark stone
   if ( fgPart > 0.5 && fgPart < 1.5 ) totalEmissiveRadiance += diffuseColor.rgb * pow( 1.0 - ndv, 2.0 ) * 0.35;
   // skin: cheap warm wrap
-  if ( fgPart > 1.5 && fgPart < 2.5 ) totalEmissiveRadiance += vec3( 0.25, 0.06, 0.03 ) * diffuseColor.rgb * ( 0.25 + fres );
+  if ( fgPart > 1.5 && fgPart < 2.5 ) totalEmissiveRadiance += vec3( 0.2, 0.05, 0.025 ) * diffuseColor.rgb * ( 0.1 + fres * 0.7 );
   // frost
   totalEmissiveRadiance += vec3( 0.55, 0.8, 1.0 ) * ( fgFrost * ( 0.12 + fres * 0.9 ) + uFrozen * fres * 0.35 );
   // corruption veins pulse
@@ -183,13 +186,13 @@ const FRAG_EMISSIVE = /* glsl */ `
   totalEmissiveRadiance *= 1.0 - fgCorr * 0.35;
   // telegraph (about to act)
   float tp = 0.7 + 0.3 * sin( uTime * 18.0 );
-  totalEmissiveRadiance += uTelegraph.rgb * uTelegraph.a * tp * ( 0.25 + fres * 1.6 );
+  totalEmissiveRadiance += uTelegraph.rgb * uTelegraph.a * tp * ( 0.06 + fres * 1.3 );
   // exposed weak zone
   if ( uExposed.y > 0.001 && abs( fgZone - uExposed.x ) < 0.5 ) {
-    totalEmissiveRadiance += vec3( 1.0, 0.72, 0.4 ) * uExposed.y * ( 0.5 + 0.5 * sin( uTime * 9.0 ) ) * ( 0.4 + fres * 1.4 );
+    totalEmissiveRadiance += vec3( 1.0, 0.72, 0.4 ) * uExposed.y * ( 0.6 + 0.4 * sin( uTime * 9.0 ) ) * ( 0.14 + fres * 1.2 );
   }
   // dissolve edge + hit flash
-  totalEmissiveRadiance += uDissolveColor * fgEdge * 7.0;
+  totalEmissiveRadiance += uDissolveColor * fgEdge * 5.0;
   totalEmissiveRadiance += uFlash.rgb * uFlash.a * ( 0.45 + fres );
 }
 `;

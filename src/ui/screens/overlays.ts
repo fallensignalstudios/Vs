@@ -147,7 +147,7 @@ export class DeathScreen implements Layer {
     this.ready = new Flag(this.el, 'is-ready');
     this.list = new FocusList(game, menu, 'h');
     this.list.add({ el: this.btn, onConfirm: () => this.retry() });
-    this.fader = new Fader(this.el, { in: 1.4, out: 0.5 });
+    this.fader = new Fader(this.el, { in: 1.4, out: 0.5, interactive: true });
   }
 
   get shown(): boolean {
@@ -249,7 +249,7 @@ export class CompleteScreen implements Layer {
     this.list = new FocusList(game, menu, 'h');
     this.list.add({ el: this.btn, onConfirm: () => { const cb = this.onTitle; this.hide(); cb?.(); } });
     this.btnFader = new Fader(this.btn, { in: 0.5, out: 0.2, display: 'inline-flex', keepLayout: true });
-    this.fader = new Fader(this.el, { in: 1.6, out: 0.6 });
+    this.fader = new Fader(this.el, { in: 1.6, out: 0.6, interactive: true });
   }
 
   get shown(): boolean {

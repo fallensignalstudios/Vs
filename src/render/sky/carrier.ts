@@ -48,6 +48,15 @@ function buildHull(rand: () => number): THREE.BufferGeometry {
   const b = new GeoBuilder();
   const HULL = 0x4a5059, DARK = 0x16181c, PALE = 0x8d8f8a, WARM = 0xffd9a0;
   b.paint(HULL, 0, 0.8).loft([slab(230, 58, 34, 0), slab(150, 66, 40, 0), slab(0, 66, 40, 0), slab(-120, 60, 36, -1), slab(-190, 44, 28, -3), slab(-232, 22, 16, -6)]);
+  // forked bow (launch slot between two prongs) and heavy aft fins break the slab outline from below
+  for (const sx of [-1, 1]) {
+    b.paint(HULL, 0, 0.75).box(sx * 15, -6, -252, 13, 20, 52, { top: [0.7, 0.8], shift: [0, -6] });
+    b.paint(HULL, 0, 0.7).loft([
+      [[sx * 62, -16, 215], [sx * 62, -4, 215], [sx * 62, -4, 105], [sx * 62, -16, 105]],
+      [[sx * 128, -12, 228], [sx * 128, -6, 228], [sx * 128, -6, 176], [sx * 128, -12, 176]],
+    ]);
+    b.paint(DARK).box(sx * 129, -9, 202, 3, 14, 60, { top: [1, 0.8] });
+  }
   // flight deck trench + deck-edge kerbs
   b.paint(DARK).box(0, 40.6, 0, 40, 1.4, 300);
   b.paint(PALE, 0, 0.5).box(21, 41.2, 0, 1.4, 2.2, 300).box(-21, 41.2, 0, 1.4, 2.2, 300);
@@ -69,7 +78,8 @@ function buildHull(rand: () => number): THREE.BufferGeometry {
   }
   // ventral ribs, centre hangar slot, docking arms
   for (let z = -150; z <= 170; z += 40) b.paint(HULL, 0, 0.55).box(0, -42, z, 46, 5, 6);
-  b.paint(WARM, 1.2).box(0, -40.4, 30, 16, 0.6, 110);
+  b.paint(WARM, 1.1).box(7, -40.4, 30, 1.6, 0.6, 110).box(-7, -40.4, 30, 1.6, 0.6, 110);
+  b.paint(DARK).box(0, -40.2, 30, 12, 0.4, 112);
   b.paint(DARK).box(0, -52, -96, 10, 22, 14, { top: 0.5 }).box(0, -52, 120, 10, 22, 14, { top: 0.5 });
   // engine block; nozzles are cold apart from what the light cards add
   b.paint(HULL, 0, 0.6).box(0, 0, 244, 104, 58, 36, { top: [0.9, 1] });
@@ -97,8 +107,8 @@ function buildLights(rand: () => number, shared: SharedUniforms): LightCardMesh 
   c.point(45, 151, 122, 4, RED, 6).point(0, -64, -96, 3.5, RED, 5).point(0, -64, 120, 3.5, RED, 5).point(0, -8, -234, 3, WHITE, 4);
   // group 1 — ventral maneuvering jets: core + downward plume (relit by setStabilized)
   for (const [x, y, z] of JETS) {
-    c.point(x, y - 6, z, 26, JET, 7, 1);
-    c.strip(x, y - 34, z, 11, 62, JET, 2.6, 1);
+    c.point(x, y - 6, z, 14, JET, 5.5, 1);
+    for (let i = 0; i < 7; i++) c.point(x, y - 12 - i * 8, z, 17 - i * 1.4, JET, 1.9 * Math.pow(0.72, i), 1);
   }
   // group 2 — failing main engines
   for (const [x, y] of [[-34, 10], [34, 10], [18, -16]] as const) c.point(x, y, 288, 30, 0xffb060, 3.2, 2);
@@ -130,7 +140,7 @@ export function createCarrier(shared: SharedUniforms, seed = 7283): Carrier {
   object.name = 'sky:carrier';
   object.visible = false;
   const hullGeo = buildHull(rand);
-  const hullMat = createScenicMaterial(shared, { name: 'SkyCarrierHull', panel: [26, 13], gloss: 0.35, breach: 0.85, haze: 0.75, glowReach: 0.5 });
+  const hullMat = createScenicMaterial(shared, { name: 'SkyCarrierHull', panel: [26, 13], gloss: 0.35, breach: 0.85, haze: 0.75, glowReach: 0.5, underLight: [0.30, 0.27, 0.22] });
   const hull = new THREE.Mesh(hullGeo, hullMat);
   hull.name = 'sky:carrierHull';
   const lights = buildLights(rand, shared);
@@ -201,10 +211,10 @@ export function createCarrier(shared: SharedUniforms, seed = 7283): Carrier {
       _t.copy(forward).multiplyScalar(kind === 0 ? 24 + r() * 60 : 10 + r() * 16);
       _t.x += (r() - 0.5) * 60 * spread; _t.y += (r() - 0.2) * 44 * spread; _t.z += (r() - 0.5) * 60 * spread;
       const life = kind === 2 ? 0.5 + r() * 0.3 : kind === 1 ? 4 + r() * 3 : 1.4 + r() * 2.6;
-      const s = kind === 2 ? 50 + r() * 30 : kind === 1 ? 24 + r() * 26 : 1.2 + r() * 2.4;
+      const s = kind === 2 ? 50 + r() * 30 : kind === 1 ? 24 + r() * 26 : 2 + r() * 3.2;
       if (kind === 2) c.setRGB(1, 0.78, 0.5).multiplyScalar(11);
       else if (kind === 1) c.setRGB(0.5, 0.48, 0.46).multiplyScalar(0.45);
-      else c.setRGB(1, 0.5 + r() * 0.35, 0.14).multiplyScalar(5 + r() * 7);
+      else c.setRGB(1, 0.5 + r() * 0.35, 0.14).multiplyScalar(8 + r() * 9);
       pos.setXYZ(i, _p.x, _p.y, _p.z);
       size.setXYZW(i, s, s, 0, 0);
       color.setXYZ(i, c.r, c.g, c.b);

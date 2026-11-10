@@ -26,6 +26,7 @@ export const C = {
   smoke: 0x2b2a2c,
   smokeWarm: 0x3a2f28,
   stone: 0x8d877a,
+  dust: 0xc4bcab,       // airborne stone dust reads paler than the solid it came from
   stoneDark: 0x24252b,
   steel: 0x9aa3ad,
   steam: 0xd8e2ea,
@@ -35,20 +36,30 @@ export const PI = Math.PI;
 
 type Over = Partial<ParticleDef>;
 
+/**
+ * Calibration: bloom sprites and flames cover many pixels, so their HDR is scaled down here once — authored
+ * intensities in the library stay comparable with the tiny sparks and motes (which keep their full value).
+ */
+const GLOW_GAIN = 0.3;
+const STAR_GAIN = 0.5;
+const FLAME_GAIN = 0.6;
+
 /** Velocity-stretched hot sparks that fall, bounce once or twice and die. */
 export function sparks(color: number, o: Over = {}): ParticleDef {
   return {
-    layer: 'stretch', sprite: 'streak', life: [0.25, 0.7], size: [0.028, 0.022, 0.008], aspect: 3, stretch: 0.045,
-    color: [[C.heat, 7], [color, 4.5], [color, 0.6]], colorMid: 0.25, fadeIn: 0.01, fadeOut: 0.6,
+    layer: 'stretch', sprite: 'streak', life: [0.25, 0.7], size: [0.04, 0.032, 0.012], aspect: 3, stretch: 0.05,
+    color: [[C.heat, 8], [color, 5.5], [color, 0.8]], colorMid: 0.25, fadeIn: 0.01, fadeOut: 0.6,
     gravity: 9.5, drag: 1.1, bounce: 0.42, tint: 0.85, ...o,
   };
 }
 
 /** One soft additive bloom sprite — the HDR core of a flash. */
 export function flashGlow(color: number, intensity: number, size: number, life = 0.14, o: Over = {}): ParticleDef {
+  const keys: readonly ColorKey[] = o.color ?? [[C.heat, intensity], [color, intensity * 0.6], [color, 0]];
   return {
     layer: 'add', sprite: 'glow', life, size: [size * 0.35, size, size * 1.25], sizeMid: 0.25, sizeRand: 1,
-    color: [[C.heat, intensity], [color, intensity * 0.6], [color, 0]], colorMid: 0.3, fadeIn: 0.02, fadeOut: 0.25, rot: 0, tint: 0.6, ...o,
+    colorMid: 0.3, fadeIn: 0.02, fadeOut: 0.25, rot: 0, tint: 0.6, ...o,
+    color: keys.map((k): ColorKey => [k[0], k[1] * GLOW_GAIN]),
   };
 }
 
@@ -56,25 +67,28 @@ export function flashGlow(color: number, intensity: number, size: number, life =
 export function star(color: number, intensity: number, size: number, life = 0.09, o: Over = {}): ParticleDef {
   return {
     layer: 'add', sprite: 'spark', life, size: [size * 0.5, size, size * 0.3], sizeMid: 0.2, sizeRand: 1,
-    color: [[C.white, intensity], [color, intensity * 0.5]], fadeIn: 0.01, fadeOut: 0.3, rot: [0, PI / 2], tint: 0.35, ...o,
+    color: [[C.white, intensity * STAR_GAIN], [color, intensity * STAR_GAIN * 0.5]], fadeIn: 0.01, fadeOut: 0.3, rot: [0, PI / 2], tint: 0.35, ...o,
   };
 }
 
 /** Embers: rise on heat, wander, flicker and cool from white-orange to dull red. */
 export function embers(o: Over = {}): ParticleDef {
   return {
-    layer: 'add', sprite: 'ember', life: [0.9, 2.2], size: [0.05, 0.04, 0.012], sizeRand: [0.5, 1.4],
+    layer: 'add', sprite: 'ember', life: [0.9, 2.2], size: [0.06, 0.05, 0.015], sizeRand: [0.5, 1.4],
     color: [[C.cinderHot, 6], [C.cinder, 3.5], [C.cinderDeep, 0.8]], colorMid: 0.3, fadeIn: 0.03, fadeOut: 0.6,
     gravity: -1.3, drag: 1.4, turb: 3.2, turbFreq: 1.6, flicker: 0.55, spin: 2, ...o,
   };
 }
 
-/** Flame tongues: additive smoke-shaped sprites that go white-hot → orange → deep red very quickly. */
+/**
+ * Flame tongues: additive smoke-shaped sprites, orange-hot → deep red. They fade IN over the first fifth of their
+ * life so a burst of overlapping flames never stacks into a white-out on the frame of the flash itself.
+ */
 export function flame(o: Over = {}): ParticleDef {
   return {
-    layer: 'add', sprite: ['smoke0', 'smoke1', 'smoke2', 'smoke3'], life: [0.22, 0.45], size: [0.25, 0.6, 0.85], sizeMid: 0.35,
-    color: [[C.heat, 5.5], [C.cinder, 3.2], [C.cinderDeep, 0.4]], colorMid: 0.3, alpha: 0.9, fadeIn: 0.04, fadeOut: 0.35,
-    gravity: -2.2, drag: 3.5, spin: 1.6, ...o,
+    layer: 'add', sprite: ['smoke0', 'smoke1', 'smoke2', 'smoke3'], life: [0.22, 0.45], size: [0.2, 0.6, 0.85], sizeMid: 0.35,
+    color: [[C.cinderHot, 3.4 * FLAME_GAIN], [C.cinder, 3.2 * FLAME_GAIN], [C.cinderDeep, 0.5 * FLAME_GAIN]], colorMid: 0.35, alpha: 0.9,
+    fadeIn: 0.22, fadeOut: 0.4, gravity: -2.2, drag: 3.5, spin: 1.6, ...o,
   };
 }
 
@@ -88,17 +102,25 @@ export function smoke(color: number = C.smoke, o: Over = {}): ParticleDef {
 }
 
 /** Low pale dust kicked along a surface. */
-export function dust(color: number = C.stone, o: Over = {}): ParticleDef {
+export function dust(color: number = C.dust, o: Over = {}): ParticleDef {
   return {
     layer: 'lit', sprite: ['smoke1', 'smoke2', 'smoke3'], life: [0.6, 1.2], size: [0.18, 0.5, 0.8], sizeMid: 0.4,
     color: [[color, 1]], alpha: 0.26, fadeIn: 0.1, fadeOut: 0.25, gravity: -0.1, drag: 3.2, spin: 0.6, floorFade: true, tint: 0.7, ...o,
   };
 }
 
+/** Fine lit grit: tiny grains that are thrown or simply fall (reads correctly in dark and bright rooms). */
+export function grit(color: number = C.dust, o: Over = {}): ParticleDef {
+  return {
+    layer: 'lit', sprite: 'dot', life: [0.5, 1.0], size: [0.04, 0.035, 0.02], sizeRand: [0.5, 1.5],
+    color: [[color, 1]], alpha: 0.85, fadeIn: 0.05, fadeOut: 0.6, gravity: 7, drag: 1.4, tint: 0.8, ...o,
+  };
+}
+
 /** Tumbling solid fragments (stone / metal) that fall and bounce. */
 export function chips(color: number, o: Over = {}): ParticleDef {
   return {
-    layer: 'alpha', sprite: ['chip0', 'chip1'], life: [0.9, 1.6], size: [0.07, 0.07, 0.05], sizeRand: [0.5, 1.5],
+    layer: 'alpha', sprite: ['chip0', 'chip1'], life: [0.9, 1.6], size: [0.09, 0.09, 0.07], sizeRand: [0.5, 1.5],
     color: [[color, 1]], fadeIn: 0.01, fadeOut: 0.8, gravity: 9.8, drag: 0.4, bounce: 0.36, spin: 9, tint: 0.9, ...o,
   };
 }

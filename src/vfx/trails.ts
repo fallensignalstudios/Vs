@@ -18,6 +18,8 @@ attribute vec4 aColor;
 varying vec2 vUv;
 varying vec4 vColor;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <logdepthbuf_pars_vertex>
 void main() {
   vUv = aUv;
@@ -32,6 +34,8 @@ const FRAG = /* glsl */ `
 varying vec2 vUv;
 varying vec4 vColor;
 #include <common>
+// pow() is undefined for negative bases in GLSL (NaN on real GPUs → bloom explosions); always go through pw()
+float pw(float b, float e) { return pow(abs(b), e); }
 #include <logdepthbuf_pars_fragment>
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) {
@@ -40,15 +44,15 @@ float vn(vec2 p) {
 }
 void main() {
   #include <logdepthbuf_fragment>
-  float u = vUv.x;  // 0 = newest edge, 1 = tail
-  float v = vUv.y;  // 0 = base, 1 = tip
-  float tail = pow(1.0 - u, 1.6);
+  float u = clamp(vUv.x, 0.0, 1.0);  // 0 = newest edge, 1 = tail
+  float v = clamp(vUv.y, 0.0, 1.0);  // 0 = base, 1 = tip
+  float tail = pw(1.0 - u, 1.6);
   // hot rim along the tip edge, soft body falling off toward the base, streaks dragged along the swing
-  float rim = exp(-pow((1.0 - v) * 9.0, 2.0));
-  float body = pow(v, 2.2) * 0.5;
+  float rim = exp(-pw((1.0 - v) * 9.0, 2.0));
+  float body = pw(v, 2.2) * 0.5;
   float streak = 0.6 + 0.4 * vn(vec2(v * 26.0, u * 3.0));
   float lead = exp(-u * 14.0) * 0.6;
-  float m = (rim * 1.5 + body * streak) * tail + lead * pow(v, 1.4);
+  float m = (rim * 1.5 + body * streak) * tail + lead * pw(v, 1.4);
   m *= smoothstep(0.0, 0.06, v);
   vec3 hot = mix(vColor.rgb, vec3(max(vColor.r, max(vColor.g, vColor.b))), rim * tail * 0.7);
   vec3 col = hot * m * vColor.a;
@@ -77,7 +81,7 @@ class Trail implements TrailHandle {
   head = 0;
   count = 0;
   r = 1; g = 1; b = 1;
-  intensity = 3;
+  intensity = 1.7;
   constructor(readonly base: THREE.Object3D, readonly tip: THREE.Object3D, readonly length: number) {}
   setActive(active: boolean): void {
     this.active = !!active;

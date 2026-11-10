@@ -3,14 +3,15 @@
  *   gold ribbons   nav paths (string-pulled)           white capsule   an agent walking path 0 through moveCharacter
  *   warm tiles     nav cells visible from an eye       violet / red    lineOfFire probes (clear / blocked)
  *
- *   /sandbox/physics/?fixture=z04|z08|z05&view=top|iso&manual=1
- *   __phys.view('top' | 'iso')   __phys.path(i, from, to)   __phys.eye(x, y, z)   __phys.door(open)   __step(s)
+ *   /sandbox/physics/?fixture=z04|z08|z05&view=top|iso&manual=1      (live: click anywhere to send the walker)
+ *   __phys.view('top' | 'iso')   __phys.path(i, from, to)   __phys.eye(x, y, z)   __phys.door(open)
+ *   __phys.barriers(up)          __phys.many(n, seed, radius?)   __step(seconds)
  */
 import * as THREE from 'three';
 import '@fontsource/barlow-condensed/500.css';
 import '@fontsource/barlow-condensed/600.css';
-import type { ColliderHandle, NavPath, PhysicsWorld, Vec3Like } from '@/core/api';
-import { RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
+import type { ColliderHandle, NavPath, PhysicsWorld, TriggerHandle, Vec3Like } from '@/core/api';
+import { RAY_GROUND, RAY_SHOT } from '@/core/api/physics';
 import { createPhysicsWorld } from '@/world/physics';
 import { buildZ04, buildZ05, buildZ08, planPos } from '@/world/physics/fixtures';
 import { createHarness } from '../harness';
@@ -28,6 +29,8 @@ interface Demo {
   probes: Array<[Vec3Like, Vec3Like]>;
   labels: Array<{ text: string; at: Vec3Like; color?: string; size?: number }>;
   doors: ColliderHandle[];
+  /** toggleable isolation barriers (Z08 court) */
+  barriers: ColliderHandle[];
 }
 
 function setup(): Demo {
@@ -35,7 +38,7 @@ function setup(): Demo {
     const f = buildZ08(world);
     for (const b of f.courtBarriers) b.enabled = true;
     return {
-      title: 'Z08 QUARANTINE CRUCIBLE — 70 × 48 m · isolation barriers raised',
+      title: 'Z08 QUARANTINE CRUCIBLE — 70 × 48 m · east balcony +3 m',
       frame: { x: 35, z: -24, span: 66 },
       paths: [[f.marks.entry, f.marks.northOfCourt], [f.marks.westLoop, f.marks.balcony]],
       eye: { ...f.marks.staging, y: 1.6 },
@@ -46,6 +49,7 @@ function setup(): Demo {
         { text: 'W', at: planPos(9, 40), size: 1.6 }, { text: 'E', at: planPos(65.5, 40), size: 1.6 },
       ],
       doors: [f.exitDoor, f.doorW, f.doorE],
+      barriers: f.courtBarriers,
     };
   }
   if (fixtureName === 'z05') {
@@ -61,6 +65,7 @@ function setup(): Demo {
         { text: 'SHAFT Ø18', at: { x: -5.8, y: 0, z: 0 }, color: '#ff8a8a' }, { text: 'BROKEN SPAN', at: { x: 42, y: 0, z: -4.6 } },
       ],
       doors: [],
+      barriers: [],
     };
   }
   const f = buildZ04(world);
@@ -78,6 +83,7 @@ function setup(): Demo {
       { text: 'S', at: planPos(8, 11, 2.8), color: '#c5ccd4', size: 1.5 }, { text: 'LOW ROUTE', at: planPos(13, 5.5) },
     ],
     doors: [f.door],
+    barriers: [],
   };
 }
 
@@ -89,6 +95,9 @@ const buildMs = performance.now() - tBuild0;
 // ---- scene dressing ---------------------------------------------------------------------------------------
 const debug = world.debugObject() as THREE.Group;
 h.scene.add(debug);
+// nav dots turn to moiré when a cell is only a few pixels: hide them on the big zones (the sight tiles
+// still show where the nodes are)
+(debug.getObjectByName('nav') as THREE.Points).visible = demo.frame.span <= 80;
 
 /** 10 m plan grid under everything (matches the tactical-plan drawings). */
 function planGrid(): THREE.LineSegments {
@@ -251,11 +260,26 @@ const trail: Vec3Like[] = [];
 let trailMesh: THREE.Mesh | null = null;
 const walker = { pos: { x: 0, y: 0, z: 0 }, leg: 1, blocked: 0, done: false };
 
+// a trigger volume at the goal of path 0, evaluated against the walker exactly as Game does for the player
+const goalTrigger = { handle: null as TriggerHandle | null, enters: 0, exits: 0 };
+function placeGoalTrigger(): void {
+  goalTrigger.handle?.remove();
+  const g = demo.paths[0][1];
+  goalTrigger.enters = 0; goalTrigger.exits = 0;
+  goalTrigger.handle = world.addTrigger(
+    { kind: 'circle', x: g.x, z: g.z, r: 2.5, yMin: g.y - 0.5, yMax: g.y + 2.2 },
+    () => { goalTrigger.enters++; hud(); },
+    () => { goalTrigger.exits++; hud(); },
+  );
+}
+
 function resetWalker(): void {
   const p = paths[0];
   walker.pos = p ? { ...p.points[0] } : { ...demo.paths[0][0] };
   walker.leg = 1; walker.blocked = 0; walker.done = !p;
   trail.length = 0;
+  agent.position.set(walker.pos.x, walker.pos.y + 0.9, walker.pos.z);
+  hud();
 }
 
 h.onUpdate((dt) => {
@@ -278,6 +302,7 @@ h.onUpdate((dt) => {
     if (!last || Math.hypot(last.x - walker.pos.x, last.z - walker.pos.z) > 0.25) trail.push({ ...walker.pos });
   }
   agent.position.set(walker.pos.x, walker.pos.y + 0.9, walker.pos.z);
+  world.updateTriggers(walker.pos);
   if (trailMesh) { h.scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh = null; }
   if (trail.length > 1) {
     trailMesh = ribbon(trail, 0.8 * (demo.frame.span / 54), 0xffffff, 0.14);
@@ -291,8 +316,8 @@ h.onUpdate((dt) => {
 // ---- HUD ----------------------------------------------------------------------------------------------------
 const HUD_W = 292;
 const panel = document.createElement('div');
-panel.style.cssText = `position:fixed;left:0;top:0;bottom:0;width:${HUD_W}px;box-sizing:border-box;padding:22px 20px;`
-  + 'font:500 15px/1.55 "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.07em;color:#8fa1b6;pointer-events:none;'
+panel.style.cssText = `position:fixed;left:0;top:0;bottom:0;width:${HUD_W}px;box-sizing:border-box;padding:18px 20px;`
+  + 'font:500 14.5px/1.42 "Barlow Condensed","Arial Narrow",sans-serif;letter-spacing:.07em;color:#8fa1b6;pointer-events:none;'
   + 'background:linear-gradient(90deg,rgba(9,12,17,.96) 78%,rgba(9,12,17,0));';
 document.body.appendChild(panel);
 
@@ -302,14 +327,14 @@ function hud(): void {
   const chip = (c: string, t: string, round = false): string =>
     `<div><span style="display:inline-block;width:11px;height:11px;background:${c};margin-right:9px;border-radius:${round ? 6 : 2}px"></span>${t}</div>`;
   const head = (t: string): string =>
-    `<div style="margin:16px 0 4px;font-size:12px;letter-spacing:.22em;color:#5d6c80;border-bottom:1px solid #1c2532;max-width:226px">${t}</div>`;
+    `<div style="margin:10px 0 3px;font-size:12px;letter-spacing:.22em;color:#5d6c80;border-bottom:1px solid #1c2532;max-width:226px">${t}</div>`;
   const [zone, ...rest] = demo.title.split(' — ');
   const pathRows = paths.map((q, i) => row(
     `<span style="color:${i === 0 ? '#ffc56b' : '#7fe0ff'}">path ${i}</span>`,
     q ? `${q.length.toFixed(1)} m · ${q.points.length} pts` : 'unreachable',
   )).join('');
   panel.innerHTML = '<div style="font-size:12px;letter-spacing:.28em;color:#c9a45c">PHYSICS · NAV DEBUG</div>'
-    + `<div style="font:600 27px/1.1 'Barlow Condensed','Arial Narrow',sans-serif;color:#eef2f7;letter-spacing:.08em;margin-top:4px">${zone}</div>`
+    + `<div style="font:600 25px/1.1 'Barlow Condensed','Arial Narrow',sans-serif;color:#eef2f7;letter-spacing:.07em;margin-top:4px;max-width:250px">${zone}</div>`
     + `<div style="max-width:226px">${rest.join(' — ')}</div>`
     + head('WORLD')
     + row('surfaces', String(world.counts.surfaces)) + row('solids', String(world.counts.colliders))
@@ -318,10 +343,13 @@ function hud(): void {
     + row(`lineOfSight × ${sightCount}`, `${sightMs.toFixed(1)} ms`)
     + head('QUERIES') + pathRows
     + row('walker', walker.done ? `arrived · ${walker.blocked} blocked` : 'walking')
+    + row('goal trigger', `${goalTrigger.handle?.inside ? 'inside' : 'outside'} · ${goalTrigger.enters} in / ${goalTrigger.exits} out`)
+    + (demo.barriers.length ? row('isolation barriers', demo.barriers[0].enabled ? 'raised' : 'lowered') : '')
+    + (demo.doors.length ? row('doors', demo.doors.some((d) => d.enabled) ? 'closed' : 'open') : '')
     + head('LEGEND')
     + chip('#2fd27a', 'walkable surface') + chip('#9af2c0', 'ramp') + chip('#ff4b4b', 'solid')
     + chip('#7cc4ff', 'low cover 1.2 m') + chip('#2f6dff', 'high cover 2.2 m') + chip('#ffa033', 'see-through solid')
-    + chip('#4a505c', 'disabled') + chip('#8fe6ff', 'nav node', true) + chip('#ffc56b', 'nav path')
+    + chip('#4a505c', 'disabled') + chip('#ffd84a', 'trigger volume') + chip('#8fe6ff', 'nav node', true) + chip('#ffc56b', 'nav path')
     + chip('#ffe2a8', 'seen from the eye') + chip('#b48cff', 'clear line of fire') + chip('#ff5a5a', 'blocked line of fire');
 }
 
@@ -349,6 +377,7 @@ const api = {
   /** replace demo path i */
   path(i: number, from: Vec3Like, to: Vec3Like): string {
     demo.paths[i] = [from, to];
+    if (i === 0) placeGoalTrigger();
     rebuildOverlay();
     if (i === 0) resetWalker();
     h.render();
@@ -356,7 +385,38 @@ const api = {
     return p ? `${p.length.toFixed(2)} m, ${p.points.length} pts` : 'unreachable';
   },
   eye(x: number, y: number, z: number): void { demo.eye = { x, y, z }; rebuildOverlay(); h.render(); },
-  /** open / close the fixture doors and rebuild nav incrementally */
+  /** draw n random nav paths (thin) to eyeball smoothing quality; returns the average query time in ms */
+  many(n: number, seed = 1, radius = 0): number {
+    const c = demo.paths[0][0];
+    const scale = demo.frame.span / 54;
+    let ms = 0, found = 0;
+    for (let i = 0; i < n; i++) {
+      const a = world.nav.randomPoint(c, demo.frame.span, seed * 1000 + i * 2);
+      const b = world.nav.randomPoint(c, demo.frame.span, seed * 1000 + i * 2 + 1);
+      if (!a || !b) continue;
+      const t0 = performance.now();
+      const p = radius > 0 ? world.nav.findPathFor(a, b, radius) : world.nav.findPath(a, b);
+      ms += performance.now() - t0;
+      if (!p) continue;
+      found++;
+      const col = new THREE.Color().setHSL((i * 0.137) % 1, 0.75, 0.66).getHex();
+      overlay.add(ribbon(p.points, Math.max(0.12, radius * 2) * scale, col, 0.12));
+      if (radius > 0) {
+        const m = overlay.children[overlay.children.length - 1] as THREE.Mesh;
+        (m.material as THREE.MeshBasicMaterial).transparent = true;
+        (m.material as THREE.MeshBasicMaterial).opacity = 0.35;
+      }
+      for (const q of p.points) overlay.add(disc(q, 0.16 * scale, col));
+    }
+    h.render();
+    return found > 0 ? ms / found : 0;
+  },
+  /** raise / lower the isolation barriers (Z08) and rebuild nav incrementally; returns the rebuild ms */
+  barriers(up: boolean): number {
+    for (const b of demo.barriers) b.enabled = up;
+    return api.door(!demo.doors.some((d) => d.enabled));
+  },
+  /** open / close the fixture doors and rebuild nav incrementally; returns the rebuild ms */
   door(open: boolean): number {
     for (const d of demo.doors) d.enabled = !open;
     const t0 = performance.now();
@@ -372,8 +432,22 @@ const api = {
 };
 (window as unknown as { __phys: typeof api }).__phys = api;
 
+// Click (without dragging) to send the walker there: a camera ray against floors + solids picks the goal.
+let downX = 0, downY = 0;
+h.renderer.domElement.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; });
+h.renderer.domElement.addEventListener('pointerup', (e) => {
+  if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) return;
+  const ndc = new THREE.Vector3((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1, 0.5).unproject(h.camera);
+  const o = h.camera.position;
+  const hit = world.raycast(o, { x: ndc.x - o.x, y: ndc.y - o.y, z: ndc.z - o.z }, 2000, RAY_GROUND | RAY_SHOT);
+  if (!hit) return;
+  const goal = world.nav.nearest(hit.point.x, hit.point.y, hit.point.z, 3);
+  if (goal) api.path(0, { ...walker.pos }, goal);
+});
+
 async function start(): Promise<void> {
   try { await Promise.all([document.fonts.load('600 44px "Barlow Condensed"'), document.fonts.load('500 15px "Barlow Condensed"')]); } catch { /* fallback font */ }
+  placeGoalTrigger();
   rebuildOverlay();
   resetWalker();
   view(h.params.get('view') ?? 'top');

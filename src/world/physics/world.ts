@@ -6,7 +6,7 @@
 import type {
   ColliderDesc, ColliderHandle, GroundHit, SurfaceDesc, TriggerShape,
 } from '@/core/api/physics';
-import { RAY_MOVE } from '@/core/api/physics';
+import { MOVE_DEFAULTS, RAY_MOVE } from '@/core/api/physics';
 import type { Vec3Like } from '@/core/api/common';
 import { SpatialHash } from './hash';
 import {
@@ -14,13 +14,15 @@ import {
 } from './shapes';
 import type { Contact, RecOwner } from './shapes';
 
-export const DEF_STEP_UP = 0.45;
-export const DEF_MAX_DROP = 0.7;
-export const DEF_HEIGHT = 1.8;
+export const DEF_STEP_UP: number = MOVE_DEFAULTS.stepUp;
+export const DEF_MAX_DROP: number = MOVE_DEFAULTS.maxDrop;
+export const DEF_HEIGHT: number = MOVE_DEFAULTS.height;
 /** vertical tolerance when testing solid overlap ranges (metres) */
 export const Y_EPS = 1e-4;
 
 const TAU = Math.PI * 2;
+/** candidate directions (radians off "directly behind the cover") tried by coverPoint, best first */
+const COVER_FAN = [0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05];
 /** more dirty rects than this between nav builds → the next rebuild is a full one */
 const MAX_DIRTY_RECTS = 24;
 
@@ -192,6 +194,43 @@ export class PhysicsCore implements RecOwner {
     return best;
   }
 
+  /**
+   * Headroom rule: false when another surface hangs over (x,z) between step height and body height above the
+   * ground height g — the body would intersect it (the low end of a ramp, the edge of a raised dais). This is
+   * what stops characters walking "under" a surface that has no solid beneath it.
+   */
+  headroom(x: number, z: number, g: number, stepUp: number, height: number): boolean {
+    const lo = g + stepUp + 1e-6, hi = g + height - 1e-6;
+    const list = this.surfaceHash.cellAt(x, z);
+    if (list) {
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i];
+        if (!s.on || s.yHi <= lo || s.yLo >= hi) continue;
+        const h = s.heightAt(x, z);
+        if (h > lo && h < hi) return false;
+      }
+    }
+    const big = this.surfaceHash.big;
+    for (let i = 0; i < big.length; i++) {
+      const s = big[i];
+      if (!s.on || s.yHi <= lo || s.yLo >= hi) continue;
+      const h = s.heightAt(x, z);
+      if (h > lo && h < hi) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Ground height a character at height yRef may move onto at (x,z): ground must exist, be no more than
+   * maxDrop below, and (when `head` is set) have headroom. NaN otherwise.
+   */
+  walkY(x: number, z: number, yRef: number, stepUp: number, maxDrop: number, height: number, head: boolean): number {
+    const g = this.groundY(x, z, yRef, stepUp);
+    if (g !== g || yRef - g > maxDrop) return NaN;
+    if (head && !this.headroom(x, z, g, stepUp, height)) return NaN;
+    return g;
+  }
+
   groundAt(x: number, z: number, yRef: number, stepUp: number = DEF_STEP_UP): GroundHit | null {
     if (!(x === x) || !(z === z) || !(yRef === yRef)) return null;
     const y = this.groundY(x, z, yRef, stepUp === stepUp ? stepUp : DEF_STEP_UP);
@@ -218,11 +257,32 @@ export class PhysicsCore implements RecOwner {
     return true;
   }
 
+  /**
+   * Distance in XZ from a point standing at height y to the nearest movement-blocking solid overlapping
+   * (y + stepUp, y + height), capped at maxR.
+   */
+  solidDistance(x: number, z: number, y: number, maxR: number, stepUp: number, height: number): number {
+    const lo = y + stepUp + Y_EPS, hi = y + height - Y_EPS;
+    const list = this.standScratch;
+    const n = this.colliderHash.query(x - maxR, z - maxR, x + maxR, z + maxR, list);
+    let best = maxR;
+    for (let i = 0; i < n; i++) {
+      const c = list[i];
+      if (!c.on || c.yMax <= lo || c.yMin >= hi) continue;
+      if (c.maxX < x - best || c.minX > x + best || c.maxZ < z - best || c.minZ > z + best) continue;
+      if (!(maskOf(c.desc) & RAY_MOVE)) continue;
+      const d = footprintDist(c, x, z);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
   canStand(x: number, y: number, z: number, radius: number, height: number = DEF_HEIGHT): boolean {
     if (!(x === x) || !(y === y) || !(z === z)) return false;
-    const gy = this.groundY(x, z, y, DEF_STEP_UP);
-    if (gy !== gy || y - gy > DEF_MAX_DROP) return false;
-    return this.standClear(x, z, gy, radius > 0 ? radius : 0, DEF_STEP_UP, height > 0 ? height : DEF_HEIGHT);
+    const h = height > 0 ? height : DEF_HEIGHT;
+    const gy = this.walkY(x, z, y, DEF_STEP_UP, DEF_MAX_DROP, h, true);
+    if (gy !== gy) return false;
+    return this.standClear(x, z, gy, radius > 0 ? radius : 0, DEF_STEP_UP, h);
   }
 
   /** canStand variant used by the un-stick search; on success the ground height is left in `standY`. */
@@ -231,10 +291,10 @@ export class PhysicsCore implements RecOwner {
     if (lenient) {
       gy = this.groundY(x, z, y, 2.0);
       if (gy !== gy) gy = this.groundY(x, z, Infinity, 0);
-      if (gy !== gy) return false;
+      if (gy !== gy || !this.headroom(x, z, gy, DEF_STEP_UP, DEF_HEIGHT)) return false;
     } else {
-      gy = this.groundY(x, z, y, DEF_STEP_UP);
-      if (gy !== gy || y - gy > DEF_MAX_DROP) return false;
+      gy = this.walkY(x, z, y, DEF_STEP_UP, DEF_MAX_DROP, DEF_HEIGHT, true);
+      if (gy !== gy) return false;
     }
     if (!this.standClear(x, z, gy, radius, DEF_STEP_UP, DEF_HEIGHT)) return false;
     this.standY = gy;
@@ -328,6 +388,44 @@ export class PhysicsCore implements RecOwner {
     const out: ColliderHandle[] = new Array(found.length);
     for (let i = 0; i < found.length; i++) out[i] = found[i].c;
     return out;
+  }
+
+  /**
+   * Standing point behind a cover collider that hides a character from `threat` (an eye / muzzle position).
+   * Tries the spot directly opposite the threat first, then fans out along the far side. `hidden` is supplied
+   * by the caller (a line-of-fire test) so this module stays free of the ray code.
+   */
+  coverPoint(
+    cover: ColliderHandle, threat: Vec3Like, radius: number,
+    hidden: (from: Vec3Like, to: Vec3Like) => boolean,
+  ): Vec3Like | null {
+    if (!(cover instanceof ColliderRec) || !cover.alive || !threat || !Number.isFinite(threat.x + threat.y + threat.z)) return null;
+    const r = radius > 0 ? radius : 0.4;
+    let dx = cover.cx - threat.x, dz = cover.cz - threat.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-6) { dx = 1; dz = 0; } else { dx /= len; dz /= len; }
+    const base = Math.atan2(dz, dx);
+    // low cover only hides a crouched body; high cover hides a standing one
+    const hideH = cover.desc.cover === 'low' ? Math.min(0.9, cover.yMax - cover.yMin - 0.2) : 1.5;
+    const probe = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < COVER_FAN.length; i++) {
+      const a = base + COVER_FAN[i];
+      const ex = Math.cos(a), ez = Math.sin(a);
+      // support distance of the footprint along this direction
+      let ext = cover.r;
+      if (cover.isBox) {
+        const lx = ex * cover.cos - ez * cover.sin, lz = ex * cover.sin + ez * cover.cos;
+        ext = Math.abs(lx) * cover.hx + Math.abs(lz) * cover.hz;
+      }
+      const d = ext + r + 0.12;
+      const px = cover.cx + ex * d, pz = cover.cz + ez * d;
+      const gy = this.walkY(px, pz, cover.yMin, DEF_STEP_UP, DEF_MAX_DROP, DEF_HEIGHT, true);
+      if (gy !== gy) continue;
+      if (!this.standClear(px, pz, gy, r, DEF_STEP_UP, DEF_HEIGHT)) continue;
+      probe.x = px; probe.y = gy + hideH; probe.z = pz;
+      if (hidden(threat, probe)) return { x: px, y: gy, z: pz };
+    }
+    return null;
   }
 
   // -------------------------------------------------------------------------------------------------------

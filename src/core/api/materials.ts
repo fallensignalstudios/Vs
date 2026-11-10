@@ -14,6 +14,8 @@
  *    switched to object space automatically. `skin`, `hair`, `domCloth`, `refCloth`, `rubber` and `shieldEnergy`
  *    are object-space by default.
  *  - `get()` works before `init()` has finished (flat placeholder maps are swapped for the real ones in place).
+ *    Textures follow `game.render.quality` (`textureSize`, `anisotropy`): a quality change after `init()` re-bakes
+ *    in place the next time the game is NOT in the 'playing' phase (title / pause / loading), never mid-combat.
  *  - The shared instances are patched through `onBeforeCompile`. If you also need `onBeforeCompile` on one of
  *    them (or on a clone), just assign it: the library keeps its own patches and runs yours after them, and
  *    `material.clone()` keeps the patches. Do not replace three's `#include <...>` tokens you do not own.

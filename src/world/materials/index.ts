@@ -58,6 +58,13 @@ class MaterialLibraryImpl implements MaterialLibrary {
   private clock = 0;
   private _ready = false;
   private _progress = 0;
+  /** quality the current maps were baked at / the quality the renderer currently asks for */
+  private bakedSize = 0;
+  private bakedAniso = 0;
+  private wantSize = DEFAULT_TEXTURE_SIZE;
+  private wantAniso = DEFAULT_ANISOTROPY;
+  private maxAniso = 0;
+  private baking = false;
 
   constructor(private readonly game: Game | null) {
     for (const id of FAMILY_IDS) {
@@ -80,7 +87,8 @@ class MaterialLibraryImpl implements MaterialLibrary {
     return this.initPromise;
   }
 
-  private quality(): { size: number; anisotropy: number } {
+  /** Read the renderer's current texture quality into `wantSize` / `wantAniso` (allocation free). */
+  private readQuality(): void {
     let size = DEFAULT_TEXTURE_SIZE;
     let anisotropy = DEFAULT_ANISOTROPY;
     const render = this.game?.render;
@@ -90,14 +98,30 @@ class MaterialLibraryImpl implements MaterialLibrary {
         if (typeof q.textureSize === 'number' && q.textureSize >= 64) size = q.textureSize;
         if (typeof q.anisotropy === 'number' && q.anisotropy >= 1) anisotropy = q.anisotropy;
       }
-      const r = render.renderer;
-      if (r && !isStub(r) && r.capabilities) anisotropy = Math.min(anisotropy, r.capabilities.getMaxAnisotropy());
+      if (this.maxAniso === 0) {
+        const r = render.renderer;
+        this.maxAniso = r && !isStub(r) && r.capabilities ? Math.max(1, r.capabilities.getMaxAnisotropy()) : 16;
+      }
+      anisotropy = Math.min(anisotropy, this.maxAniso);
     }
-    return { size, anisotropy: Math.max(1, anisotropy) };
+    this.wantSize = size;
+    this.wantAniso = Math.max(1, anisotropy);
   }
 
   private async bake(): Promise<void> {
-    const { size, anisotropy } = this.quality();
+    this.baking = true;
+    try {
+      await this.bakeAll();
+    } finally {
+      this.baking = false;
+    }
+  }
+
+  private async bakeAll(): Promise<void> {
+    this.readQuality();
+    const size = this.wantSize, anisotropy = this.wantAniso;
+    this.bakedSize = size;
+    this.bakedAniso = anisotropy;
     const t0 = now();
     let last = t0;
     const steps = FAMILY_IDS.length + 3;
@@ -137,6 +161,28 @@ class MaterialLibraryImpl implements MaterialLibrary {
     this._ready = true;
     this._progress = 1;
     if (this.game?.flags?.debug === true) console.info(`[mats] baked ${FAMILY_IDS.length} texture families at ${size}px in ${(now() - t0).toFixed(0)} ms`);
+  }
+
+  /**
+   * Follow quality changes made after `init()`: anisotropy is applied to the live textures at once; a different
+   * texture size re-bakes in place — but never while the game is being played (synthesis would hitch), only on
+   * the title / pause / loading screens.
+   */
+  private followQuality(): void {
+    this.readQuality();
+    if (this.wantSize !== this.bakedSize) {
+      if (this.game?.phase === 'playing') return;
+      void this.bake().catch((err) => console.error('[mats] re-bake failed; keeping the previous textures', err));
+      return;
+    }
+    if (this.wantAniso === this.bakedAniso) return;
+    this.bakedAniso = this.wantAniso;
+    const apply = (t: unknown): void => {
+      const tex = t as THREE.Texture;
+      if (tex.anisotropy !== this.wantAniso) { tex.anisotropy = this.wantAniso; tex.needsUpdate = true; }
+    };
+    apply(this.macro.value); apply(this.detail.value); apply(this.veins.value);
+    for (const f of this.families.values()) { apply(f.set.albedo); apply(f.set.normal); apply(f.set.orm); }
   }
 
   // ------------------------------------------------------------------------------------------- construction
@@ -232,7 +278,7 @@ class MaterialLibraryImpl implements MaterialLibrary {
       return existing;
     }
     const scale = opts?.scale !== undefined && opts.scale > 0.01 ? opts.scale : 1.8;
-    const patch = corruptPatch(this.veins, { amount: clamp01(opts?.amount ?? 0.5), scale, glow: PALETTE.eclipseViolet, dark: 0x120818, intensity: 2.6 });
+    const patch = corruptPatch(this.veins, { amount: clamp01(opts?.amount ?? 0.5), scale, glow: PALETTE.eclipseViolet, dark: 0x1c1222, intensity: 2.4 });
     ensureHost(material).add(patch);
     const a = (patch.uniforms as Record<string, AurUniform>).corA.value as THREE.Vector4;
     const handle: CorruptHandle = {
@@ -265,6 +311,7 @@ class MaterialLibraryImpl implements MaterialLibrary {
   update(dt: number, time: number): void {
     this.clock = Number.isFinite(time) ? time : this.clock + (Number.isFinite(dt) ? dt : 0);
     AUR_TIME.value = this.clock;
+    if (this._ready && !this.baking && this.game) this.followQuality();
   }
 }
 

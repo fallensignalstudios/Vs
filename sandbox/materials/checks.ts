@@ -2,9 +2,10 @@
  * Verification scenes:
  *   hall   — a 60 m hall to judge tiling repetition / macro variation at distance
  *   moving — object-space mapping on a moving mesh, instancing (world + object), a skinned mesh, non-uniform scale
+ *   maps   — the raw baked albedo / normal / ORM / mask of one material, tiled 2 × 2 (seam + feature check)
  */
 import * as THREE from 'three';
-import type { MaterialLibrary } from '@/core/api';
+import type { MaterialLibrary, MatId } from '@/core/api';
 import type { Harness } from '../harness';
 import { bevelledSlab, box, label, ribSegment } from './shapes';
 
@@ -97,4 +98,28 @@ export function buildMoving(h: Harness, mats: MaterialLibrary): Record<string, u
   });
   h.setCam([2, 5.5, 9.5], [2, 0.6, 0], 46);
   return {};
+}
+
+/** Flat view of the baked maps behind `id`, each tiled 2 × 2. Call after `mats.init()`. */
+export function buildMaps(h: Harness, mats: MaterialLibrary, id: MatId): void {
+  const set = mats.textures(id);
+  if (!set) return;
+  const unlit = (tex: THREE.Texture, channel: 'rgb' | 'a'): THREE.Material => {
+    const m = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex }, alpha: { value: channel === 'a' ? 1 : 0 }, srgb: { value: tex.colorSpace === THREE.SRGBColorSpace ? 1 : 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv * 2.0; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: 'uniform sampler2D map; uniform float alpha; uniform float srgb; varying vec2 vUv; void main(){ vec4 t = texture2D(map, vUv); vec3 c = mix(t.rgb, vec3(t.a), alpha); if (srgb > 0.5 && alpha < 0.5) c = pow(c, vec3(1.0/2.2)); gl_FragColor = vec4(c, 1.0); }',
+    });
+    return m;
+  };
+  const quads: Array<[THREE.Texture, 'rgb' | 'a', string]> = [
+    [set.albedo, 'rgb', 'albedo'], [set.normal, 'rgb', 'normal'], [set.orm, 'rgb', 'orm (AO, rough, metal)'], [set.orm, 'a', 'mask'],
+  ];
+  quads.forEach(([tex, ch, name], i) => {
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), unlit(tex, ch));
+    q.position.set((i % 2) * 4.2 - 2.1, 2.1 - Math.floor(i / 2) * 4.2, 0);
+    h.scene.add(q);
+    const l = label(`${id} · ${name}`, 2.4); l.rotation.x = 0; l.position.set(q.position.x, q.position.y - 1.85, 0.01); h.scene.add(l);
+  });
+  h.setCam([0, 0, 11.5], [0, 0, 0], 42);
 }

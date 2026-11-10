@@ -58,6 +58,7 @@ export class RenderSystemImpl implements RenderSystem {
   private cssWidth = 1;
   private cssHeight = 1;
   private lastFrameTime = 0;
+  private lastTick = -1;
   private emaMs = 16.7;
   private envDirty = true;
   private envOpts: EnvRefreshOpts = {};
@@ -130,6 +131,11 @@ export class RenderSystemImpl implements RenderSystem {
     const events = game.events;
     if (events && !isStub(events)) {
       events.on('settings:changed', ({ key }) => this.onSetting(key));
+      // A zone usually sets its environment while it is still being built: bake again (same options) once
+      // everything is in the scene, so a scene probe never captures half a zone.
+      events.on('zone:ready', () => {
+        this.envDirty = true;
+      });
     }
   }
 
@@ -301,7 +307,7 @@ export class RenderSystemImpl implements RenderSystem {
   // -----------------------------------------------------------------------------------------------------
 
   refreshEnvironment(opts?: EnvRefreshOpts): void {
-    this.envOpts = opts && typeof opts === 'object' ? { scene: opts.scene === true, position: opts.position } : {};
+    this.envOpts = opts && typeof opts === 'object' ? { scene: opts.scene !== false, position: opts.position } : {};
     this.envDirty = true;
   }
 
@@ -310,9 +316,7 @@ export class RenderSystemImpl implements RenderSystem {
     const a = this.blender.current;
     const camera = this.activeCamera();
     const opts = this.envOpts;
-    const p = opts.position;
-    if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) this.tmpPos.set(p.x, p.y, p.z);
-    else camera.getWorldPosition(this.tmpPos);
+    this.probePosition(opts, camera, this.tmpPos);
     const pc = camera as THREE.PerspectiveCamera;
     this.reflections.suspend();
     const texture = this.env.bake({
@@ -321,12 +325,29 @@ export class RenderSystemImpl implements RenderSystem {
       skyColor: this.tmpSky.setRGB(a[L.ambientSky], a[L.ambientSky + 1], a[L.ambientSky + 2]),
       groundColor: this.tmpGround.setRGB(a[L.ambientGround], a[L.ambientGround + 1], a[L.ambientGround + 2]),
       ambientIntensity: a[L.ambientIntensity],
-      captureScene: opts.scene === true,
+      captureScene: opts.scene !== false,
       position: this.tmpPos,
       near: Math.max(0.05, pc.near ?? 0.1),
       far: Math.max(200, pc.far ?? 4000),
     });
     if (texture) this.scene.environment = texture;
+  }
+
+  /** Explicit position > the player (eye height) > the active camera. */
+  private probePosition(opts: EnvRefreshOpts, camera: THREE.Camera, out: THREE.Vector3): void {
+    const p = opts.position;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      out.set(p.x, p.y, p.z);
+      return;
+    }
+    const player = this.game.player;
+    const actor = player && !isStub(player) ? player.actor : null;
+    const pos = actor && !isStub(actor) ? actor.pos : null;
+    if (pos && !isStub(pos) && Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
+      out.set(pos.x, pos.y + 1.6, pos.z);
+      return;
+    }
+    camera.getWorldPosition(out);
   }
 
   private skyRoot(): THREE.Object3D | null {
@@ -354,8 +375,8 @@ export class RenderSystemImpl implements RenderSystem {
 
   render(dt: number): void {
     const renderer = this.renderer;
-    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.25) : 0;
-    const frameMs = this.measureFrame(step);
+    const frameMs = this.measureFrame(Number.isFinite(dt) && dt > 0 ? dt : 0);
+    const step = this.elapsed(dt);
 
     const camera = this.activeCamera();
     camera.layers.enable(RENDER_LAYERS.noReflect);
@@ -397,6 +418,19 @@ export class RenderSystemImpl implements RenderSystem {
     s.reflectionActive = reflecting;
 
     this.adapt(frameMs);
+  }
+
+  /**
+   * Seconds of presentation time this frame covers. Headless settles tick the game without rendering; those
+   * ticks still count, so look blends and pulses end up where they would be on screen.
+   */
+  private elapsed(dt: number): number {
+    const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    const time = this.game.time;
+    const tick = time && !isStub(time) && typeof time.frame === 'number' ? time.frame : -1;
+    const ticks = tick >= 0 && this.lastTick >= 0 ? tick - this.lastTick : 1;
+    this.lastTick = tick;
+    return Math.min(60, step * Math.max(1, ticks));
   }
 
   /** Real time since the previous frame, smoothed into stats. Falls back to `dt` when no clock is usable. */

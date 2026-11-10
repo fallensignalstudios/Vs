@@ -46,7 +46,7 @@ export class TitleScreen implements Layer {
       this.hints.el,
       h('div', 'aur-title-legal aur-label', 'Vertical slice · Browser build'),
     );
-    this.fader = new Fader(this.el, { in: 0.9, out: 0.5 });
+    this.fader = new Fader(this.el, { in: 0.9, out: 0.5, interactive: true });
   }
 
   get shown(): boolean {
@@ -77,7 +77,7 @@ export class TitleScreen implements Layer {
     if (!o) return;
     this.sub = 'root';
     const entries: MenuEntry[] = [];
-    if (o.canContinue) entries.push({ label: 'Continue', onSelect: () => this.opts?.onContinue() });
+    if (o.canContinue === true) entries.push({ label: 'Continue', onSelect: () => this.opts?.onContinue() });
     entries.push({ label: 'New Game', onSelect: () => this.showDifficulty() });
     entries.push({ label: 'Settings', onSelect: () => this.settings('graphics') });
     entries.push({ label: 'Controls', onSelect: () => this.settings('controls') });
@@ -99,7 +99,7 @@ export class TitleScreen implements Layer {
     this.menuCol.setEntries(entries, {
       header: 'New Game',
       lead: 'Choose a difficulty. It can be changed later in Settings.',
-      note: o.canContinue ? 'Starting a new game replaces the saved checkpoint.' : undefined,
+      note: o.canContinue === true ? 'Starting a new game replaces the saved checkpoint.' : undefined,
       focus: Math.max(0, DIFFICULTY_OPTIONS.findIndex((d) => d.value === current)),
     });
   }

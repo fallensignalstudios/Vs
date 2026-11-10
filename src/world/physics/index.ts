@@ -5,7 +5,8 @@
  *   world.ts      registries, spatial hash broadphase, ground / standing / overlap / cover / trigger queries
  *   move.ts       grounded character movement (sliding, step-up, ramps, fall protection, no tunnelling)
  *   ray.ts        raycast, line of sight / fire, swept sphere
- *   nav.ts        multi-level nav grid, incremental rebuild, A* (navsearch.ts) + string-pull smoothing
+ *   nav.ts        multi-level nav grid, incremental rebuild, wide-agent clearance; A* in navsearch.ts,
+ *                 string-pulling in navsmooth.ts
  *   debug.ts      three.js debug drawing (the only three.js dependency; everything else is plain math)
  *   fixtures.ts   Z04 / Z08 / Z05 blockouts used by the tests and the sandbox
  */
@@ -67,6 +68,12 @@ class PhysicsWorldImpl implements PhysicsWorld {
   }
 
   coverNear(x: number, z: number, radius: number): ColliderHandle[] { return this.core.coverNear(x, z, radius); }
+
+  coverPoint(cover: ColliderHandle, threat: Vec3Like, radius = 0.4): Vec3Like | null {
+    return this.core.coverPoint(cover, threat, radius, this.hidden);
+  }
+
+  private readonly hidden = (from: Vec3Like, to: Vec3Like): boolean => !segmentClear(this.core, from, to, RAY_SHOT);
 
   updateTriggers(point: Vec3Like | null): void { this.core.updateTriggers(point); }
 

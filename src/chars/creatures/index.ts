@@ -7,20 +7,24 @@ import type { CharacterCreateOpts, CharacterVisual, CreatureArchetype, DeviceArc
 import { warnOnce } from './core/rig';
 import { createDrone } from './drone';
 import { createElite } from './elite';
+import { createWeaver } from './weaver';
+import { createWallrunner } from './wallrunner';
+import { createFrostAnchor, createWeaverAnchor } from './devices/anchors';
+import { createCommandEmitter, createRelayReceiver, createScanHead } from './devices/reformation';
 
 type Maker = (game: Game | null, opts?: CharacterCreateOpts) => CharacterVisual;
 
 const MAKERS: Record<CreatureArchetype | DeviceArchetype, Maker> = {
   secDrone: (g, o) => createDrone(g, false, o),
   contamDrone: (g, o) => createDrone(g, true, o),
-  wallrunner: (g, o) => createDrone(g, false, o),
-  weaver: (g, o) => createDrone(g, false, o),
+  wallrunner: (g, o) => createWallrunner(g, o),
+  weaver: (g, o) => createWeaver(g, o),
   elite: (g, o) => createElite(g, o),
-  commandEmitter: (g, o) => createDrone(g, false, o),
-  relayReceiver: (g, o) => createDrone(g, false, o),
-  scanHead: (g, o) => createDrone(g, false, o),
-  weaverAnchor: (g, o) => createDrone(g, false, o),
-  frostAnchor: (g, o) => createDrone(g, false, o),
+  commandEmitter: (g, o) => createCommandEmitter(g, o),
+  relayReceiver: (g, o) => createRelayReceiver(g, o),
+  scanHead: (g, o) => createScanHead(g, o),
+  weaverAnchor: (g, o) => createWeaverAnchor(g, o),
+  frostAnchor: (g, o) => createFrostAnchor(g, o),
 };
 
 /** All archetypes this factory builds. */

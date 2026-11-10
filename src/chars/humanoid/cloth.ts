@@ -48,6 +48,8 @@ export interface ClothPanelOpts {
   /** subdivisions per cell */
   sub?: number;
   thick?: number;
+  /** vertical folds pressed into the mesh: [count across the panel, depth in metres at the hem] */
+  folds?: readonly [number, number];
   name: string;
 }
 
@@ -81,6 +83,14 @@ export function clothPanel(b: MeshBuilder, spec: RigSpec, o: ClothPanelOpts): Cl
   const pa = o.at(0, 0.5), pb = o.at(1, 0.5), pc = o.at(0.5, 0), pd = o.at(0.5, 1);
   const width = Math.hypot(pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]) || 1;
   const height = Math.hypot(pd[0] - pc[0], pd[1] - pc[1], pd[2] - pc[2]) || 1;
+  // decide which face is the outside: the one whose normal points away from the body axis at the panel centre
+  let flip = 1;
+  {
+    const c = o.at(0.5, 0.5), cu = o.at(0.6, 0.5), cv = o.at(0.5, 0.6);
+    const ux = cu[0] - c[0], uy = cu[1] - c[1], uz = cu[2] - c[2], vx = cv[0] - c[0], vy = cv[1] - c[1], vz = cv[2] - c[2];
+    const nx = uy * vz - uz * vy, nz = ux * vy - uy * vx;
+    if (nx * c[0] + nz * c[2] < 0) flip = -1;
+  }
   for (let side = 0; side < 2; side++) {
     for (let iv = 0; iv < nv; iv++) {
       for (let iu = 0; iu < nu; iu++) {
@@ -92,11 +102,13 @@ export function clothPanel(b: MeshBuilder, spec: RigSpec, o: ClothPanelOpts): Cl
         const ux = pu1[0] - pu0[0], uy = pu1[1] - pu0[1], uz = pu1[2] - pu0[2];
         const vx = pv1[0] - pv0[0], vy = pv1[1] - pv0[1], vz = pv1[2] - pv0[2];
         let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-        const nl = Math.hypot(nx, ny, nz) || 1;
+        const nl = (Math.hypot(nx, ny, nz) || 1) * flip;
         nx /= nl; ny /= nl; nz /= nl;
         const edgeDist = Math.min(u * width, (1 - u) * width, (1 - v) * height);
         const isTrim = tw > 0 && edgeDist < tw;
-        const off = side === 0 ? thick * 0.5 : -thick * 0.5;
+        // folds deepen toward the hem; they live in the mesh, so they bend and swing with the particles
+        const fold = o.folds ? Math.sin(u * Math.PI * o.folds[0] + 0.6) * o.folds[1] * Math.pow(v, 0.8) * Math.min(1, edgeFade(u) * 4) : 0;
+        const off = (side === 0 ? thick * 0.5 : -thick * 0.5) + fold;
         const idx = prim.v(p[0] + nx * off, p[1] + ny * off, p[2] + nz * off, side === 0 ? (isTrim ? 1 : 0) : (isTrim ? 1 : 2), 0, side === 0 ? 1 : 0.7);
         (side === 0 ? front : back).push(idx);
         if (side === 0) nrm.push(nx, ny, nz);
@@ -126,6 +138,8 @@ export function clothPanel(b: MeshBuilder, spec: RigSpec, o: ClothPanelOpts): Cl
   return { cols, rows, rest, bone0, pin, pinRows: o.pinRows ?? 1, shape: o.shape ?? 0.12, damping: o.damping ?? 0.04, radius: 0.028 };
 }
 
+function edgeFade(u: number): number { return Math.min(u, 1 - u); }
+
 function darken(hex: number, k: number): number {
   const r = Math.round(((hex >> 16) & 255) * k), g = Math.round(((hex >> 8) & 255) * k), bl = Math.round((hex & 255) * k);
   return (r << 16) | (g << 8) | bl;
@@ -144,6 +158,7 @@ export class ClothSim {
   private readonly pos: Float32Array;
   private readonly prev: Float32Array;
   private readonly model: Float32Array;
+  private readonly target: Float32Array;
   private readonly restInv: THREE.Quaternion[] = [];
   private acc = 0;
   private fresh = true;
@@ -157,6 +172,7 @@ export class ClothSim {
     this.pos = new Float32Array(this.n * 3);
     this.prev = new Float32Array(this.n * 3);
     this.model = new Float32Array(rest);
+    this.target = new Float32Array(this.n * 3);
     const v = new Float32Array(this.n), h = new Float32Array(this.n), tether = new Float32Array(this.n);
     for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
       const i = c * rows + r;
@@ -208,18 +224,16 @@ export class ClothSim {
     this.lastRoot.copy(_v);
     if (jump > 2.5 * scale || !Number.isFinite(jump)) this.fresh = true;
 
-    // pinned targets (world)
-    const pinTarget = (i: number, out: THREE.Vector3): void => {
-      const c = Math.floor(i / rows);
-      const bn = pin[c];
-      out.set(rest[i * 3] - rigRest[bn * 3], rest[i * 3 + 1] - rigRest[bn * 3 + 1], rest[i * 3 + 2] - rigRest[bn * 3 + 2]).applyQuaternion(jointQuat[bn]).add(jointPos[bn]).applyMatrix4(modelWorld);
-    };
+    // rest-shape targets under the current skeleton, in world space (computed once per frame)
+    const tg = this.target;
+    for (let i = 0; i < this.n; i++) {
+      const bn = pin[Math.floor(i / rows)];
+      _v.set(rest[i * 3] - rigRest[bn * 3], rest[i * 3 + 1] - rigRest[bn * 3 + 1], rest[i * 3 + 2] - rigRest[bn * 3 + 2]).applyQuaternion(jointQuat[bn]).add(jointPos[bn]).applyMatrix4(modelWorld);
+      tg[i * 3] = _v.x; tg[i * 3 + 1] = _v.y; tg[i * 3 + 2] = _v.z;
+    }
 
     if (this.fresh) {
-      for (let i = 0; i < this.n; i++) {
-        pinTarget(i, _v);
-        pos[i * 3] = prev[i * 3] = _v.x; pos[i * 3 + 1] = prev[i * 3 + 1] = _v.y; pos[i * 3 + 2] = prev[i * 3 + 2] = _v.z;
-      }
+      for (let i = 0; i < this.n * 3; i++) pos[i] = prev[i] = tg[i];
       this.fresh = false;
       this.acc = 0;
     }
@@ -237,9 +251,8 @@ export class ClothSim {
         const r = i % rows;
         const k = i * 3;
         if (r < pinRows) {
-          pinTarget(i, _v);
           prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
-          pos[k] = _v.x; pos[k + 1] = _v.y; pos[k + 2] = _v.z;
+          pos[k] = tg[k]; pos[k + 1] = tg[k + 1]; pos[k + 2] = tg[k + 2];
           continue;
         }
         const vx = (pos[k] - prev[k]) * damp, vy = (pos[k + 1] - prev[k + 1]) * damp, vz = (pos[k + 2] - prev[k + 2]) * damp;
@@ -251,9 +264,8 @@ export class ClothSim {
         pos[k + 2] += vz + fl * 0.6 * STEP * STEP;
         // pull toward the rest shape (stiffness of the weave / hidden weights)
         if (this.def.shape > 0) {
-          pinTarget(i, _v);
           const s = this.def.shape * (1 - 0.6 * (r / (rows - 1)));
-          pos[k] += (_v.x - pos[k]) * s; pos[k + 1] += (_v.y - pos[k + 1]) * s; pos[k + 2] += (_v.z - pos[k + 2]) * s;
+          pos[k] += (tg[k] - pos[k]) * s; pos[k + 1] += (tg[k + 1] - pos[k + 1]) * s; pos[k + 2] += (tg[k + 2] - pos[k + 2]) * s;
         }
       }
       // constraints

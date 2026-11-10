@@ -9,7 +9,7 @@
  *   &soft=1                           depth pre-pass → soft particles;  &bright=1  white-gold floor;  &reduce=1  reduceFlash
  *
  * Globals: __fx(id, opts?)  __step(t)  __gallery(family?)  __beams()  __tracers()  __telegraphs(seconds?)
- *          __trail()  __swing(t)  __ambient(kind)  __decals()  __scan(alert?)  __clear()  __stats()  __vfx
+ *          __trail()  __swing(t)  __ambient(kind)  __decals()  __scan(alert?)  __clear()  __stats()  __bench()  __vfx
  */
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
@@ -23,6 +23,11 @@ import { createHarness, miniGame, withStubs } from '../harness';
 const h = createHarness({ bloom: true, env: 'dark', background: 0x05060a, lights: true });
 const q = h.params;
 const bright = q.has('bright');
+// keep the key light's glint off the polished floor in front of the camera
+h.scene.traverse((o) => {
+  const l = o as THREE.DirectionalLight;
+  if (l.isDirectionalLight) { l.position.set(-5, 9, 10); l.intensity = bright ? 2.2 : 0.9; }
+});
 
 // ---------------------------------------------------------------------------------------------- stage
 // polished black stone: a dim planar mirror under a glossy lit slab, with thin gold channels every 2 m
@@ -32,12 +37,12 @@ mirror.position.y = -0.004;
 h.scene.add(mirror);
 const slab = new THREE.Mesh(
   new THREE.PlaneGeometry(120, 120),
-  new THREE.MeshStandardMaterial({ color: bright ? 0xb9b2a2 : 0x0b0c10, roughness: bright ? 0.35 : 0.16, metalness: 0.0, transparent: true, opacity: bright ? 0.8 : 0.72 }),
+  new THREE.MeshStandardMaterial({ color: bright ? 0xb9b2a2 : 0x0b0c10, roughness: bright ? 0.35 : 0.2, metalness: 0.0, envMapIntensity: 0.25, transparent: true, opacity: bright ? 0.82 : 0.74 }),
 );
 slab.rotation.x = -Math.PI / 2;
 slab.receiveShadow = true;
 h.scene.add(slab);
-const channelMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc56b, emissiveIntensity: 1.1 });
+const channelMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffc56b, emissiveIntensity: 0.55 });
 const channels = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.004, 0.02), channelMat, 62);
 {
   const m = new THREE.Matrix4();
@@ -88,37 +93,42 @@ if (q.has('soft')) {
   };
 }
 
+/** third-person combat distance (~3.4 m) for small effects */
+const NEAR: [[number, number, number], [number, number, number]] = [[1.3, 1.7, 3.3], [-0.7, 1.0, 0]];
+/** a little further back for body-sized effects */
+const MID: [[number, number, number], [number, number, number]] = [[2.2, 1.8, 4.2], [-0.2, 1.1, 0]];
 /** sensible stage placement per effect: position, axis, scale */
 const STAGE: Record<string, VfxOpts & { pos?: [number, number, number]; cam?: [[number, number, number], [number, number, number]] }> = {
-  sparkHit: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.15, z: 0.3 } },
-  sparkHeavy: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.15, z: 0.3 } },
-  metalChip: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.2, z: 0.3 } },
-  stoneChip: { pos: [-1.14, 1.0, 0.1], dir: { x: 1, y: 0.2, z: 0.3 } },
-  dustPuff: { pos: [0, 0.05, 0] },
-  cinderBurst: { pos: [0, 1.2, 0], dir: { x: 0.4, y: 0.8, z: 0.3 } },
-  cinderEmbers: { pos: [0, 1.2, 0] },
-  cinderStickyArm: { pos: [-1.14, 1.3, 0.1] },
+  sparkHit: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.15, z: 0.3 }, cam: NEAR },
+  sparkHeavy: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.15, z: 0.3 }, cam: NEAR },
+  metalChip: { pos: [-1.14, 1.2, 0.1], dir: { x: 1, y: 0.2, z: 0.3 }, cam: NEAR },
+  stoneChip: { pos: [-1.14, 1.0, 0.1], dir: { x: 1, y: 0.2, z: 0.3 }, cam: NEAR },
+  dustPuff: { pos: [-0.4, 0.05, 0.3], cam: NEAR },
+  footDust: { pos: [-0.4, 0, 0.3], cam: NEAR },
+  cinderBurst: { pos: [0, 1.2, 0], dir: { x: 0.4, y: 0.8, z: 0.3 }, cam: MID },
+  cinderEmbers: { pos: [0, 1.2, 0], cam: MID },
+  cinderStickyArm: { pos: [-1.14, 1.3, 0.1], cam: MID },
   cinderStickyBlast: { pos: [0, 1.0, 0] },
-  frostBurst: { pos: [0, 1.2, 0], dir: { x: 0.5, y: 0.6, z: 0.5 } },
-  frostShatter: { pos: [0, 1.1, 0] },
-  frostArrest: { pos: [0, 1.1, 0] },
+  frostBurst: { pos: [0, 1.2, 0], dir: { x: 0.5, y: 0.6, z: 0.5 }, cam: MID },
+  frostShatter: { pos: [0, 1.1, 0], cam: MID },
+  frostArrest: { pos: [0, 1.1, 0], cam: MID },
   dispatchStreak: { pos: [-2.4, 1.2, 0.6], dir: { x: 1, y: 0, z: 0 }, scale: 1.1 },
-  violetBurst: { pos: [0, 1.2, 0], dir: { x: 0.4, y: 0.6, z: 0.6 } },
-  linkSever: { pos: [0, 1.3, 0], dir: { x: 1, y: 0, z: 0 } },
-  eclipseDissolve: { pos: [0, 0.95, 0] },
-  muzzleWarm: { pos: [-0.6, 1.4, 0.4], dir: { x: 1, y: 0, z: 0 } },
-  muzzleCold: { pos: [-0.6, 1.4, 0.4], dir: { x: 1, y: 0, z: 0 } },
-  droneCharge: { pos: [0, 1.8, 0] },
-  droneBoltHit: { pos: [-1.14, 1.3, 0.1], dir: { x: 1, y: 0, z: 0.3 } },
-  shieldHit: { pos: [0, 1.2, 0], dir: { x: 0.35, y: 0, z: 1 }, scale: 1 },
-  shieldBreak: { pos: [0, 1.2, 0], dir: { x: 0.35, y: 0, z: 1 } },
-  deflect: { pos: [0, 1.3, 0.2], dir: { x: 0.3, y: 0.3, z: 1 } },
+  violetBurst: { pos: [0, 1.2, 0], dir: { x: 0.4, y: 0.6, z: 0.6 }, cam: MID },
+  linkSever: { pos: [0, 1.3, 0], dir: { x: 1, y: 0, z: 0 }, cam: MID },
+  eclipseDissolve: { pos: [0, 0.95, 0], cam: MID },
+  muzzleWarm: { pos: [-0.6, 1.4, 0.4], dir: { x: 1, y: 0, z: 0 }, cam: MID },
+  muzzleCold: { pos: [-0.6, 1.4, 0.4], dir: { x: 1, y: 0, z: 0 }, cam: MID },
+  droneCharge: { pos: [0, 1.8, 0], cam: MID },
+  droneBoltHit: { pos: [-1.14, 1.3, 0.1], dir: { x: 1, y: 0, z: 0.3 }, cam: MID },
+  shieldHit: { pos: [0, 1.2, 0], dir: { x: 0.35, y: 0, z: 1 }, scale: 1, cam: MID },
+  shieldBreak: { pos: [0, 1.2, 0], dir: { x: 0.35, y: 0, z: 1 }, cam: MID },
+  deflect: { pos: [0, 1.3, 0.2], dir: { x: 0.3, y: 0.3, z: 1 }, cam: MID },
   explosionSmall: { pos: [0, 0.4, 0] },
   explosionLarge: { pos: [0, 0.2, 0], cam: [[6, 3, 9], [0, 1.8, 0]] },
-  deviceBreak: { pos: [0, 1.0, 0] },
+  deviceBreak: { pos: [0, 1.0, 0], cam: MID },
   debrisFall: { pos: [0, 5, 0], cam: [[4.5, 2.4, 6.5], [0, 2.2, 0]] },
-  echoGain: { pos: [0, 1.2, 0] },
-  interactPing: { pos: [0, 1.1, 0] },
+  echoGain: { pos: [0, 1.2, 0], cam: MID },
+  interactPing: { pos: [0, 1.1, 0], cam: MID },
   thermalFracture: { pos: [0, 1.7, 0], cam: [[5, 2.4, 7.5], [0, 1.6, 0]] },
   resonanceRing: { pos: [0, 1.7, 0] },
   quarantineSeal: { pos: [0, 0, -1], dir: { x: 0.25, y: 0, z: 1 }, scale: 0.75, cam: [[5, 2.4, 7.5], [0, 1.7, 0]] },
@@ -127,7 +137,7 @@ const STAGE: Record<string, VfxOpts & { pos?: [number, number, number]; cam?: [[
   grammarPropagate: { pos: [0, 0, 0], cam: [[6, 5, 9], [0, 0, 0]] },
   carrierShadowDust: { pos: [0, 0, 0], scale: 0.6, cam: [[6, 2.2, 9], [0, 2.2, 0]] },
   coherentPlane: { pos: [0, 1.3, 0], scale: 0.6 },
-  witnessMote: { pos: [0, 1.4, 0] },
+  witnessMote: { pos: [0, 1.4, 0], cam: MID },
   pressurePulse: { pos: [0, 0, 0], scale: 0.6, cam: [[6, 3.5, 9], [0, 0.6, 0]] },
   cinderSlam: { pos: [0, 0, 0], cam: [[4.5, 2.6, 6.5], [0, 0.7, 0]] },
   stasisField: { pos: [0, 0, 0], scale: 0.7, cam: [[5, 2.6, 7.5], [0, 1.1, 0]] },
@@ -193,23 +203,25 @@ function gallery(family?: string): string[] {
 
 function beams(): void {
   clearLabels();
+  pillar.visible = cap.visible = false;
   const styles: BeamStyle[] = ['link', 'laser', 'scan', 'tether', 'command', 'relay', 'trace', 'gold'];
   styles.forEach((s, i) => {
-    const z = (i - (styles.length - 1) / 2) * 0.9;
-    vfx.beam({ x: -3, y: 1.3, z }, { x: 3, y: s === 'link' ? 1.0 : 1.3, z }, s);
-    label(s, new THREE.Vector3(-3.5, 1.4, z));
+    const y = 3.3 - i * 0.4;
+    vfx.beam({ x: -3.2, y, z: 0 }, { x: 3.2, y: s === 'link' ? y - 0.1 : y, z: 0 }, s);
+    label(s, new THREE.Vector3(-3.75, y + 0.08, 0));
   });
-  h.setCam([0.6, 4.2, 5.6], [0, 1.0, 0], 46);
+  h.setCam([0, 1.9, 6.6], [0, 1.9, 0], 46);
 }
 
 function tracers(): void {
   clearLabels();
+  pillar.visible = cap.visible = false;
   (['warm', 'cold', 'drone', 'violet', 'rifle'] as const).forEach((s, i) => {
-    const z = (i - 2) * 0.9;
-    vfx.tracer({ x: -5, y: 1.3, z }, { x: 5, y: 1.3, z }, s, { speed: 14 });
-    label(s, new THREE.Vector3(-5.4, 1.4, z));
+    const y = 2.6 - i * 0.4;
+    vfx.tracer({ x: -5, y, z: 0 }, { x: 5, y, z: 0 }, s, { speed: 14 });
+    label(s, new THREE.Vector3(-4.4, y + 0.12, 0));
   });
-  h.setCam([0.5, 3.4, 6.4], [0, 1.1, 0], 46);
+  h.setCam([0, 1.8, 7.5], [0, 1.8, 0], 46);
 }
 
 function telegraphs(seconds = 2): void {
@@ -293,9 +305,29 @@ function showAtlas(): void {
   h.setCam([0, 2.4, 6.2], [0, 2.4, 0], 50);
 }
 
+/** live counts + the number of draw calls the VFX root costs right now (one per visible mesh) */
 function stats(): Record<string, number> {
-  const info = h.renderer.info;
-  return { ...vfx.stats, drawCalls: info.render.calls, triangles: info.render.triangles };
+  let drawCalls = 0;
+  h.scene.getObjectByName('vfx')?.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) drawCalls++; });
+  return { ...vfx.stats, drawCalls };
+}
+
+/** stress test: a wall of simultaneous effects; returns the peak load and the mean cost of vfx.update() */
+function bench(): Record<string, number> {
+  vfx.clear();
+  const ids = ['cinderSlam', 'explosionLarge', 'thermalFracture', 'frostShatter', 'shieldBreak', 'meridianComplete', 'eclipseDissolve', 'deviceBreak'];
+  let peak = 0, calls = 0, ms = 0, frames = 0;
+  for (let f = 0; f < 150; f++) {
+    if (f % 6 === 0) for (let k = 0; k < 4; k++) fx(ids[(f / 6 + k) % ids.length | 0], {}, new THREE.Vector3((k - 1.5) * 5, 0, -((f / 6) % 5) * 4));
+    const t0 = performance.now();
+    vfx.update(1 / 60);
+    ms += performance.now() - t0;
+    frames++;
+    const st = stats();
+    peak = Math.max(peak, st.particles);
+    calls = Math.max(calls, st.drawCalls);
+  }
+  return { peakParticles: peak, peakDrawCalls: calls, updateMsAvg: +(ms / frames).toFixed(3), effects: vfx.stats.effects };
 }
 
 // ---------------------------------------------------------------------------------------------- boot
@@ -332,13 +364,20 @@ else if (one) {
 
 Object.assign(window as unknown as Record<string, unknown>, {
   __vfx: vfx,
-  __fx: (id: string, opts?: VfxOpts) => { const st = STAGE[id]; if (st?.cam && !q.has('keepcam')) h.setCam(st.cam[0], st.cam[1], 50); fx(id, opts); },
+  __fx: (id: string, opts?: VfxOpts) => {
+    const st = STAGE[id];
+    if (!q.has('keepcam')) {
+      if (st?.cam) h.setCam(st.cam[0], st.cam[1], 50);
+      else h.setCam([3.4, 2.0, 5.0], [0, 1.0, 0], 50);
+    }
+    fx(id, opts);
+  },
   __gallery: (family?: string) => gallery(family),
   __beams: beams, __tracers: tracers, __telegraphs: telegraphs, __trail: trail,
   __swing: (t: number) => { swingT = t; poseArm(t); },
   __ambient: ambient, __decals: decals, __scan: scan,
-  __clear: () => { vfx.clear(); clearLabels(); arm.visible = false; swingT = -1; },
-  __stats: stats,
+  __clear: () => { vfx.clear(); clearLabels(); arm.visible = false; swingT = -1; pillar.visible = cap.visible = true; },
+  __stats: stats, __bench: bench,
 });
 
 h.ready();

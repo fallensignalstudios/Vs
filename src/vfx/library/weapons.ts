@@ -59,7 +59,7 @@ export const WEAPONS: Record<string, EffectDef> = {
       { p: { layer: 'add', sprite: 'hex', life: [0.25, 0.4], size: [0.1, 0.16, 0.12], color: [[C.goldLight, 4], [C.amber, 2.5], [C.amber, 0]], fadeOut: 0.4, drag: 4, spin: 2 }, burst: 4, shape: 'disc', radius: 0.25, vel: 'ring', speed: [1, 2.6], offset: [0, 0.04, 0] },
     ],
     events: [
-      { at: 0, kind: 'shape', shape: { kind: 'hexRipple', life: 0.45, color: [C.amber, 3], color2: [C.heat, 4], radius: [0.85, 0.95], attack: 0.02, detail: 5.5, offset: [0, 0.02, 0] } },
+      { at: 0, kind: 'shape', shape: { kind: 'hexRipple', life: 0.45, color: [C.amber, 2.4], color2: [C.heat, 3], radius: [0.85, 0.95], attack: 0.02, detail: 5.5, offset: [0, 0.02, 0] } },
       { at: 0, kind: 'flash', color: C.amber, intensity: 0.9, seconds: 0.1 },
     ],
   },
@@ -67,23 +67,23 @@ export const WEAPONS: Record<string, EffectDef> = {
   /** Shield breaks: the lattice flashes whole, then its cells fly apart as glowing hex shards */
   shieldBreak: {
     emitters: [
-      { p: star(C.white, 14, 1.6, 0.1), burst: 1 },
-      { p: flashGlow(C.amber, 6, 2.4, 0.18), burst: 1 },
+      { p: star(C.white, 10, 1.1, 0.1), burst: 1 },
+      { p: flashGlow(C.amber, 4, 1.8, 0.16), burst: 1 },
       { p: shards(C.amber, { sprite: 'hex', life: [0.7, 1.3], size: [0.17, 0.17, 0.1], color: [[C.heat, 5], [C.amber, 3], [C.amber, 1.2]], gravity: 7, drag: 1.2, bounce: 0.35, spin: 6 }), burst: [24, 28], shape: 'disc', radius: 0.8, vel: 'ring', speed: [1.5, 6], up: [0.5, 5] },
       { p: sparks(C.amber, { life: [0.3, 0.8] }), burst: [26, 30], vel: 'cone', cone: 1.4, speed: [4, 13] },
     ],
     events: [
-      { at: 0, kind: 'shape', shape: { kind: 'hexRipple', life: 0.38, color: [C.amber, 5], color2: [C.white, 6], radius: [1.2, 1.7], attack: 0.02, detail: 5.5, offset: [0, 0.02, 0] } },
-      { at: 0.02, kind: 'shape', shape: { kind: 'halo', life: 0.4, color: [C.goldLight, 4], radius: [0.3, 2.3], attack: 0.03, detail: 24 } },
-      { at: 0, kind: 'flash', color: C.amber, intensity: 4, seconds: 0.22 },
+      { at: 0, kind: 'shape', shape: { kind: 'hexRipple', life: 0.38, color: [C.amber, 2.6], color2: [C.white, 3], radius: [1.2, 1.7], attack: 0.02, detail: 5.5, offset: [0, 0.02, 0] } },
+      { at: 0.02, kind: 'shape', shape: { kind: 'halo', life: 0.4, color: [C.goldLight, 2.6], radius: [0.3, 2.3], attack: 0.03, detail: 24 } },
+      { at: 0, kind: 'flash', color: C.amber, intensity: 3, seconds: 0.22 },
     ],
   },
 
   /** Perfect guard / deflect: a white cross-flare and crescent — the cleanest, sharpest flash in the game */
   deflect: {
     emitters: [
-      { p: star(C.white, 16, 1.3, 0.1, { tint: 0 }), burst: 1 },
-      { p: { layer: 'add', sprite: 'flare', life: 0.12, size: [0.8, 2.0, 2.4], sizeRand: 1, aspect: 0.6, color: [[C.white, 9], [C.frost, 3]], fadeIn: 0.02, fadeOut: 0.3, rot: [-0.5, 0.5] }, burst: 1 },
+      { p: star(C.white, 13, 1.0, 0.1, { tint: 0 }), burst: 1 },
+      { p: { layer: 'add', sprite: 'flare', life: 0.12, size: [0.7, 1.7, 2.0], sizeRand: 1, aspect: 0.6, color: [[C.white, 5], [C.frost, 2.2]], fadeIn: 0.02, fadeOut: 0.3, rot: [-0.5, 0.5] }, burst: 1 },
       { p: { layer: 'add', sprite: 'arc', life: 0.16, size: [0.5, 1.3, 1.5], sizeRand: 1, color: [[C.white, 7], [C.frost, 3], [C.frost, 0]], fadeIn: 0.02, fadeOut: 0.3, rot: [0, PI * 2] }, burst: 1 },
       { p: ringPop(C.ice, 5, 0.1, 0.9, 0.18), burst: 1 },
       { p: sparks(C.goldLight, { life: [0.2, 0.5], color: [[C.white, 8], [C.goldLight, 4.5], [C.cinderHot, 0.6]] }), burst: [14, 18], vel: 'cone', cone: 1.25, speed: [4, 12] },

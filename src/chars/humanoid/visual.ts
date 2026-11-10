@@ -10,8 +10,9 @@ import { createFigureMaterial, type FigureUniforms } from './material';
 import { Animator } from './anim/animator';
 import { resolveClip, resolveStance, type HeldKey } from './anim/moveset';
 import type { StanceSet } from './anim/locomotion';
+import type { SolveOpts } from './anim/solver';
 import { ClothSim, type ClothCapsule } from './cloth';
-import type { FigureDef, ItemDef, Loadout, Mount } from './figure';
+import { mountQuat, type FigureDef, type ItemDef, type Loadout, type Mount } from './figure';
 
 const DEG = Math.PI / 180;
 const _v = new THREE.Vector3();
@@ -52,6 +53,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private hasGrip2 = false;
   private heldR = false;
   private heldL = false;
+  private rangedHeld = false;
   private flashLeft = 0;
   private flashDur = 0.12;
   private frozen = 0;
@@ -159,7 +161,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     const parent = this.rig.byName[m.parent] ?? this.rig.bones[0];
     if (bone.parent !== parent) parent.add(bone);
     bone.position.set(m.pos[0], m.pos[1], m.pos[2]);
-    bone.quaternion.setFromEuler(_e.set(m.rot[0] * DEG, m.rot[1] * DEG, m.rot[2] * DEG, 'XYZ'));
+    mountQuat(m, bone.quaternion);
     bone.scale.setScalar(1);
   }
 
@@ -184,14 +186,14 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.bladeTarget = meleeHeld ? 1 : 0;
     if (snap) this.bladeExt = this.bladeTarget;
 
+    this.rangedHeld = rangedHeld;
     const main = rangedHeld ? it.ranged : meleeHeld ? it.melee : undefined;
     this.heldR = !!main;
     this.heldL = (lo.prop === 'case' && !!it.case) || (lo.shield && !!it.shield);
     this.hasGrip2 = !!main?.grip2;
     if (main?.grip2) {
       // grip2 is authored in the item's frame; bring it into the hand frame through the held mount rotation
-      const r = main.held.rot;
-      this.grip2Rot.setFromEuler(_e.set(r[0] * DEG, r[1] * DEG, r[2] * DEG, 'XYZ'));
+      mountQuat(main.held, this.grip2Rot);
       this.grip2.set(main.grip2[0], main.grip2[1], main.grip2[2]).applyQuaternion(this.grip2Rot);
       const g = main.grip2Rot ?? [0, 0, 0];
       this.grip2Rot.setFromEuler(_e.set(g[0] * DEG, g[1] * DEG, g[2] * DEG, 'XYZ'));
@@ -354,7 +356,13 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     } else this.animator.setLook(null);
 
     const an = this.animator;
-    an.update(adt, this.stance, { heldL: this.heldL, heldR: this.heldR, grip2: this.hasGrip2 ? this.grip2 : null, grip2Rot: this.hasGrip2 ? this.grip2Rot : null, pins: this.pinsModel(mw, dt) }, this.rig.bones, yawRate);
+    const lf = an.loco.flags;
+    an.setAuto(lf.guarding ? 'guard' : lf.aiming && this.rangedHeld ? 'aim' : null);
+    const so = this.solveOpts;
+    so.heldL = this.heldL; so.heldR = this.heldR;
+    so.grip2 = this.hasGrip2 ? this.grip2 : null; so.grip2Rot = this.hasGrip2 ? this.grip2Rot : null;
+    so.pins = this.pinsModel(mw, dt);
+    an.update(adt, this.stance, so, this.rig.bones, yawRate);
 
     // Verity blades extend / retract
     if (this.fig.items.melee?.blades) {
@@ -372,10 +380,12 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     root.updateMatrixWorld(true);
   }
 
+  private readonly solveOpts: SolveOpts = { heldL: false, heldR: false, grip2: null, grip2Rot: null, pins: null };
   private readonly pinOut: Array<{ pos: THREE.Vector3; w: number } | null> = [null, null];
-  private readonly pinTmp = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly pinSlots = [{ pos: new THREE.Vector3(), w: 0 }, { pos: new THREE.Vector3(), w: 0 }];
 
-  private pinsModel(mw: THREE.Matrix4, dt: number): Array<{ pos: THREE.Vector3; w: number } | null> {
+  private pinsModel(mw: THREE.Matrix4, dt: number): Array<{ pos: THREE.Vector3; w: number } | null> | null {
+    if (!this.pins[0] && !this.pins[1]) return null;
     let any = false;
     for (let s = 0; s < 2; s++) {
       const p = this.pins[s];
@@ -383,7 +393,9 @@ export class HumanoidVisualImpl implements HumanoidVisual {
       p.w += (p.target - p.w) * (1 - Math.exp(-9 * dt));
       if (p.w < 0.004 && p.target === 0) { this.pins[s] = null; this.pinOut[s] = null; continue; }
       if (!any) { _m.copy(mw).invert(); any = true; }
-      this.pinOut[s] = { pos: this.pinTmp[s].copy(p.pos).applyMatrix4(_m), w: p.w };
+      const slot = this.pinSlots[s];
+      slot.pos.copy(p.pos).applyMatrix4(_m); slot.w = p.w;
+      this.pinOut[s] = slot;
     }
     return this.pinOut;
   }

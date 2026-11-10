@@ -110,8 +110,8 @@ export const AMBIENT_SFX: RecipeTable = {
   ambStellar: sfx(-22, { ...AMB, vary: 100, send: 0.5, ref: 60, gap: 5, max: 1 }, (k) => {
     // the star beyond the glass: a roll too low to locate
     const e = { a: 2.2, h: 0.5, d: 3.4, lin: true };
-    k.noise('brown', { ...e, g: 1 }, { lp: [70, 120, 3] });
-    k.osc('sine', [34, 29, 6], { ...e, g: 0.6 });
+    k.noise('brown', { ...e, g: 1 }, { lp: [110, 220, 3] });
+    k.osc('sine', [55, 46, 6], { ...e, g: 0.4 });
   }),
   ambPA: sfx(-28, { ...AMB, vary: 100, send: 0.9, ref: 12, gap: 3, max: 1 }, (k) => {
     // a hangar announcement nobody can make out: chime, then band-limited vowel shapes

@@ -6,7 +6,7 @@
  * sparks) evaluated in the vertex shader — nothing is simulated per frame on the CPU.
  */
 import * as THREE from 'three';
-import { viewportTracker, type SharedUniforms } from '../shared';
+import { SKY_ORDER, viewportTracker, type SharedUniforms } from '../shared';
 
 const VERTEX = /* glsl */ `
 attribute vec3 iPos;
@@ -157,7 +157,7 @@ export class LightCards {
     });
     const mesh = new THREE.Mesh(geometry, material) as unknown as LightCardMesh;
     mesh.name = opts?.name ?? 'scenic:lights';
-    mesh.renderOrder = 10;
+    mesh.renderOrder = SKY_ORDER.lightCards;
     mesh.onBeforeRender = viewportTracker(shared);
     mesh.cards = { attrs, uniforms };
     return mesh;

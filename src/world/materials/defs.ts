@@ -32,7 +32,7 @@ export interface MatDef {
   effects?: EffectSpec[];
 }
 
-const GOLD_LEAF = 0xd9ad5a;
+const GOLD_LEAF = 0xe8c06a;
 const BARE_STEEL = 0xaab3be;
 
 /** Shared look of the upper-terminal ceramic. */
@@ -41,7 +41,7 @@ const CERAMIC_TP: TriplanarParams = {
   normal: 1,
   roughAmp: 0.34,
   macro: { albedo: 0.1, rough: 0.07, scale: 23, hue: 0.4 },
-  detail: { scale: 0.31, normal: 0.1, rough: 0.09, albedo: 0.03 },
+  detail: { scale: 0.31, normal: 0.06, rough: 0.14, albedo: 0.03 },
 };
 
 const emissiveStrip = (base: number, emissive: number, intensity: number, mode: GlowMode, params: GlowParams): MatDef => ({
@@ -66,23 +66,23 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
       ...CERAMIC_TP,
       panel: {
         w: 2.4, h: 3.6, seam: 0.004, bevel: 0.03, depth: 0.55, tint: 0.05, jitter: 1, dark: 0.55,
-        wear: { color: GOLD_LEAF, width: 0.07, strength: 0.9, roughness: 0.3, metalness: 1 },
+        wear: { color: GOLD_LEAF, width: 0.035, strength: 0.7, roughness: 0.26, metalness: 1 },
       },
     },
   },
   whiteGoldFloor: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.27, metalness: 0.25 },
+    props: { color: 0xffffff, roughness: 0.2, metalness: 0.25 },
     family: 'ceramicFloor',
     tp: {
       scale: 4,
       normal: 1,
       roughAmp: 0.32,
       macro: { albedo: 0.12, rough: 0.08, scale: 27, hue: 0.35 },
-      detail: { scale: 0.31, normal: 0.1, rough: 0.1, albedo: 0.03 },
+      detail: { scale: 0.31, normal: 0.06, rough: 0.11, albedo: 0.03 },
       panel: {
         w: 3, h: 3, seam: 0.004, bevel: 0.025, depth: 0.5, tint: 0.07, jitter: 1, dark: 0.6,
-        wear: { color: GOLD_LEAF, width: 0.035, strength: 0.55, roughness: 0.32, metalness: 1 },
+        wear: { color: GOLD_LEAF, width: 0.02, strength: 0.5, roughness: 0.28, metalness: 1 },
       },
     },
   },
@@ -90,7 +90,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xf0c574, roughness: 0.22, metalness: 1 },
     family: 'polished',
-    tp: { scale: 1.5, normal: 0.8, roughAmp: 0.3, macro: { albedo: 0.06, rough: 0.06, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.06, rough: 0.07, albedo: 0.02 } },
+    tp: { scale: 1.5, normal: 0.8, roughAmp: 0.14, macro: { albedo: 0.06, rough: 0.05, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.05, rough: 0.12, albedo: 0.02 } },
   },
   goldDark: {
     base: 'standard',
@@ -107,24 +107,23 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     tp: {
       scale: 5, normal: 0.7, roughAmp: 0.16,
       macro: { albedo: 0.3, rough: 0.05, scale: 29, hue: 0.1 },
-      detail: { scale: 0.37, normal: 0.035, rough: 0.035, albedo: 0.03 },
-      mask: { color: GOLD_LEAF, amount: 0.7, roughness: 0.28, metalness: 1 },
+      detail: { scale: 0.37, normal: 0.03, rough: 0.035, albedo: 0.03 },
+      panel: { w: 3, h: 6, seam: 0.0015, bevel: 0.008, depth: 0.18, tint: 0.3, jitter: 1, dark: 0.45 },
     },
   },
   blackStoneFloor: {
     base: 'physical',
-    props: { color: 0xffffff, roughness: 0.09, metalness: 0, ior: 1.9 },
+    props: { color: 0xffffff, roughness: 0.1, metalness: 0, ior: 1.9 },
     family: 'blackStone',
     tp: {
-      scale: 5, normal: 0.55, roughAmp: 0.11,
-      macro: { albedo: 0.3, rough: 0.035, scale: 31, hue: 0.1 },
-      detail: { scale: 0.37, normal: 0.025, rough: 0.03, albedo: 0.03 },
+      scale: 5, normal: 0.55, roughAmp: 0.1,
+      macro: { albedo: 0.3, rough: 0.04, scale: 31, hue: 0.1 },
+      detail: { scale: 0.37, normal: 0.02, rough: 0.035, albedo: 0.03 },
       panel: { w: 4, h: 4, seam: 0.0025, bevel: 0.012, depth: 0.22, tint: 0.3, jitter: 1, dark: 0.5 },
-      mask: { color: GOLD_LEAF, amount: 0.7, roughness: 0.28, metalness: 1 },
     },
   },
   goldChannel: emissiveStrip(0x5c4a22, 0xffc56b, 3, 'channel', { pulse: 0.38, speed: 1.6, wavelength: 7, pattern: 0.12, period: 0.22 }),
-  whiteLight: emissiveStrip(0x2a2620, 0xfff0d2, 4, 'panel', { pulse: 0.05 }),
+  whiteLight: emissiveStrip(0x2a2620, 0xfff0d2, 3.5, 'panel', { pulse: 0.05 }),
 
   // ------------------------------------------------------------------ Dominion
   domBronze: {
@@ -135,7 +134,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   },
   domOxblood: {
     base: 'physical',
-    props: { color: 0x6b1517, roughness: 0.46, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.1 },
+    props: { color: 0x430b0e, roughness: 0.5, metalness: 0, clearcoat: 0.85, clearcoatRoughness: 0.12 },
     family: 'lacquer',
     tp: {
       scale: 1.2, normal: 1, roughAmp: 0.3,
@@ -152,13 +151,13 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
       scale: 1.6, normal: 1, roughAmp: 0.34,
       macro: { albedo: 0.12, rough: 0.07, scale: 11, hue: 0.1 },
       detail: { scale: 0.21, normal: 0.12, rough: 0.08, albedo: 0.04 },
-      mask: { color: 0x8f7d68, amount: 0.8, roughness: 0.34, metalness: 1 },
+      mask: { color: 0x8f7d68, amount: 0.7, roughness: 0.34, metalness: 1 },
     },
   },
-  domAmberGlow: emissiveStrip(0x1c0e05, P.domAmber, 3, 'louvre', { pulse: 0.1, pattern: 0.35, period: 0.03, flicker: 0.05 }),
+  domAmberGlow: emissiveStrip(0x1c0e05, 0xff8a1f, 2.6, 'louvre', { pulse: 0.1, pattern: 0.35, period: 0.03, flicker: 0.05 }),
   domCloth: {
     base: 'physical',
-    props: { color: 0x611518, roughness: 0.92, metalness: 0, sheen: 0.7, sheenColor: 0xc0604c, sheenRoughness: 0.5 },
+    props: { color: 0x4f1013, roughness: 0.92, metalness: 0, sheen: 0.3, sheenColor: 0x8a3a30, sheenRoughness: 0.5 },
     family: 'clothTwill',
     local: true,
     tp: { scale: 0.18, normal: 1, roughAmp: 0.2, macro: { albedo: 0.16, rough: 0.05, scale: 2.3, hue: 0.15 }, detail: { scale: 0.047, normal: 0.05, rough: 0.05, albedo: 0.04 } },
@@ -167,7 +166,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   // ------------------------------------------------------------------ Reformation
   refNavy: {
     base: 'standard',
-    props: { color: 0x22365c, roughness: 0.58, metalness: 0.35 },
+    props: { color: 0x1d2d4c, roughness: 0.58, metalness: 0.35 },
     family: 'coated',
     tp: {
       scale: 1.6, normal: 1, roughAmp: 0.3,
@@ -193,10 +192,10 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     family: 'brushed',
     tp: { scale: 1.2, normal: 1, roughAmp: 0.3, macro: { albedo: 0.06, rough: 0.06, scale: 9, hue: 0.05 }, detail: { scale: 0.17, normal: 0.05, rough: 0.06, albedo: 0.02 } },
   },
-  refBlueGlow: emissiveStrip(0x060a10, P.refBlue, 3, 'segment', { pulse: 0.08, pattern: 0.55, period: 0.045 }),
+  refBlueGlow: emissiveStrip(0x060a10, 0x86c6ff, 2.6, 'segment', { pulse: 0.08, pattern: 0.55, period: 0.045 }),
   refCloth: {
     base: 'physical',
-    props: { color: 0x1d2c46, roughness: 0.8, metalness: 0, sheen: 0.35, sheenColor: 0x7f9cc8, sheenRoughness: 0.6 },
+    props: { color: 0x1a2740, roughness: 0.8, metalness: 0, sheen: 0.2, sheenColor: 0x6f8cb8, sheenRoughness: 0.6 },
     family: 'clothTech',
     local: true,
     tp: { scale: 0.16, normal: 1, roughAmp: 0.2, macro: { albedo: 0.12, rough: 0.05, scale: 2.1, hue: 0.05 }, detail: { scale: 0.043, normal: 0.04, rough: 0.05, albedo: 0.03 } },
@@ -215,12 +214,12 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   },
   frostRime: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.7, metalness: 0 },
+    props: { color: 0xffffff, roughness: 0.66, metalness: 0 },
     family: 'rime',
     tp: { scale: 1.2, normal: 1, roughAmp: 0.3, macro: { albedo: 0.1, rough: 0.08, scale: 9, hue: 0 }, detail: { scale: 0.19, normal: 0.14, rough: 0.1, albedo: 0.04 } },
     effects: [
       { kind: 'translucency', color: 0xbfe6ff, strength: 0.5 },
-      { kind: 'sparkle', intensity: 2.2, density: 120, color: P.frost },
+      { kind: 'sparkle', intensity: 3.5, density: 160, color: P.frost },
     ],
   },
 
@@ -281,7 +280,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xffffff, roughness: 0.52, metalness: 0 },
     family: 'leather',
-    tp: { scale: 0.5, normal: 1, roughAmp: 0.5, macro: { albedo: 0.16, rough: 0.08, scale: 3.1, hue: 0.2 }, detail: { scale: 0.11, normal: 0.08, rough: 0.07, albedo: 0.04 } },
+    tp: { scale: 0.3, normal: 1, roughAmp: 0.5, macro: { albedo: 0.3, rough: 0.2, scale: 1.7, hue: 0.2 }, detail: { scale: 0.11, normal: 0.06, rough: 0.07, albedo: 0.04 } },
   },
   rubble: {
     base: 'standard',
@@ -297,7 +296,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
       scale: 2, normal: 1.2, roughAmp: 0.25,
       macro: { albedo: 0.3, rough: 0.06, scale: 7, hue: 0.2 },
       detail: { scale: 0.23, normal: 0.2, rough: 0.1, albedo: 0.08 },
-      mask: { color: 0x050403, amount: 0.9, roughness: 1, metalness: 0, glow: P.cinder, glowIntensity: 0.5, pulse: 0.85 },
+      mask: { color: 0x050403, amount: 0.9, roughness: 1, metalness: 0, glow: P.cinder, glowIntensity: 0.1, pulse: 0.85 },
     },
   },
   rubber: {

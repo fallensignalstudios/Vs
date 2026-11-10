@@ -5,11 +5,12 @@
 import { PALETTE } from '@/core/api/materials';
 import type { Paint } from './rig';
 
-export const P = {
+const PAINTS = {
   // Reformation — navy, slate, sterile metal, cold blue-white
   refNavy: { c: PALETTE.refNavy, r: 0.42, m: 0.55, edge: 0.75 },
   refSlate: { c: PALETTE.refSlate, r: 0.5, m: 0.6, edge: 0.6 },
-  refSteel: { c: PALETTE.refSteel, r: 0.28, m: 0.95, edge: 0.3 },
+  refSteel: { c: 0x8f98a3, r: 0.46, m: 0.85, edge: 0.25 },
+  refPanel: { c: 0xaeb6bf, r: 0.55, m: 0.35, edge: 0.3 },
   refDark: { c: 0x0c1118, r: 0.55, m: 0.4, edge: 0.4 },
   refGlow: { c: PALETTE.refBlue, r: 0.4, m: 0, e: 2.6, edge: 0 },
   refGlowSoft: { c: PALETTE.refBlue, r: 0.4, m: 0, e: 1.3, edge: 0 },
@@ -18,15 +19,15 @@ export const P = {
   rubber: { c: 0x08090b, r: 0.8, m: 0.05, edge: 0.1 },
 
   // Dominion — bronze, oxblood, black, amber
-  domBronze: { c: PALETTE.domBronze, r: 0.38, m: 0.9, edge: 0.7 },
+  domBronze: { c: PALETTE.domBronze, r: 0.46, m: 0.85, edge: 0.6 },
   domOxblood: { c: PALETTE.domOxblood, r: 0.5, m: 0.35, edge: 0.6 },
   domBlack: { c: PALETTE.domBlack, r: 0.5, m: 0.6, edge: 0.6 },
   domGlow: { c: PALETTE.domAmber, r: 0.4, m: 0, e: 2.4, edge: 0 },
 
   // King-era substrate fragments
-  whiteGold: { c: PALETTE.whiteGold, r: 0.36, m: 0.3, edge: 0.35 },
-  ivoryWorn: { c: 0xb9b2a2, r: 0.5, m: 0.2, edge: 0.5 },
-  gold: { c: PALETTE.gold, r: 0.3, m: 1, edge: 0.4 },
+  whiteGold: { c: 0xcfc8b6, r: 0.56, m: 0.14, edge: 0.3 },
+  ivoryWorn: { c: 0xada594, r: 0.66, m: 0.1, edge: 0.45 },
+  gold: { c: PALETTE.gold, r: 0.42, m: 1, edge: 0.35 },
   goldDeep: { c: PALETTE.goldDeep, r: 0.4, m: 1, edge: 0.5 },
   blackStone: { c: 0x101218, r: 0.14, m: 0.25, edge: 0.25 },
   goldChannel: { c: 0xffc56b, r: 0.4, m: 0, e: 2.2, edge: 0 },
@@ -43,10 +44,13 @@ export const P = {
   bone: { c: 0x8f8778, r: 0.6, m: 0.05, edge: 0.4, seam: 0.2 },
 
   // Frost
-  ice: { c: 0xbfe6f7, r: 0.12, m: 0.1, e: 0.35, edge: 0.9 },
+  ice: { c: 0x8fc4dc, r: 0.22, m: 0, e: 0.07, edge: 0.6 },
   frostGlow: { c: PALETTE.frost, r: 0.4, m: 0, e: 2.2, edge: 0 },
   frostGlowSoft: { c: PALETTE.frost, r: 0.4, m: 0, e: 1.1, edge: 0 },
-} as const satisfies Record<string, Paint>;
+} satisfies Record<string, Paint>;
+
+/** paint presets by name */
+export const P: { readonly [K in keyof typeof PAINTS]: Paint } = PAINTS;
 
 /** a paint with fields overridden (e.g. dirtier, darker, different emissive strength) */
 export function tint(p: Paint, over: Partial<Paint>): Paint {

@@ -94,7 +94,8 @@ export function buildArena(scene: THREE.Scene, physics: PhysicsWorld): Arena {
   // ---------------------------------------------------------------------------------------------
   const tiles = tileTexture();
   tiles.repeat.set(11, 8);
-  const floorMat = mat(0x07080b, 0.3, 0.0, { roughnessMap: tiles, envMapIntensity: 0.08 });
+  // physical material so the specular lobe can be held down: polished, but no sun-glare sheets under bloom
+  const floorMat = new THREE.MeshPhysicalMaterial({ color: 0x07080b, roughness: 0.3, metalness: 0, roughnessMap: tiles, specularIntensity: 0.3 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 32), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, -4);
@@ -378,7 +379,7 @@ export function buildEnvironmentScene(): THREE.Scene {
 /** Lights + sky backdrop for the arena. Returns the key light so the caller can tune shadows. */
 export function lightArena(scene: THREE.Scene): THREE.DirectionalLight {
   scene.fog = new THREE.FogExp2(0x10151e, 0.009);
-  scene.add(new THREE.HemisphereLight(0x8497bd, 0x241b12, 0.3));
+  scene.add(new THREE.HemisphereLight(0x8a9cc0, 0x2a2015, 0.42));
 
   // key falls steeply through the colonnade from the north-west: pillar shadows on the black stone, figures
   // rim-lit, and (being high) no mirror glare off the polished floor at gameplay camera angles
@@ -393,7 +394,7 @@ export function lightArena(scene: THREE.Scene): THREE.DirectionalLight {
   key.shadow.normalBias = 0.03;
   scene.add(key, key.target);
 
-  const fill = new THREE.DirectionalLight(0x93aee8, 0.55);
+  const fill = new THREE.DirectionalLight(0x9fb6ea, 1.7);
   fill.position.set(14, 10, 20);
   scene.add(fill);
 

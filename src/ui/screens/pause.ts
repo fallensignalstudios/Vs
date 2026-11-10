@@ -40,7 +40,6 @@ export class PauseScreen implements Layer {
   ) {
     this.menuCol = new MenuColumn(game, menu, 'aur-pause-menu');
     this.hints = new KeyHints(game, 'aur-pause-hints');
-    this.hints.set([{ keys: '↑↓', label: 'Navigate' }, { action: 'confirm', label: 'Select' }, { action: 'cancel', label: 'Resume' }]);
     const zone = h('div', 'aur-pause-value aur-title');
     const objective = h('div', 'aur-pause-value');
     this.zoneBlock = h('div', 'aur-pause-block', h('div', 'aur-label', 'Location'), zone);
@@ -59,7 +58,7 @@ export class PauseScreen implements Layer {
       h('div', 'aur-pause-info', this.zoneBlock, this.objectiveBlock),
       this.hints.el,
     );
-    this.fader = new Fader(this.el, { in: 0.22, out: 0.18 });
+    this.fader = new Fader(this.el, { in: 0.22, out: 0.18, interactive: true });
   }
 
   get shown(): boolean {
@@ -100,8 +99,13 @@ export class PauseScreen implements Layer {
     this.objectiveBlock.style.display = obj ? '' : 'none';
   }
 
+  private setHints(cancelLabel: string): void {
+    this.hints.set([{ keys: '↑↓', label: 'Navigate' }, { action: 'confirm', label: 'Select' }, { action: 'cancel', label: cancelLabel }]);
+  }
+
   private showRoot(): void {
     this.sub = 'root';
+    this.setHints('Resume');
     this.menuCol.setEntries([
       { label: 'Resume', onSelect: () => this.opts?.onResume() },
       { label: 'Restart from checkpoint', onSelect: () => this.confirm('restart') },
@@ -114,6 +118,7 @@ export class PauseScreen implements Layer {
   private confirm(what: 'restart' | 'quit'): void {
     this.rootFocus = this.menuCol.list.index;
     this.sub = 'confirm';
+    this.setHints('Back');
     const restart = what === 'restart';
     this.menuCol.setEntries([
       { label: 'Cancel', onSelect: () => this.showRoot() },

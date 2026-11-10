@@ -16,6 +16,7 @@ export class Objective {
   private readonly body: HTMLElement;
   private readonly text: Txt;
   private readonly tag: HTMLElement;
+  private readonly tagText: Txt;
   private readonly sweep: HTMLElement;
   private shown: string | null = null;
   private pending: string | null = null;
@@ -35,6 +36,7 @@ export class Objective {
       this.body,
     );
     this.text = new Txt(text);
+    this.tagText = new Txt(this.tag);
     this.fader = new Fader(this.el, { in: 0.4, out: 0.3 });
   }
 
@@ -52,6 +54,7 @@ export class Objective {
       this.shown = t;
       this.pending = null;
       this.text.set(t);
+      this.tagText.set('New');
       this.phase = 'in';
       this.swap = 0;
       this.fresh = 1;
@@ -71,6 +74,7 @@ export class Objective {
         this.shown = this.pending;
         this.pending = null;
         this.text.set(this.shown);
+        this.tagText.set('Updated');
         this.phase = 'in';
         this.fresh = 1;
         sfx(this.game, 'uiObjective');

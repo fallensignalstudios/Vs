@@ -14,15 +14,6 @@ export interface Field {
   readonly data: Float32Array;
 }
 
-export const makeField = (size: number): Field => ({ size, data: new Float32Array(size * size) });
-
-/** Largest power of two ≤ n (minimum 4). */
-export function pow2Floor(n: number): number {
-  let p = 4;
-  while (p * 2 <= n) p *= 2;
-  return p;
-}
-
 /** Integer lattice hash → [0, 1). Deterministic across platforms. */
 export function hash2(ix: number, iy: number, seed: number): number {
   let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(seed, 1442695041);
@@ -148,10 +139,16 @@ export interface WorleyResult {
   f2: Field;
   /** random value in [0, 1) identifying the nearest cell (flat per cell) */
   id: Field;
+  /** only with `vectors`: offset from the texel to its nearest feature point, in cell units */
+  dx?: Field;
+  dy?: Field;
 }
 
-/** Tiling cellular (Worley) noise with `cells` × `cells` feature points. `jitter` 0 = grid, 1 = fully random. */
-export function worley(size: number, cells: number, seed: number, jitter = 1): WorleyResult {
+/**
+ * Tiling cellular (Worley) noise with `cells` × `cells` feature points. `jitter` 0 = grid, 1 = fully random.
+ * `vectors` additionally returns the offset to the nearest feature point (for per-cell gradients / facets).
+ */
+export function worley(size: number, cells: number, seed: number, jitter = 1, vectors = false): WorleyResult {
   cells = Math.max(1, Math.min(size, Math.round(cells)));
   // feature points on a grid padded by one wrapped cell each side, stored in absolute cell coordinates, so the
   // hot loop needs no modulo
@@ -172,6 +169,8 @@ export function worley(size: number, cells: number, seed: number, jitter = 1): W
   const f1 = new Float32Array(size * size);
   const f2 = new Float32Array(size * size);
   const id = new Float32Array(size * size);
+  const vx = vectors ? new Float32Array(size * size) : null;
+  const vy = vectors ? new Float32Array(size * size) : null;
   const k = cells / size;
   for (let y = 0; y < size; y++) {
     const v = y * k;
@@ -192,9 +191,12 @@ export function worley(size: number, cells: number, seed: number, jitter = 1): W
       f1[yo + x] = Math.sqrt(d1);
       f2[yo + x] = Math.sqrt(d2);
       id[yo + x] = pid[best];
+      if (vx && vy) { vx[yo + x] = px[best] - u; vy[yo + x] = py[best] - v; }
     }
   }
-  return { f1: { size, data: f1 }, f2: { size, data: f2 }, id: { size, data: id } };
+  const out: WorleyResult = { f1: { size, data: f1 }, f2: { size, data: f2 }, id: { size, data: id } };
+  if (vx && vy) { out.dx = { size, data: vx }; out.dy = { size, data: vy }; }
+  return out;
 }
 
 /** Bilinear wrapped lookup at fractional texel coordinates. */
@@ -225,29 +227,6 @@ export function warp(src: Field, wx: Field, wy: Field, amount: number, outSize =
     }
   }
   return { size: outSize, data: out };
-}
-
-/** Resample a field to another power-of-two resolution (bilinear, wrapped). */
-export function resample(src: Field, size: number): Field {
-  if (src.size === size) return src;
-  const out = new Float32Array(size * size);
-  const k = src.size / size;
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) out[y * size + x] = sampleBilinear(src, x * k, y * k);
-  return { size, data: out };
-}
-
-/**
- * Repeat a field `n` × `n` times inside the tile (integer n keeps it seamless) with an optional texel offset.
- * Cheap way to reuse one generated field at a higher frequency.
- */
-export function repeat(src: Field, n: number, offX = 0, offY = 0): Field {
-  const s = src.size, m = s - 1;
-  const out = new Float32Array(s * s);
-  for (let y = 0; y < s; y++) {
-    const yo = ((y * n + offY) & m) * s;
-    for (let x = 0; x < s; x++) out[y * s + x] = src.data[yo + ((x * n + offX) & m)];
-  }
-  return { size: s, data: out };
 }
 
 /** Separable wrapped box blur, `passes` iterations (3 ≈ Gaussian). Radius in texels. Returns a new field. */
@@ -287,26 +266,4 @@ export function sstep(a: number, b: number, v: number): number {
   let t = (v - a) / (b - a);
   t = t < 0 ? 0 : t > 1 ? 1 : t;
   return t * t * (3 - 2 * t);
-}
-
-/** Apply `fn` to every texel, returning a new field. */
-export function mapField(src: Field, fn: (v: number) => number): Field {
-  const out = new Float32Array(src.data.length);
-  const d = src.data;
-  for (let i = 0; i < d.length; i++) out[i] = fn(d[i]);
-  return { size: src.size, data: out };
-}
-
-/** Uncorrelated per-texel noise in [0, 1) (film-grain style speckle). */
-export function whiteNoise(size: number, seed: number): Field {
-  const out = new Float32Array(size * size);
-  let a = (seed * 2654435761) >>> 0;
-  for (let i = 0; i < out.length; i++) {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    out[i] = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  }
-  return { size, data: out };
 }

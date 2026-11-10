@@ -83,6 +83,53 @@ export function torsoSecs(rig: RigView, inflate = 0, yMin = 0.855, yMax = 1.52):
   return all.filter((s) => s.y >= yMin - 1e-6 && s.y <= yMax + 1e-6);
 }
 
+/** Arm cross-sections (shoulder → wrist) for one side; shared with the armour so plates conform. */
+export function armSecs(rig: RigView, side: number): Sec[] {
+  const k = rig.prop.bulk;
+  const line = armLine(rig, side);
+  const sy = rig.sp('uArm', side)[1], ey = rig.sp('fArm', side)[1], wy = rig.sp('hand', side)[1];
+  const A = (y: number, rx: number, rz: number): Sec => {
+    const [cx, cz] = line(y);
+    return { y, rx: rx * k, rz: rz * k, cx, cz };
+  };
+  return [
+    A(sy + 0.028, 0.046, 0.052), A(sy - 0.01, 0.06, 0.066), A(sy - 0.09, 0.055, 0.06), A(sy - 0.18, 0.05, 0.054),
+    A(ey + 0.035, 0.044, 0.046), A(ey, 0.042, 0.044), A(ey - 0.05, 0.047, 0.047), A(ey - 0.14, 0.041, 0.04),
+    A(wy + 0.03, 0.029, 0.034), A(wy + 0.004, 0.026, 0.032),
+  ];
+}
+
+/** Leg cross-sections (hip → ankle) for one side. */
+export function legSecs(rig: RigView, side: number): Sec[] {
+  const k = rig.prop.bulk;
+  const ll = legLine(rig, side);
+  const ky = rig.sp('shin', side)[1], ay = rig.sp('foot', side)[1];
+  const Lg = (y: number, rx: number, rz: number, rzb: number): Sec => {
+    const [cx, cz] = ll(y);
+    return { y, rx: rx * k, rz: rz * k, rzb: rzb * k, cx, cz };
+  };
+  return [
+    Lg(0.99, 0.066, 0.07, 0.074), Lg(0.93, 0.086, 0.092, 0.096), Lg(0.8, 0.086, 0.094, 0.094), Lg(0.66, 0.075, 0.08, 0.08),
+    Lg(ky + 0.04, 0.06, 0.062, 0.06), Lg(ky, 0.057, 0.06, 0.056), Lg(ky - 0.07, 0.054, 0.05, 0.064), Lg(ky - 0.17, 0.051, 0.047, 0.064),
+    Lg(ky - 0.3, 0.042, 0.041, 0.046), Lg(ay + 0.02, 0.037, 0.038, 0.04),
+  ];
+}
+
+/** Interpolate a section list (descending or ascending y) at height y, grown by `inflate`. */
+export function secAt(secs: Sec[], y: number, inflate = 0): Sec {
+  const asc = secs[secs.length - 1].y > secs[0].y;
+  const S = asc ? secs : [...secs].reverse();
+  let i = 0;
+  while (i < S.length - 2 && S[i + 1].y < y) i++;
+  const a = S[i], c = S[i + 1];
+  const t = Math.min(1, Math.max(0, (y - a.y) / (c.y - a.y || 1)));
+  const L = (u: number | undefined, v: number | undefined, d: number): number => (u ?? d) + ((v ?? d) - (u ?? d)) * t;
+  return {
+    y, rx: L(a.rx, c.rx, 0) + inflate, rz: L(a.rz, c.rz, 0) + inflate, rzb: L(a.rzb ?? a.rz, c.rzb ?? c.rz, 0) + inflate,
+    cx: L(a.cx, c.cx, 0), cz: L(a.cz, c.cz, 0), n: L(a.n, c.n, 2),
+  };
+}
+
 export function buildBody(b: MeshBuilder, rig: RigView, look: BodyLook): void {
   const p = rig.prop;
   const k = p.bulk;
@@ -105,44 +152,24 @@ export function buildBody(b: MeshBuilder, rig: RigView, look: BodyLook): void {
 
   for (const side of [-1, 1]) {
     // ---- arm ---------------------------------------------------------------------------------------------
-    const line = armLine(rig, side);
-    const sy = rig.sp('uArm', side)[1], ey = rig.sp('fArm', side)[1], wy = rig.sp('hand', side)[1];
-    const A = (y: number, rx: number, rz: number, extra: Partial<Sec> = {}): Sec => {
-      const [cx, cz] = line(y);
-      return { y, rx: rx * k, rz: rz * k, cx, cz, ...extra };
-    };
-    const armSecs: Sec[] = [
-      A(sy + 0.03, 0.05, 0.056), A(sy - 0.01, 0.062, 0.068), A(sy - 0.09, 0.055, 0.06), A(sy - 0.18, 0.05, 0.054),
-      A(ey + 0.035, 0.044, 0.046), A(ey, 0.042, 0.044), A(ey - 0.05, 0.047, 0.047), A(ey - 0.14, 0.041, 0.04),
-      A(wy + 0.03, 0.029, 0.034), A(wy + 0.004, 0.026, 0.032),
-    ];
+    const arm = armSecs(rig, side);
     b.skin(armSkin(rig, side));
     if (look.bareArms) {
       b.surf({ ...suit, zone: ZONE.arm });
-      loft(b, armSecs.slice(0, 5), { seg: 12, smooth: 2, capA: 'dome' });
+      loft(b, arm.slice(0, 5), { seg: 12, smooth: 2, capA: 'dome' });
       b.surf({ ...skin, zone: ZONE.arm });
-      loft(b, armSecs.slice(4), { seg: 12, smooth: 2, capB: 'flat' });
+      loft(b, arm.slice(4), { seg: 12, smooth: 2, capB: 'flat' });
     } else {
       b.surf({ ...suit, zone: ZONE.arm });
-      loft(b, armSecs, { seg: 12, smooth: 2, capA: 'dome', capB: 'flat' });
+      loft(b, arm, { seg: 12, smooth: 2, capA: 'dome', capB: 'flat' });
     }
 
     // ---- hand ------------------------------------------------------------------------------------------
     buildHand(b, rig, side, look.glove ? { part: PART.leather, rough: 0.6, ...look.glove } : skin);
 
     // ---- leg -------------------------------------------------------------------------------------------
-    const ll = legLine(rig, side);
-    const ky = rig.sp('shin', side)[1], ay = rig.sp('foot', side)[1];
-    const Lg = (y: number, rx: number, rz: number, rzb: number): Sec => {
-      const [cx, cz] = ll(y);
-      return { y, rx: rx * k, rz: rz * k, rzb: rzb * k, cx, cz };
-    };
     b.surf({ ...legSurf, zone: ZONE.leg }).skin(legSkin(rig, side));
-    loft(b, [
-      Lg(1.0, 0.078, 0.085, 0.09), Lg(0.93, 0.09, 0.096, 0.1), Lg(0.8, 0.086, 0.094, 0.094), Lg(0.66, 0.075, 0.08, 0.08),
-      Lg(ky + 0.04, 0.06, 0.062, 0.06), Lg(ky, 0.057, 0.06, 0.056), Lg(ky - 0.07, 0.054, 0.05, 0.064), Lg(ky - 0.17, 0.051, 0.047, 0.064),
-      Lg(ky - 0.3, 0.042, 0.041, 0.046), Lg(ay + 0.02, 0.037, 0.038, 0.04),
-    ], { seg: 14, smooth: 2, capA: 'dome', capB: 'flat' });
+    loft(b, legSecs(rig, side), { seg: 14, smooth: 2, capA: 'dome', capB: 'flat' });
 
     if (!look.noBoots) buildBoot(b, rig, side, { part: PART.leather, rough: 0.55, ...look.boot }, look.sole ?? { color: 0x0c0c0e, rough: 0.8, part: PART.suit });
   }
