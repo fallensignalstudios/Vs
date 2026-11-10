@@ -5,7 +5,7 @@
 import { mulberry32 } from '@/core/mathx';
 
 export type NoiseColor = 'white' | 'pink' | 'brown' | 'crackle';
-export type CurveName = 'soft' | 'hard' | 'fold' | 'asym' | 'ceiling' | 'drum';
+export type CurveName = 'soft' | 'hard' | 'fold' | 'asym' | 'ceiling' | 'drum' | 'tonal';
 
 /** Scale `a` in place so its absolute peak equals `peak`. */
 export function normalize(a: Float32Array, peak = 1): void {
@@ -105,6 +105,15 @@ export function makeCurve(name: CurveName, n = 2049): Float32Array<ArrayBuffer> 
         const a = Math.abs(x);
         const knee = 0.12;
         const top = 0.33;
+        y = Math.sign(x) * (a <= knee ? a : knee + (top - knee) * Math.tanh((a - knee) / (top - knee)));
+        break;
+      }
+      case 'tonal': {
+        // the same shoulder for the sustained ensemble, set higher: clean below −16 dBFS, leaning into
+        // −7 dBFS. Only the accents where strings, brass and horn land together reach it.
+        const a = Math.abs(x);
+        const knee = 0.16;
+        const top = 0.45;
         y = Math.sign(x) * (a <= knee ? a : knee + (top - knee) * Math.tanh((a - knee) / (top - knee)));
         break;
       }

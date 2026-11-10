@@ -64,13 +64,15 @@ export class FallenPlate extends PropBase<Params> {
     const pile = (x: number, y: number, z: number, s: number, flat = 0.8): void => {
       P.add('rubble', rock(Math.floor(rnd() * 1e6), flat), { p: [x, y, z], r: [rnd() * 0.6, rnd() * 6, rnd() * 0.6], s: [s * (0.8 + rnd() * 0.5), s * (0.6 + rnd() * 0.4), s * (0.8 + rnd() * 0.5)] });
     };
-    for (let k = 0; k < 13; k++) pile(-2.7 + k * 0.45 + rnd() * 0.2, 0.08 + rnd() * 0.08, DEPTH / 2 + 0.05 + rnd() * 0.5, 0.26 + rnd() * 0.2);
+    for (let k = 0; k < 15; k++) pile(-3.0 + k * 0.43 + rnd() * 0.2, 0.1 + rnd() * 0.1, DEPTH / 2 + 0.1 + rnd() * 0.6, 0.3 + rnd() * 0.28);
+    for (let k = 0; k < 9; k++) pile(-2.6 + k * 0.62 + rnd() * 0.3, 0.06, DEPTH / 2 + 0.9 + rnd() * 0.7, 0.14 + rnd() * 0.16);
     for (const sx of [-1, 1]) {
       for (let k = 0; k < 9; k++) {
         const z = DEPTH / 2 - 0.3 - k * 0.36;
         const h = 0.14 + (DEPTH / 2 - z) * Math.sin(REST) * 0.8;
-        pile(sx * (2.3 + rnd() * 0.5), h * 0.45, z + rnd() * 0.2, 0.16 + h * 0.5 + rnd() * 0.1);
-        if (k % 2 === 0) pile(sx * (2.9 + rnd() * 0.5), 0.1, z + rnd() * 0.4, 0.2 + rnd() * 0.18);
+        pile(sx * (2.35 + rnd() * 0.45), h * 0.45, z + rnd() * 0.2, 0.2 + h * 0.55 + rnd() * 0.12);
+        pile(sx * (2.95 + rnd() * 0.6), 0.12, z + rnd() * 0.4, 0.22 + rnd() * 0.24);
+        if (k % 3 === 0) pile(sx * (3.6 + rnd() * 0.5), 0.05, z + rnd() * 0.5, 0.1 + rnd() * 0.12, 0.6);
       }
     }
     for (let k = 0; k < 14; k++) pile((rnd() - 0.5) * 6.6, 0.04, -DEPTH / 2 - 0.3 - rnd() * 1.2, 0.07 + rnd() * 0.12, 0.6);
@@ -96,6 +98,7 @@ export class FallenPlate extends PropBase<Params> {
     this.addSocket('stand', 0, 0, -DEPTH / 2 - 0.55, Math.PI);
     this.addSocket('marine', 0.3, 0.04, -0.75, 0);
     this.addCollider({ kind: 'box', hx: 2.8, hy: 0.55, hz: 2.05 }, 0, 0.55, 0.1);
+    this.ready();
   }
 
   /** current tilt of the plate in radians (0.14 at rest … 0.64 fully lifted) */

@@ -419,8 +419,8 @@ describe('the first sound of a session', () => {
     const ctx = new FakeContext();
     const engine = engineOn(ctx);
     const ready = engine.mixer.readyAt;
-    expect(ready).toBeGreaterThan(0.03);
-    expect(ready).toBeLessThan(0.06);
+    expect(ready).toBeGreaterThan(0.05);
+    expect(ready).toBeLessThan(0.1);
     engine.play('uiSelect'); // the click that unlocked audio, at context time 0
     expect(Math.min(...ctx.spans.map((s) => s.start))).toBeCloseTo(ready, 6);
     // a moment later nothing is held back any more

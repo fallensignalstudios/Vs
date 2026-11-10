@@ -52,6 +52,7 @@ export class ContainmentCage extends PropBase<Params> {
   private readonly ringPieces: Piece[] = [];
   private readonly shardRest: Array<{ piece: Piece; off: THREE.Vector3; quat: THREE.Quaternion }> = [];
   private readonly glow: Glow;
+  private readonly frameMat: THREE.MeshStandardMaterial;
   private readonly field: THREE.ShaderMaterial;
   private readonly fieldMesh: THREE.Mesh;
   private readonly matter: THREE.ShaderMaterial | null = null;
@@ -136,6 +137,8 @@ export class ContainmentCage extends PropBase<Params> {
       P.box('segGlow', 0.02, 1.5, 0.05, { p: [-0.181, 1.2, 0] }, 0x9a9a9a);
       for (const y of [0.3, 2.05]) P.box('segGlow', 0.02, 0.09, 0.2, { p: [-0.181, y, 0] });
       P.box('segGlow', 0.14, 0.035, 0.14, { p: [0, 2.32, 0] });
+      // a light band around every joint collar (on the foot segment it lights the deck)
+      for (const [dx, dz, w, d] of [[0.236, 0, 0.012, 0.3], [-0.236, 0, 0.012, 0.3], [0, 0.236, 0.3, 0.012], [0, -0.236, 0.3, 0.012]] as const) P.box('segGlow', w, 0.05, d, { p: [dx, 0.07, dz] });
       // emitter ring (unit radius) with twelve small emitter heads
       P.add('ring', hoop(1, 0, 0.045, 0.07, { seg: 64 }));
       for (let k = 0; k < 12; k++) {
@@ -195,7 +198,8 @@ export class ContainmentCage extends PropBase<Params> {
       this.ringPieces.push(p);
     }
 
-    const frameMat = this.mk.solid(dom ? 'domBronze' : 'refSteel');
+    // a faint self-lit floor under the metal: the cages are read at 20–40 m in a dim chamber
+    const frameMat = (this.frameMat = this.mk.solid(dom ? 'domBronze' : 'refSteel', { emissive: dom ? 0x4a2c14 : 0x1c2a3a, emissiveIntensity: 0.3 }));
     const frame = new THREE.InstancedMesh(P.geometry('seg'), frameMat, counts[0]);
     const rings = new THREE.InstancedMesh(P.geometry('ring'), frameMat, counts[1]);
     this.glow = this.mk.glow(dom ? PALETTE.domAmber : PALETTE.refBlue, 1, true);
@@ -255,6 +259,7 @@ export class ContainmentCage extends PropBase<Params> {
     this.addSocket('core', 0, this.coreY, 0);
     this.addSocket('top', 0, dom ? 6.2 : 4.9, 0);
     this.addCollider({ kind: 'cyl', r: 3.6, hy: 3 }, 0, 3, 0);
+    this.ready();
   }
 
   protected apply(dt: number, time: number): void {
@@ -265,6 +270,7 @@ export class ContainmentCage extends PropBase<Params> {
     const embers = this.dominion ? 0.3 * ramp(d, 0.3, 0.5) * (1 - ramp(d, 0.82, 1)) * (0.6 + 0.4 * Math.sin(time * 9)) : 0;
     this.glow.set(((this.dominion ? 1.0 : 0.9) + 2.3 * ch) * hum * alive + 3.5 * spike + embers);
     this.light.intensity = (6 + 44 * ch) * alive * hum + 150 * spike;
+    this.frameMat.emissiveIntensity = (0.22 + 0.5 * ch) * alive + 0.6 * spike + 0.05;
 
     const collapse = ramp(d, 0.03, 0.3);
     this.fieldMesh.visible = collapse < 0.999;

@@ -109,7 +109,8 @@ export class Stabilizer extends PropBase<Params> {
 	float spokes = fxLine( fract( ang * 24.0 ) - 0.5, 0.012 / max( r, 0.12 ) ) * smoothstep( 0.38, 0.42, r );
 	float minor = fxLine( fract( ang * 96.0 ) - 0.5, 0.05 / max( r, 0.12 ) ) * smoothstep( 0.78, 0.8, r ) * 0.5;
 	float rim = fxLine( rr - 0.975, 0.012 ) * 1.8 + fxLine( rr - 0.2, 0.008 ) * 1.2;
-	float drop = mix( step( 0.5, slow + ( n - 0.5 ) * 0.5 ), 1.0, smoothstep( 0.35, 0.95, uCoh ) );
+	float gone = step( 0.3 * ( 1.0 - uCoh ), fxHash( vec2( sect, floor( uTime * 2.5 ) ) ) );
+	float drop = gone * mix( 0.3 + 0.7 * slow, 1.0, smoothstep( 0.3, 0.95, uCoh ) );
 	float veil = 0.045 + 0.06 * uCoh * ( 0.7 + 0.3 * fxNoise( p * 6.0 + uTime * 0.2 ) );
 	alpha = ( rings * 0.75 + fine + spokes * 0.4 + minor + rim + veil ) * drop * ( 1.0 - smoothstep( 0.985, 1.0, r ) );
 	col = uColor * uGain;
@@ -152,6 +153,7 @@ export class Stabilizer extends PropBase<Params> {
       const a = A0 + ((A1 - A0) * (k + 0.5)) / 6;
       this.addCollider({ kind: 'box', hx: 0.5, hy: 0.52, hz: 0.24 }, Math.cos(a), 0.52, -Math.sin(a), a + Math.PI / 2);
     }
+    this.ready();
   }
 
   protected apply(_dt: number, time: number): void {

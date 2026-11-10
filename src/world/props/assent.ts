@@ -1,11 +1,11 @@
 /**
- * Assent interface (Z10) — one of two independent pedestals of the same ancient design: black stone, gold
+ * Assent interface (Z10) — one of two independent pedestals of the same ancient design: pale ceramic, gold
  * bands, a hand-height slanted interface surface. `active` wakes the gold glyphs; `assent` plays the acceptance
  * light, which differs by PATTERN and MOTION as well as colour:
  *   Tarrik — warm: broad concentric bands that push outward from the palm and fill the surface with heat
  *   Selene — cool: a fine, perfectly still crystalline lattice that closes in from the edges to a crisp ring
  *
- * Draw calls: stone, gold, channel light, interface surface = 4.
+ * Draw calls: ceramic, gold, channel light, interface surface = 4.
  */
 import * as THREE from 'three';
 import type { MaterialLibrary } from '@/core/api';
@@ -85,18 +85,18 @@ export class AssentInterface extends PropBase<Params> {
     const tilt: readonly [number, number, number] = [TILT, 0, 0];
 
     // foot, tapering shaft with a waist, flared neck
-    P.bevel('stone', 0.68, 0.09, 0.6, 0.02, { p: [0, 0.045, 0] });
-    P.bevel('stone', 0.56, 0.07, 0.48, 0.02, { p: [0, 0.125, 0] });
-    P.add('stone', prism([[-0.24, 0.16], [0.24, 0.16], [0.15, 0.56], [0.21, 0.9], [-0.21, 0.9], [-0.15, 0.56]], 0.34, 0.025));
-    P.add('stone', prism([[-0.11, 0.16], [0.11, 0.16], [0.075, 0.56], [0.1, 0.9], [-0.1, 0.9], [-0.075, 0.56]], 0.42, 0.02));
+    P.bevel('body', 0.68, 0.09, 0.6, 0.02, { p: [0, 0.045, 0] });
+    P.bevel('body', 0.56, 0.07, 0.48, 0.02, { p: [0, 0.125, 0] }, 0xdcdcdc);
+    P.add('body', prism([[-0.24, 0.16], [0.24, 0.16], [0.15, 0.56], [0.21, 0.9], [-0.21, 0.9], [-0.15, 0.56]], 0.34, 0.025));
+    P.add('body', prism([[-0.11, 0.16], [0.11, 0.16], [0.075, 0.56], [0.1, 0.9], [-0.1, 0.9], [-0.075, 0.56]], 0.42, 0.02), undefined, 0xcfcfcf);
     P.bevel('gold', 0.6, 0.022, 0.52, 0.006, { p: [0, 0.095, 0] });
     P.bevel('gold', 0.335, 0.03, 0.37, 0.008, { p: [0, 0.56, 0] });
     P.bevel('gold', 0.46, 0.028, 0.4, 0.008, { p: [0, 0.905, 0] });
     for (const sx of [-1, 1]) P.bevel('gold', 0.02, 0.3, 0.02, 0.005, { p: [sx * 0.19, 0.74, -0.165], r: [0, 0, sx * -0.17] });
 
     // slanted head: stone slab in a gold frame
-    P.bevel('stone', 0.68, 0.07, 0.52, 0.016, { p: head(0, 0, 0), r: tilt });
-    P.bevel('stone', 0.4, 0.07, 0.3, 0.02, { p: head(0, -0.06, 0.02), r: tilt });
+    P.bevel('body', 0.68, 0.07, 0.52, 0.016, { p: head(0, 0, 0), r: tilt });
+    P.bevel('body', 0.4, 0.07, 0.3, 0.02, { p: head(0, -0.06, 0.02), r: tilt }, 0xdcdcdc);
     for (const sz of [-1, 1]) P.bevel('gold', 0.66, 0.022, 0.03, 0.006, { p: head(0, 0.036, sz * 0.232), r: tilt });
     for (const sx of [-1, 1]) {
       P.bevel('gold', 0.03, 0.022, 0.494, 0.006, { p: head(sx * 0.315, 0.036, 0), r: tilt });
@@ -105,14 +105,15 @@ export class AssentInterface extends PropBase<Params> {
     }
 
     // channel light: one line up the front of the shaft, short returns at the foot, a seam under the head
-    P.box('chan', 0.03, 0.31, 0.008, { p: [0, 0.34, -0.212] });
-    P.box('chan', 0.03, 0.27, 0.008, { p: [0, 0.74, -0.212] });
-    P.box('chan', 0.2, 0.024, 0.008, { p: [0, 0.2, -0.212] });
+    P.box('chan', 0.018, 0.31, 0.008, { p: [0, 0.34, -0.212] });
+    P.box('chan', 0.018, 0.27, 0.008, { p: [0, 0.74, -0.212] });
+    P.box('chan', 0.14, 0.016, 0.008, { p: [0, 0.2, -0.212] });
+    P.cyl('chan', 0.03, 0.03, 0.008, 4, { p: [0, 0.56, -0.19], r: [Math.PI / 2, 0, 0] });
     for (const sx of [-1, 1]) {
-      P.box('chan', 0.008, 0.5, 0.03, { p: [sx * 0.172, 0.6, 0] }, 0x9a9a9a);
-      P.box('chan', 0.008, 0.024, 0.36, { p: [sx * 0.343, 0.06, 0] }, 0x9a9a9a);
+      P.box('chan', 0.008, 0.5, 0.018, { p: [sx * 0.172, 0.6, 0] }, 0x9a9a9a);
+      P.box('chan', 0.008, 0.016, 0.36, { p: [sx * 0.343, 0.06, 0] }, 0x9a9a9a);
     }
-    P.box('chan', 0.5, 0.01, 0.008, { p: head(0, -0.024, -0.262), r: tilt });
+    P.box('chan', 0.5, 0.008, 0.008, { p: head(0, -0.024, -0.262), r: tilt });
 
     this.chan = this.mk.glow(0xffc56b, 1, true);
     this.pad = this.mk.fx({
@@ -128,18 +129,19 @@ export class AssentInterface extends PropBase<Params> {
     pad.position.set(...head(0, 0.0365, 0));
     pad.rotation.x = -Math.PI / 2 + TILT;
     pad.userData.cannotReceiveAO = true;
-    this.object.add(P.mesh('stone', this.mk.solid('blackStone')), P.mesh('gold', this.mk.solid('goldTrim')), P.mesh('chan', this.chan.material, false), pad);
+    this.object.add(P.mesh('body', this.mk.solid('whiteGold')), P.mesh('gold', this.mk.solid('goldTrim')), P.mesh('chan', this.chan.material, false), pad);
 
     const hp = head(0, 0.06, 0);
     this.addSocket('hand', hp[0], hp[1], hp[2], Math.PI);
     this.addSocket('stand', 0, 0, -0.7, Math.PI);
     this.addCollider({ kind: 'box', hx: 0.34, hy: 0.55, hz: 0.3 }, 0, 0.55, 0);
+    this.ready();
   }
 
   protected apply(_dt: number, time: number): void {
     const act = clamp01(this.cur.active), ass = clamp01(this.cur.assent);
     this.pad.uniforms.uActive.value = act;
     this.pad.uniforms.uAssent.value = ass;
-    this.chan.set(0.12 + 1.7 * act * (1 + 0.06 * Math.sin(time * 2)) + 1.0 * ass);
+    this.chan.set(0.12 + 1.5 * act * (1 + 0.06 * Math.sin(time * 2)) + 0.7 * ass);
   }
 }

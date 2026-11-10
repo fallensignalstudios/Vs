@@ -162,6 +162,15 @@ export abstract class PropBase<P extends Record<string, number>> implements Hero
   /** push the eased values (`this.cur`) into the scene objects */
   protected abstract apply(dt: number, time: number): void;
 
+  /**
+   * Called at the end of every subclass constructor: puts the scene objects into the state of the default
+   * parameters, so a prop is presentable even before its first `update()`.
+   */
+  protected ready(): void {
+    this.settle();
+    this.apply(0, 0);
+  }
+
   /** register something to dispose with the prop */
   protected own<T extends { dispose(): void }>(d: T): T {
     this.owned.push(d);
@@ -309,9 +318,7 @@ varying vec3 vV;
 	attribute float aT;
 	varying float vT;
 #endif
-#ifdef USE_INSTANCING_COLOR
-	varying vec3 vICol;
-#endif
+varying vec3 vICol;
 void main() {
 	vUv = uv;
 	vPos = position;
@@ -326,6 +333,8 @@ void main() {
 	#endif
 	#ifdef USE_INSTANCING_COLOR
 		vICol = instanceColor;
+	#else
+		vICol = vec3( 1.0 );
 	#endif
 	vec4 wp = modelMatrix * p;
 	vN = normalize( mat3( modelMatrix ) * n );
@@ -334,7 +343,7 @@ void main() {
 }
 `;
 
-/** Inputs available to an effect body: uTime, vUv, vPos (object space), vN / vV (world), vT, fxHash, fxNoise, fxLine. */
+/** Inputs available to an effect body: uTime, vUv, vPos (object space), vN / vV (world), vT, vICol, fxHash, fxNoise, fxLine. */
 const FX_FRAGMENT_HEAD = /* glsl */ `
 uniform float uTime;
 varying vec2 vUv;
@@ -344,9 +353,7 @@ varying vec3 vV;
 #ifdef FX_AT
 	varying float vT;
 #endif
-#ifdef USE_INSTANCING_COLOR
-	varying vec3 vICol;
-#endif
+varying vec3 vICol; // per-instance colour (white when the mesh has none)
 float fxHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float fxNoise( vec2 p ) {
 	vec2 i = floor( p ), f = fract( p );
@@ -394,14 +401,16 @@ export const uF = (v: number): THREE.IUniform<number> => ({ value: v });
 export const uC = (hex: number): THREE.IUniform<THREE.Color> => ({ value: new THREE.Color(hex) });
 
 /**
- * Opaque line light that is drawn only up to `uReveal` along its `aT` order, with a brighter head at the front —
- * channels that open, filaments that knit. Uniforms: uColor, uGain, uReveal (0…1), uHead.
+ * Opaque line light that is lit only up to `uReveal` along its `aT` order, with a brighter head at the front —
+ * channels that open, filaments that knit. Uniforms: uColor, uGain, uReveal (0…1), uHead, uDim (brightness of
+ * the part that is not lit yet; 0 = not drawn at all).
  */
 export function revealBody(): string {
   return /* glsl */ `
-	if ( vT > uReveal ) discard;
+	float lit = step( vT, uReveal ) * step( 0.0005, uReveal );
+	if ( lit < 0.5 && uDim <= 0.0 ) discard;
 	float head = smoothstep( uReveal - 0.06, uReveal, vT ) * step( uReveal, 0.999 );
-	col = uColor * uGain * ( 1.0 + head * uHead );
+	col = uColor * mix( uDim, uGain * ( 1.0 + head * uHead ), lit );
 `;
 }
 

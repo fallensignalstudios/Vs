@@ -27,9 +27,8 @@ import { preloadLines } from './assets/voice';
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
 
 /**
- * The device sample rate the boot-time preparation bets on. Most outputs run at it; on one that does not
- * (44.1 kHz interfaces) the same work happens at unlock instead, and sounds are synthesised live until it lands.
- * Only one rate: the pre-rendered set is tens of megabytes, and a second, speculative copy is not worth it.
+ * The sample rate the boot-time preparation falls back on when the device will not say. Only ever one rate:
+ * the pre-rendered set is tens of megabytes, and a second, speculative copy is not worth it.
  */
 const PREWARM_RATES = [48000] as const;
 /** gestures that can unlock audio (which of them counts as a user activation differs between browsers) */
@@ -177,18 +176,30 @@ class AudioSystemImpl implements AudioSystem {
   /**
    * Everything that can be prepared without an AudioContext is prepared while the game boots: the noise
    * buffers and room impulses, and the pre-render of frequent sounds (OfflineAudioContext needs no user
-   * gesture). The device's sample rate is not knowable before the context exists, so this is done for the rate
-   * most outputs run at; if the device turns out to use another, the boot-time set is dropped at unlock and
-   * the work happens then, as it would have anyway. With this, the first click after loading builds a mixer
-   * and nothing else — and what it plays is already pre-rendered.
+   * gesture). It is done for the device's own sample rate, read from a context that is opened and closed
+   * again without ever running; if that fails, for the rate most outputs use. Should the real context still
+   * come up at another rate, the boot-time set is dropped at unlock and the work happens then, as it would
+   * have anyway. With this, the first click after loading builds a mixer and nothing else — and what it
+   * plays is already pre-rendered.
    */
   private prewarm(): void {
     type OfflineCtor = new (channels: number, length: number, sampleRate: number) => OfflineAudioContext;
     const g = globalThis as unknown as { OfflineAudioContext?: OfflineCtor; webkitOfflineAudioContext?: OfflineCtor };
     const Offline = g.OfflineAudioContext ?? g.webkitOfflineAudioContext;
-    if (!Offline || !contextCtor()) return;
+    const AC = contextCtor();
+    if (!Offline || !AC) return;
+    // Ask the device for its rate with a context that is closed again at once (it never runs: no gesture yet).
+    // Without an answer, bet on the most common rate.
+    const rates: number[] = [...PREWARM_RATES];
+    try {
+      const probe = new AC();
+      if (probe.sampleRate >= 8000 && probe.sampleRate <= 192000) rates[0] = probe.sampleRate;
+      void probe.close().catch(() => undefined);
+    } catch {
+      /* no context before a gesture here: keep the bet */
+    }
     let chain: Promise<unknown> = Promise.resolve();
-    for (const rate of PREWARM_RATES) {
+    for (const rate of rates) {
       // one after the other: the second must not compete with the first for the cores the game is loading on
       chain = chain.then(() => {
         if (this.ctx || this.disposed) return undefined; // unlocked meanwhile: unlock() does what is still needed

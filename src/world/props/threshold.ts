@@ -11,7 +11,7 @@ import type { MaterialLibrary } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { clamp01 } from '@/core/mathx';
 import { PropBase, TMP, rate, revealBody, uC, uF, type Glow } from './base';
-import { Parts, hoop, strip, sweep } from './geo';
+import { Parts, hoop, prep, strip, sweep, withT } from './geo';
 
 type Params = { recognized: number };
 
@@ -52,7 +52,10 @@ export class RecognitionThreshold extends PropBase<Params> {
       P.box('gold', 0.02, 0.006, D - 0.7, { p: [sx * (W / 2 + 0.2), 0.462, 0] });
     }
     // gold border lines, a rim and eight ticks around each depression, the dish itself
-    for (const sz of [-1, 1]) P.bevel('gold', W - 0.2, 0.008, 0.03, 0.002, { p: [0, TOP + 0.002, sz * (D / 2 - 0.1)] });
+    for (const sz of [-1, 1]) P.bevel('gold', W - 0.2, 0.008, 0.05, 0.002, { p: [0, TOP + 0.002, sz * (D / 2 - 0.1)] });
+    // border lines that always carry a little light (aT 2 = never reached by the reveal), also along the curbs
+    for (const sz of [-1, 1]) P.add('chan', withT(prep(new THREE.BoxGeometry(W - 0.24, 0.004, 0.022), { p: [0, TOP + 0.007, sz * (D / 2 - 0.1)] }), 2));
+    for (const sx of [-1, 1]) P.add('chan', withT(prep(new THREE.BoxGeometry(0.022, 0.004, D - 0.7), { p: [sx * (W / 2 + 0.2), 0.466, 0] }), 2));
     DISHES.forEach(([x, z]) => {
       P.add('gold', hoop(DISH_R + 0.012, TOP + 0.002, 0.026, 0.01, { seg: 40 }), { p: [x, 0, z] });
       P.add('gold', sweep([[DISH_R, TOP], [DISH_R * 0.8, 0.023], [DISH_R * 0.45, 0.014], [0, 0.012]], { seg: 40 }), { p: [x, 0, z] }, 0x8f8f8f);
@@ -79,23 +82,19 @@ export class RecognitionThreshold extends PropBase<Params> {
 
     this.channels = this.mk.fx({
       blend: 'opaque', reveal: true, body: revealBody(),
-      uniforms: { uColor: uC(0xffc56b), uGain: uF(2.4), uReveal: uF(0), uHead: uF(1.4) },
+      uniforms: { uColor: uC(0xffc56b), uGain: uF(2.4), uReveal: uF(0), uHead: uF(1.4), uDim: uF(0.16) },
     });
     const chan = new THREE.Mesh(P.geometry('chan'), this.channels);
     chan.name = 'channels';
 
     // light pooled in the depressions (instance colour r = fill level)
     const dishMat = this.mk.fx({
-      uniforms: { uColor: uC(PALETTE.goldLight), uGain: uF(3) },
+      uniforms: { uColor: uC(PALETTE.goldLight), uGain: uF(2.1) },
       body: /* glsl */ `
 	float r = length( vUv * 2.0 - 1.0 );
-	#ifdef USE_INSTANCING_COLOR
-		float f = vICol.r;
-	#else
-		float f = 0.0;
-	#endif
+	float f = vICol.r;
 	float pool = ( 1.0 - smoothstep( f * 0.5, f * 1.02 + 0.001, r ) ) * f;
-	float ring = fxLine( r - 0.93, 0.035 ) * ( 0.1 + 0.9 * f );
+	float ring = fxLine( r - 0.93, 0.035 ) * ( 0.14 + 0.86 * f );
 	float shimmer = 0.9 + 0.1 * sin( uTime * 3.0 + r * 9.0 );
 	alpha = clamp( pool * shimmer + ring * 0.6, 0.0, 1.0 ) * ( 1.0 - smoothstep( 0.96, 1.0, r ) );
 	col = uColor * uGain;
@@ -125,6 +124,7 @@ export class RecognitionThreshold extends PropBase<Params> {
     this.addSocket('center', 0, TOP, 0, Math.PI);
     this.addSocket('beyond', 0, 0, D / 2 + 0.9, Math.PI);
     for (const sx of [-1, 1]) this.addCollider({ kind: 'box', hx: 0.21, hy: 0.23, hz: D / 2 + 0.15 }, sx * (W / 2 + 0.2), 0.23, 0);
+    this.ready();
   }
 
   protected apply(_dt: number, _time: number): void {

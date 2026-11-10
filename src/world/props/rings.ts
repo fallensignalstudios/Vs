@@ -58,10 +58,15 @@ function sectionGeometry(P: Parts, key: string, a: number, b: number): void {
     P.bevel(`${key}.gold`, 2 * a + rail, 2 * b + rail, 0.007, rail * 0.3, { p: [Math.cos(ang), 0, -Math.sin(ang)], r: [0, ang, 0] });
   }
   // light: seams (dim), spoke studs (bright), small points between (medium) — hierarchy through vertex tint
-  const seam = 0x595959, stud = 0xffffff, point = 0xb0b0b0;
+  const seam = 0xb8b8b8, stud = 0xffffff, point = 0xdcdcdc;
   P.add(`${key}.glow`, hoop(1 - a - 0.0004, 0, 0.0008, b * 0.9, { seg: 192 }), undefined, seam);
-  for (const sy of [-1, 1]) P.add(`${key}.glow`, hoop(1, sy * (b + 0.0003), Math.max(0.0022, a * 0.14), 0.0006, { seg: 192 }), undefined, seam);
-  const size = Math.max(0.0035, Math.min(a, b) * 0.34);
+  // two light seams on each broad face, set in from the rails
+  for (const sy of [-1, 1]) for (const sr of [-1, 1]) {
+    P.add(`${key}.glow`, hoop(1 + sr * a * 0.62, sy * (b + 0.0003), Math.max(0.0016, a * 0.07), 0.0006, { seg: 192 }), undefined, seam);
+  }
+  // darker inlay band down the middle of the broad faces (reads as recessed plating)
+  for (const sy of [-1, 1]) P.add(`${key}.gold`, hoop(1, sy * (b + 0.0002), a * 0.5, 0.0004, { seg: 192 }), undefined, 0x55504a);
+  const size = Math.max(0.006, Math.min(a, b) * 0.6);
   for (let k = 0; k < SPOKES * 4; k++) {
     const ang = (k / (SPOKES * 4)) * TAU, major = k % 4 === 0;
     const s = major ? size : size * 0.5;
@@ -91,7 +96,7 @@ export class NestedRings extends PropBase<Params> {
     const P = new Parts();
     const SECTIONS: ReadonlyArray<readonly [number, number]> = [[0.04, 0.011], [0.012, 0.042]];
     SECTIONS.forEach(([a, b], k) => sectionGeometry(P, `s${k}`, a, b));
-    this.body = this.mk.solid('whiteGold', { emissive: 0x6e5d40, emissiveIntensity: 0.2 });
+    this.body = this.mk.solid('whiteGold', { emissive: 0x8a8272, emissiveIntensity: 0.1 });
     const gold = this.mk.solid('goldTrim');
     const glow: Glow = this.mk.glow(0xffffff, 1, true);
     const counts = [0, 0];
@@ -142,16 +147,17 @@ export class NestedRings extends PropBase<Params> {
 
     // axis column through the common centre, down to the floor
     this.axis = this.mk.fx({
-      uniforms: { uColor: uC(0xfff2dc), uGain: uF(0) },
+      uniforms: { uColor: uC(0xfff2dc), uGain: uF(0), uFoot: uF(clamp(1.6 / (H + R * 0.8), 0.005, 0.2)) },
       body: /* glsl */ `
-	float core = pow( abs( dot( normalize( vN ), normalize( vV ) ) ), 2.5 );
+	float core = pow( abs( dot( normalize( vN ), normalize( vV ) ) ), 4.0 );
 	float flow = 0.8 + 0.2 * fxNoise( vec2( vPos.y * 0.35 - uTime * 2.2, 3.0 ) );
-	float ends = smoothstep( 0.0, 0.03, vUv.y ) * smoothstep( 1.0, 0.7, vUv.y );
+	// the column thins out above whatever stands on the floor under it, and toward its top
+	float ends = smoothstep( uFoot, uFoot * 3.5, vUv.y ) * smoothstep( 1.0, 0.7, vUv.y );
 	alpha = core * flow * ends;
 	col = uColor * uGain;
 `,
     });
-    const top = H + R * 0.8, w = clamp(R * 0.006, 0.16, 0.5);
+    const top = H + R * 0.8, w = clamp(R * 0.0035, 0.12, 0.3);
     const column = new THREE.Mesh(new THREE.CylinderGeometry(w, w, top, 20, 1, true), this.axis);
     column.name = 'rings.axis';
     column.position.y = top / 2;
@@ -161,6 +167,7 @@ export class NestedRings extends PropBase<Params> {
 
     this.addSocket('center', 0, H, 0);
     this.addSocket('axisTop', 0, top, 0);
+    this.ready();
   }
 
   protected apply(dt: number, time: number): void {
@@ -195,8 +202,8 @@ export class NestedRings extends PropBase<Params> {
     }
     const al = clamp01(a);
     this.disc.rotation.z = this.common;
-    this.body.emissiveIntensity = 0.16 + 0.3 * e;
+    this.body.emissiveIntensity = 0.07 + 0.16 * e;
     this.currents.uniforms.uGain.value = e * (0.25 + 1.6 * al);
-    this.axis.uniforms.uGain.value = 0.25 + e * (1.4 + 2.2 * al);
+    this.axis.uniforms.uGain.value = 0.15 + e * (0.8 + 1.3 * al);
   }
 }

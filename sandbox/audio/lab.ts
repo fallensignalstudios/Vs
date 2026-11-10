@@ -76,11 +76,12 @@ export const ENCOUNTER_LOOPS = ['eliteRegen', 'weaverChant', 'linkHum', 'linkHum
 
 /** Scripted scenes: the dynamic behaviour (cross-fades, sever, resolution, voice limiting) under measurement. */
 export const SCENES: Record<string, { seconds: number; fps?: number; run(e: AudioEngine, t: number): void; setup(e: AudioEngine): void }> = {
-  // approach → combat on a bar line while intensity climbs: the first combat downbeat must be at full level
+  // approach → combat on a bar line: the first combat downbeat must be at full level, not at the bottom of
+  // a fade-in (intensity is held, so the first bar and the next are the same music)
   crossfade: {
     seconds: 12,
-    setup: (e) => { e.setMusic('approachTarrik', 0.1); },
-    run: (e, t) => { if (near(t, 4)) { e.setMusic('combatTarrik', 2); e.setIntensity(1); } },
+    setup: (e) => { e.setIntensity(0.8, true); e.setMusic('approachTarrik', 0.1); },
+    run: (e, t) => { if (near(t, 4)) e.setMusic('combatTarrik', 2); },
   },
   // Eclipse cadence: stamped out, then stinger('sever') at 5 s makes it stumble
   sever: {

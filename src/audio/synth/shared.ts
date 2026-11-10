@@ -39,7 +39,7 @@ export function makeShared(ac: BaseAudioContext): Shared {
     noise[color] = buf;
   }
   const curves = {} as Record<CurveName, Float32Array<ArrayBuffer>>;
-  for (const name of ['soft', 'hard', 'fold', 'asym', 'ceiling', 'drum'] as CurveName[]) curves[name] = makeCurve(name);
+  for (const name of ['soft', 'hard', 'fold', 'asym', 'ceiling', 'drum', 'tonal'] as CurveName[]) curves[name] = makeCurve(name);
 
   const rooms = {} as Record<RoomName, AudioBuffer>;
   for (const name of Object.keys(ROOMS) as RoomName[]) {

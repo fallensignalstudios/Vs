@@ -44,7 +44,7 @@ export interface Row extends Metrics {
 }
 
 const EMPTY: Metrics = {
-  peak: 0, peakDb: -180, rms: 0, rmsDb: -180, loudDb: -180, punchDb: 0, durationMs: 0, spectralCentroidHz: 0,
+  peak: 0, peakDb: -180, rms: 0, rmsDb: -180, crestPeakDb: -180, loudDb: -180, punchDb: 0, durationMs: 0, spectralCentroidHz: 0,
   bands: [0, 0, 0, 0, 0], dc: 0, stereo: 1, silent: true, clipped: false, nan: false,
 };
 
@@ -201,7 +201,8 @@ async function musicRows(state: Exclude<MusicState, 'silence'>, o: ReportOpts, p
   const hiRow: Row = { kind: 'music', id: `${state}@1`, targetDb: db + 2.5, note: hi.note, flags: [], ...hi.m };
   baseFlags(hiRow, hi.buf);
   if (hiRow.rmsDb > db + 3.2) hiRow.flags.push(`HOT${signed(hiRow.rmsDb - db)}`);
-  if (hiRow.peakDb > -4) hiRow.flags.push(`PEAK${f1(hiRow.peakDb)}`);
+  if (hiRow.peakDb > -3.5) hiRow.flags.push(`PEAK${f1(hiRow.peakDb)}`);
+  hiRow.note += ` · peaks ${f1(hiRow.crestPeakDb)} (max ${f1(hiRow.peakDb)})`;
   if (hi.gr < -3) hiRow.flags.push(`GR${f1(hi.gr)}`);
   if (state in COMBAT) {
     // the combat standard: hits stand out of the bed, 2–8 kHz carries real energy, dry leads wet
@@ -295,7 +296,8 @@ async function mixRows(o: ReportOpts): Promise<Row[]> {
     // eight plays each way (every play is a different random variation): compare the average loudness
     const series = async (baked: boolean): Promise<{ avg: number; m: Metrics }> => {
       const gap = sfxLength(id) + 0.45;
-      const buf = await render({ seconds: 8 * gap + 1, stepped: true, baked, setup: () => undefined, tick: (e, t) => { if (t < 8 * gap && Math.floor(t / gap) !== Math.floor((t - 0.05) / gap)) e.play(id); } });
+      let played = 0;
+      const buf = await render({ seconds: 8 * gap + 1, stepped: true, baked, setup: () => undefined, tick: (e, t) => { if (played < 8 && t >= played * gap + 0.02) { e.play(id); played++; } } });
       let sum = 0;
       for (let i = 0; i < 8; i++) sum += analyze(buf, i * gap, (i + 1) * gap).loudDb;
       return { avg: sum / 8, m: analyze(buf) };
@@ -443,10 +445,11 @@ export async function buildReport(o: ReportOpts): Promise<Row[]> {
     if (!(id in SFX_NORM)) row.flags.push('NOCAL');
     else levelFlags(row, SFX[id].db);
     if (o.cold) {
-      // the same cue on a chain that has not settled: what the unlocking click is played through
-      const cold = peakDbOf(await renderSfx(id, { cold: true }, 0.4));
-      if (Math.abs(cold - row.peakDb) > 1.5) row.flags.push(`COLD${signed(cold - row.peakDb)}`);
-      row.note += ` · cold ${signed(cold - row.peakDb)} dB`;
+      // The same cue as the first sound of a session, on a chain that has only just been built. Compared by
+      // loudness: the sample peak of a click moves by a decibel with where it falls between two samples.
+      const cold = analyze(await renderSfx(id, { cold: true }, 0.6)).loudDb;
+      if (Math.abs(cold - row.loudDb) > 1.5) row.flags.push(`COLD${signed(cold - row.loudDb)}`);
+      row.note += ` · cold ${signed(cold - row.loudDb)} dB`;
     }
     push(row, buf);
   }

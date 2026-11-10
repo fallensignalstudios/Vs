@@ -84,7 +84,7 @@ const STAGES: Record<string, Stage> = {
   stabilizer: { stage: 'white', sky: 'battleCeiling', look: 'atrium', cam: [[4.5, 2.4, -7], [0, 1.9, 0]], fig: [2.2, 0.3] },
   recognitionThreshold: { stage: 'black', sky: 'woundVista', look: 'woundGallery', cam: [[2.5, 3.2, -6.5], [0, 0, 0.6]], fig: [3.3, -1.5] },
   containmentCage: { stage: 'black', sky: 'breachDeep', look: 'gallery', cam: [[9, 4.5, -19], [0, 3.4, 0]], fig: [4.6, -1] },
-  fallenPlate: { stage: 'white', sky: 'breachDeep', look: 'breach', cam: [[4.6, 2.5, -6.6], [0, 0.7, 0]], fig: [3.4, -1.2] },
+  fallenPlate: { stage: 'white', sky: 'breachDeep', look: 'breach', cam: [[4.6, 2.5, -6.6], [0, 0.7, 0]], fig: [-0.6, -2.5] },
   observationSet: { stage: 'black', sky: 'observation', look: 'observation', cam: [[3.6, 2.3, -4.8], [0, 0.7, 0]], fig: [2.7, 0.4] },
   departureShip: { stage: 'white', sky: 'hangar', look: 'hangar', cam: [[7, 3, -17], [0, 2.2, 0]], fig: [2.6, -5.5] },
   hologram: { stage: 'black', sky: 'coreChamber', look: 'gallery', cam: [[0.9, 1.6, -3.4], [0, 1.45, 0]], fig: [1.7, 0.2] },
@@ -102,9 +102,11 @@ async function boot(): Promise<void> {
   b.setEnv({ sky: st.sky, look: LOOKS[st.look], key: { dirFrom: [6, 16, 9], intensity: stage === 'black' ? 0.9 : 1.6, color: 0xfff1dc } });
   if (stage === 'black') b.disc({ x: 0, n: 0, r: 46, mat: 'blackStoneFloor', reflective: true, inlay: 'none' });
   else b.floor({ x: 0, n: 0, w: 80, d: 80, mat: 'whiteGoldFloor', inlay: 'none' });
-  b.point({ x: -6, n: 5, h: 5, color: 0xbfd0ff, intensity: 45, distance: 26 });
-  b.point({ x: 7, n: 7, h: 4, color: 0xffe2b8, intensity: 40, distance: 26 });
-  b.spot({ x: 3, n: 8, h: 11, target: [0, 0, 1.2], color: 0xfff0dc, intensity: 320, angleDeg: 30, penumbra: 0.7, distance: 40 });
+  // a zone-like rig: cool fill from the front left, warm fill from the front right, a steep key spot
+  b.point({ x: -6, n: 5, h: 5, color: 0xbfd0ff, intensity: 70, distance: 30 });
+  b.point({ x: 7, n: 7, h: 4, color: 0xffe2b8, intensity: 60, distance: 30 });
+  b.spot({ x: 3, n: 8, h: 11, target: [0, 0, 1.2], color: 0xfff0dc, intensity: 900, angleDeg: 30, penumbra: 0.7, distance: 44 });
+  b.spot({ x: -7, n: 6, h: 8, target: [0, 0, 1.5], color: 0xcfe0ff, intensity: 500, angleDeg: 36, penumbra: 0.8, distance: 40 });
   b.finalize();
 
   const hero = createHeroProps(game);

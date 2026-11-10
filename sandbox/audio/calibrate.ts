@@ -5,8 +5,8 @@
  *  SFX / stingers  loudness (loudest 100 ms, K-weighted) → `db − 9`, with the true peak held under its
  *                  ceiling (see sfx/recipe.ts) — whichever asks for less gain wins
  *  music           RMS at the reference intensity → `db`; adaptive states are also rendered flat out and
- *                  held to `db + 2.5` RMS and a −5 dBFS peak (nothing but level sets this: the score has
- *                  no limiter of its own to lean on)
+ *                  held to `db + 2.5` RMS and to peaks of −5.5 dBFS (the level 1 sample in 10 000 exceeds;
+ *                  nothing but level sets this: the score has no limiter of its own to lean on)
  *  ambience        bed RMS → `db`
  *
  * Starts from the existing tables, so `&only=music` after a score tweak converges in a pass or two and leaves
@@ -37,9 +37,13 @@ export interface CalibrateOpts {
   onProgress(text: string): void;
 }
 
-/** full-intensity ceilings for adaptive score states */
+/**
+ * full-intensity ceilings for adaptive score states. The peak ceiling is on the level one sample in ten
+ * thousand exceeds (see Metrics.crestPeakDb): the absolute maximum of a render is a single chance alignment,
+ * and a level set by it would move by decibels every time a patch changes.
+ */
 const HOT_RMS_OVER = 2.5;
-const HOT_PEAK = -5;
+const HOT_PEAK = -5.5;
 const CONVERGED_DB = 0.3;
 
 export async function calibrate(o: CalibrateOpts): Promise<Calibration> {
@@ -87,7 +91,7 @@ export async function calibrate(o: CalibrateOpts): Promise<Calibration> {
       let k = dbToGain(db - m.rmsDb);
       if (ADAPTIVE.includes(s)) {
         const hot = analyze(await renderMusic(s, o.secs, 1, { norm }), 1);
-        const kHot = dbToGain(Math.min(db + HOT_RMS_OVER - hot.rmsDb, HOT_PEAK - hot.peakDb));
+        const kHot = dbToGain(Math.min(db + HOT_RMS_OVER - hot.rmsDb, HOT_PEAK - hot.crestPeakDb));
         if (kHot < k) { k = kHot; if (pass === o.passes || Math.abs(20 * Math.log10(k)) < CONVERGED_DB) log.push(`music ${s}: held by its full-intensity ceiling (reference intensity sits ${(m.rmsDb + 20 * Math.log10(k) - db).toFixed(1)} dB under target)`); }
       }
       track(`music:${s}`, k);

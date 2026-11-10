@@ -97,14 +97,14 @@ export const FACTION_MUSIC: Record<'context' | 'approachTarrik' | 'combatTarrik'
     chords: [ch(0, 'sus2', 2), ch(9, 'sus4', 2), ch(5, 'sus2', 2), ch(7, 'sus4', 1), ch(7, '5', 1)],
     layers: [
       { kind: 'sub', g: 0.65, follow: true },
-      { kind: 'pulse', voice: 'pluck', tiers: ['x..x..x.x..x..x.', 'x.xx.xx.x.xx.xx.', 'XxoXxoXxXxoXxoXx'], notes: [0, 1, 2, 3, 2, 1, 4, 2], low: 57, g: [0.36, 0.52], room: 0.15, wet: 0.12 },
+      { kind: 'pulse', voice: 'pluck', tiers: ['x..x..x.x..x..x.', 'x.xx.xx.x.xx.xx.', 'XooXooXoXooXooXo'], notes: [0, 1, 2, 3, 2, 1, 4, 2], low: 57, g: [0.36, 0.52], room: 0.15, wet: 0.12 },
       { kind: 'pulse', voice: 'bass', tiers: ['x.......x.......', 'x..x....x..x..x.', 'x..x..x.x..x..x.'], notes: [0], low: 33, g: [0.4, 0.5] },
-      { kind: 'perc', inst: 'kick', tiers: ['X.......X.......', 'X.....x.X.......', 'X..x..x.X..x..x.'], g: [0.28, 0.46], room: 0.1 },
-      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...', '....x..x....x...', '..x.X..x..x.X.xx'], g: [0.24, 0.48], room: 0.2 },
+      { kind: 'perc', inst: 'kick', tiers: ['X.......X.......', 'X.....x.X.......', 'X..o..x.X..o..x.'], g: [0.34, 0.58], room: 0.1 },
+      { kind: 'perc', inst: 'rim', tiers: ['....x.......x...', '....x..x....x...', '..o.X..x..o.X.ox'], g: [0.3, 0.6], room: 0.2 },
       { kind: 'perc', inst: 'hat', tiers: ['..x...x...x...x.', 'x.x.x.x.x.x.x.x.', 'XoxoXoxoXoxoXoxo'], g: [0.22, 0.53], room: 0.1 },
       { kind: 'perc', inst: 'shaker', tiers: ['................', '..x...x...x...x.', 'x.x.x.x.x.x.x.x.'], g: [0.08, 0.39], th: [0.2, 0.9], room: 0.1 },
       { kind: 'perc', inst: 'metal', tiers: ['................', '..........x.....'], g: [0, 0.26], th: [0.6, 1], room: 0.3, wet: 0.15 },
-      { kind: 'pad', voice: 'glass', low: 57, n: 3, g: [0.5, 0.5], bright: [1800, 5000], wet: 0.35 },
+      { kind: 'pad', voice: 'glass', low: 57, n: 3, g: [0.42, 0.38], bright: [1800, 5000], wet: 0.35 },
       { kind: 'strings', low: 45, n: 2, g: [0.1, 0.52], th: [0.3, 0.9], gate: ['X.x.X.x.X.x.X.x.'], bright: [1900, 5600], wet: 0.2 },
       { kind: 'motif', voice: 'glass', phrases: SELENE, every: 4, at: 2, base: 69, g: [0.3, 0.5], th: [0.2, 0.8], wet: 0.4 },
       // a cold shimmer two octaves up: the top of her sound

@@ -133,8 +133,8 @@ export class Parts {
   }
 
   /** cylinder / cone / faceted prism along Y */
-  cyl(slot: string, rTop: number, rBot: number, h: number, seg: number, t?: Xf, tint?: number, flat = false): this {
-    return this.add(slot, new THREE.CylinderGeometry(rTop, rBot, h, seg, 1), t, tint, flat);
+  cyl(slot: string, rTop: number, rBot: number, h: number, seg: number, t?: Xf, tint?: number, flat = false, open = false): this {
+    return this.add(slot, new THREE.CylinderGeometry(rTop, rBot, h, seg, 1, open), t, tint, flat);
   }
 
   has(slot: string): boolean {
@@ -293,9 +293,10 @@ export function sweep(profile: ReadonlyArray<readonly [number, number]>, o: Swee
         nr * ca, ny, nr * sa, nr * ca, ny, nr * sa, nr * cb, ny, nr * sb,
         nr * ca, ny, nr * sa, nr * cb, ny, nr * sb, nr * cb, ny, nr * sb,
       ];
-      // winding: make the geometric normal agree with the analytic one
-      _a.set(P[3] - P[0], P[4] - P[1], P[5] - P[2]);
-      _b.set(P[6] - P[0], P[7] - P[1], P[8] - P[2]);
+      // winding: make the geometric normal agree with the analytic one (diagonals, so that quads which
+      // collapse to a triangle on the axis are still judged correctly)
+      _a.set(P[6] - P[0], P[7] - P[1], P[8] - P[2]);
+      _b.set(P[15] - P[3], P[16] - P[4], P[17] - P[5]);
       _n.crossVectors(_a, _b);
       const ok = _n.x * N[0] + _n.y * N[1] + _n.z * N[2] >= 0;
       if (!ok) {

@@ -98,9 +98,9 @@ export class CrownmarkFive extends PropBase<Params> {
           v(0, YC, 0).addScaledVector(dir, u * R).addScaledVector(side, w).add(v(0, 0, sz * (DEPTH * Math.max(0, 1 - u - Math.abs(w) * beta) + lift)));
         // emissive ridge channel from the bezel toward the point, with three cross ticks that follow the facets
         ridge.quad(on(0.19, -0.013, 0.006), on(0.19, 0.013, 0.006), on(0.9, 0.006, 0.006), on(0.9, -0.006, 0.006), n);
-        for (const u of [0.42, 0.56, 0.7]) {
-          const w = 0.085 * (1 - u);
-          for (const s of [-1, 1]) ridge.quad(on(u - 0.008, 0, 0.004), on(u + 0.008, 0, 0.004), on(u + 0.008, s * w, 0.004), on(u - 0.008, s * w, 0.004), n);
+        for (const u of [0.46, 0.62]) {
+          const w = 0.06 * (1 - u);
+          for (const s of [-1, 1]) ridge.quad(on(u - 0.006, 0, 0.004), on(u + 0.006, 0, 0.004), on(u + 0.03, s * w, 0.004), on(u + 0.018, s * w, 0.004), n);
         }
         // fine gold inlay lines on each facet, parallel to the silhouette
         for (const s of [-1, 1]) {
@@ -153,7 +153,7 @@ export class CrownmarkFive extends PropBase<Params> {
     for (let i = 0; i < 5; i++) {
       const at = starAngle(i), t0 = i * 0.09;
       const tip = v(Math.cos(at) * TIPS[i], YC + Math.sin(at) * TIPS[i], 0);
-      for (const off of [-0.2, 0, 0.2]) {
+      for (const off of [-0.11, 0, 0.11]) {
         const a = at + off;
         const from = v(Math.cos(a) * (HOOP_R - 0.04), YC + Math.sin(a) * (HOOP_R - 0.04), 0);
         const mid = from.clone().lerp(tip, 0.5).lerp(centre, off === 0 ? 0 : 0.035);
@@ -178,7 +178,7 @@ export class CrownmarkFive extends PropBase<Params> {
     }
     this.filaments = this.mk.fx({
       blend: 'opaque', reveal: true, body: revealBody(),
-      uniforms: { uColor: uC(PALETTE.goldLight), uGain: uF(2.4), uReveal: uF(0), uHead: uF(1.6) },
+      uniforms: { uColor: uC(PALETTE.goldLight), uGain: uF(2.4), uReveal: uF(0), uHead: uF(1.6), uDim: uF(0) },
     });
 
     this.chan = this.mk.glow(0xffc56b, 1);
@@ -198,13 +198,14 @@ export class CrownmarkFive extends PropBase<Params> {
     this.addSocket('core', 0, YC, 0);
     this.addSocket('top', 0, YC + TIPS[0], 0);
     this.addCollider({ kind: 'cyl', r: 1.78, hy: 1.5 }, 0, 1.5, 0);
+    this.ready();
   }
 
   protected apply(_dt: number, time: number): void {
     const g = clamp01(this.cur.glow), I = clamp01(this.cur.integrated);
     const breathe = 1 + 0.05 * Math.sin(time * 1.3);
     this.chan.set((0.1 + 2.2 * g + 0.45 * I) * breathe);
-    this.core.set(0.4 + 5.6 * g);
+    this.core.set(0.4 + 4.9 * g);
     this.light.intensity = 5 + 40 * g;
     this.filaments.uniforms.uReveal.value = ramp(I, 0.3, 1) * 1.001;
     this.filaments.uniforms.uGain.value = 1.6 + 1.2 * g;

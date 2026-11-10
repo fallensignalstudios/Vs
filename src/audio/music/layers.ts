@@ -13,7 +13,7 @@ import type { Shared } from '../synth/shared';
 import type { SampleBank } from '../synth/samples';
 import { mtof, openVoicing, parsePattern, tierFor, voicing, type Chord } from './theory';
 import type { Layer } from './types';
-import { brassNote, cadenceHit, motifNote, padNote, pulseNote, strike, stringNote } from './instruments';
+import { PERC_PAN, brassNote, cadenceHit, motifNote, padNote, pulseNote, strike, stringNote } from './instruments';
 
 /** Live state shared by every layer of a deck. Mutated by the deck/engine, read at scheduling time. */
 export interface DeckEnv {
@@ -123,6 +123,21 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
   send(def.room, out.room);
   const kit = (to: AudioNode, sustain = false): Kit => new Kit(ac, res, to, 0, 1, rnd, sustain);
   const none = (): void => {};
+  /**
+   * The layer's output seen from a stage position. A panned mono source carries half the power of the same
+   * source left in the middle of a stereo bus, so the placement is level-compensated: where an instrument
+   * stands changes the image, not the balance.
+   */
+  const placed = (pan: number): AudioNode => {
+    if (pan === 0) return level;
+    const sp = ac.createStereoPanner();
+    sp.pan.value = pan;
+    sp.connect(level);
+    const lift = ac.createGain();
+    lift.gain.value = Math.SQRT2;
+    lift.connect(sp);
+    return lift;
+  };
 
   switch (def.kind) {
     case 'sub': {
@@ -232,7 +247,8 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
     }
 
     case 'brass': {
-      const k = kit(level);
+      // the section sits left of centre for its stabs, right of centre for its swells
+      const k = kit(placed(def.pattern ? -0.24 : 0.18));
       const pat = def.pattern ? parsePattern(def.pattern) : null;
       const offset = def.at ?? 0;
       let active = false;
@@ -289,7 +305,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
     }
 
     case 'perc': {
-      const k = kit(level);
+      const k = kit(placed(PERC_PAN[def.inst]));
       const tiers = def.tiers.map(parsePattern);
       let pat = tiers[0];
       const human = def.human ?? 0;

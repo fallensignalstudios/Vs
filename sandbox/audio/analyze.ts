@@ -9,6 +9,12 @@ export interface Metrics {
   peakDb: number;
   rms: number;
   rmsDb: number;
+  /**
+   * the level only one sample in ten thousand exceeds (dBFS): where the peaks of a long render really are.
+   * The absolute maximum of 8 s of generative music is one chance alignment and moves by a decibel or two
+   * with any change to the patch; this does not.
+   */
+  crestPeakDb: number;
   /** loudest 100 ms, K-weighted (dB) — what SFX levels are balanced on */
   loudDb: number;
   /** p95 − p50 of the 20 ms level envelope (dB): how far the hits stand out of the bed */
@@ -127,6 +133,19 @@ export function analyze(buf: AudioBuffer, from = 0, to = buf.duration): Metrics 
   }
   const n = Math.max(1, s1 - s0);
   const rms = Math.sqrt(sq / n);
+  // 99.99th percentile of |x| from a 0.1 dB histogram
+  const hist = new Uint32Array(1201);
+  for (let i = s0; i < s1; i++) {
+    const m = Math.max(Math.abs(l[i]), Math.abs(r[i]));
+    const d = m > 1e-6 ? 20 * Math.log10(m) : -120;
+    hist[Math.max(0, Math.min(1200, Math.round((d + 120) * 10)))]++;
+  }
+  let over = 0;
+  let crestPeakDb = -120;
+  for (let b = 1200; b >= 0; b--) {
+    over += hist[b];
+    if (over >= Math.max(1, n * 1e-4)) { crestPeakDb = b / 10 - 120; break; }
+  }
   const frames = stft(buf, from, to);
   const edges = [80, 250, 2000, 8000];
   const bands: [number, number, number, number, number] = [0, 0, 0, 0, 0];
@@ -145,7 +164,7 @@ export function analyze(buf: AudioBuffer, from = 0, to = buf.duration): Metrics 
   const env = envelopeStats(buf, from, to);
   return {
     peak: round(peak, 4), peakDb: round(db(peak)), rms: round(rms, 5), rmsDb: round(db(rms)),
-    loudDb: round(bufferLoudness(buf, from, to).loudDb), punchDb: round(env.p95 - env.p50),
+    crestPeakDb: round(crestPeakDb), loudDb: round(bufferLoudness(buf, from, to).loudDb), punchDb: round(env.p95 - env.p50),
     durationMs: Math.round(((last - s0) / sr) * 1000),
     spectralCentroidHz: den > 0 ? Math.round(num / den) : 0,
     bands, dc: round(sum / n, 5), stereo: ll > 0 && rr > 0 ? round(lr / Math.sqrt(ll * rr), 2) : 1,

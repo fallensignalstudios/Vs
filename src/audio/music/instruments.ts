@@ -98,6 +98,14 @@ export const PERC_TUNE: Readonly<Record<PercInst, number>> = {
   taiko: 78, odaiko: 49, shime: 340, kane: 2700, anvil: 540, metal: 1150, hat: 0, shaker: 0, bow: 0, rim: 0, kick: 50, boom: 36.7, clack: 0, cadence: 0,
 };
 
+/**
+ * Where each instrument stands on the stage (−1 left … 1 right). The big drums and anything below 100 Hz stay
+ * in the middle; time-keepers and metal are set out to the sides, so the ensemble has width without reverb.
+ */
+export const PERC_PAN: Readonly<Record<PercInst, number>> = {
+  taiko: -0.22, odaiko: 0, shime: 0.36, kane: -0.45, anvil: 0.32, metal: 0.48, hat: 0.3, shaker: -0.38, bow: 0, rim: -0.3, kick: 0, boom: 0, clack: 0.22, cadence: 0,
+};
+
 /** Velocities percussion is pre-rendered at: ghost, normal, accent (see theory.parsePattern). */
 export const PERC_TIERS = [0.42, 0.72, 1] as const;
 
