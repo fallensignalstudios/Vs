@@ -14,7 +14,7 @@
  */
 import type { ChoiceOpts, CineCtx, RescuePriority, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { atPost, setDoor, standardExit, tutorialHint, waitOr, walkTo } from '../shared';
-import { bearing, lightStrip, stripsOff, yawToward } from './cages';
+import { bearing, leadsTwoShot, lightStrip, stripsOff, yawToward } from './cages';
 import { moveChosenGroup } from './people';
 import { S } from './state';
 
@@ -103,16 +103,18 @@ export function* bridgeScene(z: ZoneRuntime): Routine {
     yield 0.5;
     yield* z.say('Selene', 'Do it.', { gesture: false });
 
-    // the channel opens on both systems: two streams, one shared vocabulary, never one interface
-    const cam = z.P(14.6, 15.2, 2.0);
-    c.cut({ pos: cam, look: z.P(7.8, 20.4, 2.0), fov: 46 });
-    c.moveAsync({ pos: z.P(13.4, 15.9, 2.05), look: z.P(7.8, 20.4, 2.05), fov: 42 }, 14, 'inOut');
-    if (S.streams) S.streams.params.visible = 1;
+    // the channel opens on both systems at once
+    const cam = leadsTwoShot(c, Se, T);
     if (!z.skipping) game.audio.play('ambConsoleTick', { volume: 0.8 });
     lightStrip(z, S.stripSelene, Se, cam, 'LOCAL INTEROPERABILITY CHANNEL OPEN');
     lightStrip(z, S.stripTarrik, T, cam, 'LOCAL INTEROPERABILITY CHANNEL OPEN');
     yield* z.say('Fleet channel', 'LOCAL INTEROPERABILITY CHANNEL OPEN', { ...SYSTEM, duration: 2.6 }); // NEW (speaker label)
     stripsOff(z);
+    // two streams over the desk, one shared vocabulary — never one interface
+    const holo = z.m('streams').setY(2.1);
+    c.cut({ pos: z.P(10.9, 16.4, 2.0), look: holo, fov: 40 });
+    c.moveAsync({ pos: z.P(10.2, 17.1, 2.05), look: holo, fov: 38 }, 20, 'inOut');
+    if (S.streams) S.streams.params.visible = 1;
     for (const p of S.streamLabels) p.show(1, 1.2);
     // the streams acquire matching target glyphs over a few seconds
     for (let t = 0; t <= 5; t += 0.25) {
@@ -127,7 +129,7 @@ export function* bridgeScene(z: ZoneRuntime): Routine {
     yield 7.4;
     if (!z.skipping) game.ui.card('The exchange remains ugly, incomplete, and unauthorized in several sectors, but the two fleets stop wasting weapons on each other.', { style: 'context', seconds: 7 });
     yield 7.4;
-    if (!z.skipping) game.ui.card(null);
+    game.ui.card(null);
     // end state — identical watched or skipped
     streamsOpen(z.skipping);
     stripsOff(z);
@@ -251,7 +253,8 @@ function* ackScene(z: ZoneRuntime, p: Exclude<RescuePriority, 'pending'>): Routi
   const post = west ? 'lyessaWest' : 'lyessaEast';
   yield* z.cinematic('z07-ack', function* (c: CineCtx): Routine {
     const Se = z.player.pos.clone();
-    c.shot(Se, { yawDeg: 200, distance: 2.0, height: 1.62, lookHeight: 1.58, fov: 34 });
+    c.shot(Se, { yawDeg: 250, distance: 2.6, height: 1.62, lookHeight: 1.58, fov: 34 });
+    yield 0.8; // the panel fades
     yield* z.say('Selene', west ? 'West.' : 'East.', { gesture: false }); // NEW
     walkTo(z, lyessa, post, { run: true });
     moveChosenGroup(z, p);
@@ -311,8 +314,8 @@ function* o3(z: ZoneRuntime): Routine {
   yield* z.cinematic('z07-o3', function* (c: CineCtx): Routine {
     const rec = z.m('o3Record').setY(2.05);
     walkTo(z, tharne, 'o3Tharne');
-    c.cut({ pos: z.P(4.4, 16.0, 1.9), look: rec, fov: 40 });
-    c.moveAsync({ pos: z.P(3.7, 16.6, 1.95), look: rec, fov: 36 }, 9, 'inOut');
+    c.cut({ pos: z.P(4.6, 17.0, 1.9), look: rec, fov: 40 });
+    c.moveAsync({ pos: z.P(3.8, 17.7, 1.95), look: rec, fov: 36 }, 9, 'inOut');
     if (S.record) S.record.params.visible = 1;
     // the record reveals top-down; each row is also given to the subtitles
     for (let i = 0; i < RECORD_ROWS.length; i++) {
@@ -328,7 +331,7 @@ function* o3(z: ZoneRuntime): Routine {
     c.shot(lyric ? lyric.actor.pos : z.m('lyric'), { yawDeg: 165, distance: 1.7, height: sitting ? 0.9 : 1.6, lookHeight: sitting ? 0.82 : 1.55, fov: 34 });
     yield* z.say('Lyric', 'Somebody built it a road.', { actor: lyric }); // NEW
     const Se = z.player.pos.clone();
-    c.shot(Se, { yawDeg: 120, distance: 2.0, height: 1.62, lookHeight: 1.58, fov: 34 });
+    c.shot(Se, { yawDeg: 62, distance: 2.0, height: 1.62, lookHeight: 1.58, fov: 34 });
     yield* z.say('Selene', 'This should have stopped the deployment.', { gesture: false }); // NEW
     // end state — identical watched or skipped
     recordShown(true, z.skipping);

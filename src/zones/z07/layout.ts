@@ -2,23 +2,25 @@
  * Z07 — the space (plan coordinates: origin at the south-west corner, x east, n north). A 34 × 22 m black-stone
  * capture-control gallery below grade (authored at local 0): dim, technical, gold channels in a mirror floor.
  *
- *   north   a 7 m GLASS WALL the whole length of the room — it looks OUT of the terminal. Beyond it, at scenic
- *           distance and in two directions, the two containment cages float in vacuum: the Crownwatch resonator
- *           to the north-west, the Reformation extraction drone's cold-field envelope to the north-east. Below
- *           them the terminal's own converging structure falls away. Nobody walks to a cage.
+ *   north   a 7 m GLASS WALL the whole length of the room — it looks OUT of the terminal. Beyond it, ~120 m out
+ *           and in two directions, the two containment cages float in vacuum: the Crownwatch resonator dead ahead
+ *           of the fire-control station's sighting ring, the Reformation extraction drone's cold-field envelope
+ *           to the north-east. Below them the terminal's own converging structure falls away. Nobody walks to a
+ *           cage.
  *   at the glass   the external FIRE-CONTROL STATION (centre-west, operator on its south side, the shot laid
  *           through its sighting ring), the fixed AUXILIARY DESK with the interoperability display over it (west,
  *           beside the pylon Lyric sits against).
- *   south   the RECOVERY PANEL (centre, facing south: stretcher bay west, walker bay east) in front of the exit
- *           door to Z08 (south wall, white point). The two auxiliary survivor routes leave through the west and
- *           east walls (n 4.5): the stretcher cases wait by the west one, the walking wounded by the east one.
+ *   south   the RECOVERY PANEL (facing south: stretcher bay west, walker bay east), a little west of the exit
+ *           door to Z08 (south wall, white point) so it never hides the door. The two auxiliary survivor routes
+ *           leave through the west and east walls (n 4.5): the stretcher cases wait by the west one, the walking
+ *           wounded by the east one; falling plating constricts both mouths in `choice`.
  *   west    the entry from Z06 (n 13), and the O3 side console by the glass (a Reformation console with the
  *           contamination record over it), a few steps from where Lyric sits.
  */
 import * as THREE from 'three';
 import type { ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { AMBER, BLUE, FACE, GOLD, VIOLET } from '../shared';
+import { AMBER, BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
 import { textPanel } from './display';
 import { S, type CageRig } from './state';
 
@@ -45,7 +47,7 @@ const PYLON_N = 21.15;
 const STATION: [number, number] = [14, 19.75];
 const DESK: [number, number] = [7.4, 19.55];
 /** the recovery panel (faces south) and the O3 console (west wall, by the glass) */
-const PANEL: [number, number] = [EXIT_X, 8];
+const PANEL: [number, number] = [12.6, 7.6];
 const O3: [number, number] = [0.95, 17.4];
 /** the cages: plan position, height, scale (≈ 24 m across, ~120 m out), and the bearing they face (the gallery) */
 const CAGE_DOM = { x: 5, n: 140, h: -2.5, scale: 3.5, yawDeg: 176 } as const; // dead ahead of the sighting ring
@@ -112,7 +114,7 @@ function buildShell(b: ZoneBuilder): void {
   b.column({ x: EXIT_X - 3.2, n: 0.7, height: 6.2, mat: 'blackStone', style: 'pylon', lit: true });
   b.column({ x: EXIT_X + 3.2, n: 0.7, height: 6.2, mat: 'blackStone', style: 'pylon', lit: true });
   // gold route light from the panel to the door
-  b.channel([[EXIT_X, 6.2], [EXIT_X, 1.2]], { width: 0.07 });
+  b.channel([[PANEL[0], 6.0], [PANEL[0] + 1.2, 4.6], [EXIT_X, 4.6], [EXIT_X, 1.2]], { width: 0.07 });
 }
 
 /**
@@ -130,17 +132,43 @@ function buildRoutes(b: ZoneBuilder): void {
     b.wall({ from: [x1, ROUTE_N - 1.7], to: [x1, ROUTE_N + 1.7], height: 4, mat: 'blackStone', doors: [{ at: 1.7, width: 2.6, height: 3 }] });
     b.door({ x: x1, n: ROUTE_N, yawDeg: FACE.east, width: 2.6, height: 3, style: 'service' }).setState('ready');
     b.ceiling({ x: cx, n: ROUTE_N, w: ROUTE_LEN, d: 3.4, h: 4, mat: 'blackStone', style: 'flat' });
-    b.panelLight({ x: x1 - side * 0.4, n: ROUTE_N, w: 1.6, d: 1.4, h: 2.9, facing: side < 0 ? 'east' : 'west', intensity: 1.2 });
-    // the plating that falls across the mouth: one plate leaning on the north side, rubble under it
-    const plate = b.keep(b.prop('fallenPlate', { x: x0 + side * 1.5, n: ROUTE_N + 1.0, yawDeg: side < 0 ? 75 : 285, scale: 0.8, collider: false }));
-    const rubble = b.keep(b.prop('rubblePile', { x: x0 + side * 0.9, n: ROUTE_N + 1.25, yawDeg: 30, scale: 0.8, collider: false }));
-    plate.visible = false;
-    rubble.visible = false;
-    S.plating.push(plate, rubble);
+    b.panelLight({ x: x1 - side * 0.4, n: ROUTE_N, w: 1.6, d: 1.4, h: 2.9, facing: side < 0 ? 'east' : 'west', intensity: 2.2 });
+    // the plating that falls across the mouth: a ceiling panel wedged diagonally across the opening, its light
+    // strip still lit, a plate and rubble under it — the south side stays passable
+    const beam = b.keep(b.add(fallenPanel(b, x0 - side * 0.35, side)));
+    const plate = b.keep(b.prop('fallenPlate', { x: x0 - side * 1.0, n: ROUTE_N + 1.1, yawDeg: side < 0 ? 80 : 280, scale: 0.55, collider: false }));
+    const rubble = b.keep(b.prop('rubblePile', { x: x0 - side * 1.3, n: ROUTE_N + 1.5, yawDeg: 30, scale: 0.7, collider: false }));
+    for (const o of [beam, plate, rubble]) {
+      o.visible = false;
+      S.plating.push(o);
+    }
   }
   // the medics' field cache, staged inside the west route once the stretcher cases go first
   S.cacheWest = b.keep(b.prop('domFieldCache', { x: -3.6, n: ROUTE_N - 0.9, yawDeg: 0, collider: false }));
   S.cacheWest.visible = false;
+}
+
+/**
+ * A fallen ceiling panel wedged across a route mouth (the wall plane at plan x = `x`): it runs from high on the
+ * south jamb down to the floor on the north side; the light strip on its room-facing edge is still lit.
+ * `side` −1 = west route (the room is to the east), +1 = east route.
+ */
+function fallenPanel(b: ZoneBuilder, x: number, side: -1 | 1): THREE.Group {
+  const g = new THREE.Group();
+  g.name = 'z07-plating';
+  const top = b.P(x, ROUTE_N - 1.35, 3.25);
+  const foot = b.P(x, ROUTE_N + 1.5, 0.08);
+  const dir = foot.clone().sub(top);
+  const len = dir.length();
+  dir.normalize();
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.18, len), b.mats.get('blackStone'));
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.07, len * 0.86), b.mats.emissive(IVORY, 3));
+  strip.position.x = -side * 0.51; // the edge that faces the room
+  slab.castShadow = true;
+  g.add(slab, strip);
+  g.position.copy(top).add(foot).multiplyScalar(0.5);
+  g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+  return g;
 }
 
 /** the fire-control station, the auxiliary desk, the recovery panel and the O3 console */
@@ -197,30 +225,22 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('start', 2.4, ENTRY_N, 0, FACE.east);
   b.marker('tarrikEnter', 11.2, 16.6, 0, 50); // inside, a few steps from the station
   b.marker('lyessaStart', 8.4, 14.6, 0, 40);
-  b.marker('lyessaMid', 15.6, 13.2, 0, FACE.north);
   // --- the glass ---
   b.marker('station', STATION[0], STATION[1] - 1.2, 0, FACE.north); // the operator's place
   b.marker('stationRing', STATION[0], STATION[1] + 0.8, 1.86);
   b.marker('tarrikAside', 11.5, 18.4, 0, 70);
   b.marker('seleneGlass', 16.8, 20.35, 0, FACE.north);
-  b.marker('seleneBeside', 16.3, 18.5, 0, 290);
   b.marker('lyric', PYLONS[0], PYLON_N - 0.92, 0, FACE.south); // sits against the pylon
-  b.marker('lyricUp', 6.2, 17.2, 0, 120);
   b.marker('tharne', PYLONS[0] + 1.15, PYLON_N - 1.45, 0, 290);
   b.marker('tharneDesk', DESK[0] + 0.15, DESK[1] - 1.05, 0, 20);
-  b.marker('desk', DESK[0], DESK[1], 1.4);
   b.marker('streams', DESK[0] + 0.3, DESK[1] + 0.55, 0.62, 125);
   // --- the decision ---
   b.marker('panel', PANEL[0], PANEL[1], 1.4, FACE.south);
-  b.marker('panelUse', PANEL[0], PANEL[1] - 1.25, 0, FACE.north);
-  b.marker('tarrikPanel', PANEL[0] - 2.4, PANEL[1] - 1.9, 0, 50);
-  b.marker('tharnePanel', PANEL[0] + 2.6, PANEL[1] - 1.4, 0, 300);
+  b.marker('panelUse', PANEL[0], PANEL[1] - 1.7, 0, FACE.north); // clear of the panel's own lamp
   b.marker('lyessaPanel', PANEL[0] + 1.6, PANEL[1] + 1.8, 0, 200);
   b.marker('lyessaWest', 2.2, 6.6, 0, 240);
   b.marker('lyessaEast', 31.6, 6.6, 0, 120);
-  b.marker('westMouth', 1.6, ROUTE_N, 0, FACE.west);
   b.marker('westDeep', -ROUTE_LEN + 1.2, ROUTE_N - 0.4, 0, FACE.west);
-  b.marker('eastMouth', W - 1.6, ROUTE_N, 0, FACE.east);
   b.marker('eastDeep', W + ROUTE_LEN - 1.2, ROUTE_N - 0.5, 0, FACE.east);
   b.marker('eastDeep2', W + ROUTE_LEN - 2.2, ROUTE_N + 0.6, 0, FACE.east);
   b.marker('eastDeep3', W + ROUTE_LEN - 3.2, ROUTE_N - 0.6, 0, FACE.east);
@@ -238,12 +258,9 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('walkerC', 31.4, 2.6, 0, 320);
   // --- O3 and the exit ---
   b.marker('o3Use', O3[0] + 1.6, O3[1], 0, FACE.west);
-  b.marker('o3Record', O3[0] - 0.5, O3[1], 0.55, FACE.east);
-  b.marker('o3Tharne', O3[0] + 2.1, O3[1] + 1.3, 0, 250);
+  b.marker('o3Record', O3[0] - 0.4, O3[1] + 1.45, 0.55, FACE.east); // beside the console, not behind it
+  b.marker('o3Tharne', O3[0] + 1.95, O3[1] + 2.6, 0, 225);
   b.marker('exit', EXIT_X, 1.6, 0, FACE.south);
-  // --- the cages (far outside) ---
-  b.marker('cageDom', CAGE_DOM.x, CAGE_DOM.n, CAGE_DOM.h);
-  b.marker('cageRef', CAGE_REF.x, CAGE_REF.n, CAGE_REF.h);
 }
 
 /** the two cages beyond the glass: hero props at scenic distance, each rimmed by one zone light */
@@ -329,9 +346,10 @@ function buildDisplays(b: ZoneBuilder): void {
   S.streams = streams;
   // the plan's three limits, as labels on the display (the hologram's own text stays as it is):
   // stream nouns from the book (Dominion firing arcs above, Reformation Eclipse tracks below), and the separation
+  // (x: the viewer's right is the display's local −X — it reads from its −Z side)
   const labels: Array<[string[], number, number, number, number]> = [
-    [['FIRING ARCS'], AMBER, 0.62, 0.38, 1.5 + 0.325], // NEW (the book's noun)
-    [['ECLIPSE TRACKS'], BLUE, 0.62, 0.38, 1.5 - 0.105], // NEW (the book's noun)
+    [['FIRING ARCS'], AMBER, 0.95, -0.4, 1.5 + 0.325], // NEW (the book's noun)
+    [['ECLIPSE TRACKS'], BLUE, 0.95, -0.4, 1.5 - 0.105], // NEW (the book's noun)
     [['WEAPONS AUTHORITY: NOT SHARED', 'COMMAND: NOT SHARED'], 0xf2f6ff, 1.5, 0, 1.5 - 0.72], // NEW (plan limit 2)
   ];
   for (const [lines, color, width, x, y] of labels) {

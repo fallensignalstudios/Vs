@@ -6,10 +6,11 @@
  *
  * SPACE (plan coordinates, origin at the south-west corner, x east, n north): a 34 × 22 m black-stone gallery
  * below grade (authored at local 0). The north wall is glass and looks OUT of the terminal: both containment cages
- * float in vacuum at scenic distance, the Crownwatch resonator to the north-west and the Reformation extraction
- * drone's cold-field envelope to the north-east. At the glass: the external fire-control station and the
- * auxiliary desk (the interoperability display over it); the O3 side console by the west wall. South: the
- * recovery panel in front of the exit door to Z08; the two survivor routes leave through the west and east walls.
+ * float in vacuum at scenic distance, the Crownwatch resonator dead ahead of the station's sighting ring and the
+ * Reformation extraction drone's cold-field envelope to the north-east. At the glass: the external fire-control
+ * station and the auxiliary desk (the interoperability display over it); the O3 side console by the west wall.
+ * South: the recovery panel beside the exit door to Z08; the two survivor routes leave through the west and east
+ * walls.
  *
  * BEATS (tasks/ZONES.md, SCRIPT_SOURCE Z07): `cages` (fixed story acts: Lyric names the danger; Tarrik fires the
  * Dominion lance battery against Cross; `z.handoff('selene')`; Selene fires two volleys against Sol; the two

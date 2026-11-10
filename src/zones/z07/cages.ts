@@ -67,12 +67,28 @@ export function cageGone(rig: CageRig | null, snap: boolean): void {
   }
 }
 
-/** a personal display: a strip of light in the air in front of its owner, turned toward the camera */
+/**
+ * A profile two-shot of the two leads from the room side (the glass behind them), wide enough for both of them
+ * and both of their displays. Returns the camera position (the displays turn toward it).
+ */
+export function leadsTwoShot(c: CineCtx, Se: THREE.Vector3, T: THREE.Vector3): THREE.Vector3 {
+  const mid = Se.clone().add(T).multiplyScalar(0.5);
+  const along = T.clone().sub(Se).setY(0);
+  const sep = Math.max(0.5, along.length());
+  along.normalize();
+  const perp = new THREE.Vector3(-along.z, 0, along.x);
+  if (perp.z < 0) perp.negate(); // world +z is south: the camera stands in the room
+  const cam = mid.clone().addScaledVector(perp, Math.max(3.1, sep * 0.75 + 1.7)).setY(1.55);
+  c.cut({ pos: cam, look: mid.clone().setY(1.35), fov: 40 });
+  return cam;
+}
+
+/** a personal display: a strip of light in the air in front of its owner's forearm, turned toward the camera */
 export function lightStrip(z: ZoneRuntime, strip: typeof S.stripSelene, owner: Vec3Like, cam: Vec3Like, text: string): void {
   if (!strip) return;
   strip.setLines([text]);
   const dir = _a.set(cam.x - owner.x, 0, cam.z - owner.z).normalize();
-  strip.object.position.set(owner.x + dir.x * 0.5, owner.y + 1.32, owner.z + dir.z * 0.5);
+  strip.object.position.set(owner.x + dir.x * 0.8, owner.y + 1.22, owner.z + dir.z * 0.8);
   strip.object.rotation.y = Math.atan2(dir.x, dir.z);
   strip.show(1, 0.2);
   if (z.skipping) strip.update(0, true);
@@ -95,7 +111,6 @@ export function* cagesScene(z: ZoneRuntime): Routine {
   const game = z.game;
   const selene = z.cast('selene');
   const lyric = z.cast('lyric');
-  const tharne = z.cast('tharne');
   const dom = S.dom;
   const ref = S.ref;
   yield 0.4;
@@ -166,8 +181,9 @@ export function* cagesScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(9.6, 15.2, 2.1), look: z.P(4.6, 20.4, 1.0), fov: 44 });
     if (!z.skipping) game.audio.play('ambCommBlip', { volume: 0.7, pitch: 0.8 });
     yield 1.6;
-    c.shot(Th, { yawDeg: bearing(Th, T) + 22, distance: 2.0, height: 1.2, lookHeight: 1.0, fov: 36 });
-    yield* z.say('Tharne', 'It’s learning the field.', { actor: tharne });
+    // he stays turned to Lyric: the camera finds his face from her side
+    c.shot(Th, { yawDeg: 245, distance: 1.9, height: 1.2, lookHeight: 1.0, fov: 36 });
+    yield* z.say('Tharne', 'It’s learning the field.');
     c.shot(L, { yawDeg: 205, distance: 1.5, height: 0.88, lookHeight: 0.84, fov: 32 });
     yield* z.say('Lyric', 'No. It’s using it.', { actor: lyric });
 
@@ -357,15 +373,7 @@ export function* seleneFires(z: ZoneRuntime): Routine {
     const T = tarrik ? tarrik.actor.pos.clone() : z.m('tarrikAside');
     z.player.yaw = yawToward(Se, T);
     tarrik?.face(Se);
-    // a profile two-shot from the room side, wide enough for both of them and both displays
-    const mid = Se.clone().add(T).multiplyScalar(0.5);
-    const along = T.clone().sub(Se).setY(0);
-    const sep = Math.max(0.5, along.length());
-    along.normalize();
-    const perp = new THREE.Vector3(-along.z, 0, along.x);
-    if (perp.z < 0) perp.negate(); // world +z is south: the camera stands in the room, the glass behind them
-    const cam = mid.clone().addScaledVector(perp, Math.max(3.1, sep * 0.75 + 1.7)).setY(1.55);
-    c.cut({ pos: cam, look: mid.clone().setY(1.35), fov: 40 });
+    const cam = leadsTwoShot(c, Se, T);
     lightStrip(z, S.stripSelene, Se, cam, 'UNAUTHORIZED FRIENDLY FIRE');
     lightStrip(z, S.stripTarrik, T, cam, 'UNSANCTIONED COMBAT PERCEIVED'); // NEW (author's wording, ruling 13)
     if (!z.skipping) game.audio.play('ambCommBlip', { volume: 0.8 });
