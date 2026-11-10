@@ -357,8 +357,14 @@ export function* seleneFires(z: ZoneRuntime): Routine {
     const T = tarrik ? tarrik.actor.pos.clone() : z.m('tarrikAside');
     z.player.yaw = yawToward(Se, T);
     tarrik?.face(Se);
+    // a profile two-shot from the room side, wide enough for both of them and both displays
     const mid = Se.clone().add(T).multiplyScalar(0.5);
-    const cam = z.P(0, 0).set(mid.x + 0.6, 1.55, mid.z + 3.3);
+    const along = T.clone().sub(Se).setY(0);
+    const sep = Math.max(0.5, along.length());
+    along.normalize();
+    const perp = new THREE.Vector3(-along.z, 0, along.x);
+    if (perp.z < 0) perp.negate(); // world +z is south: the camera stands in the room, the glass behind them
+    const cam = mid.clone().addScaledVector(perp, Math.max(3.1, sep * 0.75 + 1.7)).setY(1.55);
     c.cut({ pos: cam, look: mid.clone().setY(1.35), fov: 40 });
     lightStrip(z, S.stripSelene, Se, cam, 'UNAUTHORIZED FRIENDLY FIRE');
     lightStrip(z, S.stripTarrik, T, cam, 'UNSANCTIONED COMBAT PERCEIVED'); // NEW (author's wording, ruling 13)
