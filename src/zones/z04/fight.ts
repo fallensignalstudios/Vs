@@ -17,7 +17,7 @@ import type { Actor, DeviceHandle, Encounter, Interactable, Routine, SayOpts, Zo
 import { angleDelta, smoothstep, yawTo } from '@/core/mathx';
 import { barker, onZoneEvent, sustainDrops, tutorialHint, waitOr } from '../shared';
 import {
-  E2_CAP, NET, NETWORK_FINDS, NOTICE_DRONE, NOTICE_ENFORCER, RX_HOLD, SCAN_ARC, SCAN_FAST, SCAN_PERIOD, SCAN_RANGE,
+  E2_CAP, ENFORCER_LEASH, NET, NETWORK_FINDS, NOTICE_DRONE, NOTICE_ENFORCER, RX_HOLD, SCAN_ARC, SCAN_FAST, SCAN_PERIOD, SCAN_RANGE,
 } from './layout';
 import { S } from './state';
 
@@ -75,7 +75,8 @@ export function setupE2(z: ZoneRuntime): Encounter {
     waves: [{
       spawns: [
         ...[0, 1, 2, 3].map((i) => ({
-          role: 'enforcer' as const, at: `enf${i}`, opts: { yaw: z.myaw(`enf${i}`), post: z.m(`enf${i}`), tags: ['e2', 'shieldFront'] },
+          role: 'enforcer' as const, at: `enf${i}`,
+          opts: { yaw: z.myaw(`enf${i}`), post: z.m(`enf${i}`), tags: ['e2', 'shieldFront'], front: { leash: ENFORCER_LEASH, maxPeel: 1 } },
         })),
         drone('A'),
         drone('B'),

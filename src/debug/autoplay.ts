@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import type { Actor, Game, Interactable, Vec3Like } from '@/core/api';
 import { angleDelta } from '@/core/mathx';
 import { isStub } from '@/core/stub';
+import { Reflexes, type BotPace } from './pace';
 
 export interface BotOptions {
   /** the Z07 local priority to commit (default 'WestStretchers') */
@@ -18,7 +19,14 @@ export interface BotOptions {
   /** the Z08 officer choice to commit (default 'killed') */
   officer?: 'killed' | 'spared';
   skipCinematics?: boolean;
+  /** default: true at the 'bot' pace, false at the 'human' pace */
   god?: boolean;
+  /**
+   * 'bot' (default): the soft-lock detector — instant reactions, perfect aim. 'human': plays like an attentive
+   * person at Standard (reaction delays, human swing cadence, imperfect aim, dodges most wind-ups it sees) for
+   * balance and pacing measurements. See ./pace.ts.
+   */
+  pace?: BotPace;
 }
 
 const LOG_MAX = 400;
@@ -34,8 +42,6 @@ const BLACKLIST_SECONDS = 15;
 /** in range of an interaction this long without completing it → complete() it and record that */
 const FORCE_INTERACT_SECONDS = 8;
 const RANGED_MAX = 24;
-/** the aim ray must be within this of the target (radians, ≈ 0.6°) before the bot fires */
-const AIM_TOLERANCE = 0.01;
 
 const d2 = (a: Vec3Like, b: Vec3Like): number => Math.hypot(a.x - b.x, a.z - b.z);
 
@@ -48,7 +54,9 @@ export class AutoplayBot {
   readonly log: string[] = [];
   readonly forced: string[] = [];
 
-  private opts: Required<BotOptions> = { choice: 'WestStretchers', officer: 'killed', skipCinematics: true, god: true };
+  private opts: Required<BotOptions> = { choice: 'WestStretchers', officer: 'killed', skipCinematics: true, god: true, pace: 'bot' };
+  /** reaction, cadence and aim of the current pace */
+  reflex = new Reflexes('bot');
   private prevGod = false;
 
   private goalKey = '';
@@ -85,17 +93,21 @@ export class AutoplayBot {
   private readonly o = new THREE.Vector3();
   private readonly d = new THREE.Vector3();
   private readonly dir = { x: 0, z: 0 };
+  private readonly jit = { x: 0, y: 0, z: 0 };
 
   constructor(private readonly game: Game) {}
 
   start(opts?: BotOptions): void {
     const g = this.game;
+    const pace: BotPace = opts?.pace === 'human' ? 'human' : 'bot';
     this.opts = {
       choice: opts?.choice === 'EastWalkers' ? 'EastWalkers' : 'WestStretchers',
       officer: opts?.officer === 'spared' ? 'spared' : 'killed',
       skipCinematics: opts?.skipCinematics !== false,
-      god: opts?.god !== false,
+      god: typeof opts?.god === 'boolean' ? opts.god : pace !== 'human',
+      pace,
     };
+    this.reflex = new Reflexes(pace);
     if (!this.running) this.prevGod = g.player.godMode === true;
     this.running = true;
     this.teleports = 0;
@@ -104,7 +116,7 @@ export class AutoplayBot {
     this.lastNow = g.time.now;
     g.player.godMode = this.opts.god;
     g.input.virtual.active = true;
-    this.say(`autoplay started (choice ${this.opts.choice}, officer ${this.opts.officer}, skip ${this.opts.skipCinematics}, god ${this.opts.god})`);
+    this.say(`autoplay started (choice ${this.opts.choice}, officer ${this.opts.officer}, skip ${this.opts.skipCinematics}, god ${this.opts.god}, pace ${pace})`);
   }
 
   stop(): void {
@@ -163,7 +175,7 @@ export class AutoplayBot {
     if (player.enabled === false) return this.rest('waiting — player input is disabled by a script');
 
     const ctx = player.contextAction;
-    if (ctx && !isStub(ctx)) v.press(ctx.button);
+    if (ctx && !isStub(ctx) && this.reflex.reacted('prompt', ctx.id, now)) v.press(ctx.button);
 
     this.attackTimer -= dt;
     this.abilityTimer -= dt;
@@ -233,6 +245,13 @@ export class AutoplayBot {
     const { input, camera, physics, player } = g;
     const v = input.virtual;
     v.hold('interact', false);
+    const dodged = this.reflex.human ? this.reflex.evade(g, actor) : null;
+    if (dodged) {
+      this.status = `dodging ${dodged.name || dodged.archetype}`;
+      return;
+    }
+    // a person needs a moment to take in a new target before committing to it
+    const engaged = this.reflex.reacted('target', `t${t.id}`, g.time.now);
 
     // is the fight getting anywhere?
     if (t.hp < this.watchHp - 0.5) {
@@ -278,8 +297,8 @@ export class AutoplayBot {
       v.setMoveWorld(this.dir);
       v.hold('sprint', false);
       this.resetStall();
-      if (this.attackTimer <= 0) {
-        this.attackTimer = 0.42;
+      if (this.attackTimer <= 0 && engaged) {
+        this.attackTimer = this.reflex.swingGap();
         this.swings++;
         v.press(this.swings % 4 === 0 ? 'heavy' : 'attack');
       }
@@ -299,12 +318,12 @@ export class AutoplayBot {
     v.hold('sprint', false);
     v.hold('aim', true);
     this.resetStall();
-    const aligned = this.steerAim(aim);
+    const aligned = this.steerAim(this.reflex.human ? this.reflex.aimPoint(aim, this.jit) : aim);
     // fire only once the lead is really aiming: `attack` pressed before the aim hold takes effect is a MELEE
     // swing, and a chain of swings at the air (each one stepping forward) keeps aim from ever engaging
     const aiming = isStub(hud) || hud.aiming === true;
-    if (aligned && aiming && this.attackTimer <= 0) {
-      this.attackTimer = 0.5;
+    if (aligned && aiming && engaged && this.attackTimer <= 0) {
+      this.attackTimer = this.reflex.shotGap();
       v.press('attack');
     }
     this.useAbilities();
@@ -332,7 +351,8 @@ export class AutoplayBot {
       return false;
     }
     input.virtual.addLook(dyaw * 0.7, dpitch * 0.7);
-    return Math.abs(dyaw) < AIM_TOLERANCE && Math.abs(dpitch) < AIM_TOLERANCE;
+    const tol = this.reflex.profile.aimTolerance;
+    return Math.abs(dyaw) < tol && Math.abs(dpitch) < tol;
   }
 
   private useAbilities(): void {

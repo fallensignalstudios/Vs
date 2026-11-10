@@ -22,7 +22,7 @@ import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/ap
 import { setDoor, standardExit, waitOr } from './shared';
 import { PAST_X, TERMINAL } from './z03/layout';
 import { scanPlay, setupScanner, updateScanner } from './z03/scanner';
-import { LYRIC_MARKS, arrivalScene, arrivedState, placeAtStart, scanScene, terminalScene, updateScenes } from './z03/scenes';
+import { LYRIC_MARKS, arrivalScene, arrivedState, scanScene, terminalScene, updateScenes } from './z03/scenes';
 import { buildSpace } from './z03/space';
 import { S, resetState } from './z03/state';
 
@@ -76,7 +76,9 @@ function* arrival(z: ZoneRuntime): Routine {
   const start = z.m('start');
   yield waitOr(z, () => Math.hypot(z.player.pos.x - start.x, z.player.pos.z - start.z) > 1.4, 5);
   z.bark('Tharne', 'Residual atmosphere. Crystallized long before we arrived.', { actor: tharne }); // NEW
-  yield z.until(() => z.player.pos.x >= z.m('scanStart').x - 0.4);
+  // (the marker sits just short of plane A's stretch; arriving near it counts — nobody has to step past it)
+  const go = z.m('scanStart');
+  yield z.until(() => z.player.pos.x >= go.x - 0.4 || Math.hypot(z.player.pos.x - go.x, z.player.pos.z - go.z) < 1.8);
 }
 
 /** `scan`. The planes announce themselves; pass them on timing, or find the angle on their source. */
@@ -96,7 +98,6 @@ function* terminalRead(z: ZoneRuntime): Routine {
       id: 'z03-terminal', at: z.P(TERMINAL[0] - 0.7, TERMINAL[1], 0), prompt: 'Read the terminal', hold: 0.6, // NEW
       radius: 2.4, required: true,
     });
-    S.terminalIx = ix;
     yield z.untilInteract(ix);
     z.objective(null);
     yield* terminalScene(z);
@@ -109,14 +110,7 @@ function* terminalRead(z: ZoneRuntime): Routine {
 
 const beats: Beat[] = [
   { id: 'arrival', checkpoint: 'CP2', enter: (z) => spawnCast(z, 'arrival'), run: arrival },
-  {
-    id: 'scan',
-    enter: (z) => {
-      spawnCast(z, 'scan');
-      placeAtStart(z, z.cast('tharne'), z.cast('lyric'));
-    },
-    run: scan,
-  },
+  { id: 'scan', enter: (z) => spawnCast(z, 'scan'), run: scan },
   { id: 'terminalRead', enter: (z) => spawnCast(z, z.flag('z03TerminalRead') === true ? 'read' : 'terminal'), run: terminalRead },
 ];
 

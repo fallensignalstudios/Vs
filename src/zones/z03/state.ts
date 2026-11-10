@@ -62,8 +62,6 @@ export interface Z03State {
   catching: boolean;
   /** some IK hand was driven last frame (so it is released once, not every frame) */
   handsHeld: boolean;
-  /** terminal interaction */
-  terminalIx: Interactable | null;
 }
 
 export let S: Z03State = blank();
@@ -74,7 +72,7 @@ function blank(): Z03State {
     tether: null, tetherTarget: 0, tetherLen: 1, stir: null, stirTarget: 0, stirLevel: 0,
     holo: null, holoVisible: 0, holoProgress: 0,
     planes: [], source: null, sourceDown: false, sourceIx: null, identified: false, detections: 0, tension: 0, forceTraceUntil: -Infinity,
-    tremble: null, catching: false, handsHeld: false, terminalIx: null,
+    tremble: null, catching: false, handsHeld: false,
   };
 }
 

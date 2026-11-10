@@ -64,6 +64,11 @@ export const E2_CAP = 6;
 export const ENFORCER_POSTS: ReadonlyArray<readonly [number, number, number]> = [
   [19.0, 32.0, 205], [21.9, 33.1, 195], [24.9, 33.6, 185], [27.9, 33.4, 175],
 ];
+/**
+ * the shield front holds its posts against the drones (one member at most peels off briefly) and advances as a
+ * wall only on the lead once she is noticed — never more than this far off the exit it guards
+ */
+export const ENFORCER_LEASH = 9;
 /** how close the lead may come to an unseen Enforcer / drone before it notices her (horizontal metres) */
 export const NOTICE_ENFORCER = 9;
 export const NOTICE_DRONE = 6.5;

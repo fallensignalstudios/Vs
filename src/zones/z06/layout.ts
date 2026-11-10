@@ -269,13 +269,11 @@ function buildGear(b: ZoneBuilder): void {
   b.prop('refCrate', { x: 20.8, n: 12.4, yawDeg: 18, variant: 1 });
   b.prop('refCrate', { x: 31.2, n: 9.6, yawDeg: -24, variant: 2 });
   b.prop('refAmmoCase', { x: 24.6, n: 9.2, yawDeg: 64 });
-  b.prop('refSensorMast', { x: 32.6, n: 12.2, yawDeg: 200 });
+  b.prop('refCrate', { x: 32.6, n: 12.4, yawDeg: 200, variant: 0 });
   b.prop('refLamp', { x: 21.2, n: 15.6, yawDeg: 120 });
   b.prop('cableBundle', { x: 29.6, n: 11, yawDeg: 30 });
   b.prop('refStretcher', { x: 16.2, n: 10.2, yawDeg: 80 });
   // ancient furniture and the room's own wreckage
-  b.prop('ancientPylon', { x: 51.5, n: EXIT_N - 6.5 });
-  b.prop('ancientPylon', { x: 51.5, n: EXIT_N + 6.5 });
   b.prop('ancientBench', { x: 8, n: 31.8, yawDeg: 180 });
   b.prop('rubblePile', { x: 33.5, n: 20.5, yawDeg: 140 });
   b.prop('rubblePile', { x: 14.5, n: 18.4, yawDeg: 60 });
@@ -287,14 +285,17 @@ function buildGear(b: ZoneBuilder): void {
   b.prop('domAmmoCase', { x: 1.2, n: 9.2, h: REFUGE.h, yawDeg: 90 });
 }
 
-/** about a dozen lights: key (setEnv), two shafts, cool fills so figures separate from the stone, faction accents */
+/**
+ * Lights: the key (setEnv), two shafts, a cool fill so figures separate from the stone, faction accents. With the
+ * white point, the exit panel, the corruption patches, the breach glows and the marines' lamp: 16 point / spot
+ * lights in all (the kit's guidance is about a dozen; the four corruption patches are the contamination itself).
+ */
 function buildLight(b: ZoneBuilder): void {
   // a pale shaft on the plate (the focal point) and one down the left lane
   b.spot({ x: 24, n: 12, h: RIB_H - 0.8, target: [26.5, 13.6, 0], angleDeg: 20, intensity: 820, shaft: true, color: 0xe4ebff });
   b.spot({ x: 14, n: 25, h: RIB_H - 0.8, target: [15, 25.5, 0], angleDeg: 22, intensity: 640, shaft: true, color: 0xe8ecf6 });
   // cool fills
   b.point({ x: 34, n: 22, h: 5.5, color: 0x9fb2d6, intensity: 40, distance: 24 });
-  b.point({ x: 12, n: 14, h: 5, color: 0xa9b8d8, intensity: 30, distance: 20 });
   // the refuge reads warm and held: amber from the soldier's lamp
   b.point({ x: 3, n: 6, h: REFUGE.h + 2.2, color: 0xffb060, intensity: 14, distance: 8 });
   // the marines' post is lit by its own lamp (refLamp); the trapped man's suit lamp under the plate's edge

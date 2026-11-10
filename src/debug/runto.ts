@@ -15,6 +15,9 @@ export interface RunToOptions {
   officer?: 'killed' | 'spared';
   stallSeconds?: number;
   skipCinematics?: boolean;
+  /** the bot's pace (default 'bot'); 'human' also turns god mode off unless `god` says otherwise */
+  pace?: 'bot' | 'human';
+  god?: boolean;
 }
 
 /** sim step of a run: two 60 Hz substeps per tick */
@@ -82,7 +85,11 @@ export async function runTo(game: Game, bot: AutoplayBot, opts: RunToOptions = {
       result.beats.push({ zone: cur.id, beat: last.beat, t: 0 });
     }
 
-    bot.start({ choice: opts.choice, officer: opts.officer, skipCinematics: opts.skipCinematics !== false, god: true });
+    const human = opts.pace === 'human';
+    bot.start({
+      choice: opts.choice, officer: opts.officer, skipCinematics: opts.skipCinematics !== false,
+      god: typeof opts.god === 'boolean' ? opts.god : !human, pace: human ? 'human' : 'bot',
+    });
 
     let lastHard = hard;
     let lastSoft = soft + bot.progress;

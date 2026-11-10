@@ -80,6 +80,48 @@ describe('brains', () => {
     expect(finite(w)).toBe(true);
   });
 
+  it('enforcer front: holds its posts against drones (≤ 1 peeling), advances as a wall once the player is a target', () => {
+    const w = makeAiWorld();
+    w.arena();
+    const hero = w.hero('selene', 0, 24);
+    hero.targetable = false; // unseen: the front only has the drones to deal with
+    w.actors.setHostile('player', 'dominion', true);
+    const posts = [-4.5, -1.5, 1.5, 4.5].map((x) => ({ x, y: 0, z: -6 }));
+    const line = posts.map((p) => w.ai.spawnEnemy('enforcer', { pos: p, post: p, yaw: Math.PI, front: { leash: 9 } }));
+    for (const x of [-5, 5]) w.ai.spawnEnemy('contamDrone', { pos: { x, y: 1.8, z: 3 }, yaw: 0 });
+    let maxOff = 0;
+    let maxOut = 0;
+    let overlapped = 0;
+    const steps = 60 * 30;
+    for (let i = 0; i < steps; i++) {
+      w.run(1 / 60);
+      if (i < 60 * 2) continue;
+      let out = 0;
+      line.forEach((e, k) => {
+        if (!e.alive) return;
+        const p = posts[k]!;
+        const off = Math.hypot(e.pos.x - p.x, e.pos.z - p.z);
+        maxOff = Math.max(maxOff, off);
+        if (off > 2) out++;
+        if (e.guardArc > 3.4) overlapped++;
+      });
+      maxOut = Math.max(maxOut, out);
+    }
+    expect(maxOut).toBeLessThanOrEqual(1); // at most one member out of the line at any moment
+    expect(maxOff).toBeLessThan(6.5); // a peel is a short step out, never a chase
+    expect(overlapped).toBeGreaterThan(steps); // the shields stay overlapped most of the time
+    expect(w.ai.stats.boltsFired).toBeGreaterThan(0); // the drones and the sidearms trade fire
+    // noticed: the wall advances on her as one, up to its leash
+    hero.targetable = true;
+    w.run(14);
+    const alive = line.filter((e) => e.alive);
+    const adv = alive.map((e) => e.pos.z - -6);
+    expect(Math.min(...adv)).toBeGreaterThan(5);
+    expect(Math.max(...adv)).toBeLessThan(9 + 1.5);
+    expect(Math.max(...adv) - Math.min(...adv)).toBeLessThan(3); // kept its shape
+    expect(finite(w)).toBe(true);
+  });
+
   it('wallrunner: perches, announces, pounces, lies open on the ground, returns to a wall', () => {
     const w = makeAiWorld();
     w.arena();

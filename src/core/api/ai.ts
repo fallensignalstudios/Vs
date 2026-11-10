@@ -67,6 +67,27 @@ export interface SpawnOpts {
   perches?: WallPerch[];
   /** ADDED. Deterministic variation seed for the visual (default: derived from the spawn order). */
   seed?: number;
+  /** ADDED. Enforcers: how the shield front holds its line (see FrontOpts). Ignored by other roles. */
+  front?: FrontOpts;
+}
+
+/**
+ * ADDED. Shield-front behaviour of an Enforcer line. Members whose posts lie within 14 m of each other form one
+ * front: they share an advance vector (the line keeps its shape) and a facing (shields stay overlapped).
+ * By default the wall HOLDS ITS POSTS against anything that is not on the player's side (contaminated drones,
+ * other factions): it turns its shields toward the threat within `holdArc` of each post's yaw and answers with
+ * the sidearm, while at most `maxPeel` members step out briefly to press a close threat. It ADVANCES AS A WALL
+ * only on a player-side target (the protagonist or a companion that is targetable), up to `leash` metres.
+ */
+export interface FrontOpts {
+  /** metres the line may advance from its posts toward its target (default 24) */
+  leash?: number;
+  /** 'player' (default): advance only on the player's side, hold posts against anything else; 'any': advance on any target */
+  advanceOn?: 'player' | 'any';
+  /** degrees a holding member may turn its shield away from its post's yaw (spawn `yaw`; default 40) */
+  holdArc?: number;
+  /** members of one front that may peel off at once (≤ 4.5 m out for ≈ 3 s) to press a threat near the line (default 1; 0 = never) */
+  maxPeel?: number;
 }
 
 /** ADDED. Axis-aligned world-space rectangle (XZ). */
@@ -391,6 +412,12 @@ export interface AiSystem {
   readonly companions: readonly Companion[];
   /** ADDED. live counters for the debug overlay and sandbox reports (the same object every read) */
   readonly stats: AiStats;
+  /**
+   * ADDED. Seconds left of the telegraphed wind-up `actor` is in right now (0 when it is not winding up an attack,
+   * or is not an AI enemy). What a watching player reads off the body; the human-paced autoplay bot dodges on it.
+   * Optional so hand-built AI stand-ins stay valid.
+   */
+  telegraphOf?(actor: Actor): number;
 }
 
 /** ADDED. Counters since the last `ai.clear()`. */

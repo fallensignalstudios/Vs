@@ -45,8 +45,15 @@ export const AI = {
   enforcer: {
     speed: 1.35,
     turn: 1.5,
-    /** how far the line advances from its posts */
+    /** how far the line advances from its posts (default; SpawnOpts.front.leash overrides) */
     leash: 24,
+    /** degrees a holding member may turn away from its post yaw (default; SpawnOpts.front.holdArc overrides) */
+    holdArc: 40,
+    /** a peel: a threat this close to the member's post, a step of at most this far out, for this long, then a front-wide gap */
+    peelRange: 12,
+    peelStep: 4.5,
+    peelSeconds: 3,
+    peelGap: 7,
     /** distance the wall keeps from its target */
     standOff: 2.1,
     overlapWithin: 3.5,

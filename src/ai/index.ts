@@ -237,6 +237,11 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
     return this.memberOf(actor);
   }
 
+  telegraphOf(actor: Actor): number {
+    const b = this.brainOf(actor);
+    return b && actor.alive ? b.telegraphLeft : 0;
+  }
+
   update(dt: number): void {
     const d = fin(dt, 0);
     const game = this.game;

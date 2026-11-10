@@ -10,6 +10,8 @@
  *   x 33 … 48   the deployed Reformation sensor installation: terminal, reconstruction hologram, exit east
  */
 
+import * as THREE from 'three';
+
 /** playable envelope (plan §Z03: 48 × 22 m) */
 export const W = 48;
 export const D = 22;
@@ -27,6 +29,9 @@ export const HATCH_HINGE_H = 0.55;
 export const HATCH_W = 3.1;
 export const HATCH_LEN = 2.5;
 export const HATCH_OPEN_DEG = 12.5;
+/** the anchor tether: from the hull's top, just ahead of the torn rear, to the arch of the rib it wedged into */
+export const TETHER_FROM = new THREE.Vector3(-1.3, 4.25, -(WRECK_N + 1.0));
+export const TETHER_TO = new THREE.Vector3(3.7, 6.7, -(WRECK_N + 1.7));
 /** the small frozen rib the hull wedged into (its legs frame the hatch) */
 export const LODGE_RIB_X = 3.7;
 export const LODGE_RIB_SPAN = 7.2;

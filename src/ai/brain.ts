@@ -310,6 +310,11 @@ export abstract class Brain implements ActorController {
     this.enc?.releaseMeleeSlot(a);
   }
 
+  /** seconds left of the attack wind-up in progress (0 when none) — see AiSystem.telegraphOf */
+  get telegraphLeft(): number {
+    return this.teleLeft > 0 ? this.teleLeft : 0;
+  }
+
   protected get holdsSlot(): boolean {
     return this.slot;
   }

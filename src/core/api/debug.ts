@@ -91,7 +91,17 @@ export interface DebugApi {
   /** autoplay bot */
   autoplay: {
     /** `choice` = the Z07 priority (default West), `officer` = the Z08 officer (default 'killed') */
-    start(opts?: { choice?: 'WestStretchers' | 'EastWalkers'; officer?: 'killed' | 'spared'; skipCinematics?: boolean; god?: boolean }): void;
+    start(opts?: {
+      choice?: 'WestStretchers' | 'EastWalkers'; officer?: 'killed' | 'spared'; skipCinematics?: boolean;
+      /** default: on at the 'bot' pace, off at the 'human' pace */
+      god?: boolean;
+      /**
+       * ADDED. 'bot' (default): instant reactions, perfect aim — the soft-lock detector. 'human': reaction delays
+       * (0.4–0.75 s), human swing cadence with breathers, imperfect aim, dodges ~65 % of the wind-ups it sees, can
+       * die — for balance and pacing measurements at Standard.
+       */
+      pace?: 'bot' | 'human';
+    }): void;
     stop(): void;
     readonly running: boolean;
     /** human-readable log of what the bot did / is stuck on */
@@ -113,6 +123,10 @@ export interface DebugApi {
     stallSeconds?: number;
     /** ADDED. false = watch every cinematic at full length (default true: skip) */
     skipCinematics?: boolean;
+    /** ADDED. the bot's pace (see autoplay.start); 'human' runs without god mode unless `god` is given */
+    pace?: 'bot' | 'human';
+    /** ADDED. god mode for the run (default: on at the 'bot' pace, off at 'human') */
+    god?: boolean;
   }): Promise<RunToResult>;
 
   // --- ADDED (mission/debug) ---

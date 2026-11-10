@@ -342,7 +342,12 @@ const FRAG_EMISSIVE = /* glsl */ `
   cE += uDissolveColor * cDEdge * 3.0;
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
   cE += uTelegraph.rgb * uTelegraph.a * cTp * (cTelRim + cLit * 2.2 + 0.012);
+#ifdef CREATURE_SKIN
+  // a generated skin is a mass of grazing facets: a thinner rim keeps its tissue violet-black, edges still lit
+  cE += uRim.rgb * uRim.a * cFres * cFres * 2.0;
+#else
   cE += uRim.rgb * uRim.a * cFres * 1.4;
+#endif
   // hit flash: edge tint + albedo lift (src/chars/flash.ts), never a flat fill
   cE += aurHitFlash(uFlash, diffuseColor.rgb, cFres);
   totalEmissiveRadiance = cE;

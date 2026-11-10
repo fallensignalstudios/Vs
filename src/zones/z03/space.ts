@@ -12,13 +12,25 @@ import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, FROST, IVORY } from '../shared';
 import {
   BAY_X0, D, DECK_H, DECK_N0, DECK_N1, DECK_X0, DECK_X1, EXIT_N, HATCH_HINGE_H, HATCH_LEN, HATCH_W, HOLO, LODGE_RIB_SPAN,
-  LODGE_RIB_X, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
+  LODGE_RIB_X, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, TETHER_FROM, TETHER_TO, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
   VAULT_RISE, W, WALL_H, WRECK_N, WRECK_REAR_X,
 } from './layout';
 import { S } from './state';
 
 /** pale cold light: the exterior glow through the breach and the vault seams */
 const PALE = 0xdcecff;
+
+/**
+ * LOOKS.frozen, a little lower and hazier: the white-gold reads as ice-lit stone rather than a sunlit hall, so the
+ * scan planes' cold sheets, the conduits in the ice and the gold channels carry the frame.
+ */
+const LOOK = {
+  ...LOOKS.frozen,
+  exposure: 0.9,
+  fog: { color: 0x48697c, density: 0.03 },
+  ambient: { sky: 0x8fb8d2, ground: 0x1c2a34, intensity: 0.48 },
+  envIntensity: 0.8,
+};
 
 /** kit yawDeg that makes a piece at (x, n) face the projector (its lee is the hiding pocket) */
 export function faceSource(x: number, n: number): number {
@@ -29,9 +41,9 @@ export function buildSpace(b: ZoneBuilder): void {
   // the corridor runs east; the Wound sits west, over the breach the dropship came through
   b.game.sky.setHeading(Math.PI / 2);
   b.setEnv({
-    sky: 'frozenInterior', look: LOOKS.frozen, ambience: 'frozenCorridor', music: 'approachSelene',
+    sky: 'frozenInterior', look: LOOK, ambience: 'frozenCorridor', music: 'approachSelene',
     // high, from the breach in the west: long rib shadows run east down the corridor toward the installation
-    key: { dirFrom: [-26, 7, 36], intensity: 2.0, color: 0xe4f0ff },
+    key: { dirFrom: [-26, 7, 36], intensity: 1.35, color: 0xdcebff },
   });
   buildShell(b);
   buildBay(b);
@@ -52,9 +64,10 @@ function buildShell(b: ZoneBuilder): void {
   b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
   // full ribs carry the vault; their legs stand in the long walls, ice-clad
   b.ribRow({ x: RIB_X0, n: D / 2, span: D + 0.3, height: RIB_H, count: RIB_COUNT, spacing: RIB_SPACING, yawDeg: FACE.east, alongDeg: FACE.east, style: 'frozen' });
+  // one enclosed vault over the corridor and the bay (bays line up with x = −14, −6, 2, 10 … 42)
   b.ceiling({
-    x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE, bay: RIB_SPACING, bayPhase: 2,
-    hazeColor: 0xd6eaff, glow: 2.2,
+    x: (BAY_X0 + W) / 2, n: D / 2, w: W - BAY_X0, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE,
+    bay: RIB_SPACING, bayPhase: 1, hazeColor: 0xd6eaff, glow: 1.5,
   });
 
   // exit: door, a short lit vestibule, the white point above with two lit pylons leading the eye up to it
@@ -78,9 +91,9 @@ function buildShell(b: ZoneBuilder): void {
 function buildBay(b: ZoneBuilder): void {
   const game = b.game;
   b.floor({ x: BAY_X0 / 2, n: D / 2, w: -BAY_X0, d: D, inlay: 'none', noSurface: true });
-  b.wall({ from: [BAY_X0, 0], to: [BAY_X0, D], height: WALL_H * 0.7, style: 'ribbed' });
-  b.rib({ x: -5.6, n: D / 2, span: D + 0.3, height: RIB_H, style: 'broken', yawDeg: FACE.east });
-  b.rib({ x: -12.4, n: D / 2, span: D + 0.3, height: RIB_H - 1, style: 'frozen', yawDeg: FACE.east });
+  b.wall({ from: [BAY_X0, 0], to: [BAY_X0, D], height: WALL_H, style: 'ribbed' });
+  b.rib({ x: -6, n: D / 2, span: D + 0.3, height: RIB_H, style: 'broken', yawDeg: FACE.east });
+  b.rib({ x: -14, n: D / 2, span: D + 0.3, height: RIB_H, style: 'frozen', yawDeg: FACE.east });
   // the rib the hull wedged into: its legs frame the hatch (Lyric's hand goes to the north one)
   b.rib({ x: LODGE_RIB_X, n: WRECK_N, span: LODGE_RIB_SPAN, height: 7.4, style: 'frozen', yawDeg: FACE.east });
 
@@ -121,9 +134,9 @@ function buildBay(b: ZoneBuilder): void {
   S.hatch = pivot;
   S.hatchLight = b.point({ x: WRECK_REAR_X - 1.5, n: WRECK_N, h: 1.9, color: 0xcfe4ff, intensity: 0, distance: 11 });
 
-  // the anchor tether: from the hull's north shoulder to the broken rib's north leg (taut once Selene fires it)
-  const from = b.P(-2.2, WRECK_N + 2.6, 3.3);
-  const to = b.P(-5.4, D - 0.7, 6.4);
+  // the anchor tether (world points): from the hull's top to the arch it is wedged under — taut once she fires it
+  const from = TETHER_FROM.clone();
+  const to = TETHER_TO.clone();
   const len = from.distanceTo(to);
   const tether = new THREE.Group();
   tether.name = 'z03-tether';
@@ -294,15 +307,9 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('lyricExit', W - 4.6, EXIT_N - 0.6, 0, FACE.east);
 }
 
-/** far field: the nave beyond the breach, pale haze, frost motes and a little snow falling through the breach */
+/** far field: frost motes and dust in the haze (the vault encloses everything; no sky is seen) */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
-  const nave = game.sky.scenic.megaRibs({ count: 6, span: 120, height: 95, spacing: 60, seed: 303 });
-  nave.name = 'z03-nave';
-  nave.position.copy(b.P(BAY_X0 - 30, D / 2, -12));
-  nave.rotation.y = Math.PI / 2;
-  b.add(nave);
   game.vfx.ambient('frostMotes', b.P(W / 2, D / 2, 4), { x: W, y: 8, z: D }, 0.7);
-  game.vfx.ambient('snow', b.P(BAY_X0 / 2 + 2, D / 2, 6), { x: -BAY_X0 + 6, y: 12, z: D }, 0.5);
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 5), { x: W, y: 9, z: D }, 0.25);
 }

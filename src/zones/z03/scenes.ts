@@ -13,11 +13,11 @@ import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
 import { damp } from '@/core/mathx';
 import { FROST, VIOLET, atPost, conversation, feet, waitOr, walkTo } from '../shared';
-import { HATCH_OPEN_DEG, WRECK_N, WRECK_REAR_X } from './layout';
+import { HATCH_OPEN_DEG, TERMINAL, TETHER_FROM, TETHER_TO, WRECK_N, WRECK_REAR_X } from './layout';
 import { S } from './state';
 
 /** Lyric's marks here: violet traces above her collar, along her jaw (Z05 starts her at 0.2, Z06 at 0.26) */
-export const LYRIC_MARKS = { arrive: 0.18, feel: 0.24 } as const;
+export const LYRIC_MARKS = { arrive: 0.2, feel: 0.26 } as const;
 
 const _v = new THREE.Vector3();
 const _w = new THREE.Vector3();
@@ -51,23 +51,23 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     S.tetherTarget = 0;
 
     // (1) the dropship lodged among the ribs, seen from inside the corridor; frost on everything
-    c.cut({ pos: z.P(10.2, 5.2, 1.5), look: z.P(-2.8, 13.6, 3.4), fov: 52 });
-    c.moveAsync({ pos: z.P(8.8, 6.2, 1.8), look: z.P(-3.4, 14.4, 3.9), fov: 46 }, 6.5, 'inOut');
+    c.cut({ pos: z.P(9.6, 4.6, 1.45), look: z.P(-0.6, 13.2, 3.6), fov: 54 });
+    c.moveAsync({ pos: z.P(8.4, 5.6, 1.7), look: z.P(-0.2, 13.4, 4.4), fov: 48 }, 6.5, 'inOut');
     if (!z.skipping) game.audio.play('structuralGroan', { volume: 0.55 });
     yield 2.2;
     // the anchor line fires from the hull and snaps taut on the broken rib
     S.tetherTarget = 1;
-    if (!z.skipping) game.audio.play('stasisThrow', { pos: z.P(-2.2, WRECK_N + 2.6, 3.3), pitch: 0.7 });
+    if (!z.skipping) game.audio.play('stasisThrow', { pos: TETHER_FROM.clone(), pitch: 0.7 });
     yield 0.4;
     if (!z.skipping) {
-      game.audio.play('guardBlock', { pos: z.P(-5.4, 21.3, 6.4), pitch: 0.55 });
+      game.audio.play('guardBlock', { pos: TETHER_TO.clone(), pitch: 0.55 });
       game.camera.shake(0.16, 0.35);
     }
     yield* z.say('Selene', 'Anchor.', { offscreen: true });
 
     // (2) the rear hatch drops; cold light spills out over the ice
-    c.cut({ pos: z.P(6.8, 8.9, 1.05), look: z.P(1.0, WRECK_N + 0.6, 1.3), fov: 40 });
-    c.moveAsync({ pos: z.P(6.4, 9.3, 1.1), look: z.P(1.4, WRECK_N + 0.7, 1.25), fov: 38 }, 4, 'inOut');
+    c.cut({ pos: z.P(7.4, 9.6, 1.55), look: z.P(0.6, WRECK_N + 0.5, 1.35), fov: 42 });
+    c.moveAsync({ pos: z.P(6.8, 10.0, 1.5), look: z.P(1.2, WRECK_N + 0.6, 1.3), fov: 38 }, 4, 'inOut');
     S.hatchTarget = 1;
     if (!z.skipping) {
       game.audio.play('doorOpen', { pos: hatch, pitch: 0.75 });
@@ -87,14 +87,15 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     S.catching = true;
     const L = z.m('lyricStep');
     const T = z.m('tharneCatch');
-    c.shot(L, { yawDeg: 120, distance: 2.5, height: 1.25, lookHeight: 1.15, fov: 36 });
+    const both = L.clone().lerp(T, 0.5);
+    c.shot(both, { yawDeg: 118, distance: 2.6, height: 1.3, lookHeight: 1.2, fov: 36 });
     yield 1.4;
-
-    yield* conversation(z, c, [
-      ['Tharne', 'Talk to me.'],
-      ['Lyric', 'I hate that sentence.'],
-      ['Tharne', 'Talk anyway.'],
-    ], { Tharne: tharne, Lyric: lyric }, { distance: 1.5, fov: 34 });
+    c.shot(both, { yawDeg: 105, distance: 2.0, height: 1.5, lookHeight: 1.4, fov: 32 });
+    yield* z.say('Tharne', 'Talk to me.', { actor: tharne });
+    c.shot(L, { yawDeg: 95, distance: 1.45, height: 1.55, lookHeight: 1.45, fov: 30 });
+    yield* z.say('Lyric', 'I hate that sentence.', { actor: lyric });
+    c.twoShot(T, L, { side: 1, distance: 1.4, fov: 32 });
+    yield* z.say('Tharne', 'Talk anyway.', { actor: tharne });
 
     // she straightens out of his hold and puts one trembling hand against the rib
     S.catching = false;
@@ -102,7 +103,7 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     lyric?.stopAction();
     lyric?.teleport(z.m('lyricWall'), z.myaw('lyricWall'));
     S.tremble = z.m('wallTouch');
-    c.shot(z.m('lyricWall'), { yawDeg: 205, distance: 1.9, height: 1.55, lookHeight: 1.45, fov: 32 });
+    c.shot(z.m('lyricWall'), { yawDeg: 140, distance: 2.1, height: 1.5, lookHeight: 1.35, fov: 34 });
     yield 0.5;
     yield* z.say('Lyric', 'There are things inside this place.', { actor: lyric });
 
@@ -231,7 +232,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     const sel = z.m('terminal');
     const th = z.m('tharneTerm');
     const ly = z.m('lyricTerm');
-    game.player.playScripted('interact', { faceTo: z.m('holo') });
+    game.player.playScripted('interact', { faceTo: z.P(TERMINAL[0], TERMINAL[1], 1) });
 
     // before she reads: the dark tissue behind the ice stirs
     S.stirTarget = 1;
@@ -359,7 +360,7 @@ function handToChest(z: ZoneRuntime, on: boolean): void {
 // =====================================================================================================================
 
 const HATCH_CLOSED = 0;
-const HATCH_OPEN = -(Math.PI / 2 - (HATCH_OPEN_DEG * Math.PI) / 180);
+const HATCH_OPEN = -(Math.PI / 2 + (HATCH_OPEN_DEG * Math.PI) / 180);
 
 /** hatch, tether, the tissue's stir, the hologram, held hands and the trembling hand; a skip snaps every target */
 export function updateScenes(z: ZoneRuntime, dt: number): void {
@@ -393,14 +394,18 @@ export function updateScenes(z: ZoneRuntime, dt: number): void {
   const tv = tharne?.actor.visual;
   const lv = lyric?.actor.visual;
   if (S.catching && isHumanoidVisual(tv) && lv) {
-    // his hands at her upper arms; her left hand on his shoulder — she does not pull away
+    // his hands on her right upper arm and her back; her free right hand on his shoulder (her left carries the
+    // case) — she does not pull away
     const chest = lv.socket('chest').getWorldPosition(_v);
     const ry = lyric ? lyric.actor.yaw : 0;
     const rx = Math.cos(ry);
     const rz = -Math.sin(ry);
-    tv.setHandTarget('R', _w.set(chest.x - rx * 0.2, chest.y + 0.05, chest.z - rz * 0.2), 1);
-    tv.setHandTarget('L', _w.set(chest.x + rx * 0.2, chest.y - 0.02, chest.z + rz * 0.2), 0.85);
-    if (isHumanoidVisual(lv) && tharne) lv.setHandTarget('L', tharne.actor.visual?.socket('chest').getWorldPosition(_w) ?? null, 0.8);
+    const fx = -Math.sin(ry);
+    const fz = -Math.cos(ry);
+    tv.setHandTarget('L', _w.set(chest.x + rx * 0.19, chest.y + 0.02, chest.z + rz * 0.19), 1);
+    tv.setHandTarget('R', _w.set(chest.x - fx * 0.17 + rx * 0.06, chest.y - 0.12, chest.z - fz * 0.17 + rz * 0.06), 0.9);
+    const shoulder = tharne?.actor.visual?.socket('chest').getWorldPosition(_w);
+    if (isHumanoidVisual(lv) && shoulder) lv.setHandTarget('R', shoulder.setY(shoulder.y + 0.12), 0.85);
   }
   if (S.tremble && isHumanoidVisual(lv)) {
     const t = z.time;

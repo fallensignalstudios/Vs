@@ -1,14 +1,16 @@
 /**
- * Dominion Enforcer: a shield wall. Holds a line slot beside its neighbours and advances as one front, shield
- * up (frontal 140°, widening to 200° while it overlaps a neighbour facing the same way). It turns slowly, so
- * the answer is the flank, a heavy blow / poise break, or stasis. Attacks open the guard: shield bash and shock
- * baton up close (melee token required), sidearm at range.
+ * Dominion Enforcer: a shield wall. Holds a line slot beside its neighbours, shield up (frontal 140°, widening to
+ * 200° while it overlaps a neighbour facing the same way). Against anything that is not on the player's side the
+ * front HOLDS ITS POSTS (shared facing, clamped to each post's arc; sidearm answers; at most one member peels off
+ * briefly to press a threat close to the line). On a player-side target it advances as one wall (shared advance
+ * vector, `front.leash`). It turns slowly, so the answer is the flank, a heavy blow / poise break, or stasis.
+ * Attacks open the guard: shield bash and shock baton up close (melee token required), sidearm at range.
  */
 import * as THREE from 'three';
 import type { Actor, SpawnOpts } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
 import { TUNING } from '@/combat/tuning';
-import { angleDelta, forwardX, forwardZ, yawTo } from '@/core/mathx';
+import { angleDelta, clamp, DEG, forwardX, forwardZ, yawTo } from '@/core/mathx';
 import { Brain } from '../brain';
 import type { AiCore } from '../core';
 import { AI } from '../tune';
@@ -22,6 +24,15 @@ const _from = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _pt = new THREE.Vector3();
+const _face = new THREE.Vector3();
+
+/** resolved SpawnOpts.front */
+interface Front {
+  leash: number;
+  anyTarget: boolean;
+  holdArc: number;
+  maxPeel: number;
+}
 
 export class EnforcerBrain extends Brain {
   private state: State = 'advance';
@@ -39,11 +50,34 @@ export class EnforcerBrain extends Brain {
   private struck = false;
   private shot: Actor | null = null;
   private shotScanAt = 0;
+  private readonly front: Front;
+  /** the yaw this member's slot faces (spawn yaw) */
+  private readonly postYaw: number;
+  /** stepping out of the line toward a close threat until this sim time / the last peel ended at */
+  peelUntil = 0;
+  peelEndedAt = -1e9;
+  /** the front's shared facing (yaw from the posts' centroid to the front's threat), refreshed at 4 Hz */
+  private frontYaw = NaN;
+  private frontThreat: Actor | null = null;
 
   constructor(core: AiCore, opts: SpawnOpts) {
     super(core, 'enforcer', opts);
     this.meleeCd = this.rand(0.4, 1.2);
     this.shootCd = this.rand(1.5, 3.5);
+    const E = AI.enforcer;
+    const f = opts.front ?? {};
+    this.front = {
+      leash: clamp(fin(f.leash, E.leash), 0, 80),
+      anyTarget: f.advanceOn === 'any',
+      holdArc: clamp(fin(f.holdArc, E.holdArc), 0, 180) * DEG,
+      maxPeel: Math.max(0, Math.floor(fin(f.maxPeel, 1))),
+    };
+    this.postYaw = fin(opts.yaw, 0);
+  }
+
+  /** the wall advances on this target (otherwise it holds its posts) */
+  private presses(t: Actor): boolean {
+    return this.front.anyTarget || t.team === 'player';
   }
 
   protected override onActive(a: Actor): void {
@@ -107,6 +141,91 @@ export class EnforcerBrain extends Brain {
 
   private readonly nb: Actor[] = [];
 
+  /** the brains of the other living members of this front (posts within 14 m of this one) */
+  private frontMates(a: Actor, out: EnforcerBrain[]): EnforcerBrain[] {
+    out.length = 0;
+    for (const o of this.neighbours(a, this.nb)) {
+      const b = this.core.brainOf(o);
+      if (b instanceof EnforcerBrain && b.post.distanceToSquared(this.post) <= 14 * 14) out.push(b);
+    }
+    return out;
+  }
+
+  private readonly mates: EnforcerBrain[] = [];
+
+  /**
+   * The front's shared threat and facing (4 Hz): the lowest-id living member's target leads, so every holding
+   * shield turns the same way and the overlap survives; the facing is measured from the posts' centroid.
+   */
+  private updateFront(a: Actor): void {
+    let lead: Actor | null = this.validTarget(a, this.target) ? this.target : null;
+    let leadId = a.id;
+    let cx = this.post.x;
+    let cz = this.post.z;
+    let n = 1;
+    for (const b of this.frontMates(a, this.mates)) {
+      cx += b.post.x;
+      cz += b.post.z;
+      n++;
+    }
+    for (const o of this.nb) {
+      const b = this.core.brainOf(o);
+      if (!(b instanceof EnforcerBrain) || !this.mates.includes(b) || o.id > leadId) continue;
+      const t = b.target;
+      if (t && this.validTarget(a, t) && this.canTarget(a, t)) {
+        lead = t;
+        leadId = o.id;
+      }
+    }
+    this.frontThreat = lead;
+    this.frontYaw = lead ? yawTo(cx / n, cz / n, lead.pos.x, lead.pos.z) : NaN;
+  }
+
+  /** may this member step out of the line now? (the front's peel budget and its gap between peels) */
+  private canPeel(): boolean {
+    if (this.front.maxPeel <= 0) return false;
+    const now = this.now;
+    let out = 0;
+    let lastEnd = this.peelEndedAt;
+    for (const b of this.mates) {
+      if (b.peelUntil > now) out++;
+      lastEnd = Math.max(lastEnd, b.peelEndedAt);
+    }
+    return out < this.front.maxPeel && now >= lastEnd + AI.enforcer.peelGap;
+  }
+
+  /** holding the line: the post (or a short peel toward a close threat), shields turned within the post's arc */
+  private holdGoal(a: Actor, t: Actor, out: THREE.Vector3): THREE.Vector3 {
+    const E = AI.enforcer;
+    const now = this.now;
+    out.copy(this.post);
+    const dx = t.pos.x - this.post.x;
+    const dz = t.pos.z - this.post.z;
+    const d = Math.hypot(dx, dz) || 1;
+    if (this.peelUntil <= now && this.peelUntil > 0) {
+      this.peelUntil = 0;
+      this.peelEndedAt = now;
+    }
+    if (this.peelUntil === 0 && now >= this.brokenUntil && d < E.peelRange && this.canPeel()) this.peelUntil = now + E.peelSeconds;
+    if (this.peelUntil > now) {
+      const step = Math.max(0, Math.min(E.peelStep, d - E.standOff - t.radius));
+      out.x += (dx / d) * step;
+      out.z += (dz / d) * step;
+    } else if (now < this.brokenUntil) {
+      out.x -= (dx / d) * 1.6;
+      out.z -= (dz / d) * 1.6;
+    }
+    return out;
+  }
+
+  /** where a holding shield looks: the front's shared facing, clamped to this post's arc (a peeling member faces its threat) */
+  private holdFacing(a: Actor, t: Actor, out: THREE.Vector3): THREE.Vector3 {
+    if (this.peelUntil > this.now) return out.copy(t.pos);
+    const want = Number.isFinite(this.frontYaw) ? this.frontYaw : yawTo(a.pos.x, a.pos.z, t.pos.x, t.pos.z);
+    const yaw = this.postYaw + clamp(angleDelta(this.postYaw, want), -this.front.holdArc, this.front.holdArc);
+    return out.set(a.pos.x + forwardX(yaw) * 6, a.pos.y, a.pos.z + forwardZ(yaw) * 6);
+  }
+
   /** guard arc: wider while shoulder to shoulder with a neighbour facing the same way */
   private updateOverlap(a: Actor): void {
     const E = AI.enforcer;
@@ -147,7 +266,7 @@ export class EnforcerBrain extends Brain {
     const d = Math.hypot(dx, dz) || 1;
     dx /= d;
     dz /= d;
-    const adv = Math.max(0, Math.min(E.leash, d - E.standOff));
+    const adv = Math.max(0, Math.min(this.front.leash, d - E.standOff));
     out.set(this.post.x + dx * adv, this.post.y, this.post.z + dz * adv);
     if (this.now < this.brokenUntil) {
       // stumbling out of the wall: give a little ground
@@ -165,11 +284,17 @@ export class EnforcerBrain extends Brain {
     if (now >= this.overlapAt) {
       this.overlapAt = now + 0.25;
       this.updateOverlap(a);
+      this.updateFront(a);
     }
     if (!this.validTarget(a, t)) {
       if (this.state !== 'advance') this.cancelAttack(a);
       a.guarding = true;
-      this.nav.moveTo(a, this.post, E.speed, dt, { turn: E.turn });
+      if (this.peelUntil > 0) {
+        this.peelUntil = 0;
+        this.peelEndedAt = now;
+      }
+      const threat = this.frontThreat;
+      this.nav.moveTo(a, this.post, E.speed, dt, { turn: E.turn, faceTo: threat && threat.alive ? this.holdFacing(a, threat, _face) : null });
       return;
     }
     const dist = a.distanceTo(t);
@@ -183,8 +308,17 @@ export class EnforcerBrain extends Brain {
     switch (this.state) {
       case 'advance': {
         a.guarding = true;
-        this.formationGoal(a, t, _goal);
-        this.nav.moveTo(a, _goal, E.speed, dt, { turn: E.turn, faceTo: t.pos, stop: 0.3 });
+        if (this.presses(t)) {
+          if (this.peelUntil > 0) {
+            this.peelUntil = 0;
+            this.peelEndedAt = now;
+          }
+          this.formationGoal(a, t, _goal);
+          this.nav.moveTo(a, _goal, E.speed, dt, { turn: E.turn, faceTo: t.pos, stop: 0.3 });
+        } else {
+          this.holdGoal(a, t, _goal);
+          this.nav.moveTo(a, _goal, E.speed, dt, { turn: E.turn, faceTo: this.holdFacing(a, t, _face), stop: 0.3 });
+        }
         const grounded = !t.flying;
         if (grounded && dist < E.bashRange + t.radius && facing < E.attackArc * 0.5 && this.meleeCd <= 0 && this.acquireSlot(a)) {
           this.attack = dist < 1.9 + t.radius || this.rand(0, 1) < 0.5 ? 'bash' : 'baton';
