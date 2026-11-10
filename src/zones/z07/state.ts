@@ -3,7 +3,7 @@
  * every beat's `enter` rebuilds the world it needs from the markers, the mission flags and `z.state`.
  */
 import type * as THREE from 'three';
-import type { DoorHandle, HeroProp, HologramProp } from '@/core/api';
+import type { DoorHandle, HeroProp, HologramProp, VfxHandle } from '@/core/api';
 import type { TextPanel } from './display';
 
 /** a containment cage beyond the glass, and the zone light that rims it (faction colour → violet as it spreads) */
@@ -21,6 +21,8 @@ export interface CageRig {
   /** 0…1 overall rim light level (eased toward `litTarget`; 0 once the cage is gone) */
   lit: number;
   litTarget: number;
+  /** the violet wisps at its core while the Eclipse uses the field (cosmetic; null when skipped / gone) */
+  wisp: VfxHandle | null;
 }
 
 export interface Z07State {

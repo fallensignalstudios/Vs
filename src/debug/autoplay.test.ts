@@ -90,6 +90,24 @@ describe('autoplay bot', () => {
     expect(w.game.player.godMode).toBe(false);
   });
 
+  it("the 'human' pace plays without god mode, still clears the errand, and reacts to a prompt only after a human delay", async () => {
+    const { w, bot, frames } = botWorld([errands()]);
+    await w.mission.gotoZone('Z00');
+    bot.start({ pace: 'human' });
+    expect(w.game.player.godMode).toBe(false);
+    expect(bot.reflex.human).toBe(true);
+    expect(bot.reflex.reacted('prompt', 'p1', 10)).toBe(false); // the moment the prompt appears
+    expect(bot.reflex.reacted('prompt', 'p1', 10.3)).toBe(false);
+    expect(bot.reflex.reacted('prompt', 'p1', 10.8)).toBe(true); // ≤ 0.75 s later
+    frames(14);
+    expect(w.mission.state.flags.arrived).toBe(true);
+    expect(bot.teleports).toBe(0);
+    bot.stop();
+    bot.start({ pace: 'human', god: true }); // an explicit choice wins
+    expect(w.game.player.godMode).toBe(true);
+    bot.stop();
+  });
+
   it('when it cannot move it nudges, then teleports as a last resort — and records it', async () => {
     const { w, bot, frames } = botWorld([errands()]);
     await w.mission.gotoZone('Z00');

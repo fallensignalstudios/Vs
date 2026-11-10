@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import type { CamPose, CineCtx, Interactable, Routine, SayOpts, Vec3Like, ZoneRuntime } from '@/core/api';
-import { AMBER, BLUE, atPost, tutorialHint, waitOr, walkTo } from '../shared';
+import { AMBER, BLUE, tutorialHint, waitOr, walkTo } from '../shared';
 import { S, type CageRig } from './state';
 
 const RADIO: SayOpts = { offscreen: true, channel: 'radio' };
@@ -29,7 +29,7 @@ export function bearing(a: Vec3Like, b: Vec3Like): number {
 }
 
 /** engine yaw that faces from a toward b */
-function yawToward(a: Vec3Like, b: Vec3Like): number {
+export function yawToward(a: Vec3Like, b: Vec3Like): number {
   return Math.atan2(-(b.x - a.x), -(b.z - a.z));
 }
 
@@ -58,6 +58,8 @@ export function cageGone(rig: CageRig | null, snap: boolean): void {
   rig.prop.params.charge = 0;
   rig.spreadTarget = 0;
   rig.litTarget = 0;
+  rig.wisp?.stop();
+  rig.wisp = null;
   if (snap) {
     rig.prop.snap();
     rig.spread = 0;
@@ -66,7 +68,7 @@ export function cageGone(rig: CageRig | null, snap: boolean): void {
 }
 
 /** a personal display: a strip of light in the air in front of its owner, turned toward the camera */
-function lightStrip(z: ZoneRuntime, strip: typeof S.stripSelene, owner: Vec3Like, cam: Vec3Like, text: string): void {
+export function lightStrip(z: ZoneRuntime, strip: typeof S.stripSelene, owner: Vec3Like, cam: Vec3Like, text: string): void {
   if (!strip) return;
   strip.setLines([text]);
   const dir = _a.set(cam.x - owner.x, 0, cam.z - owner.z).normalize();
@@ -76,7 +78,7 @@ function lightStrip(z: ZoneRuntime, strip: typeof S.stripSelene, owner: Vec3Like
   if (z.skipping) strip.update(0, true);
 }
 
-function stripsOff(z: ZoneRuntime): void {
+export function stripsOff(z: ZoneRuntime): void {
   S.stripSelene?.show(0, 0.6);
   S.stripTarrik?.show(0, 0.6);
   if (z.skipping) {
@@ -130,11 +132,12 @@ export function* cagesScene(z: ZoneRuntime): Routine {
     // she turns to him, then indicates the Dominion resonator
     selene?.face(T);
     c.shot(Se, { yawDeg: bearing(Se, T) - 28, distance: 2.3, height: 1.62, lookHeight: 1.56, fov: 36 });
-    yield* z.say('Selene', 'One of them.', { actor: selene });
+    yield 0.7;
+    // one utterance (the book breaks it with a tag): she indicates the Dominion resonator on the second half
     if (dom) selene?.face(dom.core);
     selene?.play('point');
     c.cut({ pos: z.P(18.6, 18.2, 1.75), look: z.P(13.9, 26.6, 1.5), fov: 42 });
-    yield* z.say('Selene', 'And yours.', { gesture: false });
+    yield* z.say('Selene', 'One of them. And yours.');
     // from the floor, where Tharne set her down
     c.shot(L, { yawDeg: 158, distance: 2.0, height: 0.95, lookHeight: 0.82, fov: 38 });
     yield* z.say('Lyric', 'Kill them.', { actor: lyric });
@@ -150,13 +153,13 @@ export function* cagesScene(z: ZoneRuntime): Routine {
       ref.spreadTarget = 1;
       c.cut(feed(z, ref, 30, -6, 3, 30));
       c.moveAsync(feed(z, ref, 26, -4, 2, 28), 2.6, 'out');
-      if (!z.skipping) game.vfx.spawn('violetWisp', ref.core, { scale: 4, duration: 30 });
+      if (!z.skipping) ref.wisp = game.vfx.spawn('violetWisp', ref.core, { scale: 4, duration: 240 });
     }
     yield 2.4;
     if (dom) {
       dom.spreadTarget = 1;
       c.cut(feed(z, dom, 32, 6, 3, 30));
-      if (!z.skipping) game.vfx.spawn('violetWisp', dom.core, { scale: 4, duration: 30 });
+      if (!z.skipping) dom.wisp = game.vfx.spawn('violetWisp', dom.core, { scale: 4, duration: 240 });
     }
     yield 1.8;
     S.flicker = 5;
@@ -231,10 +234,11 @@ export function* tarrikFires(z: ZoneRuntime): Routine {
   const dom = S.dom;
   yield* z.cinematic('z07-lance', function* (c: CineCtx): Routine {
     const ring = z.m('stationRing');
-    // the shot is laid through the sighting ring
+    // the shot is laid through the sighting ring: the camera behind it, on the line to the cage
     if (dom) {
-      c.cut({ pos: ring.clone().add(_a.set(0.25, 0.12, 1.6)), look: dom.core, fov: 30 });
-      c.moveAsync({ pos: ring.clone().add(_a.set(0.18, 0.06, 1.1)), look: dom.core, fov: 26 }, 1.6, 'in');
+      const back = ring.clone().sub(dom.core).normalize();
+      c.cut({ pos: ring.clone().addScaledVector(back, 1.7).setY(ring.y + 0.06), look: dom.core, fov: 30 });
+      c.moveAsync({ pos: ring.clone().addScaledVector(back, 1.15).setY(ring.y + 0.02), look: dom.core, fov: 26 }, 1.6, 'in');
     }
     if (!z.skipping) game.audio.play('fireControlCharge', { volume: 1 });
     yield 1.3;
@@ -407,9 +411,4 @@ export function bothCagesGone(z: ZoneRuntime, snap: boolean): void {
   cageGone(S.ref, snap);
   z.story('cageDominionDestroyed');
   z.story('cageReformationDestroyed');
-}
-
-/** keep the lead's partner out of the station's way after the handoff (used by restores) */
-export function tarrikAside(z: ZoneRuntime): boolean {
-  return atPost(z, z.cast('tarrik'), 'tarrikAside', 1);
 }

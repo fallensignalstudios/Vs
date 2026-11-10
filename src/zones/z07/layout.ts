@@ -258,7 +258,7 @@ function buildCages(b: ZoneBuilder): void {
     // it is far outside in vacuum: no room haze on it (its own lights carry the silhouette)
     prop.object.traverse((obj) => {
       const m = (obj as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-      for (const mat of Array.isArray(m) ? m : m ? [m] : []) mat.fog = false;
+      for (const mat of Array.isArray(m) ? m : m ? [m] : []) if ('fog' in mat) (mat as THREE.MeshStandardMaterial).fog = false;
     });
     prop.params.charge = 0.35;
     b.add(prop.object);
@@ -270,7 +270,7 @@ function buildCages(b: ZoneBuilder): void {
     light.position.copy(lp);
     b.add(light);
     const core = base.clone().setY(base.y + CORE_H[kind] * o.scale);
-    return { prop, base, core, light, tint: new THREE.Color(tint), spread: 0, spreadTarget: 0, lit: 1, litTarget: 1 };
+    return { prop, base, core, light, tint: new THREE.Color(tint), spread: 0, spreadTarget: 0, lit: 1, litTarget: 1, wisp: null };
   };
   S.dom = rig('dominion', CAGE_DOM, AMBER);
   S.ref = rig('reformation', CAGE_REF, BLUE);
