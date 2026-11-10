@@ -22,7 +22,7 @@
  */
 import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { setDoor, standardExit, walkTo } from './shared';
-import { GAL, buildSpace } from './z11/layout';
+import { GAL, LAND, buildSpace } from './z11/layout';
 import { S, buildObjects, placePanels, resetZ11, updateZ11 } from './z11/state';
 import { callbackLine, restAtBench, reunionScene } from './z11/reunion';
 import { alertScene, conversationScene, evidenceAfterExchange } from './z11/table';
@@ -100,7 +100,9 @@ function* reunion(z: ZoneRuntime): Routine {
   yield 0.6;
   yield* reunionScene(z);
   z.objective('Take the side passage', 'passageIn'); // NEW
-  yield z.untilNear('bystander', 3.4);
+  // the bystander speaks as the group passes (whichever side of the passage mouth the player takes)
+  const by = z.m('bystander');
+  yield () => Math.hypot(z.player.pos.x - by.x, z.player.pos.z - by.z) < 3.6 || -z.player.pos.z > LAND.n1 - 0.5;
   const [who, text] = callbackLine(z);
   yield* z.say(who, text, { actor: z.cast('bystander') });
   yield z.untilInRect(6, GAL.n0 + 0.4, 4, 2.4);
