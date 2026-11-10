@@ -131,6 +131,16 @@ function track(ax: number, az: number, ay: number, bx: number, bz: number): numb
   return S.gOk;
 }
 
+/**
+ * track() from a to b, and the body can rest at b: the height there, or NaN. Used for every hop the solver
+ * makes besides the sub-step itself (the push clear of a riser, the slide along a boundary), so those can no
+ * more skip a void than the sub-step can.
+ */
+function reach(ax: number, az: number, ay: number, bx: number, bz: number): number {
+  const g = track(ax, az, ay, bx, bz);
+  return g === g && W.standClear(bx, bz, g, R, STEP, H) ? g : NaN;
+}
+
 /** Re-arm the waived rules as soon as the body stands somewhere that satisfies them again. */
 function rearm(x: number, z: number, y: number): void {
   if (!HEAD) HEAD = W.headroom(x, z, y, STEP, H);
@@ -352,8 +362,8 @@ export function moveCharacter(
         const hx = S.rx, hz = S.rz;
         const ex = hx - x, ez = hz - z;
         if (ex * mdx + ez * mdz > 0 && ex * ex + ez * ez < twoR * twoR) {
-          const g = track(qx, qz, gOk, hx, hz);
-          if (g === g && w.standClear(hx, hz, g, r, STEP, H)) {
+          const g = reach(qx, qz, gOk, hx, hz);
+          if (g === g) {
             S.hasN = hadN; S.nx = pnx; S.nz = pnz;
             x = hx; z = hz; y = g; clear = true;
             if (!HEAD || !LEDGE) rearm(x, z, y);
@@ -389,20 +399,20 @@ export function moveCharacter(
     if (dot > 0) { tx -= dot * ox; tz -= dot * oz; }
     if (tx * tx + tz * tz > 1e-10 && resolve(bx + tx, bz + tz, by + STEP + Y_EPS, by + H - Y_EPS) !== 2) {
       let cx = S.rx, cz = S.rz;
-      let g = rest(cx, cz, by);
+      let g = reach(bx, bz, by, cx, cz);
       if (g !== g) {
         // a convex boundary curves away from the tangent: pull the candidate back in to the closest valid point
         const ix = cx - ox * EDGE_PULL, iz = cz - oz * EDGE_PULL;
-        let gi = rest(ix, iz, by);
+        const gi = rest(ix, iz, by);
         if (gi === gi) {
           let kLo = 0, kHi = 1;
           for (let it = 0; it < 5; it++) {
             const m = (kLo + kHi) * 0.5;
             const gm = rest(ix + (cx - ix) * m, iz + (cz - iz) * m, by);
-            if (gm === gm) { kLo = m; gi = gm; } else kHi = m;
+            if (gm === gm) kLo = m; else kHi = m;
           }
           cx = ix + (cx - ix) * kLo; cz = iz + (cz - iz) * kLo;
-          g = gi;
+          g = reach(bx, bz, by, cx, cz);
         }
       }
       const ddx = cx - x, ddz = cz - z;

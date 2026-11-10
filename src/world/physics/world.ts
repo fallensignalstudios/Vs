@@ -189,6 +189,10 @@ export class PhysicsCore implements RecOwner {
     this.touch(s.minX, s.minZ, s.maxX, s.maxZ);
   }
 
+  triggerToggled(_t: TriggerRec): void {
+    this.triggerRevision++;
+  }
+
   triggerRemoved(t: TriggerRec): void {
     this.counts.triggers = Math.max(0, this.counts.triggers - 1);
     this.triggerRevision++;

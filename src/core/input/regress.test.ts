@@ -226,9 +226,16 @@ describe('browser integration', () => {
     expect(r.lockRequests).toBe(before + 1);
     expect(r.input.pointerLocked).toBe(true);
     r.input.setContext('menu');
-    r.input.exitPointerLock(); // an explicit exit (title screen) is final
+    r.input.exitPointerLock(); // UI code that also releases by hand (ui/menu.ts) does not cancel the re-lock
+    r.input.setContext('game');
+    expect(r.input.pointerLocked).toBe(true);
+    r.input.exitPointerLock(); // released during play: deliberate and final
+    expect(r.input.pointerLocked).toBe(false);
+    r.input.setContext('menu');
     r.input.setContext('game');
     expect(r.input.pointerLocked).toBe(false);
+    r.mouseDown(0); // until the player clicks the canvas again
+    expect(r.input.pointerLocked).toBe(true);
   });
 
   it('stops asking after three refusals but forgives one every 30 s', async () => {

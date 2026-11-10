@@ -39,7 +39,7 @@ export const FOLLOW = {
   /** when the camera is this close behind the hero the shoulder offset has shrunk to `nearShoulder` of itself */
   nearMin: 0.5,
   nearMax: 1.3,
-  nearShoulder: 0.28,
+  nearShoulder: 0.16,
   /** squeezed view: tilt down just enough to keep the helmet this far inside the frame (fraction of half-FOV) */
   keepHead: 0.74,
   tiltMax: 13 * DEG,
@@ -96,6 +96,8 @@ export interface FollowInput {
   busy: boolean;
   /** simulated seconds this frame (0 during hit-stop, scaled in slow-motion): speed estimate, guided turns */
   simDt: number;
+  /** 0..1: share of the 16:9 horizontal view the window really shows — the shoulder offset shrinks with it */
+  frame: number;
 }
 
 const NUDGE_YAW = 0.6;
@@ -171,6 +173,7 @@ export class FollowCamera {
   private readonly dir = new THREE.Vector3();
   private readonly req: ArmRequest = {
     pivot: this.pivot, head: this.head, floorY: 0, yaw: 0, dir: this.dir, dist: FOLLOW.distance, shoulder: FOLLOW.shoulder, lift: 0, overRise: 0,
+    velX: 0, velZ: 0,
   };
 
   constructor() {
@@ -321,8 +324,9 @@ export class FollowCamera {
     const heightOffset = this.fHeight.step(f?.heightOffset ?? 0, ft, dt);
     const dist = baseDist + (FOLLOW.aimDistance - baseDist) * aimK + FOLLOW.lockDistance * lockK * (1 - aimK);
     // Lateral offset of the anchor, and the toe-out that composes the hero off-centre (none while aiming).
-    const lateral = baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK;
-    const toe = FOLLOW.lookOffset * Math.min(1.5, baseShoulder / FOLLOW.shoulder) * (1 - aimK);
+    const frame = input.frame > 0 && input.frame < 1 ? input.frame : 1;
+    const lateral = (baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK) * frame;
+    const toe = FOLLOW.lookOffset * Math.min(1.5, baseShoulder / FOLLOW.shoulder) * (1 - aimK) * frame;
 
     // --- smoothed pivot (critically damped lag; vertical is softer to swallow steps) --------------
     let sx: number;
@@ -345,9 +349,12 @@ export class FollowCamera {
       const lagX = sx - tp.x;
       const lagZ = sz - tp.z;
       const lag = Math.hypot(lagX, lagZ);
-      if (lag > 1) {
-        sx = tp.x + (lagX / lag) * 1;
-        sz = tp.z + (lagZ / lag) * 1;
+      // The hero may run ahead of the pivot by up to a metre — but only as much as the frame can afford: with
+      // the camera squeezed close, a metre of lag would put the hero out of shot.
+      const slack = clamp(arm.backRoom * 0.3, 0.05, 1);
+      if (lag > slack) {
+        sx = tp.x + (lagX / lag) * slack;
+        sz = tp.z + (lagZ / lag) * slack;
         this.px.value = sx;
         this.pz.value = sz;
       }
@@ -399,6 +406,8 @@ export class FollowCamera {
     req.dist = dist;
     req.lift = heightOffset + FOLLOW.aimRise * aimK;
     req.overRise = FOLLOW.overRise + (FOLLOW.overRiseAim - FOLLOW.overRise) * aimK;
+    req.velX = this.velX;
+    req.velZ = this.velZ;
     const orbit = orbitPitchFor(pitch);
     // (a fresh seat iterates: how close the camera ends up decides the shoulder offset, and vice versa)
     for (let pass = this.fresh ? 3 : 1; pass > 0; pass--) {
@@ -410,7 +419,7 @@ export class FollowCamera {
       req.shoulder = lateral * nearScale * sideK;
       arm.solve(dt, this.fresh, world, req);
       const nearTarget = arm.length < arm.reach - 0.05 ? 1 - smoothstep(FOLLOW.nearMin, FOLLOW.nearMax, arm.backRoom) : 0;
-      this.near = this.fresh ? nearTarget : damp(this.near, nearTarget, nearTarget > this.near ? 10 : 3, dt);
+      this.near = this.fresh ? nearTarget : damp(this.near, nearTarget, nearTarget > this.near ? 20 : 3, dt);
     }
     const cam = arm.cam;
 
@@ -424,9 +433,16 @@ export class FollowCamera {
     // hero could not be brought into frame anyway (looking up with a wall behind).
     let tilt = 0;
     if (this.near > 0.01 && aimK < 0.99) {
+      // where the helmet projects in the untilted view: depth along the view axis, height along its up axis
+      const hx = head.x - cam.x;
       const hy = head.y + FOLLOW.headUp - cam.y;
-      const hd = Math.hypot(head.x - cam.x, head.z - cam.z);
-      const need = pitch - Math.atan2(hy, Math.max(hd, 1e-3)) - fov * DEG * 0.5 * FOLLOW.keepHead;
+      const hz = head.z - cam.z;
+      const sp = Math.sin(pitch);
+      const cp = Math.cos(pitch);
+      const ahead = -Math.sin(yaw) * hx - Math.cos(yaw) * hz;
+      const depth = ahead * cp + hy * sp;
+      const height = hy * cp - ahead * sp;
+      const need = Math.atan2(-height, Math.max(depth, 1e-3)) - Math.atan(Math.tan(fov * DEG * 0.5) * FOLLOW.keepHead);
       if (need > 0) {
         tilt = need <= FOLLOW.tiltMax ? need : FOLLOW.tiltMax * (1 - smoothstep(FOLLOW.tiltMax, FOLLOW.tiltMax * 2.2, need));
         tilt *= this.near * (1 - aimK);

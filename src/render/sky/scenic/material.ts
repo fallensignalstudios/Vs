@@ -40,6 +40,8 @@ export interface ScenicMaterialOpts {
   lamp?: [number, number, number];
   /** ambient multiplier where the sky is hidden (0 = black interiors, 1 = no occlusion) */
   shade?: number;
+  /** soft light arriving from the piece's +Z side (the viewer's terrace): [r, g, b, falloff distance in metres] */
+  nearFill?: [number, number, number, number];
   /** lit openings on flagged vertical faces: [module width, module height (m), brightness] */
   windows?: [number, number, number];
   /** how strongly the fleet battle's light rims the surface (the carrier's underside) */
@@ -110,6 +112,7 @@ uniform float uGlowReach;
 uniform vec3 uUnderLight;
 uniform vec3 uLamp;
 uniform float uShade;
+uniform vec4 uNearFill;
 uniform vec3 uWindows;
 uniform vec4 uArm;
 uniform vec4 uBodies;
@@ -135,7 +138,7 @@ float gridLine(float x, float w) {
 vec3 skyLite(vec3 d) {
   vec3 c = skyHaze(d) * (0.30 + 0.90 * exp(-max(d.y, 0.0) * 4.0));
   float ar = acos(clamp(dot(d, uRedDir), -1.0, 1.0)) / max(uBodies.z, 1e-3);
-  c += vec3(1.7, 0.15, 0.045) * uBodies.w * (smoothstep(1.12, 0.9, ar) + 0.30 * exp(-max(ar - 1.0, 0.0) * 1.1));
+  c += vec3(1.7, 0.15, 0.045) * uBodies.w * (smoothstep(1.12, 0.9, ar) + 0.14 * exp(-max(ar - 1.0, 0.0) * 1.7));
   float cw = max(dot(d, uWhiteDir), 0.0);
   c += uKeyColor * (pow(cw, 3000.0) * 7.0 + pow(cw, 240.0) * 0.07);
   float aw = acos(clamp(dot(d, uWoundDir), -1.0, 1.0)) / max(uBodies.x, 1e-3);
@@ -177,10 +180,13 @@ void main() {
     vec2 wc = floor(wuv), wf = fract(wuv);
     float fw = max(fwidth(wuv.x), fwidth(wuv.y));
     float h = hash21(wc + 7.3);
-    float on = step(h, vLight.z);
-    float sx = 1.0 - smoothstep(0.10, 0.10 + fw, abs(wf.x - 0.5));
-    float sy = smoothstep(0.16 - fw, 0.16, wf.y) * (1.0 - smoothstep(0.80, 0.80 + fw, wf.y));
-    float shape = mix(sx * sy * on, 0.13 * vLight.z, clamp(fw * 1.6 - 0.3, 0.0, 1.0));
+    // light gathers in a few vertical runs and leaves most of a face dark: seams of information, not office blocks
+    float run = step(0.70, hash11(wc.x * 1.37 + floor(dot(vLocalNormal, vec3(2.0, 0.0, 5.0)) + 0.5) * 17.0));
+    float level = vLight.z * mix(0.14, 1.25, run);
+    float on = step(h, level);
+    float sx = 1.0 - smoothstep(0.07, 0.07 + fw, abs(wf.x - 0.5));
+    float sy = smoothstep(0.12 - fw, 0.12, wf.y) * (1.0 - smoothstep(0.86, 0.86 + fw, wf.y));
+    float shape = mix(sx * sy * on, 0.10 * vLight.z * 0.47, clamp(fw * 1.6 - 0.3, 0.0, 1.0));
     float warm = hash21(wc + 91.0);
     windowGlow = mix(vec3(1.0, 0.62, 0.26), vec3(1.0, 0.83, 0.55), warm) * shape * uWindows.z * (0.55 + 0.9 * h) * wall;
     albedo *= 1.0 - 0.6 * sx * sy * wall * (1.0 - clamp(fw * 1.6, 0.0, 1.0));
@@ -241,9 +247,14 @@ void main() {
   float lum = dot(albedo, vec3(0.3, 0.55, 0.15));
   // mirror-polished black stone: almost no diffuse response, the reflection carries it
   float polish = uGloss * mix(1.0, 0.33, smoothstep(0.02, 0.22, lum));
-  vec3 direct = (uKeyColor * ndk + uFillColor * ndf) * skyVis;
+  // the red remnant's fill is half desaturated: it warms the far side of a tower, it must not repaint ivory as brick
+  vec3 fill = mix(vec3(dot(uFillColor, vec3(0.3, 0.55, 0.15))), uFillColor, 0.5);
+  vec3 direct = (uKeyColor * ndk + fill * ndf) * skyVis;
   vec3 lamp = uLamp * vLight.y;
-  vec3 lit = albedo * (direct * (1.0 - 0.55 * polish) + ambient + lamp + uUnderLight * max(-n.y, 0.0));
+  // soft light from the viewer's own terrace: both remnants sit behind the vista, so without it every near
+  // tower would show the viewer only its shadow side
+  vec3 nearFill = uNearFill.rgb * (clamp(dot(n, vec3(0.0, 0.33, 0.944)) * 0.6 + 0.4, 0.0, 1.0) * exp(-length(vLocal) / max(uNearFill.a, 1.0)));
+  vec3 lit = albedo * (direct * (1.0 - 0.55 * polish) + ambient + lamp + nearFill + uUnderLight * max(-n.y, 0.0));
   // the fleet battle rims surfaces that face it (wrapped so the whole underside of a hull catches it)
   float rim = clamp((dot(n, uBattleDir) + 0.6) / 1.6, 0.0, 1.0);
   lit += albedo * uBattleGlow * (uBattleRim * rim * rim * 6.0);
@@ -306,6 +317,7 @@ export function createScenicMaterial(shared: SharedUniforms, opts: ScenicMateria
       uUnderLight: { value: new THREE.Vector3(...(opts.underLight ?? [0, 0, 0])) },
       uLamp: { value: new THREE.Vector3(...(opts.lamp ?? [0, 0, 0])) },
       uShade: { value: opts.shade ?? 1 },
+      uNearFill: { value: new THREE.Vector4(...(opts.nearFill ?? [0, 0, 0, 1])) },
       uWindows: { value: new THREE.Vector3(...(opts.windows ?? [1, 1, 0])) },
       uBattleRim: { value: opts.battleRim ?? 0 },
     },

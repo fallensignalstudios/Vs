@@ -33,6 +33,8 @@ export interface PartOpts {
   slide?: Pt3;
   /** crease angle in degrees for normal smoothing (default 60; 180 = fully smooth, 0 = faceted) */
   crease?: number;
+  /** structure that outlives the creature: exempt from the dissolve and mostly from corruption */
+  keep?: boolean;
 }
 
 export interface BoneSpec {
@@ -58,6 +60,8 @@ export interface RigTemplate {
   /** bind-pose bounds */
   center: THREE.Vector3;
   radius: number;
+  /** model-space bind bounds of the vertices carried by each bone: [minX, minY, minZ, maxX, maxY, maxZ] per bone */
+  boneBox: Float32Array;
 }
 
 const _c = new THREE.Color();
@@ -214,7 +218,7 @@ export class RigBuilder {
       this.nrm.push(n[v * 3]!, n[v * 3 + 1]!, n[v * 3 + 2]!);
       this.col.push(_c.r, _c.g, _c.b);
       this.surf.push(paint.r, paint.m, paint.e ?? 0, s.e[v]! * edge);
-      this.part.push(opts.group ?? 0, rnd, paint.seam ?? 0, 0);
+      this.part.push(opts.group ?? 0, rnd, paint.seam ?? 0, opts.keep ? 1 : 0);
       this.slide.push(sl[0], sl[1], sl[2]);
       if (skin) skin(v, sk);
       this.skinI.push(sk[0]!, sk[2]!, 0, 0);
@@ -251,7 +255,17 @@ export class RigBuilder {
         return { ...s, offset: [m[0] - n[0], m[1] - n[1], m[2] - n[2]] as Pt3 };
       });
     }
-    return { geometry: g, bones, sockets, triangles: this.pos.length / 9, center: bs.center.clone(), radius: bs.radius };
+    const boneBox = new Float32Array(bones.length * 6);
+    for (let i = 0; i < bones.length; i++) { boneBox.fill(Infinity, i * 6, i * 6 + 3); boneBox.fill(-Infinity, i * 6 + 3, i * 6 + 6); }
+    for (let v = 0; v < this.pos.length / 3; v++) {
+      const o = this.skinI[v * 4]! * 6;
+      for (let k = 0; k < 3; k++) {
+        const c = this.pos[v * 3 + k]!;
+        if (c < boneBox[o + k]!) boneBox[o + k] = c;
+        if (c > boneBox[o + 3 + k]!) boneBox[o + 3 + k] = c;
+      }
+    }
+    return { geometry: g, bones, sockets, triangles: this.pos.length / 9, center: bs.center.clone(), radius: bs.radius, boneBox };
   }
 }
 
@@ -291,6 +305,8 @@ export class Rig {
   private readonly rest: Float32Array;
   private readonly skeleton: THREE.Skeleton;
   private readonly dummy = new THREE.Bone();
+  /** inverse of the rig group's world matrix (world → model space), refreshed by syncModelSpace() */
+  readonly toModel = new THREE.Matrix4();
 
   constructor(readonly template: RigTemplate, material: THREE.Material, private readonly label: string) {
     const specs = template.bones;
@@ -332,6 +348,38 @@ export class Rig {
     if (bone) return bone;
     warnOnce(`${this.label}:bone:${name}`, `[creatures] ${this.label}: unknown bone "${name}"`);
     return this.dummy;
+  }
+
+  /**
+   * Refresh `toModel` from the group's current world matrix. Returns false when the group is degenerate
+   * (a zero scale somewhere above it) — callers then skip posing for the frame instead of dividing by it.
+   */
+  syncModelSpace(): boolean {
+    this.group.updateWorldMatrix(true, false);
+    const det = this.group.matrixWorld.determinant();
+    if (!(Math.abs(det) > 1e-18)) return false;
+    this.toModel.copy(this.group.matrixWorld).invert();
+    return true;
+  }
+
+  /** bind position (model space) of a bone by index */
+  restOf(index: number, out: THREE.Vector3): THREE.Vector3 {
+    const a = this.template.bones[index]?.at;
+    return a ? out.set(a[0], a[1], a[2]) : out.set(0, 0, 0);
+  }
+
+  indexOf(bone: THREE.Bone): number {
+    return this.bones.indexOf(bone);
+  }
+
+  /** true when every bone transform is a finite number */
+  finite(): boolean {
+    const bs = this.bones;
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i]!, p = b.position, q = b.quaternion, s = b.scale;
+      if (!Number.isFinite(p.x + p.y + p.z + q.x + q.y + q.z + q.w + s.x + s.y + s.z)) return false;
+    }
+    return true;
   }
 
   /** Restore the rest pose (called at the start of every pose evaluation). */

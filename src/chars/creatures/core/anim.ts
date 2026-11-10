@@ -1,6 +1,7 @@
 /**
  * Procedural animation helpers: keyframe curves, impact envelopes, a two-bone IK limb and a cyclic gait.
- * Pure math + THREE.Bone posing; no allocation in the per-frame paths.
+ * Pure math + THREE.Bone posing; no allocation in the per-frame paths. Key tables passed to `keys` must be
+ * module constants (an array literal at the call site would allocate every frame).
  */
 import * as THREE from 'three';
 import { clamp, clamp01, smoothstep } from '@/core/mathx';
@@ -50,15 +51,22 @@ export function impact(t: number, t0: number, decay: number, ring = 0): number {
   return ring > 0 ? e * Math.cos(x * ring) : e;
 }
 
+function hash1(n: number): number {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return (s - Math.floor(s)) * 2 - 1;
+}
+
 /** cheap deterministic 1D value noise in [-1, 1] (idle drift, twitches) */
 export function noise1(x: number): number {
   const i = Math.floor(x), f = x - i;
   const u = f * f * (3 - 2 * f);
-  const h = (n: number): number => {
-    const s = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-    return (s - Math.floor(s)) * 2 - 1;
-  };
-  return h(i) + (h(i + 1) - h(i)) * u;
+  const a = hash1(i);
+  return a + (hash1(i + 1) - a) * u;
+}
+
+/** true when every component of a vector-like value is a finite number (guards every world-target setter) */
+export function finite3(v: { x: number; y: number; z: number } | null | undefined): v is { x: number; y: number; z: number } {
+  return !!v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 }
 
 /** additive euler rotation scaled by a weight */
@@ -229,4 +237,134 @@ export function gaitFoot(phase: number, stride: number, lift: number, duty: numb
 /** phase advance per second for a no-slide gait */
 export function gaitRate(speed: number, stride: number, duty: number): number {
   return stride > 1e-5 ? (speed * duty) / stride : 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// aiming + ground helpers (model space)
+// ---------------------------------------------------------------------------------------------------------
+
+const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3();
+const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
+const _ma = new THREE.Matrix4(), _mb = new THREE.Matrix4();
+
+function frame(out: THREE.Matrix4, dir: THREE.Vector3, hint: THREE.Vector3, x: THREE.Vector3, y: THREE.Vector3, z: THREE.Vector3): THREE.Matrix4 {
+  x.copy(dir).normalize();
+  y.copy(hint).addScaledVector(x, -hint.dot(x));
+  if (y.lengthSq() < 1e-8) {
+    y.set(0, 1, 0).addScaledVector(x, -x.y);
+    if (y.lengthSq() < 1e-8) y.set(1, 0, 0);
+  }
+  y.normalize();
+  z.crossVectors(x, y);
+  return out.makeBasis(x, y, z);
+}
+
+/**
+ * Rotation that carries the frame (restDir, restHint) onto (dir, hint): the segment points along `dir` and its
+ * bend plane follows `hint`, so there is no free twist. All vectors in one space; none need to be normalised.
+ */
+export function aimQuat(out: THREE.Quaternion, restDir: THREE.Vector3, restHint: THREE.Vector3, dir: THREE.Vector3, hint: THREE.Vector3): THREE.Quaternion {
+  frame(_ma, restDir, restHint, _ax, _ay, _az).transpose();
+  frame(_mb, dir, hint, _bx, _by, _bz).multiply(_ma);
+  return out.setFromRotationMatrix(_mb);
+}
+
+/**
+ * Keeps a planted foot where it is in the WORLD while the root yaws in place, and re-plants it with a short
+ * step once it has been dragged too far — so a creature tracking a target shuffles round instead of spinning
+ * like a turntable. `phi` is the yaw (about the root's Y axis) to apply to the foot's model-space target.
+ */
+export class PlantYaw {
+  phi = 0;
+  /** 0..1 while the foot is in the air on a turn step, −1 while planted */
+  step = -1;
+  /** 0..1 lift envelope of the current step */
+  lift = 0;
+  /** true only on the update in which a turn step lands */
+  landed = false;
+  private from = 0;
+  private to = 0;
+
+  get stepping(): boolean {
+    return this.step >= 0;
+  }
+
+  /**
+   * @param dyaw     root yaw change this frame (radians)
+   * @param dt       seconds
+   * @param mayStep  false while another foot of the same group is stepping
+   * @param release  0..1 — how strongly the gait is re-planting feet anyway (the offset bleeds away)
+   * @param limit    drift (radians) that triggers a step
+   * @param seconds  step duration
+   */
+  update(dyaw: number, dt: number, mayStep: boolean, release: number, limit: number, seconds: number): void {
+    this.landed = false;
+    if (this.step >= 0) {
+      this.step += dt / Math.max(0.05, seconds);
+      if (this.step >= 1) {
+        this.step = -1; this.phi = this.to; this.lift = 0; this.landed = true;
+      } else {
+        const s = this.step, e = s * s * (3 - 2 * s);
+        this.phi = this.from + (this.to - this.from) * e;
+        this.lift = Math.sin(Math.PI * s);
+      }
+      return;
+    }
+    this.phi -= dyaw;
+    if (release > 0) this.phi *= Math.exp(-10 * release * dt);
+    if (!Number.isFinite(this.phi)) this.phi = 0;
+    if (mayStep && Math.abs(this.phi) > limit) {
+      this.step = 0; this.from = this.phi;
+      // land a little ahead of the turn so a continuous turn alternates feet instead of stuttering
+      this.to = clamp(dt > 1e-5 ? (dyaw / dt) * 0.12 : 0, -0.25, 0.25);
+    }
+  }
+
+  reset(): void {
+    this.phi = 0; this.step = -1; this.lift = 0; this.landed = false;
+  }
+
+  /** rotate a model-space point about the root's Y axis by phi (in place) */
+  apply(v: THREE.Vector3): THREE.Vector3 {
+    const c = Math.cos(this.phi), s = Math.sin(this.phi);
+    const x = v.x * c + v.z * s, z = -v.x * s + v.z * c;
+    v.x = x; v.z = z;
+    return v;
+  }
+}
+
+/** a point carried by a bone that must stay above the floor (model-space y ≥ radius) */
+export interface GroundProbe {
+  bone: THREE.Object3D;
+  /** offset in the bone's own frame (= model axes at bind) */
+  x: number; y: number; z: number;
+  /** clearance kept between the point and the floor */
+  r: number;
+}
+
+/** build a probe from a model-space bind point carried by `bone` (whose bind position is `at`) */
+export function probe(bone: THREE.Object3D, at: readonly [number, number, number], point: readonly [number, number, number], r: number): GroundProbe {
+  return { bone, x: point[0] - at[0], y: point[1] - at[1], z: point[2] - at[2], r };
+}
+
+const _pv = new THREE.Vector3();
+
+/**
+ * How far the lowest probe sits below the floor (model-space metres, ≥ 0). `toModel` is the inverse of the
+ * rig group's world matrix; the probes' bones must have up-to-date world matrices.
+ */
+export function groundDeficit(probes: readonly GroundProbe[], toModel: THREE.Matrix4, floor = 0): number {
+  let d = 0;
+  for (let i = 0; i < probes.length; i++) {
+    const p = probes[i]!;
+    _pv.set(p.x, p.y, p.z).applyMatrix4(p.bone.matrixWorld).applyMatrix4(toModel);
+    const below = floor + p.r - _pv.y;
+    if (below > d) d = below;
+  }
+  return d;
+}
+
+/** model-space position of one probe (after its bone's world matrix is current) */
+export function probeModel(p: GroundProbe, toModel: THREE.Matrix4, out: THREE.Vector3): THREE.Vector3 {
+  return out.set(p.x, p.y, p.z).applyMatrix4(p.bone.matrixWorld).applyMatrix4(toModel);
 }

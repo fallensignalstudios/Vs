@@ -61,6 +61,20 @@ export function validate(core: PhysicsCore): PhysicsIssue[] {
   };
 
   // ---- surfaces: void strips, unusable widths, implausible slopes ------------------------------------------
+  const pairKey = (a: SurfaceRec, b: SurfaceRec): number => Math.min(a.id, b.id) * 0x100000 + Math.max(a.id, b.id);
+  const d0 = GAP_TOL + 0.03;
+  // Surfaces that meet somewhere along their edges (abutting, overlapping, or within the crack tolerance) are
+  // joined: a sliver of void where a straight bridge runs into a round rim is a corner, not a mis-laid module.
+  const joined = new Set<number>();
+  for (const s of core.surfaces) {
+    if (!s.on) continue;
+    eachEdgePoint(s, (x, z, nx, nz) => {
+      const h = s.heightNear(x, z);
+      const g = core.groundY(x + nx * d0, z + nz * d0, h, DEF_STEP_UP);
+      const other = core.lastSurface;
+      if (g === g && h - g <= DEF_STEP_UP && other && other !== s) joined.add(pairKey(s, other));
+    });
+  }
   const pairs = new Set<number>();
   const human = edgeMarginFor(0.4);
   for (const s of core.surfaces) {
@@ -82,7 +96,6 @@ export function validate(core: PhysicsCore): PhysicsIssue[] {
     eachEdgePoint(s, (x, z, nx, nz) => {
       const h = s.heightNear(x, z);
       // nothing just past the edge (so the crack is not closed) …
-      const d0 = GAP_TOL + 0.03;
       const g0 = core.groundY(x + nx * d0, z + nz * d0, h, DEF_STEP_UP);
       if (g0 === g0 && h - g0 <= DEF_STEP_UP) return;
       // … yet floor at the same level a little further out: a void strip
@@ -91,8 +104,8 @@ export function validate(core: PhysicsCore): PhysicsIssue[] {
         if (g !== g || h - g > DEF_STEP_UP) continue;
         const other = core.lastSurface;
         if (!other || other === s) return;
-        const key = Math.min(s.id, other.id) * 0x100000 + Math.max(s.id, other.id);
-        if (pairs.has(key)) return;
+        const key = pairKey(s, other);
+        if (pairs.has(key) || joined.has(key)) return;
         pairs.add(key);
         const gap = other.outside(x, z);
         add('gap', x + nx * gap * 0.5, h, z + nz * gap * 0.5,

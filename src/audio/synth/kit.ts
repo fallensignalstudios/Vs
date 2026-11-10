@@ -248,6 +248,47 @@ export class Kit {
   }
 
   /**
+   * Play a buffer — a pre-rendered recipe or a recording — as ONE source. A one-shot ends with the buffer;
+   * with `loop` on a sustaining kit the source loops until the voice is stopped, and follows setPitch.
+   * The kit pitch becomes the playback rate.
+   */
+  sample(buf: AudioBuffer, o?: { at?: number; g?: number; rate?: number; to?: AudioNode; pan?: number; loop?: boolean }): AudioBufferSourceNode {
+    const t0 = this.t + (o?.at ?? 0);
+    const src = this.ac.createBufferSource();
+    src.buffer = buf;
+    const rate = clamp((o?.rate ?? 1) * this.pitch, 0.25, 4);
+    src.playbackRate.value = rate;
+    const dst = this.dest(o);
+    const level = o?.g ?? 1;
+    const sustain = !!o?.loop && this.sustain;
+    if (level !== 1 || sustain) {
+      const g = this.ac.createGain();
+      if (sustain) {
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(level, t0 + 0.06);
+      } else {
+        g.gain.value = level;
+      }
+      src.connect(g);
+      g.connect(dst);
+    } else {
+      src.connect(dst);
+    }
+    src.start(t0);
+    if (sustain) {
+      src.loop = true;
+      this.pitched.push({ p: src.playbackRate, base: rate });
+      this.open.push(src);
+    } else {
+      const len = buf.duration / rate;
+      src.stop(t0 + len + 0.01);
+      const rel = t0 - this.t + len;
+      if (rel > this.end) this.end = rel;
+    }
+    return src;
+  }
+
+  /**
    * Two-operator FM voice. `ratio` = modulator/carrier frequency, `index` = modulation index trajectory
    * (bright → mellow when it falls). Bells, metal, servos, screeches.
    */

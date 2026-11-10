@@ -6,7 +6,9 @@ import { buildAtriumShell } from './atriumShell';
 import type { ClipTipSlot } from './clipTower';
 import { buildCrownmarkArm } from './crownmarkArm';
 import { buildMegaRibs } from './megaRibs';
-import { ShipMaterials, buildShip, buildWreck } from './ships';
+import { bag } from './opts';
+import { ShipMaterials, buildShip } from './ships';
+import { buildWreck } from './wrecks';
 import { buildTerminalVista } from './terminalVista';
 
 export interface ScenicRuntime extends ScenicFactory {
@@ -49,9 +51,15 @@ export function createScenicFactory(game: Game, shared: SharedUniforms, tips: Cl
         }
         k = 'dominionShuttle';
       }
-      return buildShip(shared, shipMats, k, opts?.scale);
+      return buildShip(shared, shipMats, k, bag(opts).scale);
     }),
-    wreck: (kind, opts) => guarded('wreck', () => buildWreck(shipMats, game, kind === 'reformation' ? 'reformation' : 'dominion', opts?.scale, opts?.seed)),
+    wreck: (kind, opts) => guarded('wreck', () => {
+      if (kind !== 'dominion' && kind !== 'reformation' && !warned.has(`wreck:${String(kind)}`)) {
+        warned.add(`wreck:${String(kind)}`);
+        console.warn(`[sky] unknown wreck kind "${String(kind)}" — using dominion`);
+      }
+      return buildWreck(shipMats, game, kind === 'reformation' ? 'reformation' : 'dominion', bag(opts).scale, bag(opts).seed);
+    }),
     update(time) { shipMats.update(time); },
     dispose() { shipMats.dispose(); },
   };

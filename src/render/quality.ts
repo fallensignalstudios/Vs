@@ -40,6 +40,16 @@ export function lowerQuality(level: QualityLevel): QualityLevel {
   return QUALITY_ORDER[Math.max(0, QUALITY_ORDER.indexOf(level) - 1)];
 }
 
+const SOFTWARE_GPU = /swiftshader|llvmpipe|softpipe|software|microsoft basic render|virtualbox|vmware|svga3d/;
+
+/**
+ * True for software rasterisers and virtual GPUs (SwiftShader, llvmpipe, …). No setting reaches the frame
+ * budget there, so the renderer keeps the resolution it was asked for instead of adapting (headless captures).
+ */
+export function isSoftwareGpu(rendererString: string | null | undefined): boolean {
+  return SOFTWARE_GPU.test((rendererString ?? '').toLowerCase());
+}
+
 /**
  * Guess a quality level from the unmasked WebGL renderer string (WEBGL_debug_renderer_info).
  * Conservative: unknown hardware gets 'medium'; software rasterisers always get 'low'.
@@ -47,7 +57,7 @@ export function lowerQuality(level: QualityLevel): QualityLevel {
 export function classifyGpu(rendererString: string | null | undefined, hints: { mobile?: boolean } = {}): QualityLevel {
   const s = (rendererString ?? '').toLowerCase();
   if (!s) return hints.mobile ? 'low' : 'medium';
-  if (/swiftshader|llvmpipe|softpipe|software|microsoft basic render|virtualbox|vmware|svga3d/.test(s)) return 'low';
+  if (SOFTWARE_GPU.test(s)) return 'low';
 
   // Phones / tablets.
   if (/adreno|mali|powervr|videocore|tegra/.test(s)) {
@@ -100,6 +110,39 @@ export function classifyGpu(rendererString: string | null | undefined, hints: { 
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Frame-time filtering
+// ---------------------------------------------------------------------------------------------------------
+
+/** frames longer than this are hitch candidates (ms) */
+const HITCH_MS = 100;
+/** frames longer than this are never load: tab switches, loading, a debugger (ms) */
+const STALL_MS = 1000;
+/** this many consecutive hitch candidates are dropped; a longer run is a machine that is simply slow */
+const HITCH_RUN = 3;
+
+/**
+ * Tells hitches from sustained load. Isolated long frames (shader compiles, texture uploads, GC) must not move
+ * the controllers, but a machine that renders every frame in 150 ms needs them more than any other.
+ */
+class HitchFilter {
+  private run = 0;
+
+  reset(): void {
+    this.run = 0;
+  }
+
+  /** The frame time to account for, or 0 when the frame should be ignored. */
+  accept(frameMs: number): number {
+    if (!(frameMs > 0) || frameMs > STALL_MS) return 0;
+    if (frameMs <= HITCH_MS) {
+      this.run = 0;
+      return frameMs;
+    }
+    return ++this.run > HITCH_RUN ? frameMs : 0;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Dynamic resolution
 // ---------------------------------------------------------------------------------------------------------
 
@@ -131,6 +174,7 @@ export class DynamicResolution {
   private sinceChange = 0;
   private probeWait = 4;
   private lastChangeWasUp = false;
+  private readonly hitches = new HitchFilter();
 
   constructor(opts: DynamicResolutionOpts = {}) {
     this.targetMs = opts.targetMs ?? 17.2;
@@ -146,6 +190,7 @@ export class DynamicResolution {
     this.overTime = this.stableTime = this.sinceChange = 0;
     this.probeWait = 4;
     this.lastChangeWasUp = false;
+    this.hitches.reset();
   }
 
   get atFloor(): boolean {
@@ -154,10 +199,12 @@ export class DynamicResolution {
 
   /**
    * Feed one frame (`frameMs` = real time since the previous frame). Returns true when `scale` changed.
-   * Frames longer than 100 ms (loading hitches, tab switches) are ignored.
+   * Isolated frames longer than 100 ms (hitches) and anything over a second (tab switches, loading) are
+   * ignored; a sustained run of slow frames counts as load.
    */
-  update(frameMs: number): boolean {
-    if (!(frameMs > 0) || frameMs > 100) return false;
+  update(raw: number): boolean {
+    const frameMs = this.hitches.accept(raw);
+    if (frameMs === 0) return false;
     const dt = frameMs / 1000;
     const a = 1 - Math.exp(-dt / 0.25);
     this.ema = this.ema === 0 ? frameMs : this.ema + (frameMs - this.ema) * a;
@@ -210,6 +257,9 @@ export class DynamicResolution {
 // Auto quality governor
 // ---------------------------------------------------------------------------------------------------------
 
+/** frames skipped before the early measurement starts */
+const WARMUP_FRAMES = 20;
+
 /**
  * Refines the GPU heuristic with real frame timing. Only ever steps DOWN (vsync hides headroom, and stepping
  * up would recompile shaders mid-play): once early if the first second of play is clearly too slow, and later
@@ -221,6 +271,7 @@ export class AutoQualityGovernor {
   private slowTime = 0;
   private stepsLeft: number;
   private earlyDone = false;
+  private readonly hitches = new HitchFilter();
 
   constructor(maxSteps = 2) {
     this.stepsLeft = maxSteps;
@@ -231,21 +282,26 @@ export class AutoQualityGovernor {
     this.sum = 0;
     this.slowTime = 0;
     this.earlyDone = false;
+    this.hitches.reset();
   }
 
   /**
    * Feed one frame. `resolutionAtFloor` = dynamic resolution cannot help any more (or is disabled).
    * Returns true when the caller should step one quality level down.
    */
-  update(frameMs: number, resolutionAtFloor: boolean): boolean {
-    if (this.stepsLeft <= 0 || !(frameMs > 0) || frameMs > 100) return false;
+  update(raw: number, resolutionAtFloor: boolean): boolean {
+    if (this.stepsLeft <= 0) return false;
+    const frameMs = this.hitches.accept(raw);
+    if (frameMs === 0) return false;
 
     if (!this.earlyDone) {
       this.frames++;
       // skip the first frames: shader warm-up and texture uploads are not representative
-      if (this.frames > 20) this.sum += frameMs;
-      if (this.frames >= 80) {
-        const avg = this.sum / (this.frames - 20);
+      const measured = this.frames - WARMUP_FRAMES;
+      if (measured > 0) this.sum += frameMs;
+      // 60 measured frames, or three measured seconds on a machine too slow to get there in reasonable time
+      if (measured >= 60 || (measured >= 10 && this.sum >= 3000)) {
+        const avg = this.sum / measured;
         this.earlyDone = true;
         if (avg > 30) return this.step();
       }

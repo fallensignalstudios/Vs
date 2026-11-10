@@ -281,3 +281,41 @@ export function padStyleFromId(id: string): PadStyle {
     ? 'playstation'
     : 'xbox';
 }
+
+const BINDINGS_KEY = 'aurelion.bindings.v1';
+/** where rebinds persist (localStorage); may be absent, and every access may throw in sandboxed frames */
+export type BindingStore = { getItem(key: string): string | null; setItem(key: string, value: string): void } | null | undefined;
+
+/** Apply the player's stored rebinds to `keymap` (missing / corrupt / blocked storage = defaults). */
+export function loadKeymap(keymap: Keymap, store: BindingStore): void {
+  try {
+    const raw = store?.getItem(BINDINGS_KEY);
+    if (raw) keymap.load(JSON.parse(raw));
+  } catch {
+    /* storage unavailable or corrupt: defaults */
+  }
+}
+
+/** Persist the rebinds (a blocked storage just means they last for this session). */
+export function saveKeymap(keymap: Keymap, store: BindingStore): void {
+  try {
+    store?.setItem(BINDINGS_KEY, JSON.stringify(keymap.overrides()));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Ask the browser for the keyboard layout (Chromium only); `done` is called if and when it answers. */
+export function readLayout(get: (() => Promise<LayoutMap>) | null | undefined, done: (map: LayoutMap) => void): void {
+  if (typeof get !== 'function') return;
+  try {
+    const p = get();
+    if (p && typeof p.then === 'function') {
+      p.then((map) => {
+        if (map && typeof map.get === 'function') done(map);
+      }, () => {});
+    }
+  } catch {
+    /* layout unknown: glyphs fall back to the US labels */
+  }
+}

@@ -197,6 +197,20 @@ export class GeoBuilder {
   }
 
   /**
+   * The INSIDE of a box (an open bay, a recess): five walls facing inward, open toward +Z.
+   */
+  room(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number): this {
+    const x0 = cx - sx / 2, x1 = cx + sx / 2, y0 = cy - sy / 2, y1 = cy + sy / 2, z0 = cz - sz / 2, z1 = cz + sz / 2;
+    const c: P3 = [cx, cy, cz];
+    this.quadFacing([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], c); // floor
+    this.quadFacing([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1], c); // ceiling
+    this.quadFacing([x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1], c);
+    this.quadFacing([x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1], c);
+    this.quadFacing([x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], c); // back wall
+    return this;
+  }
+
+  /**
    * Box with every edge chamfered by `bevel` metres (hard-surface plates, plinths, blocks): the chamfers catch
    * the light, which is what makes a block read as manufactured rather than as a placeholder. 44 triangles.
    */
@@ -500,10 +514,18 @@ export class GeoBuilder {
     return { pos: this.pos, nrm: this.nrm, col: this.col, glow: this.glow, idx: this.idx };
   }
 
-  build(): THREE.BufferGeometry {
+  /** `lean` = position + normal only (meshes drawn with library PBR materials need nothing else). */
+  build(lean = false): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     const n = this.pos.length / 3;
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    if (lean) {
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
+      g.setIndex(n > 65535 ? new THREE.Uint32BufferAttribute(this.idx, 1) : new THREE.Uint16BufferAttribute(this.idx, 1));
+      g.computeBoundingSphere();
+      g.computeBoundingBox();
+      return g;
+    }
     const nrm = new Int8Array(n * 3);
     for (let i = 0; i < nrm.length; i++) nrm[i] = Math.round(Math.max(-1, Math.min(1, this.nrm[i])) * 127);
     g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3, true));

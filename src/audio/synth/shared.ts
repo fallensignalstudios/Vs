@@ -1,18 +1,20 @@
 /**
- * Per-context shared resources: looping noise buffers, waveshaper curves, the reverb impulse.
- * Built once for an AudioContext / OfflineAudioContext and reused by every voice.
+ * Per-context shared resources: looping noise buffers, waveshaper curves, the room impulses.
+ * Built once per sample rate and reused by every voice.
  */
-import { fillNoise, makeCurve, makeHallIR, type CurveName, type NoiseColor } from './buffers';
+import { ROOMS, fillNoise, makeCurve, makeHallIR, type CurveName, type NoiseColor, type RoomName } from './buffers';
 
 export interface Shared {
   readonly noise: Readonly<Record<NoiseColor, AudioBuffer>>;
   readonly curves: Readonly<Record<CurveName, Float32Array<ArrayBuffer>>>;
-  readonly hallIR: AudioBuffer;
+  /** convolution impulses: three world spaces and the score's own stage */
+  readonly rooms: Readonly<Record<RoomName, AudioBuffer>>;
 }
 
 // distinct (mutually non-multiple) lengths so layered loops never phase-lock audibly
 const NOISE_SECONDS: Record<NoiseColor, number> = { white: 2.0, pink: 2.7, brown: 3.3, crackle: 2.3 };
 const NOISE_SEED: Record<NoiseColor, number> = { white: 101, pink: 202, brown: 303, crackle: 404 };
+const ROOM_SEED: Record<RoomName, number> = { small: 4127, hall: 9173, vast: 2311, stage: 6581 };
 
 // AudioBuffers are not tied to the context that made them, so one set per sample rate serves the live
 // context and every offline render.
@@ -31,11 +33,15 @@ export function makeShared(ac: BaseAudioContext): Shared {
   const curves = {} as Record<CurveName, Float32Array<ArrayBuffer>>;
   for (const name of ['soft', 'hard', 'fold', 'asym', 'ceiling'] as CurveName[]) curves[name] = makeCurve(name);
 
-  const [l, r] = makeHallIR(sr);
-  const hallIR = ac.createBuffer(2, l.length, sr);
-  hallIR.copyToChannel(l, 0);
-  hallIR.copyToChannel(r, 1);
-  const shared: Shared = { noise, curves, hallIR };
+  const rooms = {} as Record<RoomName, AudioBuffer>;
+  for (const name of Object.keys(ROOMS) as RoomName[]) {
+    const [l, r] = makeHallIR(sr, ROOMS[name], ROOM_SEED[name]);
+    const buf = ac.createBuffer(2, l.length, sr);
+    buf.copyToChannel(l, 0);
+    buf.copyToChannel(r, 1);
+    rooms[name] = buf;
+  }
+  const shared: Shared = { noise, curves, rooms };
   cache.set(sr, shared);
   return shared;
 }

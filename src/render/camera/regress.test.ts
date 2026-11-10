@@ -39,7 +39,7 @@ describe('auto-recentre (closed loop: move → camera basis → target → camer
     const cam = new FollowCamera();
     const target = { pos: new THREE.Vector3(), height: 1.55 };
     cam.setTarget(target);
-    const fi: FollowInput = { lookX: 0, lookY: 0, recentre: mode, absolute: false, busy: false, simDt: DT, ...extra };
+    const fi: FollowInput = { lookX: 0, lookY: 0, recentre: mode, absolute: false, busy: false, simDt: DT, frame: 1, ...extra };
     const world = { sweep: null, ground: null };
     const yaw: number[] = [];
     const len = Math.hypot(mx, my) || 1;
@@ -443,9 +443,15 @@ describe('blends, framing and lifecycle', () => {
     expect(rig.camera.fov).toBeCloseTo(100, 6);
     expect(hTan()).toBeGreaterThan(Math.tan(31 * DEG) * (720 / 1280) * 1.8);
     const hero = { x: 0, y: 0 };
+    tick(60);
     expect(rig.worldToScreen({ x: 0, y: 1.2, z: 0 }, hero)).toBe(true);
-    expect(hero.x).toBeGreaterThan(0);
-    expect(hero.x).toBeLessThan(720);
+    expect(hero.x).toBeGreaterThan(720 * 0.2);
+    expect(hero.x).toBeLessThan(720 * 0.5);
+    rig.setAim(true); // aiming still zooms in portrait, and the hero's head stays in the narrow frame
+    tick(90);
+    expect(rig.camera.fov).toBeLessThan(90);
+    expect(rig.worldToScreen(HEAD, hero)).toBe(true);
+    expect(hero.x).toBeGreaterThan(720 * 0.08);
   });
 
   it('shake covers the same share of the screen through the aim lens', () => {
@@ -644,5 +650,55 @@ describe('cinematic continuity', () => {
     expect(() => s.rig.cine.path([], 2)).not.toThrow();
     expect(() => s.rig.cine.path(null as never, 2)).not.toThrow();
     expect(() => s.rig.cine.path([{ pos: { x: NaN, y: 0, z: 0 }, look: { x: 0, y: 0, z: 0 } }], 2)).not.toThrow();
+  });
+});
+
+describe('gamepad aim assist', () => {
+  /** degrees of yaw produced by one second of the same stick push while aiming */
+  function turn(opts: { device: 'kbm' | 'gamepad'; assist: boolean; target: boolean }): number {
+    const s = setup();
+    s.settings.set('aimAssist', opts.assist);
+    const padInput = Object.create(s.input, { device: { get: () => opts.device } });
+    (s.game as { input: unknown }).input = padInput;
+    s.rig.setTarget(s.target);
+    s.rig.snapBehind(0);
+    s.rig.pitch = 0;
+    s.rig.setAim(true);
+    s.tick(60);
+    const o = new THREE.Vector3();
+    const d = new THREE.Vector3();
+    s.rig.getAimRay(o, d);
+    const onReticle = o.clone().addScaledVector(d, 12); // an enemy head dead centre, 12 m out
+    if (opts.target) s.rig.setAimAssist(() => [onReticle, { x: NaN, y: 0, z: 0 }]);
+    const before = s.rig.yaw;
+    s.input.virtual.addLook(0.01, 0);
+    s.tick();
+    return (s.rig.yaw - before) / DEG;
+  }
+
+  it('slows the stick near a target for pad players only, and only when the setting is on', () => {
+    const free = turn({ device: 'gamepad', assist: true, target: false });
+    const sticky = turn({ device: 'gamepad', assist: true, target: true });
+    expect(free).toBeGreaterThan(0.3);
+    expect(sticky / free).toBeCloseTo(0.55, 2); // −45 % on the reticle
+    expect(turn({ device: 'gamepad', assist: false, target: true })).toBeCloseTo(free, 6);
+    expect(turn({ device: 'kbm', assist: true, target: true })).toBeCloseTo(free, 6);
+  });
+
+  it('a throwing source is dropped, never thrown into the frame', () => {
+    const s = setup();
+    (s.game as { input: unknown }).input = Object.create(s.input, { device: { get: () => 'gamepad' } });
+    s.rig.setTarget(s.target);
+    s.rig.setAim(true);
+    s.rig.setAimAssist(() => {
+      throw new Error('dead actor');
+    });
+    const warn = console.warn;
+    console.warn = () => {};
+    expect(() => s.tick(3)).not.toThrow();
+    console.warn = warn;
+    s.rig.setAimAssist(null);
+    s.rig.setAimAssist('junk' as never);
+    expect(() => s.tick(3)).not.toThrow();
   });
 });

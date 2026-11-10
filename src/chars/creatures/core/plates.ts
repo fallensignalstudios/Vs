@@ -81,6 +81,12 @@ export interface PlateOpts extends PartOpts {
   lift?: number;
   /** how far it slides along its own +Y at knit = 1 (default 0.05) */
   shift?: number;
+  /**
+   * secondary forms that make a slab read as made armour rather than a blank facet: a raised inner panel
+   * (second bevel line), and — with `inlay` — a dead channel strip let into its face
+   */
+  detail?: boolean;
+  inlay?: Paint;
 }
 
 /** Add one curved armour plate seated by matrix `m` (see `facing`), with a knit slide vector derived from it. */
@@ -91,6 +97,23 @@ export function addPlate(b: RigBuilder, bone: string, paint: Paint, outline: rea
   const slide: Pt3 = o.slide ?? [e[8]! * lift + e[4]! * shift, e[9]! * lift + e[5]! * shift, e[10]! * lift + e[6]! * shift];
   const opts: PartOpts = { group: o.group, rand: o.rand, crease: o.crease, slide };
   b.add(bone, paint, plate(outline, thick, bevel, o.rx ?? 0, o.ry ?? 0, bevel * 0.5), m, opts);
+  if (o.detail) {
+    // inner panel: the outline pulled in toward its centroid, proud of the face by a fraction of the thickness
+    let cx = 0, cy = 0;
+    for (const p of outline) { cx += p[0]; cy += p[1]; }
+    cx /= outline.length; cy /= outline.length;
+    const inner = outline.map((p) => [cx + (p[0] - cx) * 0.7, cy + (p[1] - cy) * 0.74] as Pt2);
+    const mi = m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, thick * 0.56));
+    b.add(bone, { ...paint, r: Math.min(1, paint.r + 0.08), edge: (paint.edge ?? 0.5) * 1.3 }, plate(inner, thick * 0.3, bevel * 0.7, o.rx ? o.rx + thick * 0.56 : 0, o.ry ? o.ry + thick * 0.56 : 0, 0), mi, opts);
+    if (o.inlay) {
+      let hw = 0, y0 = Infinity, y1 = -Infinity;
+      for (const p of inner) { hw = Math.max(hw, Math.abs(p[0] - cx)); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+      const w = Math.max(0.014, hw * 0.09);
+      const strip: Pt2[] = [[cx - w, y0 + (y1 - y0) * 0.12], [cx + w, y0 + (y1 - y0) * 0.12], [cx + w, y1 - (y1 - y0) * 0.2], [cx - w, y1 - (y1 - y0) * 0.12]];
+      const ms = m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, thick * 0.74));
+      b.add(bone, o.inlay, plate(strip, thick * 0.12, thick * 0.03, 0, o.ry ? o.ry + thick * 0.8 : 0, 0), ms, opts);
+    }
+  }
   if (o.trim) {
     const under = outline.map((p) => [p[0] * 1.07 + 0.012, p[1] * 1.05 - 0.016] as Pt2);
     const mt = m.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, -thick * 0.62));

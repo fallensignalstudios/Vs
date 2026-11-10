@@ -17,6 +17,12 @@
  * lift, vignette) → screen feedback → ACES filmic tone map → SMAA → film grain + dither.
  * `?nopost=1` renders the scene directly (tone-mapped, no effects) for fast headless shots; `?quality=high`
  * forces the reference chain (software WebGL defaults to 'low': no AO, no SMAA, no planar reflections).
+ * Dynamic resolution and the auto-quality step-down never act under `?manual=1` or on a software rasteriser,
+ * so headless captures always keep the resolution of their quality level.
+ *
+ * LIGHTING NOTE: a directional light mirrored in a polished floor (roughness < ~0.1) is a pin-sharp, very hot
+ * glint that blooms into a white blob wherever the camera can see its reflection. Keep hard lights steep or
+ * behind the usual camera direction over mirror stone, or give that floor material a little more roughness.
  *
  * AUTHORING CONVENTIONS
  *  - Emissive: scene-linear luminance above `Look.bloom.threshold` (≈ 1) blooms — emissive intensity 1.5 = soft
@@ -24,7 +30,7 @@
  *  - Thin emissive geometry (channels, seams) should be at least ~4 cm wide: MSAA keeps it continuous at
  *    high / ultra, but at low / medium anything under a pixel breaks into dots.
  *  - Ambient occlusion multiplies the whole pixel. An emissive hero object that sits in a crease can opt out
- *    with `mesh.userData.cannotReceiveAO = true` (costs one extra draw of that mesh).
+ *    with `mesh.userData.cannotReceiveAO = true` (high / ultra only; costs one extra draw of that mesh).
  *  - Things that should not show up in floor reflections / the reflection probe: see RENDER_LAYERS.
  */
 import type * as THREE from 'three';

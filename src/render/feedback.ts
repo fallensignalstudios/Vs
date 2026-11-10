@@ -32,8 +32,8 @@ interface PulseDef {
  * of the frame, not paint a border (callers may pass up to strength 2). Only `flash` washes the frame.
  */
 export const PULSES: Readonly<Record<ScreenPulse, PulseDef>> = {
-  // damage: the edges sink into a dark blood red — weight, not neon
-  hit: { glow: [0.035, 0, 0], wash: [0.004, 0, 0], tint: [0.85, 0.045, 0.035], tintAmount: 0.72, darken: 0.45, chroma: 1.4, frost: 0, attack: 0.03, decay: 0.55 },
+  // damage: the edges sink into a dark blood red — weight, not neon (the glow keeps it readable on black stone)
+  hit: { glow: [0.07, 0.002, 0], wash: [0.004, 0, 0], tint: [0.85, 0.045, 0.035], tintAmount: 0.72, darken: 0.45, chroma: 1.4, frost: 0, attack: 0.03, decay: 0.55 },
   // sustain: a soft warm-green breath
   heal: { glow: [0.02, 0.05, 0.03], wash: [0.002, 0.005, 0.003], tint: [0.85, 1.2, 0.95], tintAmount: 0.12, darken: 0, chroma: 0, frost: 0, attack: 0.14, decay: 0.9 },
   // Eclipse pressure spike (the sustained state is setCorruption)

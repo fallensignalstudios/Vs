@@ -79,7 +79,7 @@ vec2 starDensity(vec3 d) {
   float band = exp(-lat * lat * 13.0);
   float clump = vnoise(d * 3.3 + 40.0);
   float lane = uDetail > 0.5 ? smoothstep(0.30, 0.62, vnoise(d * vec3(6.0, 10.0, 6.0) + 11.0)) : 1.0;
-  return vec2(clamp(0.16 + 0.95 * clump * clump + 1.15 * band * lane, 0.0, 1.5), band * lane);
+  return vec2(clamp(0.10 + 0.85 * clump * clump * clump * 2.0 + 1.25 * band * lane, 0.0, 1.5), band * lane);
 }
 
 vec3 starLayer(vec3 d, float n, float px, float seed, float occupancy, float r0, float gamma) {
@@ -104,15 +104,15 @@ vec3 starLayer(vec3 d, float n, float px, float seed, float occupancy, float r0,
 vec3 starField(vec3 d, float px) {
   vec2 dens = starDensity(d);
   vec3 s = vec3(0.0);
-  s += starLayer(d, 86.0, px, 3.0, 0.50 * dens.x, 0.00050, 7.5) * 11.0;
-  s += starLayer(d, 47.0, px, 11.0, 0.40 * dens.x, 0.00062, 6.5) * 14.0;
-  s += starLayer(d, 23.0, px, 23.0, 0.26 * dens.x, 0.00085, 5.5) * 17.0;
+  s += starLayer(d, 86.0, px, 3.0, 0.50 * dens.x, 0.00050, 7.5) * 6.5;
+  s += starLayer(d, 47.0, px, 11.0, 0.40 * dens.x, 0.00062, 6.5) * 8.0;
+  s += starLayer(d, 23.0, px, 23.0, 0.24 * dens.x, 0.00085, 6.0) * 9.0;
   // unresolved stars of the band itself: a faint milky glow that the lanes cut through
   s += vec3(0.020, 0.021, 0.027) * dens.y * dens.y;
   // a few bright stars with a soft glare (much rarer than before; none of them rivals the white remnant)
   vec3 c = floor(d * 7.0);
   vec3 h = hash33(c + 71.0);
-  if (h.x < 0.11) {
+  if (h.x < 0.07) {
     vec3 sd = normalize(c + 0.5 + (hash33(c + 90.7) - 0.5) * 0.5);
     vec3 sp = sd * 7.0 - c - 0.5;
     float edge = 0.5 - max(abs(sp.x), max(abs(sp.y), abs(sp.z)));
@@ -120,7 +120,7 @@ vec3 starField(vec3 d, float px) {
     vec3 dv = d - sd;
     float a2 = dot(dv, dv);
     float r = max(0.0009, px * 0.9);
-    float core = exp(-a2 / (r * r)) * (0.0009 * 0.0009) / (r * r) * 16.0;
+    float core = exp(-a2 / (r * r)) * (0.0009 * 0.0009) / (r * r) * 11.0;
     float glare = 0.0000009 / (a2 + 0.00002) * exp(-a2 / 0.00022);
     vec3 tint = mix(vec3(1.0, 0.80, 0.60), vec3(0.68, 0.82, 1.0), h.z);
     s += tint * (core + glare) * (0.12 + 0.88 * h.y * h.y) * w;
@@ -223,7 +223,7 @@ vec3 whiteRemnant(vec3 d, float px) {
   float glare = 0.50 * pow(g, 2.3) + 0.032 * pow(g, 1.15);
   float u = dot(dv, uCamRight), v = dot(dv, uCamUp);
   float lw = max(uWhiteR * 0.14, px * 0.9);
-  float streak = exp(-abs(v) / lw) * exp(-abs(u) / (uWhiteR * 24.0)) * 0.55;
+  float streak = exp(-abs(v) / lw) * exp(-abs(u) / (uWhiteR * 15.0)) * 0.55;
   streak += exp(-abs(u) / lw) * exp(-abs(v) / (uWhiteR * 7.0)) * 0.16;
   return vec3(0.80, 0.90, 1.0) * (core + glare + streak);
 }
@@ -231,8 +231,13 @@ vec3 whiteRemnant(vec3 d, float px) {
 // ---------------------------------------------------------------------------------------------------------
 // The Wound.
 // ---------------------------------------------------------------------------------------------------------
+// Pulverised matter hugging the rim. The triangle-wave folds put hard creases into the iso-contours, so the
+// thresholded silhouette is chipped and angular (shattered rock) rather than a row of soft ink blots.
 float debrisField(vec3 p, float seed) {
-  return 0.58 * vnoise(p + seed) + 0.30 * vnoise(p * 2.6 + seed * 1.7) + 0.12 * vnoise(p * 6.1 + seed * 0.3);
+  float n = 0.58 * vnoise(p + seed) + 0.30 * vnoise(p * 2.6 + seed * 1.7) + 0.12 * vnoise(p * 6.1 + seed * 0.3);
+  vec3 f = abs(fract(p * vec3(2.3, 2.9, 2.6) + seed) - 0.5);
+  vec3 g = abs(fract(p.yzx * vec3(5.1, 4.3, 5.7) + seed * 2.0) - 0.5);
+  return n + (f.x + f.y + f.z - 0.75) * 0.085 + (g.x + g.y + g.z - 0.75) * 0.04;
 }
 
 // One angular rock per lattice cell in (angle, radius) space around the Wound: an irregular five-sided
@@ -344,14 +349,14 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   float v1 = vnoise(q * fq * 1.6 + vec3(0.0, uTime * 0.045, 3.0));
   float v2 = uDetail > 0.5 ? vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0)) : v1;
   float ridge = 1.0 - abs(2.0 * (0.64 * v1 + 0.36 * v2) - 1.0);
-  float fil = pow(ridge, 14.0);
-  float gate = smoothstep(0.46, 0.76, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
+  float fil = pow(ridge, 22.0);
+  float gate = smoothstep(0.52, 0.80, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
   float swell = uDetail > 0.5 ? 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * vnoise(q * (0.9 / R) + 4.0)) : 0.75;
   float band = smoothstep(0.80, 1.0, rn) * exp(-max(rn - 1.0, 0.0) / 0.34);
   // sub-linear in activity so the default mid settings still show a few live threads
   float vio = act * (0.55 + 0.45 * act) + 0.5 * sqrt(act) * (1.0 - act);
-  vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * vio * 3.0;
-  violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * vio * 0.5;
+  vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * vio * 2.0;
+  violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * vio * 0.45;
   col += violet * outside;
 
   col = mix(inner, col, outside);
@@ -443,7 +448,8 @@ void main() {
   float below = smoothstep(0.0, -0.035, d.y) * uGround;
   col = mix(col, hz * mix(1.0, 0.35, smoothstep(0.0, -0.6, d.y)), below);
 
-  if (uWhiteVis > 0.002) col += whiteRemnant(d, px) * uWhiteVis * (1.0 - 0.6 * band) * (1.0 - below);
+  // (its glare never reaches into the Wound: the disc stays exactly black)
+  if (uWhiteVis > 0.002) col += whiteRemnant(d, px) * uWhiteVis * (1.0 - 0.6 * band) * (1.0 - below) * (1.0 - uWoundVis * (1.0 - smoothstep(0.97, 1.02, rn)));
 
   col = skyDither(col * uGain, gl_FragCoord.xy);
   gl_FragColor = vec4(col, 1.0);

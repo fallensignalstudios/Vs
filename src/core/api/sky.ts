@@ -10,6 +10,10 @@
  * `SKY_PRESET_IDS` (all preset ids, mission order) and `SKY_PRESETS` (the authored table) are exported from
  * '@/render/sky' for debug menus.
  *
+ * ZONE LOADS. Sky state persists between zones (preset, heading, boundary, carrier). A snap `setPreset` clears
+ * every live battle effect and hides the carrier unless the preset is 'battleCeiling'; `sky.reset()` returns
+ * everything to the neutral start state. Call one of them when a zone loads.
+ *
  * TYPICAL ZONE USE
  *   game.sky.setPreset('woundVista');                       // snap during loading (or { blendSeconds } in play)
  *   const vista = game.sky.scenic.terminalVista();          // built facing −Z, origin = overlook floor
@@ -30,10 +34,21 @@ export type SkyPreset =
   | 'observation'     // Z11: red remnant left, hard white remnant right, Wound between
   | 'hangar';         // Z12: outer ring, both fleets wary at distance
 
+/**
+ * The damaged carrier of Z05. Hidden unless `visible`; `sky.setPreset` hides it again for every preset except
+ * 'battleCeiling'.
+ *
+ * THE CLIP. The pass is staged so the hull's ventral bow ram FIRST touches the scenic tower's needle at
+ * `clipProgress` (0.8): nothing intersects the tower before it, the needle shears off at its collar and the
+ * rest of the hull rides clear of the stump. A crossing that is PLAYED (visible, progress advancing by ≤ 0.05
+ * per call) fires `onClip` and spawns the flash, sparks, masonry and dust; these and the falling needle run on
+ * the sim clock, so they keep going if the script holds progress. A skip / load past 0.8 lands with the needle
+ * simply gone and no effects; progress below 0.8 restores it.
+ */
 export interface CarrierActor {
   readonly object: THREE.Object3D;
   visible: boolean;
-  /** 0..1 along its authored pass above the Z05 ceiling (clips a scenic tower near 0.8). */
+  /** 0..1 along its authored pass above the Z05 ceiling (first contact with the scenic tower at `clipProgress`). */
   setProgress(t: number): void;
   /** 0..1 how much of its maneuvering light is restored (Tharne reconnecting jets) */
   setStabilized(n: number): void;
@@ -47,19 +62,36 @@ export interface CarrierActor {
    * Place the authored pass. `origin` = centre of the Z05 atrium floor in world space and `yaw` (engine yaw)
    * rotates the whole pass about it. Defaults to the origin with yaw 0 — the frame `scenic.atriumShell()` is
    * built in, so shell and carrier line up when both get the same position / rotation.y.
+   * A missing or non-finite origin warns once and keeps the previous anchor.
    */
   setAnchor(origin: Vec3Like, yaw?: number): void;
-  /** World position where the hull clips the scenic tower (the tower `scenic.atriumShell()` builds). */
+  /** World position where the hull clips the scenic tower: the needle's collar (the tower `scenic.atriumShell()` builds). */
   readonly clipPoint: THREE.Vector3;
+  /** Progress at which the bow ram first touches the tower (0.8). */
+  readonly clipProgress: number;
+  /**
+   * Called once when a PLAYED pass shears the tower (see the interface note), with the world contact point —
+   * hook audio, camera shake and rumble here instead of polling `progress`. null = no listener.
+   */
+  onClip: ((point: THREE.Vector3) => void) | null;
   /** Unit travel direction (world) at the current progress. */
   readonly forward: THREE.Vector3;
   /** Overall hull length in metres (≈ 460). */
   readonly length: number;
   /**
-   * 0..1 how much the hull currently blocks the sky's key light over the atrium centre (0 while hidden).
-   * Dim the zone key light with it — the carrier's threat is communicated by its shadow.
+   * 0..1 how much the hull currently blocks the sky's key light over the atrium centre (0 while hidden; always
+   * finite). Dim the zone key light with it — the carrier's threat is communicated by its shadow.
+   * It peaks when the hull sits BETWEEN the atrium and the key light, not when it looks overhead: with the
+   * 'battleCeiling' key (high in the east-north-east) that is progress ≈ 0.72–0.88, i.e. around the clip.
    */
   readonly shadow: number;
+  /**
+   * The hull's shadow on the atrium floor plane (y = anchor height), cast along the sky's key light — drive a
+   * light cookie or a blob shadow with it so a moving edge crosses the room. `center` is in world space, `axis`
+   * the unit direction of the shadow's long side; half extents are 0 while the carrier is hidden.
+   * The same objects are updated in place every frame.
+   */
+  readonly shadowFootprint: { readonly center: THREE.Vector3; readonly axis: THREE.Vector3; readonly halfLength: number; readonly halfWidth: number };
 }
 
 /** A directional light suggestion. `dir` is the unit vector pointing FROM the scene TOWARD the light. */
@@ -79,8 +111,17 @@ export interface SkySystem {
    */
   readonly root: THREE.Object3D;
   readonly preset: SkyPreset;
-  /** Switch preset; `blendSeconds` (default 0 = snap) crossfades every parameter. Unknown ids fall back to 'void'. */
+  /**
+   * Switch preset; `blendSeconds` (default 0 = snap) crossfades every parameter. Unknown ids fall back to 'void'.
+   * A snap is a cut: live tracers, flashes and arcs are cleared and `battleGlow` is zeroed. Any preset other
+   * than 'battleCeiling' hides the carrier.
+   */
   setPreset(preset: SkyPreset, opts?: { blendSeconds?: number }): void;
+  /**
+   * Back to the neutral start state for a zone load: preset 'void' (snap), heading 0, boundary open, battle
+   * effects cleared, carrier hidden at progress 0 / stabilised 0 with the scenic tower's needle restored.
+   */
+  reset(): void;
 
   /**
    * Unit directions (world) toward the key bodies for the current preset — use to align key lights.
@@ -130,6 +171,9 @@ export interface SkySystem {
   /** Horizon haze colour of the current (blended) sky, linear — match zone fog to it for seamless vistas. */
   readonly hazeColor: THREE.Color;
 
+  // QUALITY: the dome's shading cost follows `game.render.quality.level` (low / medium / high+ultra tiers) and
+  // drops to the cheapest tier automatically in small secondary passes (reflections, PMREM bakes).
+
   /**
    * Build non-colliding megastructure backdrop pieces. Returned objects are positioned in zone-local space by
    * the caller and disposed with the zone.
@@ -144,41 +188,63 @@ export interface SkySystem {
 /**
  * Scenic pieces. Far-field kinds (`terminalVista`, `atriumShell`, `crownmarkArm`, `megaRibs`, capital ships) use
  * fog-exempt materials with their own distance haze that follows the sky preset, so they survive zone fog; each
- * is ≤ 12 draw calls (merged structure + instanced light points). Near-field kinds (shuttle / transport / wreck)
- * use the shared material library and are lit and fogged by the zone like any prop.
- * All pieces are built facing −Z (north) with +Y up and have no collision.
+ * is ≤ 12 draw calls (merged structure + instanced light points). Their lighting is BAKED per vertex: the sky's
+ * key / fill reach only what is open to the sky, enclosed surfaces are lit by their own seams — zone lights and
+ * shadows do not affect them. Near-field kinds (shuttle / transport / wreck) use the shared material library and
+ * are lit, shadowed and fogged by the zone like any prop.
+ *
+ * All pieces are built facing −Z (north) with +Y up. NOTHING HERE HAS COLLISION: a zone that lets the player
+ * reach a shuttle, transport or wreck must author its own colliders (footprints are given per kind below).
+ * Geometry is owned by the returned object (dispose it with the zone); the near-field pieces' materials are
+ * shared and owned by the factory — never dispose or mutate them.
+ *
+ * Every option is sanitised: null / NaN / infinite / absurd values fall back to the default or are clamped to
+ * the stated range, and unknown kinds warn once and fall back.
  */
 export interface ScenicFactory {
   /**
-   * City-scale converging terminal structure: spires, arms, bridges fading into haze (Wound overlook concept).
-   * Origin = the overlook floor; the deck lies `drop` metres below and the arms converge toward −Z.
+   * City-scale converging terminal structure: spires, arched skyways, bridges fading into haze (Wound overlook
+   * concept). Origin = the overlook floor by the railing; the hub lies toward −Z. Two levels: skyways about
+   * 0.2 × `drop` below the floor (what the eye-level camera sees) and the main deck `drop` metres below.
+   * `radius` 800…6000 (default 3000), `drop` 40…900 (default 220), `density` 0.25…2.
    * `corridor` keeps a central strip (metres wide) free of spires so `crownmarkArm` can lie in it.
+   * `clearWound` (default true): nothing shines inside the `woundVista` Wound's disc as seen from the origin —
+   * structures in its cone are capped low and unlit, so the disc stays an absence. Pass false for other skies.
    */
-  terminalVista(opts?: { radius?: number; seed?: number; density?: number; drop?: number; corridor?: number }): THREE.Object3D;
+  terminalVista(opts?: { radius?: number; seed?: number; density?: number; drop?: number; corridor?: number; clearWound?: boolean }): THREE.Object3D;
   /**
-   * The ~300 m scenic atrium shell around Z05: ringed tiers, broken spans, transparent ceiling lattice.
-   * Origin = centre of the playable platform floor. Everything lies outside `shaftRadius` (the void around the
-   * playable platform), so it never intersects zone geometry built inside it. Includes the exterior spires seen
-   * through the ceiling — one of them is the tower the carrier clips (`sky.carrier.clipPoint`).
+   * The ~300 m scenic atrium shell around Z05: arcaded gallery tiers, immense ribs, broken bridges, an open
+   * ceiling lattice. Origin = centre of the playable platform floor. At floor level everything lies outside
+   * `shaftRadius` (the void around the playable platform) except four short broken stubs on the diagonals
+   * 22.5° + k·90° (they reach in to r ≈ 34); long broken spans cross the shaft on the other diagonals at
+   * gallery height (≥ one tier up). Includes the exterior spires seen through the ceiling — one of them is the
+   * tower the carrier clips (`sky.carrier.clipPoint`); the most recently built shell's needle is the one the
+   * carrier shears. `radius` 80…260 (default 150), `height` 50…400 (140), `shaftRadius` ≥ 20 (60), `tiers` 1…7 (4).
    */
   atriumShell(opts?: { radius?: number; height?: number; shaftRadius?: number; tiers?: number; seed?: number }): THREE.Object3D;
   /**
    * One enormous arm of a city-scale Crownmark structure receding to the horizon.
    * Origin = the overlook floor above the arm's root; the arm runs toward −Z, `drop` metres below.
+   * `length` 600…9000 (default 3600), `width` 80…1600 (520), `drop` 20…900 (150). `clearWound` as in `terminalVista`.
    */
-  crownmarkArm(opts?: { length?: number; width?: number; drop?: number; seed?: number }): THREE.Object3D;
+  crownmarkArm(opts?: { length?: number; width?: number; drop?: number; seed?: number; clearWound?: boolean }): THREE.Object3D;
   /**
-   * Distant structural ribs (immense spans) for interiors that look out. A nave of `count` arches spaced
-   * `spacing` apart along −Z, each `span` wide and `height` tall, centred on the origin at floor level.
+   * Distant structural ribs (immense spans) for interiors that look out. A nave of `count` (1…24) arches spaced
+   * `spacing` apart, each `span` wide and `height` tall. Origin = floor level on the nave axis under the FIRST
+   * rib; the others recede toward −Z.
    */
   megaRibs(opts?: { count?: number; span?: number; height?: number; spacing?: number; seed?: number }): THREE.Object3D;
   /**
-   * A parked/hovering capital silhouette for hangar and battle backdrops.
-   * Shuttle ≈ 24 m and transport ≈ 31 m long (near-field PBR, resting on y = 0, nose toward −Z);
-   * capitals ≈ 620 m (far-field hazed material, origin at the hull centre).
+   * A parked/hovering ship for hangar and battle backdrops.
+   * Shuttle ≈ 26 m long × 17 m span × 7 m high and transport ≈ 31 × 15 × 9 m (near-field PBR, resting on
+   * y = 0, nose toward −Z, ramp / cargo door at +Z); capitals ≈ 620 m (far-field hazed material, origin at the
+   * hull centre). No collision — see the interface note.
    */
   ship(kind: 'dominionShuttle' | 'reformationTransport' | 'dominionCapital' | 'reformationCapital', opts?: { scale?: number }): THREE.Object3D;
-  /** Crashed dropship hull section (Z00 / Z03 start dressing). Rests on y = 0; ≈ 16 m long at scale 1. */
+  /**
+   * Crashed dropship hull section (Z00 / Z03 start dressing). Rests on y = 0; ≈ 16 m long × 9 m wide × 6 m
+   * high at scale 1, with debris and scorch scattered within ≈ 12 m. No collision — see the interface note.
+   */
   wreck(kind: 'dominion' | 'reformation', opts?: { scale?: number; seed?: number }): THREE.Object3D;
 }
 

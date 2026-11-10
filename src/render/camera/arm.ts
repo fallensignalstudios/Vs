@@ -39,6 +39,8 @@ export const ARM = {
   overFar: 1.45,
   /** line-of-sight probe radius (camera → the hero's true head) */
   sight: 0.12,
+  /** seconds ahead the arm looks along the hero's velocity */
+  lead: 0.22,
 } as const;
 
 /** soft minimum: tends to min(a,b) but with a rounded corner */
@@ -64,6 +66,9 @@ export interface ArmRequest {
   lift: number;
   /** extra anchor height when fully squeezed against a wall (look-over) */
   overRise: number;
+  /** the hero's horizontal velocity (m/s): where the anchor is about to be */
+  velX: number;
+  velZ: number;
 }
 
 export class SpringArm {
@@ -81,8 +86,8 @@ export class SpringArm {
   backRoom = 3.4;
 
   private sideLimit = 1;
-  private lift = 0;
   private floorLift = 0;
+  private slammed = false;
 
   private readonly base = new THREE.Vector3();
   private readonly anchor = new THREE.Vector3();
@@ -94,8 +99,8 @@ export class SpringArm {
     this.sideLimit = 1;
     this.squeeze = 0;
     this.crowded = 0;
-    this.lift = 0;
     this.floorLift = 0;
+    this.slammed = false;
   }
 
   /**
@@ -105,6 +110,9 @@ export class SpringArm {
   solve(dt: number, fresh: boolean, world: FollowWorld, req: ArmRequest): void {
     const passes = fresh && world.sweep ? 3 : 1;
     for (let i = 0; i < passes; i++) this.pass(dt, fresh, world, req);
+    // Something cut the arm to (almost) nothing this very frame: the look-over rise it calls for is taken in
+    // the same frame, or the camera would sit in the hero's head while the rise eased in.
+    if (this.slammed && !fresh) this.pass(dt, false, world, req);
 
     // floor under the camera (ramps, steps): lift instantly, settle back slowly
     const cam = this.cam;
@@ -126,6 +134,7 @@ export class SpringArm {
     const cam = this.cam;
     const rx = Math.cos(req.yaw);
     const rz = -Math.sin(req.yaw);
+    this.slammed = false;
 
     // --- anchor height: authored lift, then the look-over rise; each only as far as the ceiling allows ----
     const lowY = this.raise(sweep, pivot, pivot.y, req.lift);
@@ -170,7 +179,7 @@ export class SpringArm {
     // --- 2) the arm itself: the swept limit applies instantly (never clip through cover) ------------------
     cam.set(anchor.x - dir.x * dist, anchor.y - dir.y * dist, anchor.z - dir.z * dist);
     const k = embedded ? null : sweep(anchor, cam, ARM.probe);
-    let hard = k !== null && k < 1 ? dist * clamp01(k) : dist;
+    const hard = k !== null && k < 1 ? dist * clamp01(k) : dist;
     if (!embedded && hard < 1e-3 && this.inside(sweep, anchor)) embedded = true;
     if (embedded) {
       // The hero is INSIDE a solid (a door closed on them, a large body moved over them, a sight-blocking
@@ -193,7 +202,11 @@ export class SpringArm {
       if (k0 !== null) free = k0 < 1 ? dist * clamp01(k0) : dist;
     }
     const squeeze = (1 - smoothstep(ARM.overNear, ARM.overFar, free * cp)) * smoothstep(0.05, 0.3, 1 - free / dist);
-    this.squeeze = fresh ? squeeze : damp(this.squeeze, squeeze, squeeze > this.squeeze ? 10 : 2.5, dt);
+    // (with under half a metre left the rise is immediate — see `solve`; otherwise it eases in and out)
+    const floor = squeeze * (1 - smoothstep(0.35, 0.9, free * cp));
+    this.slammed = floor > this.squeeze + 0.25;
+    if (fresh || this.slammed) this.squeeze = fresh ? squeeze : floor;
+    else this.squeeze = damp(this.squeeze, squeeze, squeeze > this.squeeze ? 10 : 2.5, dt);
 
     // --- 3) anticipation whiskers ease the arm in ahead of obstacles about to cross it --------------------
     let want = hard;
@@ -211,6 +224,21 @@ export class SpringArm {
       }
     }
     this.crowded = fresh ? crowded : damp(this.crowded, crowded, crowded > this.crowded ? 20 : 4, dt);
+    // …and a third whisker in TIME: the same arm from where the hero will be in a fifth of a second. Running
+    // along a ribbed wall, the next rib is about to pass between hero and camera — start closing now, so the
+    // inevitable cut is a short step instead of a full-length leap.
+    const speed = Math.hypot(req.velX, req.velZ);
+    if (speed > 2 && !fresh) {
+      const lead = Math.min(ARM.lead, 1.6 / speed);
+      this.tmp.set(anchor.x + req.velX * lead, anchor.y, anchor.z + req.velZ * lead);
+      this.tmp2.set(this.tmp.x - dir.x * dist, this.tmp.y - dir.y * dist, this.tmp.z - dir.z * dist);
+      const w = sweep(this.tmp, this.tmp2, ARM.probe * 0.6);
+      // (≈0 = the hero is running AT something and the future anchor is inside it: that is not a crossing)
+      if (w !== null && w < 1 && w > 0.02) {
+        const hit = dist * w;
+        if (hit < hard) want = Math.min(want, hard + (hit - hard) * ARM.whiskerPull);
+      }
+    }
 
     // --- 4) keep the hero's head in sight: a thin post between camera and hero shortens the arm quickly,
     //        but as an eased move (the camera itself is in free space, so nothing is clipping) ------------

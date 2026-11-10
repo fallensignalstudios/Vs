@@ -1,20 +1,21 @@
 /**
- * Scenic ships and wrecks.
+ * Scenic ships.
  *  - Capitals (≈ 620 m): far-field hazed material + light cards, 2 draw calls.
- *  - Shuttle / transport (≈ 24 / 31 m) and crashed hull sections: near-field PBR split by material role, using
- *    the shared material library when it is available (so they match the faction kit) and a palette-matched
- *    MeshStandardMaterial fallback when it is not. ≤ 7 draw calls each; they cast and receive zone shadows.
+ *  - Shuttle / transport (≈ 26 / 31 m): near-field PBR split by material role, using the shared material library
+ *    when it is available (so they match the faction kit) and a palette-matched MeshStandardMaterial fallback
+ *    when it is not. ≤ 7 draw calls each; they cast and receive zone shadows. Crashed hull sections live in
+ *    wrecks.ts and share `ShipMaterials`.
  */
 import * as THREE from 'three';
 import type { Game, MatId } from '@/core/api';
 import { PALETTE } from '@/core/api';
-import { mulberry32 } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import type { SharedUniforms } from '../shared';
-import { GeoBuilder, type P3 } from './geo';
+import { GeoBuilder } from './geo';
 import { HULL_ROLES, PartSink, buildHull, paletteFor, type HullRole, type ShipKind } from './hulls';
 import { LightCards } from './lights';
 import { createScenicMaterial } from './material';
+import { num } from './opts';
 
 type Faction = 'dominion' | 'reformation';
 
@@ -67,6 +68,31 @@ export class ShipMaterials {
     this.dying.push({ m: mat, base: 2.2, seed: faction === 'dominion' ? 1.3 : 4.1 });
     this.cache.set(key, mat);
     m = mat;
+    return m;
+  }
+
+  /** Fallback for the ground a wreck ploughed up (used when the library has no 'rubble'). */
+  ground(): THREE.Material {
+    let m = this.cache.get('ground');
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({ name: 'ship:ground', color: 0x24211e, roughness: 0.95, metalness: 0 });
+      this.owned.push(m);
+      this.cache.set('ground', m);
+    }
+    return m;
+  }
+
+  /** Soft scorch decal: black, alpha from the vertex colours, never writes depth. */
+  scorch(): THREE.Material {
+    let m = this.cache.get('scorch');
+    if (!m) {
+      m = new THREE.MeshBasicMaterial({
+        name: 'ship:scorch', color: 0x050403, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      });
+      this.owned.push(m);
+      this.cache.set('scorch', m);
+    }
     return m;
   }
 
@@ -125,7 +151,7 @@ function splitMeshes(sink: PartSink, name: string, material: (role: HullRole) =>
   for (const role of HULL_ROLES) {
     const b = sink.builder(role);
     if (b.triangleCount === 0) continue;
-    const mesh = new THREE.Mesh(b.build(), material(role));
+    const mesh = new THREE.Mesh(b.build(true), material(role));
     mesh.name = `${name}:${role}`;
     const lit = role !== 'glow' && role !== 'engine';
     mesh.castShadow = lit;
@@ -137,9 +163,9 @@ function splitMeshes(sink: PartSink, name: string, material: (role: HullRole) =>
   return group;
 }
 
-export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: ShipKind, scale = 1): THREE.Object3D {
+export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: ShipKind, scale?: number): THREE.Object3D {
   const faction = factionOf(kind);
-  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const s = num(scale, 1, 0.05, 20);
   if (kind === 'dominionCapital' || kind === 'reformationCapital') {
     const b = new GeoBuilder();
     buildHull(kind, PartSink.single(paletteFor(kind), b));
@@ -172,121 +198,3 @@ export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: Shi
   group.scale.setScalar(s);
   return group;
 }
-
-// -------------------------------------------------------------------------------------------------------------
-// Wrecks — a crashed dropship hull section: an open, ribbed fuselage barrel half-buried at an angle, torn
-// plating, a snapped strut or wing root, scattered plates, scorch, and light strips that are failing.
-// -------------------------------------------------------------------------------------------------------------
-export function buildWreck(mats: ShipMaterials, game: Game, faction: Faction, scale = 1, seed = 7283): THREE.Object3D {
-  const rand = mulberry32(seed ^ (faction === 'dominion' ? 0xd03 : 0x4ef));
-  const sink = PartSink.split(paletteFor(faction === 'dominion' ? 'dominionShuttle' : 'reformationTransport'));
-  const scorch = new GeoBuilder().paint(0x060606);
-  const dom = faction === 'dominion';
-  const R = dom ? 2.9 : 3.2, HGT = dom ? 2.2 : 2.3; // half width / half height of the barrel
-  const LEN = 13;
-  const sides = dom ? 7 : 8;
-  const ringAt = (z: number, k: number, jag: number): P3[] => {
-    const pts: P3[] = [];
-    for (let i = 0; i < sides; i++) {
-      const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
-      // squarer section for the Reformation module, wedge-bellied for the Dominion hull
-      const sx = Math.cos(a), sy = Math.sin(a);
-      const px = dom ? sx * R * (sy < 0 ? 0.82 : 1) : Math.sign(sx) * Math.pow(Math.abs(sx), 0.55) * R;
-      const py = dom ? sy * HGT * (sy < 0 ? 1.1 : 0.92) : Math.sign(sy) * Math.pow(Math.abs(sy), 0.55) * HGT;
-      pts.push([px * k, py * k, z + (jag ? (rand() - 0.5) * jag : 0)]);
-    }
-    return pts;
-  };
-  // resting pose: nose buried, rolled, section lifted so it rests on y = 0
-  sink.push().translate(0, HGT * 0.72, 0).rotateZ(dom ? 0.28 : -0.2).rotateX(dom ? -0.16 : -0.1);
-  scorch.push().translate(0, HGT * 0.72, 0).rotateZ(dom ? 0.28 : -0.2).rotateX(dom ? -0.16 : -0.1);
-
-  // outer skin (torn open at the rear: jagged last ring) and inner lining
-  const stations = [-LEN / 2, -LEN / 4, 0, LEN / 4, LEN / 2];
-  const outer = stations.map((z, i) => ringAt(z, 1 - 0.08 * Math.max(0, -z / (LEN / 2)), i === stations.length - 1 ? 2.6 : 0));
-  // ringAt winds clockwise when looking from the first station toward the last, so the skin is lofted
-  // reversed (faces out) and the lining as-is (faces the cabin)
-  sink.p('hull').loft(outer.map((ring) => [...ring].reverse()), false);
-  const inner = outer.map((ring) => ring.map((p): P3 => [p[0] * 0.9, p[1] * 0.88, p[2]]));
-  sink.p('dark').loft(inner, false);
-  // nose bulkhead, crumpled
-  sink.p('accent').poly([...outer[0]].reverse());
-  // structural frames (visible ribs) and a longitudinal spine
-  for (let i = 0; i < 5; i++) {
-    const z = -LEN / 2 + 1 + i * (LEN - 2) / 4;
-    const a = ringAt(z - 0.14, 0.9, 0), c = ringAt(z + 0.14, 0.9, 0);
-    const a2 = a.map((p): P3 => [p[0] * 0.86, p[1] * 0.86, p[2]]), c2 = c.map((p): P3 => [p[0] * 0.86, p[1] * 0.86, p[2]]);
-    for (let j = 0; j < sides; j++) {
-      const k = (j + 1) % sides;
-      sink.p('metal').quad(a2[k], a2[j], c2[j], c2[k]).quad(a[j], a2[j], a2[k], a[k]).quad(c[k], c2[k], c2[j], c[j]);
-    }
-  }
-  sink.p('metal').box(0, HGT * 0.82, 0, 0.3, 0.26, LEN * 0.94);
-  // armour plates / panels on the skin; some missing, edges scorched
-  for (let i = 0; i < 9; i++) {
-    const z = -LEN / 2 + 0.9 + i * 1.3;
-    for (const s of [-1, 1]) {
-      if (rand() < 0.28) continue;
-      sink.p(dom ? 'accent' : 'hull', 0.9 + rand() * 0.25).box(s * (R + 0.06), (rand() - 0.5) * 0.5, z, 0.14, HGT * (0.9 + rand() * 0.5), 1.14);
-      if (rand() < 0.45) scorch.box(s * (R + 0.15), HGT * (rand() - 0.2) * 0.6, z, 0.06, HGT * 0.7, 1.0);
-    }
-  }
-  // failing light strips along the upper flanks + a dead console glow inside
-  for (const s of [-1, 1]) {
-    for (let i = 0; i < 3; i++) if (rand() < 0.75) sink.p('glow').box(s * (R + 0.14), HGT * 0.52, -LEN / 2 + 2.2 + i * 3.6, 0.05, 0.09, 2.4);
-  }
-  sink.p('glow').box(-R * 0.5, -HGT * 0.3, -LEN / 2 + 0.5, 0.9, 0.5, 0.06);
-  // snapped wing root (Dominion) / torn outrigger with a dead thruster pod (Reformation)
-  if (dom) {
-    sink.push().translate(-R, 0.5, 0.6).rotateZ(0.5);
-    sink.p('hull', 0.9).box(-1.9, 0, 0, 3.8, 0.4, 4.6, { top: [0.8, 0.7] });
-    sink.p('dark').box(-3.9, 0.1, 0.2, 0.5, 0.5, 3.4, { top: [0.4, 0.5] });
-    sink.pop();
-  } else {
-    sink.p('metal').box(R + 1.5, HGT * 0.6, 1, 3.0, 0.34, 0.6, { shift: [0.4, 0] });
-    sink.push().translate(R + 3.2, HGT * 0.35, 1).rotateZ(-0.5).rotateX(Math.PI / 2);
-    sink.p('dark').prism(0, -1.3, 0, 1.4, 0.95, 1.1, 8);
-    sink.pop();
-  }
-  scorch.box(0, -HGT * 0.95, LEN * 0.3, R * 1.5, 0.12, LEN * 0.5);
-  sink.pop();
-  scorch.pop();
-
-  // ground: gouge berm, scattered plates and scorch marks around the hull
-  for (let i = 0; i < 14; i++) {
-    const a = rand() * Math.PI * 2, d = R + 1.2 + rand() * 6.5;
-    const x = Math.cos(a) * d * 0.9, z = Math.sin(a) * d * 1.2;
-    sink.push().translate(x, 0.08 + rand() * 0.25, z).rotateY(rand() * 6.28).rotateX((rand() - 0.5) * 0.7).rotateZ((rand() - 0.5) * 0.7);
-    sink.p(rand() < 0.5 ? 'hull' : dom ? 'accent' : 'metal', 0.8).box(0, 0, 0, 0.5 + rand() * 1.6, 0.07, 0.4 + rand() * 1.2, { top: [0.6 + rand() * 0.4, 0.6 + rand() * 0.4] });
-    sink.pop();
-  }
-  // scorch marks: each a rosette of thin overlapping blades so no mark reads as a rectangle
-  for (let i = 0; i < 7; i++) {
-    const cx = (rand() - 0.5) * 9, cz = (rand() - 0.5) * 14, size = 1.2 + rand() * 2.6;
-    for (let j = 0; j < 5; j++) {
-      scorch.push().translate(cx, 0.012 + (i * 5 + j) * 0.0008, cz).rotateY((j / 5) * Math.PI + rand() * 0.4);
-      scorch.box(0, 0, 0, size * (1.4 + rand()), 0.006, size * (0.25 + rand() * 0.3), { top: [0.7, 0.4] });
-      scorch.pop();
-    }
-  }
-
-  const roleMat = (role: HullRole): THREE.Material => (role === 'glow' ? mats.dyingGlow(faction) : mats.get(faction, role));
-  const group = splitMeshes(sink, `scenic:wreck:${faction}`, roleMat);
-  if (scorch.triangleCount > 0) {
-    let burnt: THREE.Material | null = null;
-    try {
-      const m = game.mats && !isStub(game.mats) ? game.mats.get('scorched') : null;
-      burnt = m && !isStub(m) && (m as THREE.Material).isMaterial ? m : null;
-    } catch {
-      burnt = null;
-    }
-    const mesh = new THREE.Mesh(scorch.build(), burnt ?? mats.get(faction, 'dark'));
-    mesh.name = `scenic:wreck:${faction}:scorch`;
-    mesh.receiveShadow = true;
-    group.add(mesh);
-  }
-  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  group.scale.setScalar(s);
-  return group;
-}
-

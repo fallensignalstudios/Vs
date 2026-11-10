@@ -167,8 +167,9 @@ export interface InputSystem {
    *    DOM menus keep keyboard focus traversal.
    *  - 'cinematic': only skip / pause.
    * Pointer lock follows the context: entering 'menu' gives the cursor back, returning to 'game' quietly takes
-   * the lock again if it was held (callers need not pair exitPointerLock / requestPointerLock); 'cinematic'
-   * keeps it.
+   * the lock again if it was held (callers need not pair exitPointerLock / requestPointerLock, and an extra
+   * exitPointerLock() from a menu changes nothing); 'cinematic' keeps it. exitPointerLock() during play is a
+   * deliberate release: the lock then stays off until the next canvas click or requestPointerLock().
    * A physical key never acts in two contexts: presses latched on the switching tick are swallowed and anything
    * held must be released first — except sprint / aim / guard, which resume (without a `pressed` edge) when
    * returning to 'game'. Because a switch can hide a held action, poll `down()` for holds rather than waiting
@@ -310,14 +311,18 @@ export interface CinematicCamera {
  *  - Composition: the hero sits left of centre (right shoulder) with the screen centre clear; aim framing is
  *    tighter (distance 1.6, FOV 48) with the head below the reticle line.
  *  - Auto-recentre depends on the device: none with a captured mouse; on a gamepad a slow turn (≤ 18°/s) behind
- *    FORWARD motion after 2.4 s without look input and 4 s without combat input; without pointer lock a slightly
- *    firmer one (≤ 25°/s, after 0.9 s). Strafing and backpedalling never turn the camera.
+ *    FORWARD motion after 2.4 s without look input and 4 s without combat input, easing in over the first two
+ *    seconds of a run; without pointer lock a slightly firmer one (≤ 25°/s, after 0.9 s). Strafing and
+ *    backpedalling never turn the camera. A bot steering with `virtual.setMoveWorld` is followed round corners
+ *    (≤ 60°/s); bots that need a specific view should still call aimAt().
  *  - With a wall close behind the hero the camera rises and looks over the head (and tilts down a few degrees)
  *    instead of sitting beside it; looking steeply up, it drops low and close so the helmet stays at the bottom
  *    of the frame.
  *  - A one-frame displacement of 1.5–25 m (blink-strike, knock-through) is followed with a ~0.15–0.2 s whip;
  *    more than 25 m is a teleport and cuts. Call snapBehind() after a move you want as a hard cut.
- *  - Windows narrower than 16:9 keep the 16:9 horizontal field of view (vertical FOV grows, up to 100°).
+ *  - Windows narrower than 16:9 keep the 16:9 horizontal field of view (vertical FOV grows, up to 100° for the
+ *    follow lens; beyond that — portrait — the shoulder offset tightens instead). Aiming still zooms.
+ *  - `rig.camera.fov` is therefore the RENDERED vertical FOV, not always the authored one.
  */
 export interface CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -363,6 +368,13 @@ export interface CameraRig {
    * cancels it by touching look, and it never fights lock-on or aim.
    */
   aimAt(point: Vec3Like, seconds?: number): void;
+  /**
+   * ADDED. Aim-assist candidates (weak points, heads, centres of mass), read every frame while it applies. With
+   * a GAMEPAD, while aiming, and `settings.aimAssist` on, the stick's look speed eases down by up to 45 % as the
+   * reticle passes within ~1–5° of a candidate ("reticle friction"). It only slows the player's own input — it
+   * never moves the view — and does nothing for mouse players. null clears; 'zone:loading' clears.
+   */
+  setAimAssist(points: (() => readonly Vec3Like[]) | null): void;
   /** ADDED. Override the follow framing, eased over `blendSeconds` (default 1). null restores the defaults. */
   setFraming(framing: FollowFraming | null, blendSeconds?: number): void;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AutoQualityGovernor, classifyGpu, DynamicResolution, isQualityLevel, lowerQuality, QUALITY_PRESETS } from './quality';
+import { AutoQualityGovernor, classifyGpu, DynamicResolution, isQualityLevel, isSoftwareGpu, lowerQuality, QUALITY_PRESETS } from './quality';
 
 describe('quality presets', () => {
   it('scale monotonically', () => {
@@ -55,6 +55,13 @@ describe('classifyGpu', () => {
     expect(classifyGpu('Apple GPU', { mobile: true })).toBe('medium');
     expect(classifyGpu('Apple GPU')).toBe('high');
   });
+
+  it('recognises software rasterisers', () => {
+    expect(isSoftwareGpu('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)')).toBe(true);
+    expect(isSoftwareGpu('llvmpipe (LLVM 15.0.7, 256 bits)')).toBe(true);
+    expect(isSoftwareGpu('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)')).toBe(false);
+    expect(isSoftwareGpu(null)).toBe(false);
+  });
 });
 
 /** Drive a controller for `seconds` against a frame-time model (ms as a function of the resolution scale). */
@@ -108,11 +115,23 @@ describe('DynamicResolution', () => {
 
   it('ignores hitches and nonsense', () => {
     const dr = new DynamicResolution();
-    for (let i = 0; i < 50; i++) dr.update(400);
+    // isolated long frames between healthy ones (shader compiles, uploads), stalls, garbage
+    for (let i = 0; i < 40; i++) {
+      dr.update(400);
+      dr.update(250);
+      for (let k = 0; k < 10; k++) dr.update(16.7);
+    }
+    for (let i = 0; i < 50; i++) dr.update(5000);
     dr.update(Number.NaN);
     dr.update(-5);
     expect(dr.scale).toBe(1);
-    expect(dr.ema).toBe(0);
+    expect(dr.ema).toBeLessThan(18);
+  });
+
+  it('treats a sustained run of very slow frames as load, not as hitches', () => {
+    const dr = new DynamicResolution();
+    run(dr, 6, () => 150);
+    expect(dr.atFloor).toBe(true);
   });
 
   it('quantises to its step', () => {
@@ -128,6 +147,27 @@ describe('AutoQualityGovernor', () => {
     let stepped = 0;
     for (let i = 0; i < 100; i++) if (g.update(45, false)) stepped++;
     expect(stepped).toBe(1);
+  });
+
+  it('steps down on a machine that never gets under 100 ms a frame', () => {
+    const g = new AutoQualityGovernor();
+    let stepped = 0;
+    let frames = 0;
+    while (stepped === 0 && frames < 200) {
+      frames++;
+      if (g.update(160, true)) stepped++;
+    }
+    expect(stepped).toBe(1);
+    expect(frames * 0.16).toBeLessThan(10); // within ten seconds of play
+  });
+
+  it('is not fooled by isolated hitches', () => {
+    const g = new AutoQualityGovernor();
+    let stepped = 0;
+    for (let i = 0; i < 400; i++) {
+      if (g.update(i % 15 === 0 ? 300 : 16.7, true)) stepped++;
+    }
+    expect(stepped).toBe(0);
   });
 
   it('leaves a healthy frame rate alone', () => {

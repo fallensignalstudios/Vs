@@ -1,7 +1,8 @@
 /**
  * Render-core sandbox — the showcase scene rendered through the real RenderSystem (own renderer, own composer).
  *
- * URL:  ?look=<LookName>  &q=low|medium|high|ultra (default high)  &nopost=1  &tm=aces|agx|agxPunchy|neutral
+ * URL:  ?look=<LookName>  &q=low|medium|high|ultra|auto (default high; auto = GPU heuristic)  &nopost=1
+ *       &tm=aces|agx|agxPunchy|neutral
  *       &refl=0 (do not register reflective floors)  &strength=<n>  &env=sky (skip the scene probe)  &manual=1
  *       Integration with the neighbouring subsystems (optional, falls back to the stand-ins if they fail):
  *       &sky=<SkyPreset> real sky system   &open=1 no ceiling / far wall   &mats=1 real material library
@@ -20,7 +21,8 @@ import { buildShowcase } from './scene';
 const h = createCanvasOnly();
 const q = h.params;
 const levels: QualityLevel[] = ['low', 'medium', 'high', 'ultra'];
-const quality = (levels.includes(q.get('q') as QualityLevel) ? q.get('q') : 'high') as QualityLevel;
+const qParam = q.get('q');
+const quality: QualityLevel | null = qParam === 'auto' ? null : levels.includes(qParam as QualityLevel) ? (qParam as QualityLevel) : 'high';
 const lookName = (q.get('look') && q.get('look')! in LOOKS ? q.get('look') : 'core') as LookName;
 
 const scene = new THREE.Scene();

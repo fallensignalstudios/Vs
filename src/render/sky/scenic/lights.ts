@@ -103,6 +103,9 @@ export class LightCards {
   private readonly phase: number[] = [];
   private readonly fx: number[] = [];
 
+  /** When set, cards whose position it rejects are silently dropped (e.g. nothing may shine inside the Wound). */
+  veto: ((x: number, y: number, z: number) => boolean) | null = null;
+
   get count(): number { return this.pos.length / 3; }
 
   /** Round glow of diameter `size` metres. `intensity` > 1 blooms. */
@@ -116,6 +119,7 @@ export class LightCards {
   }
 
   card(x: number, y: number, z: number, w: number, h: number, hex: number, intensity: number, group = 0): this {
+    if (this.veto && this.veto(x, y, z)) return this;
     _c.setHex(hex);
     this.pos.push(x, y, z);
     this.size.push(w, h, group, h > w * 1.6 ? 1 : 0);
@@ -128,6 +132,7 @@ export class LightCards {
 
   /** Give the most recently added card a looping linear motion (vent plume / drifting ember). */
   loop(vx: number, vy: number, vz: number, period: number, phase: number): this {
+    if (this.motion.length === 0) return this;
     const o = this.motion.length - 4;
     this.motion[o] = vx; this.motion[o + 1] = vy; this.motion[o + 2] = vz; this.motion[o + 3] = Math.max(period, 0.01);
     this.phase[this.phase.length - 2] = phase;

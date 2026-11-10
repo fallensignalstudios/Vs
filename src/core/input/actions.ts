@@ -257,3 +257,39 @@ export class ActionStates {
     }
   }
 }
+
+/**
+ * Edges are latched once per FRAME, but the simulation may run several substeps in that frame (below 45 fps).
+ * The gate shows each press / release to one substep only — the first one that asks — so sim code never sees
+ * the same press twice; frame-level readers (before the sim, or after `endSim()`) always see it. Substeps are
+ * told apart by the simulation clock (`game.time.now`), which Game advances at the start of each one.
+ */
+export class EdgeGate {
+  private latchNow = NaN;
+  private simNow = NaN;
+  private afterSim = true;
+
+  /** a new frame was latched at simulation time `now` (NaN = the host has no simulation clock) */
+  latch(now: number): void {
+    this.latchNow = now;
+    this.simNow = NaN;
+    this.afterSim = false;
+  }
+
+  /** the frame's substeps are over */
+  endSim(): void {
+    this.afterSim = true;
+  }
+
+  /** did the simulation clock stand still since the last latch (hit-stop, pause)? */
+  frozen(now: number): boolean {
+    return now === this.latchNow;
+  }
+
+  /** may a reader at simulation time `now` see this frame's edges? */
+  live(now: number): boolean {
+    if (this.afterSim || now !== now || now === this.latchNow) return true;
+    if (this.simNow !== this.simNow) this.simNow = now;
+    return now === this.simNow;
+  }
+}

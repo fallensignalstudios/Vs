@@ -6,7 +6,7 @@
  *   local → world:  wx = cx + lx·cos + lz·sin      wz = cz − lx·sin + lz·cos
  *   world → local:  lx = dx·cos − dz·sin           lz = dx·sin + dz·cos
  */
-import { RAY_MOVE, RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
+import { MOVE_DEFAULTS, RAY_MOVE, RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
 import type {
   ColliderDesc, ColliderHandle, SurfaceDesc, SurfaceHandle, TriggerHandle, TriggerShape,
 } from '@/core/api/physics';
@@ -16,10 +16,11 @@ import type { HashItem } from './hash';
 /** Tolerance on surface edges so adjoining floors never leave a crack (metres). */
 export const EDGE_EPS = 1e-6;
 /**
- * Widest crack between two walkable surfaces that still counts as continuous floor (metres). Anything wider is
- * a void that fall protection, the nav grid and every other ground query treat as an edge — at any speed.
+ * Widest crack between two walkable surfaces that still counts as continuous floor (metres; published as
+ * MOVE_DEFAULTS.gap). Anything wider is a void that fall protection, the nav grid and every other ground query
+ * treat as an edge — at any speed.
  */
-export const GAP_TOL = 0.12;
+export const GAP_TOL: number = MOVE_DEFAULTS.gap;
 /** Surfaces are bucketed with this much padding so a point in a crack still finds both of its neighbours. */
 const SURFACE_PAD = GAP_TOL;
 
@@ -73,6 +74,7 @@ export interface RecOwner {
   surfaceMoved(s: SurfaceRec, oMinX: number, oMinZ: number, oMaxX: number, oMaxZ: number): void;
   surfaceToggled(s: SurfaceRec): void;
   surfaceRemoved(s: SurfaceRec): void;
+  triggerToggled(t: TriggerRec): void;
   triggerRemoved(t: TriggerRec): void;
 }
 
@@ -489,9 +491,10 @@ export class TriggerRec implements TriggerHandle {
   get enabled(): boolean { return this.on; }
   set enabled(v: boolean) {
     const b = !!v;
-    if (!this.alive) return;
+    if (!this.alive || b === this.on) return;
     this.on = b;
     if (!b) this.in = false;
+    this.owner.triggerToggled(this);
   }
 
   get inside(): boolean { return this.in; }

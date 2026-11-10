@@ -8,6 +8,7 @@ import { RAY_SHOT, RAY_SIGHT } from '@/core/api';
 import type { ButtonAction, CamPose, CameraFollowTarget, CameraRig, FollowFraming, Game, Vec3Like } from '@/core/api';
 import { DEG, EASE, clamp, smoothstep, wrapAngle } from '@/core/mathx';
 import { isStub } from '@/core/stub';
+import { AimAssist, SimClock } from './assist';
 import { CinematicImpl, type CinematicHost } from './cinematic';
 import { CameraFeel } from './feel';
 import { FOLLOW, FollowCamera, RECENTRE_ASSIST, RECENTRE_GENTLE, RECENTRE_OFF, type FollowInput, type FollowWorld } from './follow';
@@ -27,13 +28,12 @@ const CAMERA_MASK = RAY_SIGHT | RAY_SHOT;
 const WIDE = 16 / 9;
 const MAX_VFOV = 100;
 const TAN_REF = Math.tan(FOLLOW.fov * DEG * 0.5);
+const MAX_WIDEN = Math.tan(MAX_VFOV * DEG * 0.5) / TAN_REF;
 /** the followed figure fades between these distances from the camera to its body axis */
 const FADE_NEAR = 0.28;
 const FADE_FAR = 0.6;
 /** inputs that mean "the player is fighting": auto-recentre stays out of the way while (and just after) held */
 const COMBAT: readonly ButtonAction[] = ['attack', 'heavy', 'guard', 'dodge', 'aim', 'ability1', 'ability2'];
-/** phases in which Game runs the simulation: authored camera time follows the simulation clock there */
-const SIM_PHASES = new Set<string>(['playing', 'dead', 'complete']);
 
 const num = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
@@ -53,10 +53,10 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   /** the blend path has not been checked against the world yet */
   private blendUnchecked = false;
   private fade = 1;
-  private lastSimNow = NaN;
-  private stalled = 0;
   private disposed = false;
   private readonly offs: Array<() => void> = [];
+  private readonly assist = new AimAssist();
+  private readonly clock: SimClock;
 
   private readonly freePose = new Pose();
   private free = false;
@@ -70,7 +70,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   private lastFov = -1;
   private lastAspect = -1;
 
-  private readonly followInput: FollowInput = { lookX: 0, lookY: 0, recentre: RECENTRE_OFF, absolute: false, busy: false, simDt: 0 };
+  private readonly followInput: FollowInput = { lookX: 0, lookY: 0, recentre: RECENTRE_OFF, absolute: false, busy: false, simDt: 0, frame: 1 };
   private readonly world: FollowWorld = { sweep: null, ground: null };
   private readonly sweepFn: NonNullable<FollowWorld['sweep']>;
   private readonly groundFn: NonNullable<FollowWorld['ground']>;
@@ -86,6 +86,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     this.camera.name = 'gameCamera';
     this.camera.rotation.order = 'YXZ';
     this.cine = new CinematicImpl(this);
+    this.clock = new SimClock(game);
     this.base.copy(this.follow.out);
 
     // World queries are defensive: a bad answer (or a throw) from physics degrades to "no collision" for that
@@ -125,6 +126,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
       this.blendT = 1;
       this.follow.setFraming(null, 0);
       this.follow.resetScene();
+      this.assist.set(null);
     });
     if (typeof off === 'function') this.offs.push(off);
     const scene = game.scene as THREE.Scene | undefined;
@@ -219,6 +221,10 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
 
   aimAt(point: Vec3Like, seconds = 0): void {
     this.follow.aimAt(point, seconds);
+  }
+
+  setAimAssist(points: (() => readonly Vec3Like[]) | null): void {
+    this.assist.set(points);
   }
 
   setFraming(framing: FollowFraming | null, blendSeconds = 1): void {
@@ -379,8 +385,8 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     // Two clocks. `d` is real time: shake, recoil and breathing never freeze. `sim` is simulated time (0 when
     // paused, loading or in hit-stop, scaled in slow-motion): authored motion — cinematic moves, blends back
     // to gameplay, guided turns — stays in step with the scripts, voice and animation that run on it.
-    const sim = this.simDelta(d);
-    const frozen = sim === 0 && this.isSuspended();
+    const sim = this.clock.delta(d);
+    const frozen = sim === 0 && this.clock.suspended;
 
     // Shoulder swap is camera-owned unless someone consumed the press or set the side explicitly this tick.
     if (mode === 'follow' && !this.shoulderSetExternally && this.takeSwap()) {
@@ -391,17 +397,23 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     // Follow keeps tracking even under a cinematic so release() has a live pose to return to.
     const fi = this.followInput;
     const takesLook = mode === 'follow';
-    fi.lookX = takesLook ? num(input.look.x) : 0;
-    fi.lookY = takesLook ? num(input.look.y) : 0;
+    const pad = input.device === 'gamepad';
+    let friction = 1;
+    if (takesLook && pad && this.assist.active && this.follow.aim && game.settings.get('aimAssist') !== false) {
+      friction = this.assist.friction(this.base.pos, this.tmpV.set(0, 0, -1).applyQuaternion(this.aimQuat));
+    }
+    fi.lookX = takesLook ? num(input.look.x) * friction : 0;
+    fi.lookY = takesLook ? num(input.look.y) * friction : 0;
     // Auto-recentre by device: never with a captured mouse; gentle on a pad (and for bots); firmer when the
     // only ways to look are a drag or the arrow keys.
-    const pad = input.device === 'gamepad';
     const bot = input.virtual.active === true;
     fi.recentre = bot || pad ? RECENTRE_GENTLE : input.pointerLocked === true ? RECENTRE_OFF : RECENTRE_ASSIST;
     fi.absolute = !!input.moveWorld && !isStub(input.moveWorld);
     fi.busy = false;
     for (let i = 0; i < COMBAT.length; i++) if (input.down(COMBAT[i]) === true) fi.busy = true;
     fi.simDt = sim;
+    // a window too narrow to be given the whole 16:9 horizontal view (portrait) gets a tighter shoulder instead
+    fi.frame = Math.min(1, (MAX_WIDEN * this.viewW) / (this.viewH * WIDE));
     const physics = game.physics;
     const solid = !isStub(physics);
     this.world.sweep = solid ? this.sweepFn : null;
@@ -477,40 +489,6 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     return input.pressed('swapShoulder') === true;
   }
 
-  /** paused or loading: authored motion AND the follow camera stand still */
-  private isSuspended(): boolean {
-    const game = this.game;
-    if (game.paused === true) return true;
-    const mission = game.mission;
-    return !!mission && !isStub(mission) && mission.loading === true;
-  }
-
-  /**
-   * Simulated seconds since the last update. Where the host runs a simulation clock (Game.time.now during
-   * play) this is exactly how far it advanced, so hit-stop and slow-motion are honoured; elsewhere (title
-   * screen, sandboxes without a clock) it is real time, and it is 0 whenever the game is paused or loading.
-   */
-  private simDelta(d: number): number {
-    if (this.isSuspended()) return 0;
-    const game = this.game;
-    const time = game.time;
-    const now = time && !isStub(time) ? time.now : NaN;
-    if (typeof now !== 'number' || !Number.isFinite(now)) return d;
-    const prev = this.lastSimNow;
-    this.lastSimNow = now;
-    if (!SIM_PHASES.has(game.phase as string)) return d;
-    const step = now - prev;
-    if (step === 0) {
-      // Hit-stop freezes the clock for at most 0.25 s. A clock that stays frozen longer while the game is
-      // neither paused nor loading is a host that does not run one (a bare sandbox): never stall on it.
-      this.stalled += d;
-      return this.stalled > 0.3 ? d : 0;
-    }
-    this.stalled = 0;
-    // first frame, a rewound clock or a jump (checkpoint reload): fall back to real time for this frame
-    return step > 0 && step <= d * 1.5 + 1e-4 ? step : d;
-  }
-
   /**
    * Opacity for the followed figure: 1 normally, falling to 0 as the camera closes on the body (squeezed into
    * a corner) so the hero never fills the frame or crosses the near plane.
@@ -553,7 +531,8 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     fov = clamp(fov, 5, 140);
     const aspect = this.viewW / this.viewH;
     // Narrow windows (4:3, portrait, a tall iframe): hold the 16:9 horizontal view instead of cropping it away.
-    if (aspect < WIDE - 1e-6) fov = Math.min(Math.max(fov, MAX_VFOV), 2 * Math.atan(Math.tan(fov * DEG * 0.5) * (WIDE / aspect)) / DEG);
+    // The widening is limited so the follow lens never exceeds MAX_VFOV — as a factor, so aiming still zooms.
+    if (aspect < WIDE - 1e-6) fov = clamp((2 * Math.atan(Math.tan(fov * DEG * 0.5) * Math.min(WIDE / aspect, MAX_WIDEN))) / DEG, 5, 140);
     if (fov !== this.lastFov || aspect !== this.lastAspect) {
       cam.fov = fov;
       cam.aspect = aspect;

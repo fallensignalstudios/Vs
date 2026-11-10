@@ -1,25 +1,31 @@
 /**
- * HumanoidVisualImpl — the CharacterVisual for every humanoid archetype: one skinned mesh, one shared-program
- * material, a layered animator, cloth panels, equipment mounts and sockets.
+ * HumanoidVisualImpl — the CharacterVisual for every humanoid archetype: a skinned figure at up to three levels
+ * of detail on one skeleton (plus a low-poly shadow caster), one shared-program material, a layered animator,
+ * cloth panels, equipment mounts and sockets. With a geometry mask it is a mesh-less (or cloth / weapon only)
+ * animation DRIVER for another body, e.g. a generated GLB.
  */
 import * as THREE from 'three';
-import type { ActionInfo, AnimAction, HumanoidArchetype, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
+import type { ActionInfo, AnimAction, HumanoidArchetype, HumanoidLoadout, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
 import { ZONE } from './geo/builder';
 import { instantiateRig, type RigInstance } from './rig';
 import { createFigureMaterial, type FigureUniforms } from './material';
 import { Animator } from './anim/animator';
-import { resolveClip, resolveStance, type HeldKey } from './anim/moveset';
+import { hasClip, resolveClip, resolveStance } from './anim/moveset';
 import type { StanceSet } from './anim/locomotion';
 import type { SolveOpts } from './anim/solver';
 import { ClothSim, type ClothCapsule } from './cloth';
-import { mountQuat, type FigureDef, type ItemDef, type Loadout, type Mount } from './figure';
+import { releaseFigure, retainFigure, type FigureDef } from './figure';
+import { Equipment } from './equip';
 
 const DEG = Math.PI / 180;
 const _v = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _c = new THREE.Color();
-const _e = new THREE.Euler();
-const HIDDEN = 1e-4;
+const BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 3.2);
+const BOUNDS_BOX = new THREE.Box3(new THREE.Vector3(-3.2, -0.6, -3.2), new THREE.Vector3(3.2, 3.6, 3.2));
+/** capsule slots: body for cloth + blade clearance, then the melee weapon (cloth only) */
+const CAP_COUNT = 13, CAP_WEAPON = 12;
+const BLADE_CAPS: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11];
 
 const EXPOSE_ZONE: Record<string, number> = {
   head: ZONE.head, chest: ZONE.chest, core: ZONE.chest, back: ZONE.back, vent: ZONE.back, shield: ZONE.shield,
@@ -27,6 +33,14 @@ const EXPOSE_ZONE: Record<string, number> = {
 };
 const warned = new Set<string>();
 function warnOnce(msg: string): void { if (!warned.has(msg)) { warned.add(msg); console.warn('[humanoid] ' + msg); } }
+function hash01(n: number): number { const s = Math.sin(n * 91.345 + 17.13) * 43758.5453; return s - Math.floor(s); }
+
+export interface VisualOpts {
+  scale: number;
+  seed: number;
+  /** squad variation on shared geometry: per-instance height and tint from the seed */
+  vary: boolean;
+}
 
 export class HumanoidVisualImpl implements HumanoidVisual {
   readonly archetype: HumanoidArchetype;
@@ -37,23 +51,20 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   onFootstep: ((foot: 'L' | 'R', world: THREE.Vector3) => void) | null = null;
 
   private readonly model = new THREE.Group();
-  private readonly mesh: THREE.SkinnedMesh;
+  /** level-of-detail switch holding the body meshes (null for a mesh-less driver) */
+  private readonly lod: THREE.LOD | null = null;
   private readonly rig: RigInstance;
   private readonly uniforms: FigureUniforms;
   private readonly material: THREE.MeshStandardMaterial;
+  private readonly depthMaterial: THREE.MeshDepthMaterial;
+  private shadowMaterial: THREE.Material | null = null;
   private readonly animator: Animator;
+  private readonly equip: Equipment;
   private readonly cloth: ClothSim[] = [];
   private readonly caps: ClothCapsule[] = [];
   private readonly sockets: Record<string, THREE.Object3D> = {};
   private readonly overlays: Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; base: number; with?: string }> = [];
-  private readonly loadout: Loadout;
   private stance: StanceSet;
-  private readonly grip2 = new THREE.Vector3();
-  private readonly grip2Rot = new THREE.Quaternion();
-  private hasGrip2 = false;
-  private heldR = false;
-  private heldL = false;
-  private rangedHeld = false;
   private flashLeft = 0;
   private flashDur = 0.12;
   private frozen = 0;
@@ -62,15 +73,18 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private lastYaw = 0;
   private readonly lastPos = new THREE.Vector3();
   private first = true;
+  private hidden = false;
   private lookWorld: THREE.Vector3 | null = null;
   private readonly lookLocal = new THREE.Vector3();
   private readonly pins: Array<{ pos: THREE.Vector3; w: number; target: number } | null> = [null, null];
-  private bladeExt = 1;
-  private bladeTarget = 1;
   private disposed = false;
 
-  constructor(private readonly fig: FigureDef, scale: number, seed: number) {
+  constructor(private readonly fig: FigureDef, opts: VisualOpts) {
+    retainFigure(fig);
     this.archetype = fig.archetype;
+    const seed = opts.seed;
+    const jitter = opts.vary ? 1 + (hash01(seed) - 0.5) * 0.05 : 1;
+    const scale = opts.scale * jitter;
     const s = fig.spec.scale * scale;
     this.height = fig.spec.prop.height * scale;
     this.radius = fig.radius * scale;
@@ -80,19 +94,19 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.root.add(this.model);
 
     this.rig = instantiateRig(fig.spec);
-    const fm = createFigureMaterial({ ghost: fig.ghost, luminous: fig.luminous });
+    const fm = createFigureMaterial({ ghost: fig.ghost, luminous: fig.luminous, seed });
     this.material = fm.material;
+    this.depthMaterial = fm.depth;
     this.uniforms = fm.uniforms;
-    this.mesh = new THREE.SkinnedMesh(fig.geometry, this.material);
-    this.mesh.name = 'body';
-    this.mesh.castShadow = !fig.ghost;
-    this.mesh.receiveShadow = !fig.ghost;
-    this.mesh.frustumCulled = true;
+    if (opts.vary) {
+      // same body, different day: value and a touch of warm / cool
+      const v = 0.9 + hash01(seed * 1.9 + 3) * 0.2, w = (hash01(seed * 3.1 + 7) - 0.5) * 0.08;
+      this.uniforms.uTint.value.setRGB(v * (1 + w), v, v * (1 - w));
+    }
     this.model.add(this.rig.bones[0]);
-    this.model.add(this.mesh);
-    this.mesh.bind(this.rig.skeleton, new THREE.Matrix4());
+    if (fig.geometry) this.lod = this.buildMeshes();
 
-    this.animator = new Animator(fig.spec, (name) => resolveClip(fig.moveset, name));
+    this.animator = new Animator(fig.spec, { resolve: (name) => resolveClip(fig.moveset, name), has: (name) => hasClip(fig.moveset, name) });
     this.animator.headBias.set(fig.headBias[0] * DEG, fig.headBias[1] * DEG, fig.headBias[2] * DEG);
     this.animator.breath = fig.breath;
     this.animator.loco.onStep = (side) => {
@@ -102,7 +116,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     };
 
     for (let i = 0; i < fig.cloth.length; i++) this.cloth.push(new ClothSim(fig.cloth[i], this.rig.bones, seed * 3.1 + i));
-    for (let i = 0; i < 9; i++) this.caps.push({ a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0.1 });
+    for (let i = 0; i < CAP_COUNT; i++) this.caps.push({ a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
 
     for (const o of fig.overlays) {
       const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.color).multiplyScalar(o.intensity), transparent: true, opacity: o.opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
@@ -113,13 +127,57 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     }
 
     this.buildSockets();
-    this.loadout = { ...fig.loadout };
-    this.stance = resolveStance(fig.moveset, 'none');
-    this.applyLoadout(true);
+    this.equip = new Equipment(fig, this.rig);
+    this.stance = resolveStance(fig.moveset, this.equip.stanceKey);
+    this.syncOverlays();
 
     this.setRim(fig.rim.amount, fig.rim.color);
     this.uniforms.uCorruption.value = fig.corruption;
-    this.update(0);
+    // pose the skeleton once so sockets are valid before the first tick; cloth and motion smoothing stay
+    // un-seeded until the owner has placed the root and calls update()
+    this.animator.update(0, 0, this.stance, this.fillSolveOpts(null), this.rig.bones, 0);
+    this.root.updateMatrixWorld(true);
+  }
+
+  // ---- meshes -------------------------------------------------------------------------------------------
+
+  private skinned(geometry: THREE.BufferGeometry, material: THREE.Material, name: string): THREE.SkinnedMesh {
+    const mesh = new THREE.SkinnedMesh(geometry, material);
+    mesh.name = name;
+    mesh.bind(this.rig.skeleton, new THREE.Matrix4());
+    // generous fixed bounds in model space: swings, capes and corpses stay inside; nothing is skinned on the CPU
+    mesh.boundingSphere = BOUNDS.clone();
+    mesh.boundingBox = BOUNDS_BOX.clone();
+    mesh.frustumCulled = true;
+    return mesh;
+  }
+
+  private buildMeshes(): THREE.LOD {
+    const fig = this.fig;
+    const geos = [fig.geometry as THREE.BufferGeometry, ...fig.lods];
+    const proxy = !fig.ghost && fig.lods.length > 0;
+    const lod = new THREE.LOD();
+    lod.name = 'lod';
+    const s = this.model.scale.x;
+    for (let i = 0; i < geos.length; i++) {
+      const mesh = this.skinned(geos[i], this.material, i === 0 ? 'body' : 'body:lod' + i);
+      mesh.castShadow = !fig.ghost && !proxy;
+      mesh.receiveShadow = !fig.ghost;
+      mesh.customDepthMaterial = this.depthMaterial;
+      mesh.visible = i === 0;
+      lod.addLevel(mesh, i === 0 ? 0 : fig.lodDist[Math.min(i - 1, fig.lodDist.length - 1)] * (s > 0 ? 1 : 1), 0.08);
+    }
+    this.model.add(lod);
+    if (proxy) {
+      // the shadow is cast by the cheapest level: drawn without colour or depth in the main pass
+      this.shadowMaterial = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false });
+      const caster = this.skinned(geos[geos.length - 1], this.shadowMaterial, 'shadow');
+      caster.castShadow = true;
+      caster.customDepthMaterial = this.depthMaterial;
+      caster.renderOrder = -1;
+      this.model.add(caster);
+    }
+    return lod;
   }
 
   // ---- sockets + equipment ------------------------------------------------------------------------------
@@ -157,59 +215,16 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     else this.addSocket('muzzle', 'handR', ...rel('weapon', 'handR'));
   }
 
-  private mount(bone: THREE.Bone, m: Mount): void {
-    const parent = this.rig.byName[m.parent] ?? this.rig.bones[0];
-    if (bone.parent !== parent) parent.add(bone);
-    bone.position.set(m.pos[0], m.pos[1], m.pos[2]);
-    mountQuat(m, bone.quaternion);
-    bone.scale.setScalar(1);
+  private syncOverlays(): void {
+    const lo = this.equip.loadout;
+    for (const o of this.overlays) o.mesh.visible = o.with === 'shield' ? lo.shield : o.with === 'melee' ? this.equip.meleeHeld : true;
   }
 
-  private place(item: ItemDef | undefined, held: boolean): void {
-    if (!item) return;
-    const bone = this.rig.byName[item.bone];
-    if (held) this.mount(bone, item.held);
-    else if (item.sheath) this.mount(bone, item.sheath);
-    else bone.scale.setScalar(HIDDEN);
-  }
-
-  private applyLoadout(snap: boolean): void {
-    const it = this.fig.items, lo = this.loadout;
-    const rifleProp = lo.prop === 'rifle' && !!it.ranged?.rifle;
-    const rangedHeld = (lo.ranged || rifleProp) && !!it.ranged;
-    const meleeHeld = lo.melee && !!it.melee && !rangedHeld;
-    this.place(it.melee, meleeHeld);
-    this.place(it.ranged, rangedHeld);
-    this.place(it.shield, lo.shield);
-    this.place(it.case, lo.prop === 'case');
-    for (const o of this.overlays) o.mesh.visible = o.with === 'shield' ? lo.shield : o.with === 'melee' ? meleeHeld : true;
-    this.bladeTarget = meleeHeld ? 1 : 0;
-    if (snap) this.bladeExt = this.bladeTarget;
-
-    this.rangedHeld = rangedHeld;
-    const main = rangedHeld ? it.ranged : meleeHeld ? it.melee : undefined;
-    this.heldR = !!main;
-    this.heldL = (lo.prop === 'case' && !!it.case) || (lo.shield && !!it.shield);
-    this.hasGrip2 = !!main?.grip2;
-    if (main?.grip2) {
-      // grip2 is authored in the item's frame; bring it into the hand frame through the held mount rotation
-      mountQuat(main.held, this.grip2Rot);
-      this.grip2.set(main.grip2[0], main.grip2[1], main.grip2[2]).applyQuaternion(this.grip2Rot);
-      const g = main.grip2Rot ?? [0, 0, 0];
-      this.grip2Rot.setFromEuler(_e.set(g[0] * DEG, g[1] * DEG, g[2] * DEG, 'XYZ'));
-    }
-    const key: HeldKey = rangedHeld ? 'ranged' : meleeHeld ? 'melee' : lo.prop === 'case' && it.case ? 'case' : 'none';
-    this.stance = resolveStance(this.fig.moveset, key);
-  }
-
-  setLoadout(opts: { melee?: boolean; ranged?: boolean; shield?: boolean; prop?: 'case' | 'rifle' | 'none' }): void {
+  setLoadout(opts: HumanoidLoadout): void {
     if (!opts) return;
-    const lo = this.loadout;
-    if (opts.melee !== undefined) lo.melee = !!opts.melee;
-    if (opts.ranged !== undefined) lo.ranged = !!opts.ranged;
-    if (opts.shield !== undefined) lo.shield = !!opts.shield;
-    if (opts.prop !== undefined) lo.prop = opts.prop === 'case' || opts.prop === 'rifle' ? opts.prop : 'none';
-    this.applyLoadout(false);
+    this.equip.set(opts);
+    this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey);
+    this.syncOverlays();
   }
 
   // ---- animation ----------------------------------------------------------------------------------------
@@ -221,8 +236,8 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
   play(action: AnimAction, opts?: PlayOpts): ActionInfo {
     const name = typeof action === 'string' && action ? action : 'idle';
-    if (name === 'frozen') { this.animator.paused = true; return { duration: Infinity, hitTimes: [], loop: true }; }
-    if (name === 'idle') { this.animator.stop(undefined, opts?.fade); return { duration: 0, hitTimes: [], loop: true }; }
+    if (name === 'frozen') { this.animator.paused = true; return { duration: 0, hitTimes: [], loop: true }; }
+    if (name === 'idle') { this.animator.stop(undefined, opts?.fade); this.animator.paused = false; return { duration: 0, hitTimes: [], loop: true }; }
     return this.animator.play(name, opts);
   }
 
@@ -238,7 +253,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   }
 
   info(action: AnimAction): ActionInfo {
-    if (action === 'frozen') return { duration: Infinity, hitTimes: [], loop: true };
+    if (action === 'frozen' || action === 'idle') return { duration: 0, hitTimes: [], loop: true };
     return this.animator.info(String(action));
   }
 
@@ -281,8 +296,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     const a = clamp01(amount);
     this.uniforms.uDissolve.value = a;
     if (color !== undefined) this.uniforms.uDissolveColor.value.set(color);
-    this.mesh.castShadow = !this.fig.ghost && a < 0.35;
-    this.mesh.visible = a < 0.999;
+    if (this.lod) this.lod.visible = a < 0.999;
     for (const o of this.overlays) o.mat.opacity = o.base * (1 - a);
   }
 
@@ -324,24 +338,30 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     root.updateWorldMatrix(true, false);
     this.model.updateWorldMatrix(false, false);
     const mw = this.model.matrixWorld;
+    const scale = this.model.scale.x || 1;
+    const an = this.animator;
 
-    // teleport / first frame: no leaning, no cloth whip
+    // teleport / first frame: no leaning, no cloth whip, feet re-plant
     _v.setFromMatrixPosition(mw);
     const yaw = root.rotation.y;
     let yawRate = 0;
-    if (this.first || _v.distanceTo(this.lastPos) > 3) {
-      this.animator.reset();
+    const moved = _v.distanceTo(this.lastPos);
+    if (this.first || !(moved <= 3) || (dt > 1e-4 && moved > 0.4 && moved / dt > 45)) {
+      an.reset();
+      an.loco.setRoot(0, 0, yaw);
       for (const c of this.cloth) c.reset();
       this.first = false;
-    } else if (dt > 1e-5) {
-      let d = yaw - this.lastYaw;
-      d = ((d + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-      yawRate = d / dt;
+    } else {
+      an.loco.setRoot((_v.x - this.lastPos.x) / scale, (_v.z - this.lastPos.z) / scale, yaw);
+      if (dt > 1e-5) {
+        let d = yaw - this.lastYaw;
+        d = ((d + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+        yawRate = d / dt;
+      }
     }
     this.lastPos.copy(_v);
     this.lastYaw = yaw;
 
-    const adt = dt * (1 - this.frozen);
     this.time += dt;
     this.uniforms.uTime.value = this.time;
     if (this.flashLeft > 0) {
@@ -352,37 +372,47 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     // look target → model space
     if (this.lookWorld) {
       _m.copy(mw).invert();
-      this.animator.setLook(this.lookLocal.copy(this.lookWorld).applyMatrix4(_m));
-    } else this.animator.setLook(null);
+      an.setLook(this.lookLocal.copy(this.lookWorld).applyMatrix4(_m));
+    } else an.setLook(null);
 
-    const an = this.animator;
+    // equipment follows the action (two-handed work sheathes the weapon, a dying hand lets go)
+    if (this.equip.sync(an.emptyHands, an.dropped)) { this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey); this.syncOverlays(); }
     const lf = an.loco.flags;
-    an.setAuto(lf.guarding ? 'guard' : lf.aiming && this.rangedHeld ? 'aim' : null);
-    const so = this.solveOpts;
-    so.heldL = this.heldL; so.heldR = this.heldR;
-    so.grip2 = this.hasGrip2 ? this.grip2 : null; so.grip2Rot = this.hasGrip2 ? this.grip2Rot : null;
-    so.pins = this.pinsModel(mw, dt);
-    an.update(adt, this.stance, so, this.rig.bones, yawRate);
+    an.setAuto(lf.guarding ? 'guard' : lf.aiming && this.equip.rangedHeld ? 'aim' : null);
 
-    // Verity blades extend / retract
-    if (this.fig.items.melee?.blades) {
-      this.bladeExt += (this.bladeTarget - this.bladeExt) * (1 - Math.exp(-14 * dt));
-      const k = Math.max(HIDDEN, this.bladeExt);
-      this.rig.byName.bladeA.scale.set(1, 1, k);
-      this.rig.byName.bladeB.scale.set(1, 1, k);
-    }
+    // invisible figures keep their clocks and events but skip posing, IK and cloth
+    const visible = root.visible;
+    an.update(dt * (1 - this.frozen), dt, this.stance, this.fillSolveOpts(this.pinsModel(mw, dt)), this.rig.bones, yawRate, visible);
+    if (!visible) { this.hidden = true; return; }
+    if (this.hidden) { this.hidden = false; for (const c of this.cloth) c.reset(); }
 
+    const sv = an.solver;
+    const needCaps = this.cloth.length > 0 || !!this.fig.items.melee?.blades;
+    if (needCaps) this.updateCapsules();
+    this.equip.update(dt, sv, this.caps, BLADE_CAPS);
     if (this.cloth.length) {
-      this.updateCapsules();
-      const sv = an.solver;
-      for (const c of this.cloth) c.update(adt, mw, sv.wp, sv.wq, this.fig.spec.rest, this.caps, this.model.scale.x);
+      const carry = an.paused ? 1 : this.frozen;
+      const seat = an.seat;
+      for (const c of this.cloth) {
+        if (seat > 0.08) { const h = sv.wp[this.fig.spec.index.hips]; c.seat.x = h.x; c.seat.z = h.z; c.seat.y = seat; c.seat.r = 0.34; } else c.seat.r = 0;
+        c.update(dt, mw, sv.wp, sv.wq, this.fig.spec.rest, this.caps, scale, carry);
+      }
     }
     root.updateMatrixWorld(true);
   }
 
-  private readonly solveOpts: SolveOpts = { heldL: false, heldR: false, grip2: null, grip2Rot: null, pins: null };
+  private readonly solveOpts: SolveOpts = { heldL: false, heldR: false, grip2: null, grip2Rot: null, pins: null, barrel: null, tips: null };
   private readonly pinOut: Array<{ pos: THREE.Vector3; w: number } | null> = [null, null];
   private readonly pinSlots = [{ pos: new THREE.Vector3(), w: 0 }, { pos: new THREE.Vector3(), w: 0 }];
+
+  private fillSolveOpts(pins: SolveOpts['pins']): SolveOpts {
+    const so = this.solveOpts, eq = this.equip;
+    so.heldL = eq.heldL; so.heldR = eq.heldR;
+    so.grip2 = eq.hasGrip2 ? eq.grip2 : null; so.grip2Rot = eq.hasGrip2 ? eq.grip2Rot : null;
+    so.barrel = eq.barrel; so.tips = eq.tips;
+    so.pins = pins;
+    return so;
+  }
 
   private pinsModel(mw: THREE.Matrix4, dt: number): Array<{ pos: THREE.Vector3; w: number } | null> | null {
     if (!this.pins[0] && !this.pins[1]) return null;
@@ -415,6 +445,14 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     set(6, I.uArmL, I.fArmL, 0.07 * k * g);
     set(7, I.uArmR, I.fArmR, 0.07 * k * g);
     set(8, I.hips, I.hips, 0.19 * k * g, -0.06);
+    set(9, I.fArmL, I.handL, 0.055 * k);
+    set(10, I.fArmR, I.handR, 0.055 * k);
+    // the weapon hand's own forearm stops short of the wrist, where the hilt lives
+    this.caps[10].b.lerp(this.caps[10].a, 0.2);
+    const head = this.caps[11];
+    head.a.copy(sv.wp[I.head]); head.b.set(0, 0.14, -0.01).applyQuaternion(sv.wq[I.head]).add(head.a); head.r = 0.115;
+    const w = this.caps[CAP_WEAPON];
+    w.r = this.equip.weaponSegment(sv, w.a, w.b) ? 0.03 : 0;
   }
 
   dispose(): void {
@@ -422,8 +460,11 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.disposed = true;
     this.root.removeFromParent();
     this.material.dispose();
+    this.depthMaterial.dispose();
+    this.shadowMaterial?.dispose();
     this.rig.skeleton.dispose();
     for (const o of this.overlays) o.mat.dispose();
+    releaseFigure(this.fig);
   }
 }
 

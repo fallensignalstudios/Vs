@@ -2,10 +2,13 @@
  * Cloth: capes, cloaks, mantles and coat tails.
  *
  * A panel is a small grid of particles (cols × rows). Each particle is a bone; the panel mesh is skinned
- * bilinearly to the four surrounding particles. The top row is pinned to a body bone; the rest is a verlet
- * simulation in WORLD space (so travel and turns drag the cloth) with fixed sub-steps, distance constraints,
- * a tether to the pin (cloth cannot stretch or explode), and capsule collision against torso and legs.
- * A large frame-to-frame jump of the root (teleport) resets the panel to its rest shape.
+ * bilinearly to the four surrounding particles. The top row is pinned to a body bone and is written to its
+ * target EVERY frame, whatever the frame time; the rest is a verlet simulation in WORLD space (so travel and
+ * turns drag the cloth) that always integrates exactly up to the current frame (1–4 sub-steps of at most 1/60 s,
+ * time-corrected), with stretch + bend constraints, a tether to the pin (cloth cannot stretch or explode),
+ * air drag normal to the fabric, and collision against body capsules, a seat disc and the floor.
+ * When time does not advance (pause, stasis) the panel is carried rigidly with the figure instead of being left
+ * behind; a large jump of the root (teleport) resets it to its rest shape.
  */
 import * as THREE from 'three';
 import { MeshBuilder, Prim, PART, type Surf } from './geo/builder';
@@ -70,7 +73,7 @@ export function clothPanel(b: MeshBuilder, spec: RigSpec, o: ClothPanelOpts): Cl
       addBone(spec, `${o.name}_${c}_${r}`, 'root', p[0], p[1], p[2]);
     }
   }
-  const sub = o.sub ?? 3;
+  const sub = b.detail >= 1 ? o.sub ?? 3 : Math.max(1, Math.round((o.sub ?? 3) * Math.max(0.34, b.detail)));
   const nu = (cols - 1) * sub + 1, nv = (rows - 1) * sub + 1;
   const thick = o.thick ?? 0.006;
   const tw = o.trim ? (o.trimWidth ?? 0.03) : 0;
@@ -130,11 +133,13 @@ export function clothPanel(b: MeshBuilder, spec: RigSpec, o: ClothPanelOpts): Cl
   }
   prim.k = skin;
   const base: Surf = { part: PART.cloth, rough: 0.82, ...o.surf };
-  b.push();
-  b.matrix.identity();
-  b.surf(base);
-  b.commit(prim, [base, o.trim ? { part: PART.cloth, ...o.trim } : base, o.lining ? { part: PART.cloth, rough: 0.85, ...o.lining } : { ...base, color: darken(base.color, 0.6) }]);
-  b.pop();
+  b.group('cloth', () => {
+    b.push();
+    b.matrix.identity();
+    b.surf(base);
+    b.commit(prim, [base, o.trim ? { part: PART.cloth, ...o.trim } : base, o.lining ? { part: PART.cloth, rough: 0.85, ...o.lining } : { ...base, color: darken(base.color, 0.6) }]);
+    b.pop();
+  });
   return { cols, rows, rest, bone0, pin, pinRows: o.pinRows ?? 1, shape: o.shape ?? 0.12, damping: o.damping ?? 0.04, radius: 0.028 };
 }
 
@@ -149,22 +154,36 @@ function darken(hex: number, k: number): number {
 export interface ClothCapsule { a: THREE.Vector3; b: THREE.Vector3; r: number }
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
-const _m = new THREE.Matrix4(), _mi = new THREE.Matrix4();
+const _m = new THREE.Matrix4(), _mi = new THREE.Matrix4(), _d = new THREE.Matrix4();
 const _q = new THREE.Quaternion(), _qr = new THREE.Quaternion();
+/** longest sub-step; a frame is split into ≤ MAX_SUB steps of at most this */
 const STEP = 1 / 60;
+const MAX_SUB = 4;
+const ITERATIONS = 4;
+const MAX_CAPS = 16;
 
 export class ClothSim {
   private readonly n: number;
   private readonly pos: Float32Array;
   private readonly prev: Float32Array;
   private readonly model: Float32Array;
+  /** rest-shape targets under the current / previous skeleton (world space) */
   private readonly target: Float32Array;
+  private readonly targetPrev: Float32Array;
+  private readonly nrm: Float32Array;
+  private readonly capW = new Float32Array(MAX_CAPS * 7);
   private readonly restInv: THREE.Quaternion[] = [];
-  private acc = 0;
   private fresh = true;
+  private hPrev = STEP;
+  private readonly lastWorld = new THREE.Matrix4();
   private readonly lastRoot = new THREE.Vector3();
-  private readonly restLen: { v: Float32Array; h: Float32Array; tether: Float32Array };
+  private readonly restLen: { v: Float32Array; h: Float32Array; v2: Float32Array; h2: Float32Array; tether: Float32Array };
   private time = 0;
+  /**
+   * Seat disc in MODEL space: particles within `r` of (x, z) are kept above `y` (sitting on a chair or the
+   * floor). r = 0 disables it.
+   */
+  readonly seat = { x: 0, y: 0, z: 0, r: 0 };
 
   constructor(readonly def: ClothDef, private readonly bones: THREE.Bone[], private readonly seed = 0) {
     const { cols, rows, rest } = def;
@@ -173,15 +192,19 @@ export class ClothSim {
     this.prev = new Float32Array(this.n * 3);
     this.model = new Float32Array(rest);
     this.target = new Float32Array(this.n * 3);
-    const v = new Float32Array(this.n), h = new Float32Array(this.n), tether = new Float32Array(this.n);
+    this.targetPrev = new Float32Array(this.n * 3);
+    this.nrm = new Float32Array(this.n * 3);
+    const v = new Float32Array(this.n), h = new Float32Array(this.n), v2 = new Float32Array(this.n), h2 = new Float32Array(this.n), tether = new Float32Array(this.n);
     for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
       const i = c * rows + r;
       if (r > 0) v[i] = dist(rest, i, i - 1);
       if (c > 0) h[i] = dist(rest, i, i - rows);
+      if (r > 1) v2[i] = dist(rest, i, i - 2);
+      if (c > 1) h2[i] = dist(rest, i, i - 2 * rows);
       // tether: path length from the pinned row
       tether[i] = r === 0 ? 0 : tether[i - 1] + v[i];
     }
-    this.restLen = { v, h, tether };
+    this.restLen = { v, h, v2, h2, tether };
     for (let i = 0; i < this.n; i++) {
       this.frame(rest, i, _q);
       this.restInv.push(_q.clone().invert());
@@ -211,13 +234,17 @@ export class ClothSim {
   reset(): void { this.fresh = true; }
 
   /**
+   * @param dt simulated seconds this frame (0 = time is stopped: the panel rides the figure rigidly)
    * @param modelWorld model→world matrix of the figure
    * @param jointPos/jointQuat model-space transforms of the body bones (from the solver)
    * @param caps collision capsules in model space
+   * @param carry 0..1 share of the figure's own motion the cloth follows rigidly (stasis: 1 = arrested with it)
    */
-  update(dt: number, modelWorld: THREE.Matrix4, jointPos: THREE.Vector3[], jointQuat: THREE.Quaternion[], rigRest: number[], caps: ClothCapsule[], scale: number): void {
-    const { cols, rows, rest, pin, pinRows } = this.def;
-    const pos = this.pos, prev = this.prev;
+  update(dt: number, modelWorld: THREE.Matrix4, jointPos: THREE.Vector3[], jointQuat: THREE.Quaternion[], rigRest: number[], caps: ClothCapsule[], scale: number, carry = 0): void {
+    const { rows, rest, pin, pinRows } = this.def;
+    const pos = this.pos, prev = this.prev, n = this.n;
+    if (!(dt > 0)) dt = 0;
+    carry = carry > 0 ? Math.min(1, carry) : 0;
     // teleport detection
     _v.setFromMatrixPosition(modelWorld);
     const jump = _v.distanceTo(this.lastRoot);
@@ -225,106 +252,175 @@ export class ClothSim {
     if (jump > 2.5 * scale || !Number.isFinite(jump)) this.fresh = true;
 
     // rest-shape targets under the current skeleton, in world space (computed once per frame)
-    const tg = this.target;
-    for (let i = 0; i < this.n; i++) {
+    const tg = this.target, tp = this.targetPrev;
+    tp.set(tg);
+    for (let i = 0; i < n; i++) {
       const bn = pin[Math.floor(i / rows)];
       _v.set(rest[i * 3] - rigRest[bn * 3], rest[i * 3 + 1] - rigRest[bn * 3 + 1], rest[i * 3 + 2] - rigRest[bn * 3 + 2]).applyQuaternion(jointQuat[bn]).add(jointPos[bn]).applyMatrix4(modelWorld);
       tg[i * 3] = _v.x; tg[i * 3 + 1] = _v.y; tg[i * 3 + 2] = _v.z;
     }
 
     if (this.fresh) {
-      for (let i = 0; i < this.n * 3; i++) pos[i] = prev[i] = tg[i];
+      pos.set(tg); prev.set(tg); tp.set(tg);
       this.fresh = false;
-      this.acc = 0;
+      this.hPrev = STEP;
+    } else {
+      // time that does not advance for the cloth: ride the figure's rigid motion instead of staying behind
+      const rigid = dt <= 1e-6 ? 1 : carry;
+      if (rigid > 0) {
+        _d.copy(this.lastWorld).invert().premultiply(modelWorld);
+        for (let i = 0; i < n; i++) {
+          const k = i * 3;
+          _v.set(pos[k], pos[k + 1], pos[k + 2]); _w.copy(_v).applyMatrix4(_d);
+          pos[k] += (_w.x - _v.x) * rigid; pos[k + 1] += (_w.y - _v.y) * rigid; pos[k + 2] += (_w.z - _v.z) * rigid;
+          _v.set(prev[k], prev[k + 1], prev[k + 2]); _w.copy(_v).applyMatrix4(_d);
+          prev[k] += (_w.x - _v.x) * rigid; prev[k + 1] += (_w.y - _v.y) * rigid; prev[k + 2] += (_w.z - _v.z) * rigid;
+        }
+      }
     }
+    this.lastWorld.copy(modelWorld);
 
-    this.acc = Math.min(this.acc + dt, STEP * 4);
-    const g = -9.8 * scale * 0.9;
-    const damp = 1 - this.def.damping;
-    const rad = this.def.radius * scale;
-    const { v: lv, h: lh, tether } = this.restLen;
-    while (this.acc >= STEP) {
-      this.acc -= STEP;
-      this.time += STEP;
-      // integrate
-      for (let i = 0; i < this.n; i++) {
-        const r = i % rows;
-        const k = i * 3;
-        if (r < pinRows) {
-          prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
-          pos[k] = tg[k]; pos[k + 1] = tg[k + 1]; pos[k + 2] = tg[k + 2];
-          continue;
-        }
-        const vx = (pos[k] - prev[k]) * damp, vy = (pos[k + 1] - prev[k + 1]) * damp, vz = (pos[k + 2] - prev[k + 2]) * damp;
-        prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
-        // a little turbulence keeps hanging cloth alive
-        const fl = Math.sin(this.time * 2.3 + i * 1.7 + this.seed) * 0.35 * scale * (r / rows);
-        pos[k] += vx + fl * STEP * STEP;
-        pos[k + 1] += vy + g * STEP * STEP;
-        pos[k + 2] += vz + fl * 0.6 * STEP * STEP;
-        // pull toward the rest shape (stiffness of the weave / hidden weights)
-        if (this.def.shape > 0) {
-          const s = this.def.shape * (1 - 0.6 * (r / (rows - 1)));
-          pos[k] += (tg[k] - pos[k]) * s; pos[k + 1] += (tg[k + 1] - pos[k + 1]) * s; pos[k + 2] += (tg[k + 2] - pos[k + 2]) * s;
-        }
+    const sim = dt * (1 - carry);
+    if (sim > 1e-6) {
+      const steps = Math.min(MAX_SUB, Math.max(1, Math.ceil(sim / STEP - 1e-6)));
+      const h = Math.min(STEP, sim / steps);
+      // capsules → world, once per frame
+      const nc = Math.min(caps.length, MAX_CAPS), cw = this.capW;
+      const rad = this.def.radius * scale;
+      for (let c = 0; c < nc; c++) {
+        const cap = caps[c];
+        _v.copy(cap.a).applyMatrix4(modelWorld); _w.copy(cap.b).applyMatrix4(modelWorld);
+        cw[c * 7] = _v.x; cw[c * 7 + 1] = _v.y; cw[c * 7 + 2] = _v.z; cw[c * 7 + 3] = _w.x; cw[c * 7 + 4] = _w.y; cw[c * 7 + 5] = _w.z; cw[c * 7 + 6] = cap.r > 0 ? cap.r * scale + rad : 0;
       }
-      // constraints
-      for (let it = 0; it < 3; it++) {
-        for (let c = 0; c < cols; c++) for (let r = 1; r < rows; r++) {
-          const i = c * rows + r;
-          this.link(i, i - 1, lv[i] * scale, r < pinRows, r - 1 < pinRows);
-          if (c > 0) this.link(i, i - rows, lh[i] * scale, r < pinRows, r < pinRows);
-        }
-        // tether to the pin: never longer than the cloth itself
-        for (let c = 0; c < cols; c++) {
-          const top = c * rows + (pinRows - 1);
-          for (let r = pinRows; r < rows; r++) {
-            const i = c * rows + r;
-            const maxD = (tether[i] - tether[top]) * scale * 1.03;
-            const k = i * 3, t = top * 3;
-            const dx = pos[k] - pos[t], dy = pos[k + 1] - pos[t + 1], dz = pos[k + 2] - pos[t + 2];
-            const d = Math.hypot(dx, dy, dz);
-            if (d > maxD && d > 1e-6) { const s = maxD / d; pos[k] = pos[t] + dx * s; pos[k + 1] = pos[t + 1] + dy * s; pos[k + 2] = pos[t + 2] + dz * s; }
-          }
-        }
-        // collision
-        for (const cap of caps) {
-          _v.copy(cap.a).applyMatrix4(modelWorld);
-          _w.copy(cap.b).applyMatrix4(modelWorld);
-          const rr = cap.r * scale + rad;
-          const abx = _w.x - _v.x, aby = _w.y - _v.y, abz = _w.z - _v.z;
-          const ab2 = abx * abx + aby * aby + abz * abz || 1e-9;
-          for (let i = 0; i < this.n; i++) {
-            if (i % rows < pinRows) continue;
-            const k = i * 3;
-            let t = ((pos[k] - _v.x) * abx + (pos[k + 1] - _v.y) * aby + (pos[k + 2] - _v.z) * abz) / ab2;
-            t = t < 0 ? 0 : t > 1 ? 1 : t;
-            const dx = pos[k] - (_v.x + abx * t), dy = pos[k + 1] - (_v.y + aby * t), dz = pos[k + 2] - (_v.z + abz * t);
-            const d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 < rr * rr && d2 > 1e-12) { const d = Math.sqrt(d2), s = (rr - d) / d; pos[k] += dx * s; pos[k + 1] += dy * s; pos[k + 2] += dz * s; }
-          }
-        }
-      }
-      // keep off the floor
+      const seat = this.seat;
+      let seatOn = false, sx = 0, sy = 0, sz = 0, sr2 = 0;
+      if (seat.r > 0) { _v.set(seat.x, seat.y, seat.z).applyMatrix4(modelWorld); sx = _v.x; sy = _v.y + rad; sz = _v.z; sr2 = seat.r * seat.r * scale * scale; seatOn = true; }
       const floorY = this.lastRoot.y + 0.02 * scale;
-      for (let i = 0; i < this.n; i++) if (pos[i * 3 + 1] < floorY) pos[i * 3 + 1] = floorY;
+      for (let s = 1; s <= steps; s++) this.step(h, s / steps, scale, nc, floorY, seatOn, sx, sy, sz, sr2);
+    }
+    // the pinned rows sit exactly on the body, whether or not anything was simulated
+    for (let i = 0; i < n; i++) {
+      if (i % rows >= pinRows) continue;
+      const k = i * 3;
+      prev[k] = pos[k] = tg[k]; prev[k + 1] = pos[k + 1] = tg[k + 1]; prev[k + 2] = pos[k + 2] = tg[k + 2];
     }
 
     // world → model, write bones
     _mi.copy(modelWorld).invert();
     const M = this.model;
-    for (let i = 0; i < this.n; i++) {
+    for (let i = 0; i < n; i++) {
       const k = i * 3;
       if (!Number.isFinite(pos[k] + pos[k + 1] + pos[k + 2])) { this.fresh = true; return; }
       _v.set(pos[k], pos[k + 1], pos[k + 2]).applyMatrix4(_mi);
       M[k] = _v.x; M[k + 1] = _v.y; M[k + 2] = _v.z;
     }
     const b0 = this.def.bone0;
-    for (let i = 0; i < this.n; i++) {
+    for (let i = 0; i < n; i++) {
       const bone = this.bones[b0 + i];
       bone.position.set(M[i * 3], M[i * 3 + 1], M[i * 3 + 2]);
       this.frame(M, i, _qr);
       bone.quaternion.copy(_qr).multiply(this.restInv[i]);
+    }
+  }
+
+  /** One sub-step of `h` seconds; `a` = how far through the frame it ends (pins move with the body). */
+  private step(h: number, a: number, scale: number, nc: number, floorY: number, seatOn: boolean, sx: number, sy: number, sz: number, sr2: number): void {
+    const { cols, rows, pinRows } = this.def;
+    const pos = this.pos, prev = this.prev, tg = this.target, tp = this.targetPrev, nrm = this.nrm, n = this.n;
+    const { v: lv, h: lh, v2, h2, tether } = this.restLen;
+    const ratio = h / this.hPrev;
+    this.hPrev = h;
+    this.time += h;
+    const kStep = h / STEP;
+    const damp = Math.pow(1 - this.def.damping, kStep);
+    const air = 1 - Math.exp(-5.5 * h);
+    const g = -9.8 * scale * 0.9 * h * h;
+    this.normals();
+    for (let i = 0; i < n; i++) {
+      const r = i % rows, k = i * 3;
+      if (r < pinRows) {
+        prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
+        pos[k] = tp[k] + (tg[k] - tp[k]) * a; pos[k + 1] = tp[k + 1] + (tg[k + 1] - tp[k + 1]) * a; pos[k + 2] = tp[k + 2] + (tg[k + 2] - tp[k + 2]) * a;
+        continue;
+      }
+      let vx = (pos[k] - prev[k]) * ratio * damp, vy = (pos[k + 1] - prev[k + 1]) * ratio * damp, vz = (pos[k + 2] - prev[k + 2]) * ratio * damp;
+      // still air resists motion ACROSS the fabric: a moving wearer makes the panel trail and lift
+      const vn = (vx * nrm[k] + vy * nrm[k + 1] + vz * nrm[k + 2]) * air;
+      vx -= nrm[k] * vn; vy -= nrm[k + 1] * vn; vz -= nrm[k + 2] * vn;
+      prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
+      const speed = Math.hypot(vx, vy, vz) / (h * scale);
+      // a little turbulence keeps hanging cloth alive; more of it in an air stream
+      const fl = Math.sin(this.time * 2.3 + i * 1.7 + this.seed) * (0.35 + Math.min(3, speed) * 0.5) * scale * (r / rows) * h * h;
+      pos[k] += vx + fl; pos[k + 1] += vy + g; pos[k + 2] += vz + fl * 0.6;
+      // pull toward the rest shape (weave stiffness / hidden weights); it lets go as the cloth starts to fly
+      if (this.def.shape > 0) {
+        const base = this.def.shape * (1 - 0.6 * (r / (rows - 1))) / (1 + speed * speed * 0.16);
+        const s = 1 - Math.pow(1 - Math.min(0.95, base), kStep);
+        pos[k] += (tg[k] - pos[k]) * s; pos[k + 1] += (tg[k + 1] - pos[k + 1]) * s; pos[k + 2] += (tg[k + 2] - pos[k + 2]) * s;
+      }
+    }
+    const cw = this.capW;
+    for (let it = 0; it < ITERATIONS; it++) {
+      // bending: skip-one links resist creasing softly and forbid folding flat
+      for (let c = 0; c < cols; c++) for (let r = 2; r < rows; r++) { const i = c * rows + r; this.bend(i, i - 2, v2[i] * scale, r < pinRows, r - 2 < pinRows); }
+      for (let c = 2; c < cols; c++) for (let r = pinRows; r < rows; r++) { const i = c * rows + r; this.bend(i, i - 2 * rows, h2[i] * scale, false, false); }
+      for (let c = 0; c < cols; c++) for (let r = 1; r < rows; r++) {
+        const i = c * rows + r;
+        this.link(i, i - 1, lv[i] * scale, r < pinRows, r - 1 < pinRows);
+        if (c > 0) this.link(i, i - rows, lh[i] * scale, r < pinRows, r < pinRows);
+      }
+      // tether to the pin: never longer than the cloth itself
+      for (let c = 0; c < cols; c++) {
+        const top = c * rows + (pinRows - 1);
+        for (let r = pinRows; r < rows; r++) {
+          const i = c * rows + r;
+          const maxD = (tether[i] - tether[top]) * scale * 1.03;
+          const k = i * 3, t = top * 3;
+          const dx = pos[k] - pos[t], dy = pos[k + 1] - pos[t + 1], dz = pos[k + 2] - pos[t + 2];
+          const d = Math.hypot(dx, dy, dz);
+          if (d > maxD && d > 1e-6) { const s = maxD / d; pos[k] = pos[t] + dx * s; pos[k + 1] = pos[t + 1] + dy * s; pos[k + 2] = pos[t + 2] + dz * s; }
+        }
+      }
+      // collision
+      for (let c = 0; c < nc; c++) {
+        const o = c * 7, rr = cw[o + 6];
+        if (rr <= 0) continue;
+        const ax = cw[o], ay = cw[o + 1], az = cw[o + 2];
+        const abx = cw[o + 3] - ax, aby = cw[o + 4] - ay, abz = cw[o + 5] - az;
+        const ab2 = abx * abx + aby * aby + abz * abz || 1e-9;
+        for (let i = 0; i < n; i++) {
+          if (i % rows < pinRows) continue;
+          const k = i * 3;
+          let t = ((pos[k] - ax) * abx + (pos[k + 1] - ay) * aby + (pos[k + 2] - az) * abz) / ab2;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const dx = pos[k] - (ax + abx * t), dy = pos[k + 1] - (ay + aby * t), dz = pos[k + 2] - (az + abz * t);
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < rr * rr && d2 > 1e-12) { const d = Math.sqrt(d2), s = (rr - d) / d; pos[k] += dx * s; pos[k + 1] += dy * s; pos[k + 2] += dz * s; }
+        }
+      }
+    }
+    // seat + floor
+    for (let i = 0; i < n; i++) {
+      const k = i * 3;
+      if (seatOn && pos[k + 1] < sy) { const dx = pos[k] - sx, dz = pos[k + 2] - sz; if (dx * dx + dz * dz < sr2) pos[k + 1] = sy; }
+      if (pos[k + 1] < floorY) pos[k + 1] = floorY;
+    }
+  }
+
+  /** per-particle surface normals from the grid neighbours (world space) */
+  private normals(): void {
+    const { cols, rows } = this.def;
+    const P = this.pos, N = this.nrm;
+    for (let i = 0; i < this.n; i++) {
+      const c = Math.floor(i / rows), r = i % rows;
+      const up = (r > 0 ? i - 1 : i) * 3, dn = (r < rows - 1 ? i + 1 : i) * 3;
+      const lf = (c > 0 ? i - rows : i) * 3, rt = (c < cols - 1 ? i + rows : i) * 3;
+      const ux = P[rt] - P[lf], uy = P[rt + 1] - P[lf + 1], uz = P[rt + 2] - P[lf + 2];
+      const vx = P[dn] - P[up], vy = P[dn + 1] - P[up + 1], vz = P[dn + 2] - P[up + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz);
+      const k = i * 3;
+      if (l > 1e-9) { N[k] = nx / l; N[k + 1] = ny / l; N[k + 2] = nz / l; } else { N[k] = 0; N[k + 1] = 0; N[k + 2] = 0; }
     }
   }
 
@@ -335,6 +431,24 @@ export class ClothSim {
     const d = Math.hypot(dx, dy, dz);
     if (d < 1e-7) return;
     const diff = (d - restLen) / d;
+    const wi = iPinned ? 0 : 1, wj = jPinned ? 0 : 1;
+    const sum = wi + wj;
+    if (sum === 0) return;
+    const si = (wi / sum) * diff, sj = (wj / sum) * diff;
+    pos[a] -= dx * si; pos[a + 1] -= dy * si; pos[a + 2] -= dz * si;
+    pos[b] += dx * sj; pos[b + 1] += dy * sj; pos[b + 2] += dz * sj;
+  }
+
+  /** Skip-one constraint: soft toward its rest length, hard below 70 % of it (no fold-over). */
+  private bend(i: number, j: number, restLen: number, iPinned: boolean, jPinned: boolean): void {
+    const pos = this.pos;
+    const a = i * 3, b = j * 3;
+    const dx = pos[a] - pos[b], dy = pos[a + 1] - pos[b + 1], dz = pos[a + 2] - pos[b + 2];
+    const d = Math.hypot(dx, dy, dz);
+    if (d < 1e-7 || d >= restLen) return;
+    const min = restLen * 0.7;
+    const want = d < min ? min : d + (restLen - d) * 0.12;
+    const diff = (d - want) / d;
     const wi = iPinned ? 0 : 1, wj = jPinned ? 0 : 1;
     const sum = wi + wj;
     if (sum === 0) return;

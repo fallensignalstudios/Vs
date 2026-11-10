@@ -4,8 +4,10 @@
  */
 import type { ButtonAction, Game, InputContext, InputSystem } from '@/core/api';
 import { clamp } from '@/core/mathx';
-import { A, ACTION_COUNT, ActionStates, actionIndex } from './actions';
-import { Keymap, LOOK_KEYS, MOUSE_BINDINGS, MOVE_KEYS, glyphFor, type InputDevice, type LayoutMap } from './bindings';
+import { A, ACTION_COUNT, ActionStates, EdgeGate, actionIndex } from './actions';
+import {
+  Keymap, LOOK_KEYS, MOUSE_BINDINGS, MOVE_KEYS, glyphFor, loadKeymap, readLayout, saveKeymap, type BindingStore, type InputDevice, type LayoutMap,
+} from './bindings';
 import { GamepadReader, type PadLike } from './gamepad';
 import { PointerLock, type LockCanvas, type LockDoc } from './lock';
 import { VirtualInputImpl } from './virtual';
@@ -29,7 +31,6 @@ const RMB_IDLE = 0;
 const RMB_PENDING = 1;
 const RMB_LOOK = 2;
 const RMB_AIM = 3;
-const BINDINGS_KEY = 'aurelion.bindings.v1';
 
 type Listener = (e: Event) => void;
 interface Listenable {
@@ -50,7 +51,7 @@ export interface InputEnv {
   /** navigator.keyboard.getLayoutMap, where the browser has it (glyphs for non-QWERTY layouts) */
   getLayoutMap?: (() => Promise<LayoutMap>) | null;
   /** where key rebinds persist (localStorage); access is guarded */
-  storage?: { getItem(key: string): string | null; setItem(key: string, value: string): void } | null;
+  storage?: BindingStore;
 }
 
 interface KeyEv {
@@ -123,10 +124,8 @@ export class InputSystemImpl implements InputSystem {
   private padProbe = 0;
   private worldActive = false;
   private toggleHolds = false;
-  /** sim-substep edge gating: see `edgesLive` */
-  private latchNow = NaN;
-  private simNow = NaN;
-  private afterSim = true;
+  /** shows each edge to one sim substep per frame */
+  private readonly gate = new EdgeGate();
 
   constructor(private readonly game: Game, private readonly env: InputEnv) {
     this.pad = new GamepadReader(env.getGamepads);
@@ -134,8 +133,10 @@ export class InputSystemImpl implements InputSystem {
       this.skipMouse = 1; // first delta after capture is often a warp
       this.accX = this.accY = 0;
     });
-    this.loadBindings();
-    this.readLayout();
+    loadKeymap(this.keymap, env.storage);
+    readLayout(env.getLayoutMap, (map) => {
+      this.layout = map;
+    });
     this.bind();
   }
 
@@ -173,21 +174,21 @@ export class InputSystemImpl implements InputSystem {
 
   pressed(a: ButtonAction): boolean {
     const i = actionIndex(a);
-    if (!this.states.pressed(i) || !this.edgesLive()) return false;
+    if (!this.states.pressed(i) || !this.gate.live(this.simClock())) return false;
     this.states.sawPress(i);
     return true;
   }
 
   released(a: ButtonAction): boolean {
     const i = actionIndex(a);
-    if (!this.states.released(i) || !this.edgesLive()) return false;
+    if (!this.states.released(i) || !this.gate.live(this.simClock())) return false;
     this.states.sawRelease(i);
     return true;
   }
 
   take(a: ButtonAction): boolean {
     const i = actionIndex(a);
-    if (!this.states.pressed(i) || !this.edgesLive()) return false;
+    if (!this.states.pressed(i) || !this.gate.live(this.simClock())) return false;
     this.states.consume(i);
     return true;
   }
@@ -233,7 +234,7 @@ export class InputSystemImpl implements InputSystem {
     if (actionIndex(a) < 0) return false;
     this.releaseAll(); // counts are per key: never carry a held key across a map change
     const ok = this.keymap.rebind(a, code);
-    if (ok) this.saveBindings();
+    if (ok) saveKeymap(this.keymap, this.env.storage);
     return ok;
   }
 
@@ -244,7 +245,7 @@ export class InputSystemImpl implements InputSystem {
   resetBindings(): void {
     this.releaseAll();
     this.keymap.reset();
-    this.saveBindings();
+    saveKeymap(this.keymap, this.env.storage);
   }
 
   allowInGame(actions: readonly ButtonAction[] | null): void {
@@ -288,7 +289,9 @@ export class InputSystemImpl implements InputSystem {
   }
 
   exitPointerLock(): void {
-    this.lock.exit();
+    // Called from a menu (after setContext('menu') already freed the cursor) this must not cancel the re-lock
+    // that returning to play performs; called during play it is a deliberate, final release.
+    this.lock.exit(this.states.context === 'menu');
   }
 
   rumble(strong: number, weak: number, ms: number): void {
@@ -296,7 +299,7 @@ export class InputSystemImpl implements InputSystem {
   }
 
   endSim(): void {
-    this.afterSim = true;
+    this.gate.endSim();
   }
 
   update(dt: number): void {
@@ -327,10 +330,8 @@ export class InputSystemImpl implements InputSystem {
     this.toggleHolds = this.game.settings.get('holdToToggle') === true;
     // No sim step since the previous latch (hit-stop): unread gameplay edges stay up for the frozen frames.
     const clock = this.simClock();
-    this.states.latch(d, this.toggleHolds, clock === this.latchNow);
-    this.latchNow = clock;
-    this.simNow = NaN;
-    this.afterSim = false;
+    this.states.latch(d, this.toggleHolds, this.gate.frozen(clock));
+    this.gate.latch(clock);
 
     // Move (camera-relative; y = forward).
     let mx = 0;
@@ -408,19 +409,6 @@ export class InputSystemImpl implements InputSystem {
   private simClock(): number {
     const now = (this.game as { time?: { now?: unknown } }).time?.now;
     return typeof now === 'number' ? now : NaN;
-  }
-
-  /**
-   * Edges are latched once per FRAME, but the simulation may run several substeps in that frame (below
-   * 45 fps). Each press / release is shown to one substep only — the first one that asks — so sim code never
-   * sees the same press twice; frame-level readers (before the sim, or after `endSim()`) always see it.
-   */
-  private edgesLive(): boolean {
-    if (this.afterSim) return true;
-    const now = this.simClock();
-    if (now !== now || now === this.latchNow) return true;
-    if (this.simNow !== this.simNow) this.simNow = now;
-    return now === this.simNow;
   }
 
   private notifyDevice(): void {
@@ -611,37 +599,5 @@ export class InputSystemImpl implements InputSystem {
     this.rmb = RMB_IDLE;
     this.accX = this.accY = 0;
     this.keyLook = 0;
-  }
-
-  private readLayout(): void {
-    const get = this.env.getLayoutMap;
-    if (typeof get !== 'function') return;
-    try {
-      const p = get();
-      if (p && typeof p.then === 'function') {
-        p.then((map) => {
-          if (map && typeof map.get === 'function') this.layout = map;
-        }, () => {});
-      }
-    } catch {
-      /* layout unknown: glyphs fall back to the US labels */
-    }
-  }
-
-  private loadBindings(): void {
-    try {
-      const raw = this.env.storage?.getItem(BINDINGS_KEY);
-      if (raw) this.keymap.load(JSON.parse(raw));
-    } catch {
-      /* storage unavailable or corrupt: defaults */
-    }
-  }
-
-  private saveBindings(): void {
-    try {
-      this.env.storage?.setItem(BINDINGS_KEY, JSON.stringify(this.keymap.overrides()));
-    } catch {
-      /* storage unavailable: the rebind lasts for this session */
-    }
   }
 }

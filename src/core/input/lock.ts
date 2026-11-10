@@ -67,9 +67,10 @@ export class PointerLock {
     this.attempt(true);
   }
 
-  exit(): void {
+  /** `keepResume`: the caller is a menu handing the cursor back — play still takes the lock again afterwards */
+  exit(keepResume = false): void {
     this.pending = false;
-    this.resume = false;
+    if (!keepResume) this.resume = false;
     this.release();
   }
 

@@ -112,10 +112,11 @@ export function buildCarrierHull(rand: () => number): CarrierHull {
       }
     }
     // aft sponson wings carrying the flank batteries
-    b.paint(HULL, 0, 0.7).loft([
+    const wing: P3[][] = [
       [[sx * 62, -18, 215], [sx * 62, -4, 215], [sx * 62, -4, 100], [sx * 62, -18, 100]],
       [[sx * 128, -13, 226], [sx * 128, -7, 226], [sx * 128, -7, 176], [sx * 128, -13, 176]],
-    ].map((r) => (sx > 0 ? r : [...r].reverse()) as P3[]));
+    ];
+    b.paint(HULL, 0, 0.7).loft(wing.map((r) => (sx > 0 ? r : [...r].reverse())));
     proxy.push([Math.min(sx * 62, sx * 128), Math.max(sx * 62, sx * 128), -18, -4, 100, 226]);
     part(DARK, 1, sx * 129, -10, 202, 4, 14, 58, 1);
     b.paint(STEEL, 0, 0.7).cyl(sx * 104, -4, 190, 3, 4.5, 4.5, 10).cyl(sx * 84, -4, 170, 3, 4.5, 4.5, 10);

@@ -1,11 +1,13 @@
 /**
- * Physics / nav sandbox — debug view of a fixture zone with live queries drawn on top:
- *   gold ribbons   nav paths (string-pulled)           white capsule   an agent walking path 0 through moveCharacter
- *   warm tiles     nav cells visible from an eye       violet / red    lineOfFire probes (clear / blocked)
+ * Physics / nav sandbox — the debug view of a fixture zone (floors tinted by level, solids, nav strips,
+ * triggers, validate() pins) with live queries drawn on top:
+ *   gold / cyan ribbons   nav paths, waypoints numbered     white capsule   an agent walking path 0 (moveCharacter)
+ *   violet / red          lineOfFire probes (clear / blocked)   amber tiles  sight map: nav cells seen from the eye (off by default)
  *
- *   /sandbox/physics/?fixture=z04|z08|z05&view=top|iso&manual=1      (live: click anywhere to send the walker)
- *   __phys.view('top' | 'iso')   __phys.path(i, from, to)   __phys.eye(x, y, z)   __phys.door(open)
- *   __phys.barriers(up)          __phys.many(n, seed, radius?)   __step(seconds)
+ *   /sandbox/physics/?fixture=z04|z08|z05&view=top|iso&manual=1&sight=1&hide=nav,solids
+ *   live: click anywhere to send the walker · keys 1–7 toggle surfaces / solids / nav / triggers / issues / sight / queries
+ *   __phys.view('top' | 'iso')   __phys.layer(name, on)   __phys.path(i, from, to)   __phys.eye(x, y, z)
+ *   __phys.door(open)   __phys.barriers(up)   __phys.many(n, seed, radius?, height?)   __step(seconds)
  */
 import * as THREE from 'three';
 import '@fontsource/barlow-condensed/500.css';
@@ -95,9 +97,16 @@ const buildMs = performance.now() - tBuild0;
 // ---- scene dressing ---------------------------------------------------------------------------------------
 const debug = world.debugObject() as THREE.Group;
 h.scene.add(debug);
-// nav dots turn to moiré when a cell is only a few pixels: hide them on the big zones (the sight tiles
-// still show where the nodes are)
-(debug.getObjectByName('nav') as THREE.Points).visible = demo.frame.span <= 80;
+const debugApi = debug.userData as {
+  layer(name: string, visible: boolean): boolean; refresh(): void; issues: Array<{ kind: string; message: string }>; navNodes(): number[];
+};
+
+/** What is drawn: the five layers of the debug group, plus the two overlays this page adds. */
+const LAYERS = ['surfaces', 'solids', 'nav', 'triggers', 'issues', 'sight', 'queries'] as const;
+type LayerName = typeof LAYERS[number];
+const shown: Record<LayerName, boolean> = { surfaces: true, solids: true, nav: true, triggers: true, issues: true, sight: h.params.has('sight'), queries: true };
+for (const name of (h.params.get('hide') ?? '').split(',')) if ((LAYERS as readonly string[]).includes(name)) shown[name as LayerName] = false;
+for (const name of LAYERS) debugApi.layer(name, shown[name]);
 
 /** 10 m plan grid under everything (matches the tactical-plan drawings). */
 function planGrid(): THREE.LineSegments {
@@ -114,7 +123,11 @@ function planGrid(): THREE.LineSegments {
 }
 h.scene.add(planGrid());
 
-function label(text: string, at: Vec3Like, color = '#9fb2c8', size = 1): THREE.Sprite {
+/** Labels are kept apart on screen: each records its anchor and world size, see declutter(). */
+interface Tag { sprite: THREE.Sprite; height: number; aspect: number }
+const tags: Tag[] = [];
+
+function label(text: string, at: Vec3Like, color = '#d3dde9', size = 1): THREE.Sprite {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d')!;
   const font = '600 44px "Barlow Condensed", "Arial Narrow", sans-serif';
@@ -123,7 +136,9 @@ function label(text: string, at: Vec3Like, color = '#9fb2c8', size = 1): THREE.S
   c.height = 60;
   ctx.font = font;
   ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 8;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(6,9,13,0.92)'; ctx.lineWidth = 9;
+  ctx.strokeText(text, 12, 32);
   ctx.fillStyle = color;
   ctx.fillText(text, 12, 32);
   const tex = new THREE.CanvasTexture(c);
@@ -133,7 +148,36 @@ function label(text: string, at: Vec3Like, color = '#9fb2c8', size = 1): THREE.S
   s.scale.set((hgt * c.width) / c.height, hgt, 1);
   s.position.set(at.x, at.y + 0.6, at.z);
   s.renderOrder = 990;
+  tags.push({ sprite: s, height: hgt, aspect: c.width / c.height });
   return s;
+}
+
+const projected = new THREE.Vector3();
+/** Screen rectangle [x0, y0, x1, y1] in pixels of a world-space box of the given height centred on `at`. */
+function screenRect(at: THREE.Vector3, height: number, aspect: number, lift: number): [number, number, number, number] {
+  projected.copy(at).project(h.camera);
+  const depth = Math.max(0.1, at.clone().sub(h.camera.position).dot(h.camera.getWorldDirection(new THREE.Vector3())));
+  const ph = (height / (2 * depth * Math.tan((h.camera.fov * Math.PI) / 360))) * innerHeight;
+  const cx = (projected.x * 0.5 + 0.5) * innerWidth, cy = (-projected.y * 0.5 + 0.5) * innerHeight - lift * ph;
+  return [cx - (ph * aspect) / 2, cy - ph / 2, cx + (ph * aspect) / 2, cy + ph / 2];
+}
+
+/**
+ * Keep labels legible from any camera: in creation order (zone labels first, waypoint numbers last) each one
+ * that would overlap the walker or an earlier label is raised by whole label heights until it is clear.
+ */
+function declutter(): void {
+  h.camera.updateMatrixWorld();
+  const taken: Array<[number, number, number, number]> = [screenRect(agent.position, 2.2, 0.5, 0)];
+  for (const t of tags) {
+    let lift = 0, r = screenRect(t.sprite.position, t.height, t.aspect, 0);
+    for (let k = 0; k < 6 && taken.some((o) => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]); k++) {
+      lift += 1.05;
+      r = screenRect(t.sprite.position, t.height, t.aspect, lift);
+    }
+    t.sprite.center.set(0.5, 0.5 - lift);
+    taken.push(r);
+  }
 }
 
 // ---- live query overlays ----------------------------------------------------------------------------------
@@ -178,17 +222,17 @@ function disc(at: Vec3Like, r: number, color: number, ring = false): THREE.Mesh 
  */
 let sightMs = 0, sightCount = 0;
 function sightMap(eye: Vec3Like): THREE.Mesh {
-  const nodes = (debug.getObjectByName('nav') as THREE.Points).geometry.getAttribute('position');
+  const nodes = debugApi.navNodes();
   const half = world.nav.cellSize * 0.5;
   const pos: number[] = [];
   const target = { x: 0, y: 0, z: 0 };
   const t0 = performance.now();
-  sightCount = nodes ? nodes.count : 0;
-  for (let i = 0; i < sightCount; i++) {
-    const x = nodes.getX(i), y = nodes.getY(i), z = nodes.getZ(i);
+  sightCount = nodes.length / 3;
+  for (let i = 0; i < nodes.length; i += 3) {
+    const x = nodes[i], y = nodes[i + 1], z = nodes[i + 2];
     target.x = x; target.y = y + 1.6; target.z = z;
     if (!world.lineOfSight(eye, target)) continue;
-    const yy = y + 0.02;
+    const yy = y + 0.09;
     pos.push(x - half, yy, z - half, x - half, yy, z + half, x + half, yy, z + half);
     pos.push(x - half, yy, z - half, x + half, yy, z + half, x + half, yy, z - half);
   }
@@ -196,9 +240,9 @@ function sightMap(eye: Vec3Like): THREE.Mesh {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
-    color: 0xffe2a8, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
+    color: 0xffa033, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
   }));
-  m.renderOrder = 899;
+  m.renderOrder = 915;
   return m;
 }
 
@@ -228,25 +272,43 @@ function rebuildOverlay(): void {
     c.traverse((o) => (o as THREE.Mesh).geometry?.dispose());
   }
   const scale = demo.frame.span / 54;
-  overlay.add(sightMap(demo.eye));
-  overlay.add(disc({ x: demo.eye.x, y: Math.max(0, demo.eye.y - 1.5), z: demo.eye.z }, 0.5 * scale, 0xffe2a8, true));
-  for (const [a, b] of demo.probes) overlay.add(probe(a, b, scale));
+  tags.length = 0;
+  for (const l of demo.labels) overlay.add(label(l.text, l.at, l.color, l.size));
   paths.length = 0;
   for (const [a, b] of demo.paths) paths.push(world.nav.findPath(a, b));
   const t0 = performance.now();
   for (let k = 0; k < 20; k++) for (const [a, b] of demo.paths) world.nav.findPath(a, b);
   pathMs = (performance.now() - t0) / (20 * Math.max(1, demo.paths.length));
-  paths.forEach((p, i) => {
-    const col = PATH_COLORS[i % PATH_COLORS.length];
-    const [a, b] = demo.paths[i];
-    overlay.add(disc(a, 0.55 * scale, col, true));
-    overlay.add(disc(b, 0.55 * scale, p ? col : 0xff5a5a, true));
-    if (!p) return;
-    overlay.add(ribbon(p.points, 0.3 * scale, col, 0.1));
-    for (let k = 1; k < p.points.length - 1; k++) overlay.add(disc(p.points[k], 0.32 * scale, col));
-  });
-  for (const l of demo.labels) overlay.add(label(l.text, l.at, l.color, l.size));
+  if (shown.sight) {
+    overlay.add(sightMap(demo.eye));
+    overlay.add(disc({ x: demo.eye.x, y: Math.max(0, demo.eye.y - 1.5), z: demo.eye.z }, 0.5 * scale, 0xffa033, true));
+  }
+  if (shown.queries) {
+    for (const [a, b] of demo.probes) overlay.add(probe(a, b, scale));
+    paths.forEach((p, i) => {
+      const col = PATH_COLORS[i % PATH_COLORS.length];
+      const css = `#${col.toString(16).padStart(6, '0')}`;
+      const [a, b] = demo.paths[i];
+      overlay.add(disc(a, 0.55 * scale, col, true));
+      overlay.add(disc(b, 0.55 * scale, p ? col : 0xff5a5a, true));
+      if (!p) return;
+      overlay.add(ribbon(p.points, 0.3 * scale, col, 0.1));
+      // waypoints in walking order
+      for (let k = 1; k < p.points.length; k++) {
+        if (k < p.points.length - 1) overlay.add(disc(p.points[k], 0.32 * scale, col));
+        overlay.add(label(String(k), { x: p.points[k].x + 0.9 * scale, y: p.points[k].y + 0.5 * scale, z: p.points[k].z - 0.9 * scale }, css, 0.9));
+      }
+    });
+  }
   hud();
+}
+
+function setLayer(name: LayerName, on: boolean): void {
+  shown[name] = on;
+  if (!debugApi.layer(name, on)) rebuildOverlay();
+  hud();
+  declutter();
+  h.render();
 }
 
 // ---- agent walking path 0 with the real movement solver ----------------------------------------------------
@@ -303,8 +365,9 @@ h.onUpdate((dt) => {
   }
   agent.position.set(walker.pos.x, walker.pos.y + 0.9, walker.pos.z);
   world.updateTriggers(walker.pos);
+  declutter();
   if (trailMesh) { h.scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh = null; }
-  if (trail.length > 1) {
+  if (shown.queries && trail.length > 1) {
     trailMesh = ribbon(trail, 0.8 * (demo.frame.span / 54), 0xffffff, 0.14);
     (trailMesh.material as THREE.MeshBasicMaterial).transparent = true;
     (trailMesh.material as THREE.MeshBasicMaterial).opacity = 0.22;
@@ -340,17 +403,25 @@ function hud(): void {
     + row('surfaces', String(world.counts.surfaces)) + row('solids', String(world.counts.colliders))
     + row('nav nodes', `${world.nav.nodeCount} @ ${world.nav.cellSize} m`)
     + row('nav rebuild', `${buildMs.toFixed(1)} ms`) + row('findPath', `${pathMs.toFixed(2)} ms`)
-    + row(`lineOfSight × ${sightCount}`, `${sightMs.toFixed(1)} ms`)
+    + (shown.sight ? row(`lineOfSight × ${sightCount}`, `${sightMs.toFixed(1)} ms`) : '')
     + head('QUERIES') + pathRows
     + row('walker', walker.done ? `arrived · ${walker.blocked} blocked` : 'walking')
     + row('goal trigger', `${goalTrigger.handle?.inside ? 'inside' : 'outside'} · ${goalTrigger.enters} in / ${goalTrigger.exits} out`)
     + (demo.barriers.length ? row('isolation barriers', demo.barriers[0].enabled ? 'raised' : 'lowered') : '')
     + (demo.doors.length ? row('doors', demo.doors.some((d) => d.enabled) ? 'closed' : 'open') : '')
+    + row('validate()', debugApi.issues.length ? `<span style="color:#ff3df0">${debugApi.issues.length} issue${debugApi.issues.length > 1 ? 's' : ''}</span>` : 'clean')
+    + head('LAYERS · KEYS 1–7')
+    + `<div style="max-width:236px">${LAYERS.map((n, i) => `<span style="white-space:nowrap;color:${shown[n] ? '#dfe6ee' : '#4a5668'}">${i + 1} ${n}</span>`).join(' · ')}</div>`
     + head('LEGEND')
-    + chip('#2fd27a', 'walkable surface') + chip('#9af2c0', 'ramp') + chip('#ff4b4b', 'solid')
-    + chip('#7cc4ff', 'low cover 1.2 m') + chip('#2f6dff', 'high cover 2.2 m') + chip('#ffa033', 'see-through solid')
-    + chip('#4a505c', 'disabled') + chip('#ffd84a', 'trigger volume') + chip('#8fe6ff', 'nav node', true) + chip('#ffc56b', 'nav path')
-    + chip('#ffe2a8', 'seen from the eye') + chip('#b48cff', 'clear line of fire') + chip('#ff5a5a', 'blocked line of fire');
+    + `<div><span style="display:inline-block;width:46px;height:11px;margin-right:9px;border-radius:2px;background:linear-gradient(90deg,#c8cf30,#30cf6e,#30a9cf,#3058cf)"></span>floor · nav, by level −6…+6 m</div>`
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;max-width:250px">'
+    + chip('#ff4b4b', 'solid') + chip('#4a505c', 'disabled')
+    + chip('#7cc4ff', 'low cover') + chip('#2f6dff', 'high cover')
+    + chip('#ffa033', 'see-through') + chip('#c070ff', 'walk-through')
+    + chip('#ffd84a', 'trigger') + chip('#ff3df0', 'validate() issue')
+    + chip('#b48cff', 'fire: clear') + chip('#ff5a5a', 'fire: blocked')
+    + chip('#ffc56b', 'nav path') + (shown.sight ? chip('#ffa033', 'seen from eye') : '')
+    + '</div>';
 }
 
 // ---- views + console API --------------------------------------------------------------------------------------
@@ -368,12 +439,15 @@ function view(name: string): void {
     const shift = (HUD_W / innerHeight) * fit * 0.5;
     h.setCam([x - shift, dist, z + 0.02], [x - shift, 0, z], fov);
   }
+  declutter();
   h.render();
 }
 
 const api = {
   world, demo, paths, walker,
   view,
+  /** show / hide one of: surfaces, solids, nav, triggers, issues, sight, queries */
+  layer(name: LayerName, on: boolean): void { if (LAYERS.includes(name)) setLayer(name, on); },
   /** replace demo path i */
   path(i: number, from: Vec3Like, to: Vec3Like): string {
     demo.paths[i] = [from, to];
@@ -386,7 +460,7 @@ const api = {
   },
   eye(x: number, y: number, z: number): void { demo.eye = { x, y, z }; rebuildOverlay(); h.render(); },
   /** draw n random nav paths (thin) to eyeball smoothing quality; returns the average query time in ms */
-  many(n: number, seed = 1, radius = 0): number {
+  many(n: number, seed = 1, radius = 0, height = 0): number {
     const c = demo.paths[0][0];
     const scale = demo.frame.span / 54;
     let ms = 0, found = 0;
@@ -395,7 +469,7 @@ const api = {
       const b = world.nav.randomPoint(c, demo.frame.span, seed * 1000 + i * 2 + 1);
       if (!a || !b) continue;
       const t0 = performance.now();
-      const p = radius > 0 ? world.nav.findPathFor(a, b, radius) : world.nav.findPath(a, b);
+      const p = radius > 0 ? world.nav.findPathFor(a, b, radius, height) : world.nav.findPath(a, b);
       ms += performance.now() - t0;
       if (!p) continue;
       found++;
@@ -431,6 +505,12 @@ const api = {
   },
 };
 (window as unknown as { __phys: typeof api }).__phys = api;
+
+// Keys 1–7 toggle the layers in LAYERS order.
+addEventListener('keydown', (e) => {
+  const i = Number(e.key) - 1;
+  if (Number.isInteger(i) && i >= 0 && i < LAYERS.length) setLayer(LAYERS[i], !shown[LAYERS[i]]);
+});
 
 // Click (without dragging) to send the walker there: a camera ray against floors + solids picks the goal.
 let downX = 0, downY = 0;

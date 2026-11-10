@@ -4,8 +4,11 @@
  * Params: preset, scenic (comma list: terminalVista|atriumShell|crownmarkArm|megaRibs|dominionShuttle|
  *         reformationTransport|dominionCapital|reformationCapital|wreckDominion|wreckReformation),
  *         heading (deg), battle (0..1), activity (0..1), closed (1), carrier (progress 0..1), stab (0..1),
- *         ref=0 (hide the 1.8 m reference figure), deck=0 (hide the foreground slab), exposure.
- * Eval helpers: __sky, __look(azDeg, elDeg, fov?, [x,y,z]?), __preset(id, blendSeconds?), __scenic(list), __stats().
+ *         ref=0 (hide the 1.8 m reference figure), deck=0 (hide the foreground slab), exposure,
+ *         q=low|medium|high|ultra (render quality → dome shading tier), reduceFlash=1.
+ * Eval helpers: __sky, __look(azDeg, elDeg, fov?, [x,y,z]?), __lookAt(to, fov?, from?), __preset(id, blendSeconds?),
+ *         __scenic(list), __carrier(progress, stab?, fov?, track?), __play(from, to, seconds) (advance the carrier
+ *         with the sim clock — plays the clip), __stats(), __time(frames) (ms per direct render).
  */
 import * as THREE from 'three';
 import type { SkyPreset } from '@/core/api';
@@ -16,6 +19,8 @@ const h = createHarness({ bloom: true, env: 'dark', background: 0x000000, lights
 const p = h.params;
 h.renderer.toneMappingExposure = Number(p.get('exposure') ?? 1);
 const game = miniGame(h);
+if (p.has('q')) (game.render.quality as { level: string }).level = p.get('q') ?? 'high';
+if (p.get('reduceFlash') === '1') game.settings.set('reduceFlash', true);
 const sky = createSkySystem(game);
 if (!sky.root.parent) h.scene.add(sky.root);
 
@@ -49,7 +54,7 @@ if (p.get('ref') !== '0') foreground.add(ref);
 h.scene.add(foreground);
 
 // Near-field (PBR) pieces are shown on open ground instead of behind the overlook parapet.
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.9, metalness: 0 }));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: 0x3a3c40, roughness: 0.85, metalness: 0 }));
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 ground.visible = false;
@@ -112,7 +117,16 @@ h.camera.fov = 62;
 h.camera.updateProjectionMatrix();
 look(0, 6);
 
-h.onUpdate((dt) => { sky.update(dt, h.camera); });
+// scripted carrier run: progress advances with the sim clock, exactly as a zone script would drive it
+let run: { from: number; to: number; seconds: number; t: number } | null = null;
+h.onUpdate((dt) => {
+  if (run) {
+    run.t = Math.min(run.t + dt, run.seconds);
+    sky.carrier.setProgress(run.from + (run.to - run.from) * (run.t / run.seconds));
+    if (run.t >= run.seconds) run = null;
+  }
+  sky.update(dt, h.camera);
+});
 
 Object.assign(window, {
   __sky: sky,
@@ -129,6 +143,22 @@ Object.assign(window, {
     return { pos: c.toArray().map((v) => Math.round(v)), shadow: sky.carrier.shadow };
   },
   __preset: (id: SkyPreset, blend = 0) => { sky.setPreset(id, { blendSeconds: blend }); syncLights(); },
+  /** drive the carrier from `from` to `to` over `seconds` of sim time (then call __step to advance) */
+  __play: (from: number, to: number, seconds: number, stab = 0) => {
+    sky.carrier.visible = true;
+    sky.carrier.setStabilized(stab);
+    sky.carrier.setProgress(from);
+    run = { from, to, seconds: Math.max(seconds, 1e-3), t: 0 };
+  },
+  /** average ms of `frames` direct scene renders (software GL: only meaningful as a ratio between settings) */
+  __time: (frames = 3) => {
+    const gl = h.renderer.getContext();
+    h.renderer.render(h.scene, h.camera);
+    gl.finish();
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) { h.renderer.render(h.scene, h.camera); gl.finish(); }
+    return Math.round(((performance.now() - t0) / frames) * 10) / 10;
+  },
   __scenic: (list: string) => buildScenic(list),
   /** draw calls / triangles of one direct scene render (no post passes) */
   __stats: () => {

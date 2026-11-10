@@ -217,114 +217,288 @@ export function buildReformationCapital(s: PartSink): void {
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// Dominion shuttle — ≈ 24 m armoured dropship, parked on y = 0 with the ramp down.
+// Near-field helpers
 // -------------------------------------------------------------------------------------------------------------
-const SHUTTLE_SHAPE = [[0, -1], [0.7, -0.92], [1, -0.2], [0.9, 0.5], [0.42, 1]] as const;
+/** Smooth round frustum lying along +Z (nacelles, tanks, barrels, struts' housings). */
+function zCyl(b: GeoBuilder, cx: number, cy: number, z0: number, z1: number, r0: number, r1: number, sides: number, caps = true): void {
+  b.push().translate(cx, cy, z0).rotateX(Math.PI / 2).cyl(0, 0, 0, z1 - z0, r0, r1, sides, caps).pop();
+}
 
+/** Smooth surface of revolution lying along +Z: profile = [radius, z offset]. */
+function zLathe(b: GeoBuilder, cx: number, cy: number, z0: number, profile: readonly (readonly [number, number])[], sides: number): void {
+  b.push().translate(cx, cy, z0).rotateX(Math.PI / 2).lathe(0, 0, profile, sides).pop();
+}
+
+/** A row of thin slats (vents, radiators): `n` blades across `len` along Z. */
+function slats(b: GeoBuilder, x: number, y: number, z: number, len: number, w: number, n: number, tilt: number): void {
+  for (let i = 0; i < n; i++) {
+    b.push().translate(x, y, z - len / 2 + ((i + 0.5) / n) * len).rotateX(tilt);
+    b.box(0, 0, 0, w, 0.03, (len / n) * 0.7);
+    b.pop();
+  }
+}
+
+/** Landing leg: oleo strut, drag brace, hydraulic ram and a chamfered foot pad resting on y = 0. */
+function gear(s: PartSink, x: number, z: number, top: number, splay: number): void {
+  s.p('metal').tube([[x, top, z], [x + splay * 0.55, top * 0.45, z], [x + splay, 0.34, z]], [0.17, 0.13, 0.1], 8);
+  s.p('dark').tube([[x, top * 0.92, z + 1.1], [x + splay * 0.8, 0.5, z + 0.15]], 0.07, 6);
+  s.p('dark').tube([[x, top * 0.92, z - 1.1], [x + splay * 0.8, 0.5, z - 0.15]], 0.07, 6);
+  s.p('metal', 1.2).tube([[x - splay * 0.3, top * 0.8, z], [x + splay * 0.7, top * 0.36, z]], 0.06, 6);
+  s.p('dark').bevelBox(x + splay, 0.2, z, 0.5, 0.3, 0.6, 0.06);
+  s.p('metal').bevelBox(x + splay, 0.07, z, 1.25, 0.14, 2.1, 0.05);
+  s.p('dark').box(x + splay, 0.155, z, 1.0, 0.03, 1.8);
+}
+
+const NEAR_SHAPE = [[0, -1], [0.55, -1], [0.92, -0.62], [1.0, -0.1], [0.97, 0.38], [0.74, 0.84], [0.36, 1.0], [0, 1.0]] as const;
+/** hard chines of NEAR_SHAPE once mirrored (keel edges, bilge chines, shoulders) */
+const NEAR_CREASE = [1, 2, 5, 9, 12, 13] as const;
+
+// -------------------------------------------------------------------------------------------------------------
+// Dominion shuttle — ≈ 26 m armoured dropship, parked on y = 0 with the ramp down.
+// Heavy and ceremonial-functional: a smooth-skinned bronze fuselage under overlapping oxblood armour skirts,
+// a blade prow, a framed canopy blister, shoulder nacelles with real bells, anhedral stub wings with lift
+// thrusters, modelled landing legs and an open troop bay behind the ramp.
+// -------------------------------------------------------------------------------------------------------------
 export function buildDominionShuttle(s: PartSink): void {
-  const Y = 3.1; // hull centreline above the deck
-  s.p('hull').loft([
-    section(9.5, 2.6, 1.9, Y + 0.2, SHUTTLE_SHAPE), section(6.5, 3.0, 2.2, Y + 0.1, SHUTTLE_SHAPE),
-    section(0, 3.0, 2.15, Y, SHUTTLE_SHAPE), section(-5.5, 2.5, 1.8, Y - 0.15, SHUTTLE_SHAPE),
-    section(-9.5, 1.5, 1.2, Y - 0.55, SHUTTLE_SHAPE), section(-12.2, 0.35, 0.5, Y - 1.0, SHUTTLE_SHAPE),
-  ]);
-  // prow blade + dorsal crest
+  const Y = 3.45; // hull centreline above the deck
+  const st: Array<[number, number, number, number]> = [
+    [9.8, 2.85, 2.1, Y + 0.15], [7.0, 3.05, 2.25, Y + 0.1], [1.0, 3.1, 2.25, Y], [-4.5, 2.8, 2.05, Y - 0.1],
+    [-8.5, 2.1, 1.6, Y - 0.4], [-11.3, 1.2, 1.0, Y - 0.75], [-12.8, 0.5, 0.5, Y - 1.0],
+  ];
+  s.p('hull').skin(st.map(([z, w, h, y]) => section(z, w, h, y, NEAR_SHAPE)), { crease: NEAR_CREASE });
+  s.p('dark').poly([...section(-12.8, 0.5, 0.5, Y - 1.0, NEAR_SHAPE)].reverse());
+
+  // blade prow under the nose, dorsal crest with a gold edge
   s.p('accent').loft([
-    [[0, Y - 2.0, -8], [0.22, Y - 1.2, -8], [0.22, Y + 0.3, -8], [-0.22, Y + 0.3, -8], [-0.22, Y - 1.2, -8]],
-    [[0, Y - 1.9, -13.4], [0.06, Y - 1.6, -13.4], [0.06, Y - 1.1, -13.4], [-0.06, Y - 1.1, -13.4], [-0.06, Y - 1.6, -13.4]],
+    [[0, Y - 2.25, -8.4], [0.26, Y - 1.5, -8.4], [0.26, Y - 0.2, -8.4], [-0.26, Y - 0.2, -8.4], [-0.26, Y - 1.5, -8.4]],
+    [[0, Y - 2.1, -11.6], [0.14, Y - 1.6, -11.6], [0.14, Y - 0.9, -11.6], [-0.14, Y - 0.9, -11.6], [-0.14, Y - 1.6, -11.6]],
+    [[0, Y - 1.75, -14.1], [0.05, Y - 1.6, -14.1], [0.05, Y - 1.25, -14.1], [-0.05, Y - 1.25, -14.1], [-0.05, Y - 1.6, -14.1]],
   ]);
-  s.p('accent').box(0, Y + 2.75, 2.5, 0.3, 1.5, 9, { top: [0.5, 0.45], shift: [0, 2.2] });
-  // cockpit slit
-  s.p('glass').box(0, Y + 0.72, -8.1, 2.3, 0.5, 2.6, { top: [0.7, 0.8], shift: [0, 0.5] });
-  s.p('dark').box(0, Y + 0.45, -8.2, 2.7, 0.16, 3.0);
+  s.p('accent').loft([
+    [[-0.17, Y + 2.2, 8.4], [0.17, Y + 2.2, 8.4], [0.17, Y + 4.1, 8.9], [-0.17, Y + 4.1, 8.9]],
+    [[-0.17, Y + 2.15, 3.2], [0.17, Y + 2.15, 3.2], [0.1, Y + 3.55, 5.6], [-0.1, Y + 3.55, 5.6]],
+    [[-0.12, Y + 2.1, -2.2], [0.12, Y + 2.1, -2.2], [0.05, Y + 2.3, -1.2], [-0.05, Y + 2.3, -1.2]],
+  ]);
+  s.p('metal').tube([[0, Y + 4.12, 8.92], [0, Y + 3.57, 5.6], [0, Y + 2.32, -1.2]], 0.05, 5);
+
+  // canopy blister with frame ribs, visor brow
+  s.p('glass').ball(0, Y + 0.95, -8.3, 1.25, 0.95, 2.5, 18, 7, 0.02, 1);
+  for (const z of [-9.6, -8.3, -7.0]) {
+    const pts: P3[] = [];
+    for (let i = 0; i <= 8; i++) {
+      const a = (i / 8) * Math.PI;
+      const k = Math.sqrt(Math.max(0, 1 - ((z + 8.3) / 2.5) ** 2));
+      pts.push([Math.cos(a) * 1.27 * k, Y + 0.95 + Math.sin(a) * 0.97 * k, z]);
+    }
+    s.p('dark').tube(pts, 0.045, 5, false);
+  }
+  s.p('dark').tube([[0, Y + 1.9, -8.3], [0, Y + 1.6, -10.0], [0, Y + 0.98, -10.75]], 0.05, 5, false);
+  s.p('accent').bevelBox(0, Y + 0.85, -5.6, 2.9, 0.5, 1.0, 0.1);
+
   both(s, () => {
-    // armour skirts
-    for (let i = 0; i < 4; i++) s.p('accent').box(3.06, Y - 0.25, 6.2 - i * 3.5, 0.22, 2.3, 3.1, { top: [1, 0.9] });
-    s.p('metal').box(3.2, Y + 0.95, 0.8, 0.12, 0.14, 14.5);
-    // anhedral stub wings with tip fins
-    s.push().translate(2.7, Y + 0.7, 3.2).rotateZ(-0.34);
-    s.p('hull', 0.9).box(2.6, 0, 0, 5.2, 0.42, 5.6, { top: [1, 0.8] });
-    s.p('dark').box(5.2, -0.5, 0.3, 0.3, 2.4, 4.4, { top: [1, 0.6], shift: [0, 0.6] });
-    s.p('glow').box(5.38, -0.4, -1.2, 0.06, 0.5, 0.9);
+    // overlapping armour skirts, each a chamfered plate standing a hand off the hull on gold brackets
+    for (let i = 0; i < 5; i++) {
+      const z = 7.4 - i * 3.3, k = i === 4 ? 0.86 : 1;
+      s.push().translate(3.2 * k + (i === 4 ? 0.1 : 0), Y - 0.35, z).rotateY(i === 4 ? 0.12 : 0).rotateZ(0.05);
+      s.p('accent').bevelBox(0, 0, 0, 0.2, 2.5, 3.5, 0.07);
+      s.p('metal').box(0.11, 1.1, 0, 0.03, 0.12, 3.3);
+      s.p('dark').bevelBox(0.11, -0.2, 0, 0.04, 1.1, 2.3, 0.02);
+      s.pop();
+      s.p('metal').box(3.0 * k, Y + 0.55, z - 1.2, 0.3, 0.12, 0.16).box(3.0 * k, Y - 1.1, z + 1.2, 0.3, 0.12, 0.16);
+    }
+    s.p('metal').tube([[3.12, Y + 1.0, 8.6], [3.14, Y + 1.0, -4.5], [2.4, Y + 0.72, -8.4]], 0.06, 6);
+    // shoulder nacelle: intake lip, smooth body, heat fins, a real bell with the glow deep inside
+    const nx = 2.15, ny = Y + 1.95;
+    zCyl(s.p('dark'), nx, ny, 2.6, 10.6, 1.0, 1.18, 18, false);
+    zLathe(s.p('metal'), nx, ny, 1.9, [[0.72, 0.7], [0.95, 0], [1.08, 0.15], [1.02, 0.75]], 18);
+    s.p('dark').box(nx, ny, 2.55, 1.3, 1.3, 0.06);
+    zLathe(s.p('dark', 1.3), nx, ny, 10.6, [[1.18, 0], [1.3, 1.5], [1.16, 1.5], [0.8, 0.25]], 18);
+    s.p('engine').box(nx, ny, 10.9, 1.25, 1.25, 0.05);
+    for (let i = 0; i < 6; i++) s.p('metal').box(nx + 1.02, ny + 0.2, 5 + i * 0.85, 0.2, 0.9, 0.08);
+    s.p('hull', 0.85).bevelBox(nx - 0.2, ny - 0.75, 6.5, 1.5, 0.5, 7.4, 0.12);
+    slats(s.p('dark'), nx, ny + 1.06, 7.2, 3.0, 0.9, 9, 0.5);
+    // anhedral stub wing: tapered slab, leading-edge gold strip, tip fin, lift thruster, hardpoint
+    s.push().translate(2.8, Y + 0.75, 3.1).rotateZ(-0.34);
+    s.p('hull', 0.9).loft([
+      [[0, -0.26, 3.0], [0, 0.26, 3.0], [0, 0.26, -3.0], [0, -0.26, -3.0]],
+      [[5.3, -0.1, 2.5], [5.3, 0.1, 2.5], [5.3, 0.1, -1.4], [5.3, -0.1, -1.4]],
+    ]);
+    s.p('metal').tube([[0, 0, -3.0], [5.3, 0, -1.4]], 0.07, 6);
+    s.p('accent').bevelBox(2.4, 0.2, 0.3, 3.4, 0.08, 3.2, 0.03);
+    const fin: P3[][] = [
+      [[5.22, -1.7, 2.3], [5.38, -1.7, 2.3], [5.38, -1.7, -0.6], [5.22, -1.7, -0.6]],
+      [[5.22, 0.7, 2.7], [5.38, 0.7, 2.7], [5.38, 0.7, 0.9], [5.22, 0.7, 0.9]],
+    ];
+    s.p('dark').loft(fin.map((r) => [...r].reverse()));
+    s.p('glow').box(5.4, -0.5, -0.4, 0.04, 0.45, 0.7);
+    zCyl(s.p('dark'), 3.3, -0.62, -0.2, 1.4, 0.62, 0.7, 14);
+    s.push().translate(3.3, -0.62, 0.6).rotateX(-Math.PI / 2);
+    zLathe(s.p('dark', 1.2), 0, 0, 0, [[0.5, 0], [0.74, 0.7], [0.64, 0.7], [0.4, 0.1]], 14);
+    s.p('engine').box(0, 0, 0.12, 0.7, 0.7, 0.03);
     s.pop();
-    // engine nacelles
-    zPrism(s.p('dark'), 2.05, Y + 1.75, 4.4, 11.4, 1.05, 1.3, 8);
-    zPrism(s.p('metal'), 2.05, Y + 1.75, 3.6, 4.6, 0.7, 1.08, 8);
-    zPrism(s.p('engine'), 2.05, Y + 1.75, 11.3, 11.5, 1.1, 1.1, 8);
+    zCyl(s.p('metal'), 1.6, -0.5, -1.6, 1.2, 0.2, 0.2, 10);
+    s.p('dark').bevelBox(1.6, -0.3, -0.2, 0.2, 0.3, 1.2, 0.03);
+    s.pop();
     // running lights + intake glow
-    s.p('glow').box(3.2, Y - 0.1, -4.6, 0.08, 0.22, 1.5);
-    s.p('glow').box(2.05, Y + 1.75, 3.55, 0.9, 0.9, 0.08);
-    // landing gear
-    s.p('dark').box(2.2, 0.85, 5.6, 0.34, 1.7, 0.34, { shift: [-0.5, 0] });
-    s.p('metal').box(2.5, 0.09, 5.6, 1.1, 0.18, 2.2);
+    s.p('glow').box(3.33, Y - 0.1, -4.6, 0.05, 0.16, 1.4).box(3.33, Y - 0.1, 2.0, 0.05, 0.16, 1.4);
+    s.p('glow').box(nx, ny, 2.6, 0.7, 0.7, 0.04);
+    // hull panels and maintenance hatches
+    s.p('hull', 1.15).bevelBox(1.7, Y + 2.2, -1.6, 1.3, 0.08, 2.2, 0.03).bevelBox(1.5, Y + 2.2, 1.4, 1.1, 0.08, 1.4, 0.03);
+    s.p('dark').bevelBox(2.55, Y + 1.25, -5.3, 0.1, 0.5, 0.9, 0.03);
+    // main gear under the wing roots
+    gear(s, 2.3, 5.3, Y - 2.2, 0.9);
   });
-  s.p('dark').box(0, 0.8, -6.4, 0.34, 1.6, 0.34);
-  s.p('metal').box(0, 0.09, -6.4, 1.0, 0.18, 1.9);
-  // ventral plating + lowered rear ramp
-  s.p('dark').box(0, Y - 2.25, 0.5, 3.4, 0.3, 14);
-  s.push().translate(0, Y - 1.9, 9.4).rotateX(-0.52);
-  s.p('metal').box(0, -0.1, 2.3, 3.6, 0.22, 4.9);
-  s.p('glow').box(1.72, 0.06, 2.3, 0.07, 0.07, 4.6);
-  s.p('glow').box(-1.72, 0.06, 2.3, 0.07, 0.07, 4.6);
+  gear(s, 0, -6.6, Y - 1.5, 0);
+
+  // belly plating with keel strakes, dorsal sensor mast
+  s.p('dark').bevelBox(0, Y - 2.33, 0.4, 3.5, 0.22, 14.2, 0.08);
+  for (const x of [-1.2, 1.2]) s.p('metal').bevelBox(x, Y - 2.5, 0.4, 0.16, 0.16, 12.6, 0.04);
+  s.p('metal').tube([[0.9, Y + 2.2, -3.4], [0.9, Y + 3.5, -3.1]], [0.05, 0.02], 5);
+  s.p('glow').box(0.9, Y + 3.55, -3.1, 0.08, 0.08, 0.08);
+
+  // open troop bay: frame, lit interior, benches; lowered ramp with treads, edge lights and hydraulic rams
+  s.p('dark').room(0, Y - 0.05, 6.9, 4.3, 3.5, 6.0);
+  s.p('dark').bevelBox(0, Y + 1.95, 9.95, 5.6, 0.55, 0.34, 0.08).bevelBox(0, Y - 1.95, 9.95, 5.2, 0.3, 0.34, 0.06);
+  for (const x of [-2.45, 2.45]) s.p('dark').bevelBox(x, Y, 9.95, 0.7, 3.6, 0.34, 0.08);
+  s.p('hull', 0.6).box(0, Y - 1.76, 6.9, 4.2, 0.05, 5.9);
+  for (const z of [5.0, 6.6, 8.2]) {
+    s.p('glow').box(0, Y + 1.66, z, 2.6, 0.05, 0.12);
+    s.p('metal').box(0, Y + 1.6, z + 0.8, 4.2, 0.12, 0.12);
+    for (const x of [-2.08, 2.08]) s.p('metal').box(x, Y, z + 0.8, 0.1, 3.3, 0.12);
+  }
+  for (const x of [-1.72, 1.72]) {
+    s.p('accent').bevelBox(x, Y - 1.3, 6.9, 0.55, 0.42, 5.2, 0.06);
+    s.p('dark').bevelBox(x * 1.14, Y - 0.55, 6.9, 0.12, 1.0, 5.2, 0.03);
+    s.p('glow').box(x * 1.3, Y - 0.1, 10.14, 0.07, 2.9, 0.05);
+  }
+  s.p('glow').box(0, Y + 1.64, 10.14, 3.6, 0.07, 0.05);
+  s.push().translate(0, Y - 1.78, 10.0).rotateX(-0.36);
+  s.p('metal').bevelBox(0, -0.1, 2.5, 3.9, 0.2, 5.0, 0.06);
+  for (let i = 0; i < 12; i++) s.p('dark').box(0, 0.02, 0.4 + i * 0.4, 3.3, 0.03, 0.12);
+  for (const x of [-1.86, 1.86]) {
+    s.p('glow').box(x, 0.04, 2.5, 0.06, 0.05, 4.7);
+    s.p('dark').bevelBox(x * 1.03, 0.1, 2.5, 0.1, 0.28, 5.0, 0.03);
+  }
   s.pop();
-  s.p('dark').box(0, Y + 0.3, 9.62, 3.6, 3.0, 0.2);
-  s.p('glow').box(0, Y + 1.72, 9.75, 2.6, 0.12, 0.06);
+  for (const x of [-1.95, 1.95]) s.p('metal', 1.2).tube([[x, Y + 0.4, 9.9], [x, Y - 2.2, 12.6]], [0.09, 0.055], 7);
 }
 
 // -------------------------------------------------------------------------------------------------------------
-// Reformation transport — ≈ 31 m modular carrier: cockpit pod, neck truss, cargo module, strut-mounted pods.
+// Reformation transport — ≈ 31 m modular carrier. Sterile, modular, every connection visible: a capsule cockpit
+// on a tubular neck truss, a chamfered cargo module with ribbed frames, strapped propellant tanks on struts,
+// four vectoring thrusters on outriggers, skids, a sensor bar and a dish.
 // -------------------------------------------------------------------------------------------------------------
 export function buildReformationTransport(s: PartSink): void {
-  const Y = 3.6;
-  // cargo module with chamfered roof + panel ribs
-  s.p('hull').box(0, Y, 3.5, 6.4, 4.4, 17, { top: [0.78, 0.97] });
-  s.p('accent').box(0, Y - 2.35, 3.5, 5.6, 0.5, 16.2);
-  for (let i = 0; i < 6; i++) s.p('metal').box(0, Y - 0.15, -3.6 + i * 2.85, 6.56, 4.1, 0.22, { top: [0.79, 1] });
-  // neck truss + cockpit pod
-  s.p('metal').box(0, Y + 0.1, -6.6, 2.2, 2.0, 3.6);
+  const Y = 3.7;
+  // cargo module: chamfered box, roof cap, ribbed frames, recessed side door panels with blue edge light
+  s.p('hull').bevelBox(0, Y, 3.5, 6.4, 4.4, 17, 0.28);
+  s.p('hull', 1.1).bevelBox(0, Y + 2.3, 3.5, 5.0, 0.3, 16.2, 0.1);
+  s.p('accent').bevelBox(0, Y - 2.3, 3.5, 5.6, 0.36, 16.2, 0.1);
+  for (let i = 0; i < 7; i++) {
+    const z = -4.6 + i * 2.7;
+    s.p('metal').bevelBox(0, Y, z, 6.62, 4.46, 0.2, 0.05);
+  }
   both(s, () => {
-    s.p('dark').box(1.3, Y + 0.1, -6.6, 0.16, 0.16, 4.2);
-    s.p('dark').box(1.3, Y - 0.9, -6.6, 0.16, 0.16, 4.2);
+    s.p('accent').bevelBox(3.24, Y - 0.25, 3.5, 0.1, 3.0, 4.6, 0.04);
+    s.p('dark').box(3.3, Y - 0.25, 3.5, 0.04, 2.7, 0.06).box(3.3, Y + 1.0, 3.5, 0.04, 0.06, 4.2);
+    s.p('glow').box(3.3, Y + 1.36, 3.5, 0.04, 0.06, 4.4);
+    s.p('metal').tube([[3.34, Y - 0.9, 1.5], [3.5, Y - 0.9, 1.5], [3.5, Y + 0.3, 1.5], [3.34, Y + 0.3, 1.5]], 0.035, 5, false);
+    slats(s.p('dark'), 3.26, Y + 0.8, -2.2, 1.6, 0.06, 6, 0);
+    for (let i = 0; i < 4; i++) s.p('metal', 1.2).bevelBox(3.27, Y - 1.6, -3.0 + i * 4.4, 0.08, 0.5, 0.9, 0.02);
   });
-  s.p('hull', 1.1).box(0, Y + 0.2, -11.4, 4.4, 3.2, 6.4, { top: [0.7, 0.72], shift: [0, 0.5] });
-  s.p('glass').box(0, Y + 0.95, -13.4, 3.5, 1.05, 2.6, { top: [0.72, 0.5], shift: [0, 0.7] });
-  s.p('accent').box(0, Y - 1.25, -11.6, 3.8, 0.5, 6.0);
-  s.p('metal').box(0, Y - 0.2, -14.9, 2.4, 1.3, 0.8, { top: [0.7, 0.6] });
-  s.p('glow').box(0, Y + 0.28, -14.62, 3.0, 0.1, 0.06);
+
+  // neck: a tubular space-frame between pod and module (diagonals visible), service lines along it
+  const nz0 = -5.0, nz1 = -8.6, r = 0.95;
+  const corners: Array<[number, number]> = [[-r, Y + 1.0], [r, Y + 1.0], [r, Y - 0.9], [-r, Y - 0.9]];
+  for (let i = 0; i < 4; i++) {
+    const [ax, ay] = corners[i], [bx, by] = corners[(i + 1) % 4];
+    s.p('metal').tube([[ax, ay, nz0], [ax, ay, nz1]], 0.09, 7);
+    s.p('dark').tube([[ax, ay, nz0], [bx, by, nz1]], 0.05, 5);
+    s.p('metal').tube([[ax, ay, (nz0 + nz1) / 2], [bx, by, (nz0 + nz1) / 2]], 0.05, 5);
+  }
+  zCyl(s.p('dark'), 0, Y + 0.05, nz1, nz0, 0.55, 0.55, 12);
+  s.p('accent').tube([[0.5, Y + 0.7, nz0], [0.55, Y + 0.85, (nz0 + nz1) / 2], [0.5, Y + 0.7, nz1]], 0.05, 5);
+  s.p('accent').tube([[-0.5, Y + 0.7, nz0], [-0.6, Y + 0.5, (nz0 + nz1) / 2], [-0.5, Y + 0.7, nz1]], 0.04, 5);
+
+  // cockpit pod: a smooth capsule with a wraparound glass band, chin sensor, docking collar
+  const pod: Array<[number, number, number, number]> = [
+    [-8.6, 1.5, 1.25, Y + 0.1], [-9.6, 2.15, 1.6, Y + 0.15], [-11.8, 2.2, 1.65, Y + 0.15], [-13.6, 1.8, 1.4, Y + 0.05], [-14.9, 1.05, 0.85, Y - 0.15], [-15.4, 0.4, 0.35, Y - 0.25],
+  ];
+  const POD = [[0, -1], [0.6, -0.9], [0.95, -0.45], [1.0, 0.1], [0.86, 0.62], [0.5, 0.95], [0, 1.0]] as const;
+  s.p('hull', 1.1).skin(pod.map(([z, w, h, y]) => section(z, w, h, y, POD)), { caps: true });
+  s.p('glass').ball(0, Y + 0.72, -13.0, 1.72, 0.92, 2.25, 18, 6, 0.05, 1);
+  for (const z of [-14.2, -13.0, -11.8]) {
+    const k = Math.sqrt(Math.max(0, 1 - ((z + 13.0) / 2.25) ** 2));
+    const pts: P3[] = [];
+    for (let i = 0; i <= 8; i++) { const a = (i / 8) * Math.PI; pts.push([Math.cos(a) * 1.74 * k, Y + 0.72 + Math.sin(a) * 0.94 * k, z]); }
+    s.p('metal').tube(pts, 0.04, 5, false);
+  }
+  s.p('accent').bevelBox(0, Y - 1.2, -11.8, 3.4, 0.4, 5.2, 0.12);
+  s.p('dark').ball(0, Y - 1.45, -13.9, 0.5, 0.42, 0.6, 12, 5, -1, 0.2);
+  s.p('glow').box(0, Y - 1.45, -14.42, 0.3, 0.1, 0.05);
+  s.p('glow').box(0, Y + 0.06, -15.52, 1.6, 0.07, 0.05);
+  zLathe(s.p('metal'), 0, Y + 0.1, -8.75, [[1.3, 0.3], [1.42, 0.3], [1.42, 0], [1.3, 0]], 16);
+
   both(s, () => {
-    // side tanks on struts
-    zPrism(s.p('metal'), 4.5, Y - 0.4, -2.2, 8.6, 1.15, 1.15, 10);
-    zPrism(s.p('accent'), 4.5, Y - 0.4, -3.1, -2.2, 0.5, 1.15, 10);
-    zPrism(s.p('accent'), 4.5, Y - 0.4, 8.6, 9.5, 1.15, 0.5, 10);
-    for (const z of [-0.8, 3.2, 7.2]) {
-      s.p('dark').box(3.6, Y - 0.4, z, 1.6, 0.22, 0.22);
-      s.p('dark').box(3.6, Y + 0.3, z, 1.7, 0.16, 0.16);
+    // propellant tank: smooth barrel with domed ends, straps, and the struts that hold it off the module
+    const tx = 4.7, ty = Y - 0.5;
+    zCyl(s.p('metal'), tx, ty, -2.4, 8.8, 1.15, 1.15, 20, false);
+    s.p('metal').ball(tx, ty, -2.4, 1.15, 1.15, 0.9, 20, 5, -1, 1);
+    s.p('metal').ball(tx, ty, 8.8, 1.15, 1.15, 0.9, 20, 5, -1, 1);
+    for (const z of [-1.2, 3.2, 7.6]) {
+      zLathe(s.p('accent'), tx, ty, z - 0.14, [[1.17, 0], [1.22, 0], [1.22, 0.28], [1.17, 0.28]], 20);
+      s.p('dark').tube([[3.2, Y - 1.1, z], [tx - 0.9, ty - 0.5, z]], 0.07, 6);
+      s.p('dark').tube([[3.2, Y + 0.5, z], [tx - 0.7, ty + 0.75, z]], 0.07, 6);
+      s.p('dark').tube([[3.2, Y + 0.5, z], [tx - 0.9, ty - 0.5, z + 1.6]], 0.04, 5);
     }
-    // vector thrusters on outriggers (fore + aft)
-    for (const z of [-4.6, 11.2]) {
-      s.p('metal').box(4.4, Y + 1.9, z, 3.4, 0.36, 0.7);
-      s.push().translate(6.2, Y + 1.5, z);
-      zPrism(s.p('dark'), 0, 0, -1.3, 1.5, 0.95, 1.1, 8);
-      zPrism(s.p('engine'), 0, 0, 1.45, 1.58, 0.9, 0.9, 8);
-      s.p('glow').box(0, 1.12, 0, 0.5, 0.06, 1.2);
+    s.p('accent').tube([[tx, ty + 1.15, -1.8], [tx - 0.3, ty + 1.5, -3.2], [3.2, Y + 1.6, -4.0]], 0.05, 5);
+    // vectoring thrusters on outriggers (fore + aft): gimbal ring, smooth nacelle, bell, glow, status strip
+    for (const z of [-4.3, 11.0]) {
+      s.p('metal').tube([[3.1, Y + 1.9, z], [6.1, Y + 1.7, z]], [0.2, 0.15], 8);
+      s.p('dark').tube([[3.1, Y + 0.8, z + 0.5], [5.7, Y + 1.45, z + 0.1]], 0.06, 5);
+      s.push().translate(6.5, Y + 1.55, z).rotateX(0.5);
+      zLathe(s.p('metal'), 0, 0, -0.16, [[1.04, 0], [1.12, 0], [1.12, 0.32], [1.04, 0.32]], 16);
+      zCyl(s.p('dark'), 0, 0, -1.3, 1.2, 0.8, 0.95, 16);
+      zLathe(s.p('dark', 1.3), 0, 0, 1.2, [[0.95, 0], [1.1, 0.75], [0.98, 0.75], [0.7, 0.1]], 16);
+      s.p('engine').box(0, 0, 1.36, 1.0, 1.0, 0.04);
+      s.p('hull').ball(0, 0, -1.3, 0.8, 0.8, 0.5, 16, 4, -1, 1);
+      s.p('glow').box(0, 0.98, 0, 0.4, 0.04, 1.1);
       s.pop();
     }
-    // light strips, skids on struts
-    s.p('glow').box(3.22, Y + 0.9, 3.5, 0.05, 0.1, 15.5);
-    s.p('glow').box(2.2, Y + 2.24, 11.9, 0.9, 0.08, 0.06);
-    s.p('metal').box(2.3, 0.1, 3.4, 0.5, 0.2, 13.5);
-    for (const z of [-1.6, 8.4]) s.p('dark').box(2.3, 0.75, z, 0.22, 1.3, 0.22);
+    // light strips, skids on struts, RCS quads
+    s.p('glow').box(3.26, Y + 1.9, 3.5, 0.04, 0.07, 15.2);
+    s.p('glow').box(2.2, Y + 2.48, 11.95, 0.9, 0.06, 0.05);
+    s.p('metal').tube([[2.5, 0.12, -3.2], [2.5, 0.1, 9.6], [2.5, 0.42, 10.6]], 0.12, 8);
+    s.p('metal').tube([[2.5, 0.12, -3.2], [2.5, 0.5, -4.2]], 0.12, 8);
+    for (const z of [-1.6, 3.6, 8.4]) {
+      s.p('dark').tube([[2.5, 0.16, z], [2.6, Y - 2.45, z]], 0.09, 7);
+      s.p('dark').tube([[2.5, 0.2, z + 0.9], [2.6, Y - 2.4, z + 0.1]], 0.05, 5);
+    }
+    for (const z of [-3.9, 11.3]) {
+      s.p('dark').bevelBox(3.3, Y - 1.5, z, 0.3, 0.4, 0.4, 0.05);
+      for (const [dy, dz] of [[0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]] as const) zCyl(s.p('metal'), 3.5, Y - 1.5 + dy, z + dz - 0.06, z + dz + 0.06, 0.07, 0.09, 7);
+    }
   });
-  // main engines + rear door frame
+  // main engines + rear cargo door (closed: frame, seam, lock bar), boarding ladder
   both(s, () => {
-    zPrism(s.p('dark'), 1.7, Y + 0.5, 11.9, 14.0, 1.25, 1.45, 8);
-    zPrism(s.p('engine'), 1.7, Y + 0.5, 13.95, 14.08, 1.2, 1.2, 8);
+    zCyl(s.p('dark'), 1.7, Y + 0.5, 11.9, 13.2, 1.15, 1.3, 18);
+    zLathe(s.p('dark', 1.3), 1.7, Y + 0.5, 13.2, [[1.3, 0], [1.48, 1.1], [1.34, 1.1], [1.0, 0.15]], 18);
+    s.p('engine').box(1.7, Y + 0.5, 13.5, 1.5, 1.5, 0.04);
   });
-  s.p('dark').box(0, Y - 1.1, 12.1, 3.0, 2.0, 0.25);
-  // roof sensor bar + mast
-  s.p('metal').box(0, Y + 2.45, -0.5, 4.2, 0.3, 0.9);
-  s.p('metal').prism(1.6, Y + 2.5, -0.5, Y + 5.4, 0.09, 0.04, 5);
-  s.p('glow').box(1.6, Y + 5.45, -0.5, 0.12, 0.12, 0.12);
+  s.p('dark').bevelBox(0, Y - 1.05, 12.08, 3.2, 2.3, 0.2, 0.06);
+  s.p('metal').bevelBox(0, Y - 1.05, 12.2, 2.9, 0.12, 0.08, 0.02).box(0, Y - 1.05, 12.2, 0.06, 2.1, 0.06);
+  for (const x of [-0.25, 0.25]) s.p('metal').tube([[x - 2.6, 0.2, 12.4], [x - 2.6, Y - 2.0, 12.25]], 0.035, 5);
+  for (let i = 0; i < 5; i++) s.p('metal').tube([[-2.85, 0.4 + i * 0.28, 12.4 - i * 0.03], [-2.35, 0.4 + i * 0.28, 12.4 - i * 0.03]], 0.025, 5);
+  // roof: sensor bar, mast, dish on a pedestal, cable trunk
+  s.p('metal').bevelBox(0, Y + 2.62, -0.5, 4.2, 0.26, 0.9, 0.06);
+  s.p('metal').tube([[1.6, Y + 2.7, -0.5], [1.6, Y + 5.5, -0.5]], [0.09, 0.03], 6);
+  s.p('glow').box(1.6, Y + 5.55, -0.5, 0.1, 0.1, 0.1);
+  s.p('metal').tube([[-1.3, Y + 2.5, 5.0], [-1.3, Y + 3.4, 5.0]], 0.1, 7);
+  s.push().translate(-1.3, Y + 3.55, 5.0).rotateX(-0.8);
+  s.p('metal').lathe(0, 0, [[0.12, 0], [0.7, 0.18], [1.25, 0.6], [1.2, 0.6], [0.66, 0.24], [0.08, 0.08]], 18);
+  s.p('dark').tube([[0, 0.1, 0], [0, 0.85, 0]], 0.03, 5);
+  s.pop();
+  s.p('accent').tube([[-2.0, Y + 2.5, -4.2], [-2.0, Y + 2.52, 10.8]], 0.09, 6);
 }
 
 /** Emit a ship design into a sink. */

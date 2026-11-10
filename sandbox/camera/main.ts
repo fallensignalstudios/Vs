@@ -218,20 +218,33 @@ function simulate(dt: number): void {
   mannequin.setOpacity(rig.playerFade);
 }
 
-/** Establishing shot → eased push-in with roll and FOV change → slow drift → blend back to gameplay. */
+/**
+ * Establishing shot → one continuous crane move through two keys (path) → an arc round the hero → slow drift →
+ * blend back to gameplay. Hold the skip glyph to fast-forward.
+ */
 function* demoCinematic(): Routine {
   cinematic = true;
   input.setContext('cinematic');
   const p = player.pos;
+  const hero = { x: p.x, y: p.y + 1.3, z: p.z };
   const skip = () => input.heldTime('skip') > 0.5;
   rig.cine.cut({ pos: { x: p.x - 7.5, y: p.y + 4.4, z: Math.min(p.z + 5.5, 10.6) }, look: { x: p.x + 0.3, y: p.y + 0.9, z: p.z - 7 }, fov: 34 });
   rig.cine.handheld(0.4);
   yield { race: [0.8, skip] };
-  rig.cine.move({ pos: { x: p.x + 2.4, y: p.y + 1.75, z: p.z + 2.8 }, look: { x: p.x - 0.5, y: p.y + 1.5, z: p.z - 6 }, fov: 44, roll: -3 }, 4.5, 'inOutCubic');
+  rig.cine.path(
+    [
+      { pos: { x: p.x - 4.2, y: p.y + 2.9, z: p.z + 4.6 }, look: { x: p.x, y: p.y + 1.2, z: p.z - 4 }, fov: 38 },
+      { pos: { x: p.x - 0.6, y: p.y + 1.9, z: p.z + 3.4 }, look: hero, fov: 42, roll: -2 },
+    ],
+    4.2, 'inOutCubic',
+  );
+  yield { race: [() => !rig.cine.moving, skip] };
+  rig.cine.finish();
+  rig.cine.arc({ pos: { x: p.x + 2.6, y: p.y + 1.7, z: p.z + 1.6 }, look: hero, fov: 44 }, 2.6, { x: p.x, y: p.y, z: p.z }, 'inOut');
   yield { race: [() => !rig.cine.moving, skip] };
   rig.cine.finish();
   rig.cine.drift({ around: { x: p.x, y: p.y, z: p.z }, yawRate: 0.12, lookHeight: 1.45 });
-  yield { race: [2.5, skip] };
+  yield { race: [2.2, skip] };
   rig.release(1.2);
   input.setContext('game');
   cinematic = false;

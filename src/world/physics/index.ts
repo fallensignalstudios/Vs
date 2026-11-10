@@ -6,11 +6,15 @@
  *   move.ts       grounded character movement (sliding, step-up, ramps, fall protection, no tunnelling)
  *   stand.ts      un-stick search (nearestStandable, recovery of actors in an invalid state)
  *   ray.ts        raycast, line of sight / fire, swept sphere
- *   nav.ts        multi-level nav grid, incremental rebuild; A* in navsearch.ts, string-pulling in
- *                 navsmooth.ts, per-agent (radius / height) fit caches in navfit.ts
+ *   navgrid.ts    multi-level nav grid: storage, full / incremental build, point ↔ node mapping
+ *   nav.ts        nav queries on that grid: straight-line tests, point queries, paths (A* in navsearch.ts,
+ *                 string-pulling in navsmooth.ts, per-agent radius / height fit caches in navfit.ts)
  *   validate.ts   authoring checks (void strips between modules, walk-through solids, …)
- *   debug.ts      three.js debug drawing (the only three.js dependency; everything else is plain math)
+ *   debug.ts      three.js debug drawing in named layers (the only three.js dependency; the rest is plain math)
  *   fixtures.ts   Z04 / Z08 / Z05 blockouts used by the tests and the sandbox
+ *
+ * Tests are colocated (*.test.ts; the regress.*.test.ts files pin the findings of the subsystem review);
+ * physics.bench.ts holds the wall-clock benchmarks (`npx vitest bench src/world/physics`).
  */
 import type {
   ColliderDesc, ColliderHandle, Game, GroundHit, MoveOpts, MoveResult, NavGrid, PhysicsWorld, RayHit,

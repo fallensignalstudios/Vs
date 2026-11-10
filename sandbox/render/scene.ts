@@ -299,8 +299,9 @@ export function buildShowcase(scene: THREE.Scene, render: RenderSystem, opts: Sh
   key.shadow.bias = -0.0004;
   key.shadow.normalBias = 0.03;
   root.add(key, key.target);
+  // cool back light, steep enough that its mirror glint on the polished floor lands below the hero framing
   const rim = new THREE.DirectionalLight(0x9fc0ff, 0.7);
-  rim.position.set(-10, 8, -30);
+  rim.position.set(-14, 26, -22);
   root.add(rim);
   // warm practicals where the seams are
   for (const z of [4, -12, -28]) {

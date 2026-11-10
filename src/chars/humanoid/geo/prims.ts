@@ -160,14 +160,15 @@ const _ax = new THREE.Vector3();
  * Open arc or thickness → bevelled shell with edge walls and optional raised trim (armour plates).
  */
 export function loft(b: MeshBuilder, secs: Sec[], o: LoftOpts = {}): void {
-  const S = expand(secs, o.smooth ?? 1, o.arc);
+  if (b.dry) return;
+  const S = expand(secs, b.detail >= 1 ? o.smooth ?? 1 : Math.max(1, Math.round((o.smooth ?? 1) * b.detail)), o.arc);
   const open = !!o.arc || secs.some((s) => s.a0 !== undefined || s.a1 !== undefined);
   if (!open && o.thick === undefined) loftTube(b, S, o);
   else loftShell(b, S, o, !open);
 }
 
 function loftTube(b: MeshBuilder, S: FullSec[], o: LoftOpts): void {
-  const seg = o.seg ?? 16;
+  const seg = b.segs(o.seg ?? 16, 6);
   const prim = new Prim();
   const nrm: number[] = [];
   const fn = o.fn;
@@ -199,7 +200,7 @@ function loftTube(b: MeshBuilder, S: FullSec[], o: LoftOpts): void {
       return;
     }
     const h = spec === 'dome' ? Math.min(sec.rx, sec.rz) * 0.85 : spec.dome;
-    const K = spec === 'dome' ? 3 : spec.k ?? 3;
+    const K = Math.round((spec === 'dome' ? 3 : spec.k ?? 3) * Math.min(1, b.detail * 1.2));
     let prev = edgeRing;
     const ax = _ax.x, ay = _ax.y, az = _ax.z;
     for (let k = 1; k <= K; k++) {
@@ -260,9 +261,10 @@ function lattice(len: number, n: number, bevel: number, trim: number, lo: boolea
 }
 
 function loftShell(b: MeshBuilder, S: FullSec[], o: LoftOpts, wrap: boolean): void {
-  const seg = o.seg ?? 12;
+  const seg = b.segs(o.seg ?? 12, wrap ? 6 : 2);
   const thick = o.thick ?? 0.012;
-  const bevel = o.bevel ?? Math.min(0.005, thick * 0.45);
+  // far LODs lose the bevel row (the faces it made degenerate and are dropped) but keep the coloured trim band
+  const bevel = b.detail < 0.45 ? 0 : o.bevel ?? Math.min(0.005, thick * 0.45);
   const trim = o.trim;
   const tw = trim ? trim.w : 0;
   const raise = trim ? trim.raise ?? 0.003 : 0;
@@ -389,6 +391,7 @@ export function lathe(b: MeshBuilder, profile: Array<[number, number]>, o: LoftO
 
 /** Ellipsoid centred on the origin. */
 export function ball(b: MeshBuilder, rx: number, ry: number, rz: number, seg = 12, rows = 7): void {
+  rows = b.segs(rows, 4);
   const secs: Sec[] = [];
   for (let k = 1; k < rows; k++) {
     const phi = (k / rows) * Math.PI;
@@ -408,8 +411,10 @@ export interface BoxOpts {
 
 /** Chamfered box centred on the origin. */
 export function box(b: MeshBuilder, sx: number, sy: number, sz: number, o: BoxOpts = {}): void {
+  if (b.dry) return;
   const hx = sx / 2, hy = sy / 2, hz = sz / 2;
-  const bv = Math.min(o.bevel ?? Math.min(sx, sy, sz) * 0.12, hx * 0.95, hy * 0.95, hz * 0.95);
+  // far LODs: no chamfer (its faces collapse and are dropped at commit)
+  const bv = b.detail < 0.45 ? 0 : Math.min(o.bevel ?? Math.min(sx, sy, sz) * 0.12, hx * 0.95, hy * 0.95, hz * 0.95);
   const tx = o.taper ? o.taper[0] : 1, tz = o.taper ? o.taper[1] : 1;
   const ed = o.edge ?? 0.6;
   const prim = new Prim();
@@ -448,8 +453,8 @@ export interface TubeOpts { seg?: number; closed?: boolean; caps?: boolean; slot
 /** Round tube along a polyline (cables, straps, hoses, halo rings). `r` may vary per point. */
 export function tube(b: MeshBuilder, pts: V3[], r: number | number[], o: TubeOpts = {}): void {
   const n = pts.length;
-  if (n < 2) return;
-  const seg = o.seg ?? 6;
+  if (n < 2 || b.dry) return;
+  const seg = b.segs(o.seg ?? 6, 3);
   const closed = !!o.closed;
   const prim = new Prim();
   const rad = (i: number): number => (typeof r === 'number' ? r : r[Math.min(i, r.length - 1)]);
@@ -509,8 +514,8 @@ export interface PrismOpts { bevel?: number; slots?: Array<Surf | undefined>; /*
 /** Extrude a 2D outline (XY, any winding) along Z, centred, with chamfered rims. */
 export function prism(b: MeshBuilder, outline: Array<readonly [number, number]>, depth: number, o: PrismOpts = {}): void {
   const n = outline.length;
-  if (n < 3) return;
-  const bv = Math.min(o.bevel ?? depth * 0.2, depth * 0.49);
+  if (n < 3 || b.dry) return;
+  const bv = b.detail < 0.45 ? 0 : Math.min(o.bevel ?? depth * 0.2, depth * 0.49);
   const fs = o.faceSlot ?? 0;
   const ed = o.edge ?? 0.7;
   let cx = 0, cy = 0;
@@ -551,7 +556,9 @@ export interface SweepPoint { x: number; y: number; z: number; slot?: number; ed
 
 /** Connect consecutive closed rings of equal vertex count (blades, bespoke profiles). Flat-capped. */
 export function sweep(b: MeshBuilder, rings: SweepPoint[][], o: { slots?: Array<Surf | undefined>; caps?: boolean } = {}): void {
-  if (rings.length < 2) return;
+  if (rings.length < 2 || b.dry) return;
+  // lower LODs keep every other ring (always the first and the last)
+  if (b.detail < 1 && rings.length > 4) rings = rings.filter((_, i) => i === 0 || i === rings.length - 1 || i % (b.detail < 0.45 ? 3 : 2) === 0);
   const m = rings[0].length;
   const prim = new Prim();
   const starts: number[] = [];
@@ -586,7 +593,7 @@ export function sweep(b: MeshBuilder, rings: SweepPoint[][], o: { slots?: Array<
 
 /** Flat ring / torus around Y at the origin (hilt rings, collars, halos). */
 export function torus(b: MeshBuilder, R0: number, r: number, o: { seg?: number; tubeSeg?: number; arc?: [number, number]; flat?: number; slots?: Array<Surf | undefined> } = {}): void {
-  const seg = o.seg ?? 24;
+  const seg = b.segs(o.seg ?? 24, 6);
   const a0 = (o.arc ? o.arc[0] : 0) * DEG, a1 = (o.arc ? o.arc[1] : 360) * DEG;
   const closed = !o.arc;
   const pts: V3[] = [];

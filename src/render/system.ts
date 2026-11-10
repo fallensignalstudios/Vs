@@ -10,7 +10,9 @@ import type {
 import { RENDER_LAYERS } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { DEFAULT_LOOK, L, LOOKS, LookBlender } from './looks';
-import { AutoQualityGovernor, classifyGpu, DynamicResolution, isQualityLevel, lowerQuality, QUALITY_PRESETS } from './quality';
+import {
+  AutoQualityGovernor, classifyGpu, DynamicResolution, isQualityLevel, isSoftwareGpu, lowerQuality, QUALITY_PRESETS,
+} from './quality';
 import { PostChain } from './postfx';
 import { PlanarReflections } from './reflections';
 import { EnvironmentBaker } from './environment';
@@ -52,6 +54,11 @@ export class RenderSystemImpl implements RenderSystem {
   private readonly governor = new AutoQualityGovernor();
   private readonly manual: boolean;
   private readonly gpuLevel: QualityLevel;
+  /**
+   * Dynamic resolution and the auto-quality governor may act. Off in manual / headless stepping and on software
+   * rasterisers: no setting reaches the frame budget there, and captures must keep the resolution they asked for.
+   */
+  private readonly adaptive: boolean;
 
   private auto: boolean;
   private dynamicResolution = true;
@@ -107,7 +114,9 @@ export class RenderSystemImpl implements RenderSystem {
 
     // Quality: URL flag > explicit setting > GPU heuristic. Decided here (not in init) because the material
     // library reads quality.textureSize while it bakes.
-    this.gpuLevel = classifyGpu(readGpuString(renderer), { mobile: isMobile() });
+    const gpu = readGpuString(renderer);
+    this.gpuLevel = classifyGpu(gpu, { mobile: isMobile() });
+    this.adaptive = !this.manual && !isSoftwareGpu(gpu);
     const setting = readSetting(game, 'quality', 'auto');
     const flagLevel = !isStub(flags) && isQualityLevel(flags.quality) ? flags.quality : null;
     this.auto = flagLevel === null && !isQualityLevel(setting);
@@ -181,7 +190,7 @@ export class RenderSystemImpl implements RenderSystem {
     this.cssHeight = h;
     const q = this.quality;
     const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
-    const dyn = this.dynamicResolution && !this.manual ? this.dynRes.scale : 1;
+    const dyn = this.dynamicResolution && this.adaptive ? this.dynRes.scale : 1;
     const capped = Math.min(dpr, q.maxPixelRatio);
     // Pixel budget per level: a 4K panel at dpr 1 must not quietly quadruple the cost of every pass.
     // Applied before dynamic resolution, so the controller always scales the resolution really in use.
@@ -481,9 +490,9 @@ export class RenderSystemImpl implements RenderSystem {
     return this.manual ? 0 : real;
   }
 
-  /** Dynamic resolution and the auto-quality governor (never in manual / headless stepping). */
+  /** Dynamic resolution and the auto-quality governor (see `adaptive`). */
   private adapt(frameMs: number): void {
-    if (this.manual || !(frameMs > 0)) return;
+    if (!this.adaptive || !(frameMs > 0)) return;
     const game = this.game;
     if (game.phase !== 'playing' || game.paused === true) return;
     if (this.dynamicResolution && this.dynRes.update(frameMs)) this.resize();

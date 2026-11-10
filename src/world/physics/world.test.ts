@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { PhysicsWorld } from '@/core/api';
 import { createPhysicsWorld } from './index';
-import { buildZ04, buildZ05, fxBox, fxFloor, planPos } from './fixtures';
+import { buildZ04, buildZ05, buildZ08, fxBox, fxFloor, planPos } from './fixtures';
 
 const world = (): PhysicsWorld => createPhysicsWorld(null);
 
@@ -366,41 +366,99 @@ describe('triggers', () => {
 });
 
 describe('debugObject', () => {
-  it('returns one persistent group that refreshes itself when the world changes', () => {
+  const count = (g: THREE.Group, name: string): number => {
+    const o = g.getObjectByName(name) as THREE.Mesh | undefined;
+    return o?.geometry.getAttribute('position')?.count ?? 0;
+  };
+  const geo = (g: THREE.Group, name: string): THREE.BufferGeometry => (g.getObjectByName(name) as THREE.Mesh).geometry;
+  interface Api { layer(name: string, visible: boolean): boolean; refresh(): void; issues: Array<{ kind: string }>; navNodes(): number[] }
+
+  it('returns one persistent group of named layers that refresh themselves when the world changes', () => {
     const w = world();
     const f = buildZ04(w);
     const g = w.debugObject() as THREE.Group;
     expect(g).toBeInstanceOf(THREE.Group);
     expect(w.debugObject()).toBe(g);
-    const count = (name: string): number => {
-      const o = g.getObjectByName(name) as THREE.Mesh;
-      return o.geometry.getAttribute('position')?.count ?? 0;
-    };
-    expect(count('lines')).toBeGreaterThan(500);
-    expect(count('surfaces')).toBeGreaterThan(30);
-    expect(count('solids')).toBeGreaterThan(500);
-    expect(count('nav')).toBe(0); // nav not built yet
+    expect(g.children.map((c) => c.name)).toEqual(['surfaces', 'nav', 'solids', 'triggers', 'issues']);
+    expect(count(g, 'surfaces:fill')).toBeGreaterThan(30);
+    expect(count(g, 'surfaces:lines')).toBeGreaterThan(40);
+    expect(count(g, 'solids:fill')).toBeGreaterThan(500);
+    expect(count(g, 'solids:lines')).toBeGreaterThan(500);
+    expect(count(g, 'nav:fill')).toBe(0); // nav not built yet
     w.nav.rebuild();
     g.updateMatrixWorld(); // what the renderer does every frame
-    expect(count('nav')).toBe(w.nav.nodeCount);
+    // merged strips: far fewer quads than nodes, but every node is covered
+    expect(count(g, 'nav:fill')).toBeGreaterThan(600);
+    expect(count(g, 'nav:fill')).toBeLessThan(w.nav.nodeCount * 2);
+    expect((g.userData as Api).navNodes().length).toBe(w.nav.nodeCount * 3);
 
-    const lines = count('lines');
+    const lines = count(g, 'solids:lines');
+    expect(count(g, 'triggers:lines')).toBe(0);
     w.addTrigger({ kind: 'circle', x: 31, z: -19, r: 3 });
     w.addCollider({ shape: { kind: 'cyl', r: 1, hy: 1 }, x: 20, y: 1, z: -5 });
     g.updateMatrixWorld();
-    expect(count('lines')).toBeGreaterThan(lines);
+    expect(count(g, 'solids:lines')).toBeGreaterThan(lines);
+    expect(count(g, 'triggers:lines')).toBeGreaterThan(60);
     // hidden groups do no work; they catch up when shown again
     g.visible = false;
-    const before = count('lines');
+    const before = count(g, 'solids:lines');
     f.door.remove();
     g.updateMatrixWorld();
-    expect(count('lines')).toBe(before);
+    expect(count(g, 'solids:lines')).toBe(before);
     g.visible = true;
     g.updateMatrixWorld();
-    expect(count('lines')).toBeLessThan(before);
+    expect(count(g, 'solids:lines')).toBeLessThan(before);
     w.clear();
     g.updateMatrixWorld();
-    expect(count('lines')).toBe(0);
-    expect(count('nav')).toBe(0);
+    for (const name of ['surfaces:fill', 'surfaces:lines', 'solids:lines', 'triggers:lines', 'nav:fill']) expect(count(g, name)).toBe(0);
+  });
+
+  it('rebuilds only the layer that changed, honours layer visibility and marks validate() findings', () => {
+    const w = world();
+    const f = buildZ08(w);
+    w.nav.rebuild();
+    const g = w.debugObject() as THREE.Group;
+    const api = g.userData as Api;
+    const surf = geo(g, 'surfaces:fill'), sol = geo(g, 'solids:fill'), nav = geo(g, 'nav:fill'), trg = geo(g, 'triggers:lines');
+    // a door that slides every frame: only the solids layer is touched (nav is not rebuilt until someone asks)
+    for (let i = 0; i < 5; i++) {
+      f.doorW.setPose(f.doorW.desc.x + 0.1, f.doorW.desc.y, f.doorW.desc.z);
+      g.updateMatrixWorld();
+    }
+    expect(geo(g, 'solids:fill')).not.toBe(sol);
+    expect(geo(g, 'surfaces:fill')).toBe(surf);
+    expect(geo(g, 'nav:fill')).toBe(nav);
+    expect(geo(g, 'triggers:lines')).toBe(trg);
+    w.nav.rebuild();
+    g.updateMatrixWorld();
+    expect(geo(g, 'nav:fill')).not.toBe(nav);
+    const t = w.addTrigger({ kind: 'box', x: 35, z: -24, hx: 9, hz: 7 });
+    g.updateMatrixWorld();
+    const trg2 = geo(g, 'triggers:lines');
+    expect(trg2).not.toBe(trg);
+    t.enabled = false; // drawn grey
+    g.updateMatrixWorld();
+    expect(geo(g, 'triggers:lines')).not.toBe(trg2);
+    // layers toggle individually; a hidden layer is skipped until it is shown again
+    expect(api.layer('nav', false)).toBe(true);
+    expect(api.layer('no-such-layer', false)).toBe(false);
+    expect(g.getObjectByName('nav')!.visible).toBe(false);
+    const hidden = geo(g, 'nav:fill');
+    for (const b of f.courtBarriers) b.enabled = true;
+    w.nav.rebuild();
+    g.updateMatrixWorld();
+    expect(geo(g, 'nav:fill')).toBe(hidden);
+    api.layer('nav', true);
+    g.updateMatrixWorld();
+    expect(geo(g, 'nav:fill')).not.toBe(hidden);
+    // issues: the fixture is clean; a crate everybody walks through gets a pin once the world has settled
+    expect(api.issues).toEqual([]);
+    expect(count(g, 'issues:lines')).toBe(0);
+    fxBox(w, 20, 20, 21, 21, 0, 0.4, { tag: 'crate' });
+    g.updateMatrixWorld();
+    expect(api.issues).toEqual([]); // not rescanned on the very frame something moved
+    api.refresh();
+    expect(api.issues.map((i) => i.kind)).toEqual(['low-solid']);
+    expect(count(g, 'issues:lines')).toBeGreaterThan(20);
   });
 });

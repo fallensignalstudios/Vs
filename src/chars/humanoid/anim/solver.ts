@@ -35,6 +35,10 @@ export interface SolveOpts {
   grip2Rot: THREE.Quaternion | null;
   /** [L,R] model-space palm pins (console holds, lifting, hand-overs) */
   pins: Array<{ pos: THREE.Vector3; w: number } | null> | null;
+  /** barrel axis of the drawn ranged weapon in right-hand space (null = none); the aim loop measures it */
+  barrel: THREE.Vector3 | null;
+  /** points on the right-hand item, in right-hand space, that must stay above the floor (blade tips) */
+  tips: THREE.Vector3[] | null;
 }
 
 const V = (): THREE.Vector3 => new THREE.Vector3();
@@ -42,9 +46,15 @@ const Q = (): THREE.Quaternion => new THREE.Quaternion();
 
 const _q = Q(), _q2 = Q(), _qa = Q(), _qb = Q(), _qh = Q(), _delta = Q(), _inv = Q(), _gq = Q();
 const _v = V(), _v2 = V(), _t = V(), _pole = V(), _end = V(), _c0 = V(), _c1 = V(), _g = V();
+const _fe = V(), _fw = V(), _fp = V(), _ft = V(), _fk = V(), _fq = Q();
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const IDENT = new THREE.Quaternion();
+/** the floor is the plane y = 0 of model space: lowest a palm / a blade tip may go */
+const FLOOR_HAND = 0.03, FLOOR_TIP = 0.015;
+/** ankle → ball of the foot (the toe joint, 3 cm above the sole), heel bottom, toe tip from the ball */
+const BALL = new THREE.Vector3(0, -0.055, -0.143), HEEL = new THREE.Vector3(0, -0.085, 0.06), TOE_TIP = new THREE.Vector3(0, -0.028, -0.085);
 
 export class BodySolver {
   private readonly idx: Record<string, number>;
@@ -60,6 +70,8 @@ export class BodySolver {
   readonly curl = new Float32Array([0.3, 0.3]);
   private readonly restHips: THREE.Vector3;
   readonly bodyCount: number;
+  /** bones apply() writes, in hierarchy order */
+  private readonly body: number[];
   /** chest transform before additives (for follow hands) */
   private readonly chest0p = V();
   private readonly chest0q = Q();
@@ -95,6 +107,8 @@ export class BodySolver {
       makeTwoBoneRest(this.off[I.shinR], this.off[I.footR], fwd),
     ];
     this.palm = [this.off[I.prop].clone(), this.off[I.weapon].clone()];
+    this.body = [I.hips, I.spine, I.chest, I.neck, I.head, I.clavL, I.uArmL, I.fArmL, I.handL, I.clavR, I.uArmR, I.fArmR, I.handR,
+      I.thighL, I.shinL, I.footL, I.toeL, I.thighR, I.shinR, I.footR, I.toeR];
   }
 
   private fk(child: number, parent: number, local: THREE.Quaternion): void {
@@ -137,14 +151,14 @@ export class BodySolver {
 
     // right arm first (the left may ride its weapon)
     const pinR = opts.pins ? opts.pins[1] : null, pinL = opts.pins ? opts.pins[0] : null;
-    this.solveArm(pose, 1, add, null, null, 0, pinR);
+    this.solveArm(pose, 1, add, null, null, 0, pinR, opts.tips);
     if (pose.grip > 1e-3 && opts.grip2) {
       const hr = I.handR;
       _g.copy(this.palm[1]).add(opts.grip2).applyQuaternion(this.wq[hr]).add(this.wp[hr]);
       _gq.copy(this.wq[hr]);
       if (opts.grip2Rot) _gq.multiply(opts.grip2Rot);
-      this.solveArm(pose, 0, add, _g, _gq, pose.grip, pinL);
-    } else this.solveArm(pose, 0, add, null, null, 0, pinL);
+      this.solveArm(pose, 0, add, _g, _gq, pose.grip, pinL, null);
+    } else this.solveArm(pose, 0, add, null, null, 0, pinL, null);
 
     this.solveLeg(pose, 0);
     this.solveLeg(pose, 1);
@@ -157,7 +171,7 @@ export class BodySolver {
     }
   }
 
-  private solveArm(pose: Pose, s: number, add: Additive | null, gripPos: THREE.Vector3 | null, gripRot: THREE.Quaternion | null, gripW: number, pin: { pos: THREE.Vector3; w: number } | null): void {
+  private solveArm(pose: Pose, s: number, add: Additive | null, gripPos: THREE.Vector3 | null, gripRot: THREE.Quaternion | null, gripW: number, pin: { pos: THREE.Vector3; w: number } | null, tips: THREE.Vector3[] | null): void {
     const I = this.idx, q = pose.q;
     const L = s === 0;
     const clav = L ? I.clavL : I.clavR, ua = L ? I.uArmL : I.uArmR, fa = L ? I.fArmL : I.fArmR, ha = L ? I.handL : I.handR;
@@ -202,6 +216,7 @@ export class BodySolver {
       _pole.set(L ? -0.5 : 0.5, -0.7, 0.35).applyQuaternion(this.wq[chest]);
       this.ikArm(s, rest, ua, pin.pos, _qh, _pole, pin.w);
     }
+    this.floorArm(s, rest, ua, fa, ha, gripW > 0.5 ? null : tips, gripW > 0.5);
     this.wq[ua].copy(this.ua);
     this.wp[fa].copy(this.off[fa]).applyQuaternion(this.ua).add(this.wp[ua]);
     this.wq[fa].copy(this.fa);
@@ -220,6 +235,51 @@ export class BodySolver {
     else { this.ua.slerp(_qa, w); this.fa.slerp(_qb, w); this.ha.slerp(rot, w); }
   }
 
+  /** wrist (→ _fw) and palm (→ _fp) of the arm as currently solved; _fe = elbow */
+  private armPoints(s: number, ua: number, fa: number, ha: number): void {
+    _fe.copy(this.off[fa]).applyQuaternion(this.ua).add(this.wp[ua]);
+    _fw.copy(this.off[ha]).applyQuaternion(this.fa).add(_fe);
+    _fp.copy(this.palm[s]).applyQuaternion(this.ha).add(_fw);
+  }
+
+  /**
+   * Ground constraint: a palm never sinks below the floor, and neither does a point of the held weapon — a steep
+   * blade lifts the hand, a shallow one pitches up about the grip (the stroke stops ON the stone, not in it).
+   */
+  private floorArm(s: number, rest: TwoBoneRest, ua: number, fa: number, ha: number, tips: THREE.Vector3[] | null, riding: boolean): void {
+    this.armPoints(s, ua, fa, ha);
+    if (_fp.y < FLOOR_HAND && !riding) {
+      _fp.y = FLOOR_HAND;
+      _pole.copy(_fe).sub(this.wp[ua]);
+      this.ikArm(s, rest, ua, _fp, _fq.copy(this.ha), _pole, 1);
+    }
+    if (!tips) return;
+    for (let pass = 0; pass < 2; pass++) {
+      for (const tip of tips) {
+        this.armPoints(s, ua, fa, ha);
+        _ft.copy(tip).applyQuaternion(this.ha).add(_fw);
+        const deficit = FLOOR_TIP - _ft.y;
+        if (deficit <= 1e-5) continue;
+        _ft.sub(_fp);
+        const L = _ft.length();
+        if (L < 1e-4) continue;
+        const steep = Math.min(1, Math.max(0, (-_ft.y / L - 0.8) / 0.15));
+        const pitchUp = deficit * (1 - steep);
+        _fq.copy(this.ha);
+        if (pitchUp > 1e-5) {
+          _fk.crossVectors(_ft, Y_AXIS);
+          if (_fk.lengthSq() > 1e-10) {
+            const e0 = Math.asin(Math.max(-1, Math.min(1, _ft.y / L))), e1 = Math.asin(Math.max(-1, Math.min(1, (_ft.y + pitchUp) / L)));
+            _fq.setFromAxisAngle(_fk.normalize(), e1 - e0).multiply(this.ha);
+          }
+        }
+        _fp.y += deficit * steep;
+        _pole.copy(_fe).sub(this.wp[ua]);
+        this.ikArm(s, rest, ua, _fp, _fq, _pole, 1);
+      }
+    }
+  }
+
   private solveLeg(pose: Pose, s: number): void {
     const I = this.idx;
     const L = s === 0;
@@ -228,6 +288,13 @@ export class BodySolver {
     this.wp[th].copy(this.off[th]).applyQuaternion(this.wq[hips]).add(this.wp[hips]);
     const k = s * 7;
     _t.set(pose.foot[k], pose.foot[k + 1], pose.foot[k + 2]);
+    // no part of the foot goes through the floor, whatever the pose asked for
+    _q.set(pose.foot[k + 3], pose.foot[k + 4], pose.foot[k + 5], pose.foot[k + 6]);
+    _v.copy(BALL).applyQuaternion(_q);
+    _q2.setFromAxisAngle(X_AXIS, pose.toe[s]).premultiply(_q);
+    _v2.copy(TOE_TIP).applyQuaternion(_q2);
+    const low = Math.min(_t.y + _v.y - 0.03, _t.y + _v.y + _v2.y, _t.y + _g.copy(HEEL).applyQuaternion(_q).y);
+    if (low < 0) _t.y -= low;
     _pole.set(pose.knee[s * 3], pose.knee[s * 3 + 1], pose.knee[s * 3 + 2]);
     if (_pole.lengthSq() < 1e-6) _pole.set(0, 0, -1);
     solveTwoBone(this.leg[s], this.wp[th], _t, _pole, _qa, _qb, _end);
@@ -242,11 +309,9 @@ export class BodySolver {
 
   /** Write the solved transforms into the live skeleton (local rotations; hips also get position). */
   apply(bones: THREE.Bone[]): void {
-    const I = this.idx, P = this.spec.parent;
-    const body = [I.hips, I.spine, I.chest, I.neck, I.head, I.clavL, I.uArmL, I.fArmL, I.handL, I.clavR, I.uArmR, I.fArmR, I.handR,
-      I.thighL, I.shinL, I.footL, I.toeL, I.thighR, I.shinR, I.footR, I.toeR];
-    for (const i of body) {
-      const p = P[i];
+    const I = this.idx, P = this.spec.parent, body = this.body;
+    for (let n = 0; n < body.length; n++) {
+      const i = body[n], p = P[i];
       _inv.copy(this.wq[p]).invert();
       bones[i].quaternion.copy(_inv).multiply(this.wq[i]);
     }

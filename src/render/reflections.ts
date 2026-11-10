@@ -67,10 +67,6 @@ export class PlanarReflections {
     m.layers.set(RENDER_LAYERS.default);
   }
 
-  get count(): number {
-    return this.floors.size;
-  }
-
   register(mesh: THREE.Mesh, opts: ReflectiveFloorOpts = {}): void {
     if (!mesh || (mesh as THREE.Mesh).isMesh !== true || !mesh.geometry) {
       if (!this.warnedMesh) {

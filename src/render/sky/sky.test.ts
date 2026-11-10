@@ -1,12 +1,17 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Game, SkyPreset } from '@/core/api';
+import type { Carrier } from './carrier';
+import { insideHull } from './carrierHull';
 import { createSkySystem } from './index';
 import { battleFrame, battlePlaneCoords } from './fleet';
 import { SKY_PRESETS, SKY_PRESET_IDS, SkyState, blendSkyStates, dirFromAzEl, rotateSkyState, slerpDir } from './presets';
-import { CLIP_TOWER } from './scenic/clipTower';
+import { lancet } from './scenic/arch';
+import { CLIP_TOWER, clipTowerRadius } from './scenic/clipTower';
 import { GeoBuilder } from './scenic/geo';
 import { archPoint } from './scenic/megaRibs';
+import { num } from './scenic/opts';
+import { insideWound, woundCone } from './scenic/woundClear';
 
 function fakeGame(over: Partial<Record<string, unknown>> = {}): Game {
   return {
@@ -154,11 +159,62 @@ describe('GeoBuilder', () => {
     }
   });
 
-  it('builds indexed geometry with colour and glow attributes', () => {
-    const g = new GeoBuilder().paint(0xff0000, 2).box(0, 0, 0, 1, 1, 1).build();
+  it('builds indexed geometry with colour, glow, baked light and surface coordinates', () => {
+    const g = new GeoBuilder().paint(0xff0000, 2).light(0.5, 1).dress(0.25, 0).box(0, 0, 0, 1, 1, 1).build();
     expect(g.getAttribute('position').count).toBe(24);
     expect(g.getAttribute('aGlow').getX(0)).toBe(2);
+    expect(g.getAttribute('aLight').getX(0)).toBeCloseTo(0.5, 2);
+    expect(g.getAttribute('aLight').getY(0)).toBeCloseTo(1, 2);
+    expect(g.getAttribute('aLight').getZ(0)).toBeCloseTo(0.25, 2);
+    expect(g.getAttribute('aLight').getW(0)).toBe(0);
+    expect(g.getAttribute('aUv').count).toBe(24);
+    expect(g.getAttribute('normal').getY(8)).toBeCloseTo(0, 1);
     expect(g.index?.count).toBe(36);
+  });
+
+  it('bevelled boxes, lathes, skins, tubes and balls face outward (also when mirrored)', () => {
+    const o = new THREE.Vector3();
+    expect(new GeoBuilder().bevelBox(0, 0, 0, 4, 2, 6, 0.3).triangleCount).toBe(44);
+    expect(outward(new GeoBuilder().bevelBox(0, 0, 0, 4, 2, 6, 0.3), o)).toBe(true);
+    expect(outward(new GeoBuilder().push().scale(-1, 1, 1).bevelBox(0, 0, 0, 4, 2, 6, 0.3).pop(), o)).toBe(true);
+    // closed section revolved (a ring slab): every normal points away from the section's own centre line
+    const slab = new GeoBuilder().lathe(0, 0, [[5, -1], [5, 1], [4.2, 1], [4.2, -1]], 24, { closed: true }).raw();
+    for (let i = 0; i < slab.pos.length; i += 3) {
+      const r = Math.hypot(slab.pos[i], slab.pos[i + 2]);
+      const cx = (slab.pos[i] / r) * 4.6, cz = (slab.pos[i + 2] / r) * 4.6;
+      expect((slab.pos[i] - cx) * slab.nrm[i] + slab.pos[i + 1] * slab.nrm[i + 1] + (slab.pos[i + 2] - cz) * slab.nrm[i + 2]).toBeGreaterThan(0);
+    }
+    expect(outward(new GeoBuilder().cyl(0, -1, 0, 1, 1, 0.5, 12), o)).toBe(true);
+    expect(outward(new GeoBuilder().ball(0, 0, 0, 2, 1, 3, 12, 8), o)).toBe(true);
+    expect(outward(new GeoBuilder().tube([[0, 0, 0], [0, 0, -4], [1, 0, -8]], 0.5, 8), new THREE.Vector3(0.2, 0, -4))).toBe(true);
+    const ring = (z: number, k: number): [number, number, number][] => [[0, -k, z], [k, 0, z], [0, k, z], [-k, 0, z]];
+    expect(outward(new GeoBuilder().skin([ring(2, 1), ring(0, 1.4), ring(-3, 0.8)], { crease: [1, 3], caps: true }), o)).toBe(true);
+    expect(outward(new GeoBuilder().push().scale(-1, 1, 1).skin([ring(2, 1), ring(0, 1.4), ring(-3, 0.8)], { caps: true }).pop(), o)).toBe(true);
+  });
+
+  it('a lathe wall listed top → bottom faces the axis (atrium interiors)', () => {
+    const { pos, nrm } = new GeoBuilder().lathe(0, 0, [[10, 5], [10, 0]], 16).raw();
+    for (let i = 0; i < pos.length; i += 3) expect(pos[i] * nrm[i] + pos[i + 2] * nrm[i + 2]).toBeLessThan(0);
+  });
+});
+
+describe('option sanitiser', () => {
+  it('forces finite numbers into range', () => {
+    expect(num(Number.NaN, 7, 0, 10)).toBe(7);
+    expect(num(Number.POSITIVE_INFINITY, 7, 0, 10)).toBe(7);
+    expect(num('12', 7, 0, 10)).toBe(7);
+    expect(num(null, 7, 0, 10)).toBe(7);
+    expect(num(99, 7, 0, 10)).toBe(10);
+    expect(num(-99, 7, 0, 10)).toBe(0);
+  });
+
+  it('lancet arches spring at the half width and meet at the apex, round or pointed', () => {
+    for (const rise of [0.6, 1, 1.9]) {
+      expect(lancet(0, 2, 2 * rise)[0]).toBeCloseTo(2, 6);
+      expect(lancet(0, 2, 2 * rise)[1]).toBeCloseTo(0, 6);
+      expect(lancet(1, 2, 2 * rise)[0]).toBeCloseTo(0, 5);
+      expect(lancet(1, 2, 2 * rise)[1]).toBeCloseTo(2 * rise, 5);
+    }
   });
 });
 
@@ -196,31 +252,50 @@ describe('sky system', () => {
     expect(rightOf(sky.woundDir, sky.redRemnantDir)).toBeLessThan(-0.2);
   });
 
-  it('never throws on bad input: unknown preset, NaN, zero / negative dt', () => {
+  it('never throws on bad input: unknown preset, NaN, null, zero / negative dt', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const sky = createSkySystem(fakeGame());
     const cam = new THREE.PerspectiveCamera();
+    const c = sky.carrier;
+    c.visible = true;
+    c.setAnchor({ x: 5, y: 6, z: 7 }, 0.3);
+    c.setProgress(0.5);
+    const anchored = c.position.clone();
     expect(() => {
       sky.setPreset('nope' as SkyPreset);
       sky.setPreset('nope' as SkyPreset);
+      sky.setPreset('battleCeiling', { blendSeconds: Number.NaN });
       sky.setBattleIntensity(Number.NaN);
       sky.setWoundActivity(7);
       sky.setBoundaryClosed(true, Number.NaN);
       sky.setHeading(Number.NaN);
       sky.impact({ dir: { x: Number.NaN, y: 0, z: 0 }, strength: Number.NaN });
+      sky.impact(null as unknown as undefined);
       sky.impact();
-      sky.carrier.setProgress(Number.NaN);
-      sky.carrier.setStabilized(Number.POSITIVE_INFINITY);
-      sky.carrier.setAnchor({ x: 1, y: 2, z: 3 }, Number.NaN);
+      c.visible = true;
+      c.setProgress(Number.NaN);
+      c.setStabilized(Number.POSITIVE_INFINITY);
+      c.setAnchor(null as unknown as { x: number; y: number; z: number });
+      c.setAnchor(undefined as unknown as { x: number; y: number; z: number }, 1);
+      c.setAnchor({ x: Number.NaN, y: 0, z: 0 });
+      c.setAnchor({ x: 0, y: Number.POSITIVE_INFINITY, z: 0 }, Number.NaN);
+      c.setAnchor({} as { x: number; y: number; z: number });
       sky.update(Number.NaN, cam);
       sky.update(-1, cam);
       sky.update(0, cam);
       sky.update(1 / 60, cam);
     }).not.toThrow();
-    expect(sky.preset).toBe('void');
-    expect(warn.mock.calls.filter((c) => String(c[0]).includes('unknown preset')).length).toBe(1);
+    expect(sky.preset).toBe('battleCeiling');
+    expect(warn.mock.calls.filter((w) => String(w[0]).includes('unknown preset')).length).toBe(1);
     expect(sky.woundActivity).toBeLessThanOrEqual(1);
     expect(sky.heading).toBe(0);
+    // a bad anchor keeps the previous one (yaw 1 from the second call was finite and is applied): state stays finite
+    for (const v of [c.position, c.forward, c.clipPoint, c.shadowFootprint.center, c.shadowFootprint.axis]) {
+      expect(Number.isFinite(v.x + v.y + v.z)).toBe(true);
+    }
+    expect(Number.isFinite(c.shadow)).toBe(true);
+    expect(Number.isFinite(c.shadowFootprint.halfLength + c.shadowFootprint.halfWidth)).toBe(true);
+    expect(c.position.y).toBeCloseTo(anchored.y, 6); // still anchored at y = 6
     warn.mockRestore();
   });
 
@@ -262,28 +337,205 @@ describe('sky system', () => {
     quiet.update(1 / 60, new THREE.PerspectiveCamera());
     expect(quiet.battleGlow.r + quiet.battleGlow.g + quiet.battleGlow.b).toBeGreaterThan(0);
   });
+
+  it('a snap preset is a cut: no battle light survives it, and the carrier stays with the Z05 sky', () => {
+    const sky = createSkySystem(fakeGame());
+    const cam = new THREE.PerspectiveCamera();
+    sky.setPreset('battleCeiling');
+    sky.setBattleIntensity(1);
+    sky.carrier.visible = true;
+    sky.carrier.setProgress(0.5);
+    for (let i = 0; i < 600; i++) sky.update(1 / 60, cam);
+    sky.impact({ strength: 1 });
+    sky.update(1 / 60, cam);
+    expect(sky.battleGlow.r + sky.battleGlow.g + sky.battleGlow.b).toBeGreaterThan(0);
+    sky.setPreset('coreChamber'); // fleet 0, intensity 0
+    expect(sky.battleGlow.r + sky.battleGlow.g + sky.battleGlow.b).toBe(0);
+    expect(sky.carrier.visible).toBe(false);
+    let after = 0;
+    for (let i = 0; i < 240; i++) { sky.update(1 / 60, cam); after += sky.battleGlow.r + sky.battleGlow.g + sky.battleGlow.b; }
+    expect(after).toBe(0);
+    // battleCeiling itself keeps a carrier that was already shown
+    sky.setPreset('battleCeiling');
+    sky.carrier.visible = true;
+    sky.setPreset('battleCeiling', { blendSeconds: 2 });
+    expect(sky.carrier.visible).toBe(true);
+  });
+
+  it('reset() returns to the neutral start state', () => {
+    const sky = createSkySystem(fakeGame());
+    const cam = new THREE.PerspectiveCamera();
+    sky.setPreset('battleCeiling');
+    sky.setHeading(1.2);
+    sky.setBoundaryClosed(true, 0);
+    sky.carrier.visible = true;
+    sky.carrier.setStabilized(0.7);
+    sky.carrier.setProgress(0.9);
+    sky.update(1 / 60, cam);
+    sky.reset();
+    expect(sky.preset).toBe('void');
+    expect(sky.heading).toBe(0);
+    expect(sky.boundaryClosed).toBe(0);
+    expect(sky.carrier.visible).toBe(false);
+    expect(sky.carrier.progress).toBe(0);
+    expect(sky.carrier.stabilized).toBe(0);
+    expect(sky.carrier.shadow).toBe(0);
+  });
+
+  it('follows the render quality profile and tolerates a missing one', () => {
+    const cam = new THREE.PerspectiveCamera();
+    for (const [level, want] of [['low', 0], ['medium', 1], ['high', 2], ['ultra', 2], ['bogus', 2]] as const) {
+      const sky = createSkySystem(fakeGame({ render: { quality: { level } } }));
+      sky.update(1 / 60, cam);
+      const dome = sky.root.getObjectByName('sky:dome') as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+      // the main-view tier is what `onBeforeRender` copies into uDetail for full-size passes
+      const renderer = { getRenderTarget: () => null, getDrawingBufferSize: (v: THREE.Vector2) => v.set(1280, 720), capabilities: { reversedDepthBuffer: false } };
+      dome.onBeforeRender(renderer as unknown as THREE.WebGLRenderer, new THREE.Scene(), cam, dome.geometry, dome.material, null as unknown as THREE.Group);
+      expect(dome.material.uniforms.uDetail.value, level).toBe(want);
+      // a small secondary target (reflection / PMREM face) always shades the cheapest tier
+      const small = { ...renderer, getRenderTarget: () => ({ width: 256, height: 256 }) };
+      dome.onBeforeRender(small as unknown as THREE.WebGLRenderer, new THREE.Scene(), cam, dome.geometry, dome.material, null as unknown as THREE.Group);
+      expect(dome.material.uniforms.uDetail.value, level).toBe(0);
+    }
+    expect(() => createSkySystem(fakeGame()).update(1 / 60, cam)).not.toThrow();
+  });
 });
 
 describe('carrier', () => {
-  it('passes the clip tower at progress 0.8 and keeps position current', () => {
+  const up = new THREE.Vector3(0, 1, 0);
+  /** is any part of the tower between heights y0..y1 inside the hull? (tower = vertical solid of revolution) */
+  const towerHits = (c: Carrier, y0: number, y1: number): boolean => {
+    c.object.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(c.object.matrixWorld).invert();
+    const p = new THREE.Vector3();
+    for (let y = y0; y <= y1; y += 2) {
+      const r = clipTowerRadius(y);
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 8) * Math.PI * 2, rr = k === 8 ? 0 : r;
+        p.set(CLIP_TOWER.x + Math.cos(a) * rr, y, CLIP_TOWER.z + Math.sin(a) * rr).applyMatrix4(inv);
+        if (insideHull(c.hullProxy, p.x, p.y, p.z)) return true;
+      }
+    }
+    return false;
+  };
+
+  it('keeps position current along the pass and reaches the tower at clipProgress', () => {
     const sky = createSkySystem(fakeGame());
     const c = sky.carrier;
     expect(c.visible).toBe(false);
+    expect(c.clipProgress).toBe(0.8);
     c.visible = true;
     c.setStabilized(1);
     c.setProgress(CLIP_TOWER.progress);
     expect(c.progress).toBe(0.8);
     expect(c.position.distanceTo(c.object.position)).toBe(0);
-    // hull centre is within the hull's own half-height + beam of the tower's cut point
-    expect(Math.hypot(c.position.x - c.clipPoint.x, c.position.z - c.clipPoint.z)).toBeLessThan(40);
-    expect(c.position.y - c.clipPoint.y).toBeGreaterThan(20);
-    expect(c.position.y - c.clipPoint.y).toBeLessThan(70);
+    expect(c.clipPoint.toArray()).toEqual([CLIP_TOWER.x, CLIP_TOWER.cut, CLIP_TOWER.z]);
+    // first contact is a BOW strike: the hull centre is still half a ship's length short of the tower, flying level
+    const flat = Math.hypot(c.position.x - c.clipPoint.x, c.position.z - c.clipPoint.z);
+    expect(flat).toBeGreaterThan(c.length / 2 - 6);
+    expect(flat).toBeLessThan(c.length / 2 + 12);
+    expect(Math.abs(c.forward.y)).toBeLessThan(0.01);
     expect(c.forward.length()).toBeCloseTo(1, 6);
     c.setProgress(5);
     expect(c.progress).toBe(1);
     const far = c.position.clone();
     c.setProgress(0.2);
     expect(c.position.distanceTo(far)).toBeGreaterThan(800);
+  });
+
+  it('nothing touches the tower before the clip, the bow ram strikes the needle at 0.8, the stump stays clear after', () => {
+    const sky = createSkySystem(fakeGame());
+    const cam = new THREE.PerspectiveCamera();
+    const c = sky.carrier as Carrier;
+    for (const stab of [0, 0.5, 1]) {
+      for (const clock of [0, 2.9, 7.3]) {
+        c.reset();
+        sky.update(clock, cam); // the unstabilised wander depends on the sim clock
+        sky.update(clock, cam);
+        c.setStabilized(stab);
+        // (carrier hidden: crossings are "skips", which is fine — this test is about geometry)
+        for (let p = 0; p <= 0.796; p += 0.002) {
+          c.setProgress(p);
+          expect(towerHits(c, 150, CLIP_TOWER.top), `early contact at p=${p.toFixed(3)} stab=${stab} clock=${clock}`).toBe(false);
+        }
+        let struck = false;
+        for (let p = 0.797; p <= 0.812; p += 0.001) {
+          c.setProgress(p);
+          struck = struck || towerHits(c, CLIP_TOWER.cut + 1, CLIP_TOWER.top);
+        }
+        expect(struck, `ram meets the needle near 0.8 (stab=${stab} clock=${clock})`).toBe(true);
+        for (let p = 0.8; p <= 1.0001; p += 0.002) {
+          c.setProgress(Math.min(p, 1));
+          expect(towerHits(c, 150, CLIP_TOWER.cut), `stump inside the hull at p=${p.toFixed(3)} stab=${stab} clock=${clock}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('a played clip fires onClip once and keeps animating on the sim clock while progress is held', () => {
+    const sky = createSkySystem(fakeGame());
+    const cam = new THREE.PerspectiveCamera();
+    sky.setPreset('battleCeiling');
+    const tip = sky.scenic.atriumShell().getObjectByName('scenic:atriumShell:clipTip') as THREE.Object3D;
+    const c = sky.carrier;
+    const hits: THREE.Vector3[] = [];
+    c.onClip = (p) => hits.push(p.clone());
+    c.visible = true;
+    for (let p = 0.7; p < 0.8005; p += 0.002) { c.setProgress(p); sky.update(1 / 60, cam); }
+    expect(hits.length).toBe(1);
+    expect(hits[0].distanceTo(c.clipPoint)).toBe(0);
+    expect(tip.visible).toBe(true);
+    // the script now HOLDS progress: the sheared needle must keep falling
+    const y0 = tip.position.y;
+    for (let i = 0; i < 120; i++) sky.update(1 / 60, cam);
+    const y1 = tip.position.y;
+    for (let i = 0; i < 120; i++) sky.update(1 / 60, cam);
+    expect(y1).toBeLessThan(y0 - 5);
+    expect(tip.position.y).toBeLessThan(y1 - 20);
+    expect(sky.root.getObjectByName('sky:carrierSparks')?.visible).toBe(true);
+    // paused sim (dt = 0): nothing moves
+    const held = tip.position.y;
+    sky.update(0, cam);
+    expect(tip.position.y).toBe(held);
+    // rewinding restores the tower; replaying fires again
+    c.setProgress(0.7);
+    expect(tip.position.y).toBe(CLIP_TOWER.cut);
+    expect(tip.rotation.x).toBe(0);
+    c.setProgress(0.72);
+    for (let p = 0.74; p < 0.81; p += 0.01) c.setProgress(p);
+    expect(hits.length).toBe(2);
+  });
+
+  it('a skip / load past the clip lands with the needle gone and no effects', () => {
+    const sky = createSkySystem(fakeGame());
+    const cam = new THREE.PerspectiveCamera();
+    sky.setPreset('battleCeiling');
+    const tip = sky.scenic.atriumShell().getObjectByName('scenic:atriumShell:clipTip') as THREE.Object3D;
+    const c = sky.carrier;
+    let clips = 0;
+    c.onClip = () => { clips++; };
+    c.visible = true;
+    c.setProgress(0.3);
+    c.setProgress(0.95); // cinematic skip
+    sky.update(1 / 60, cam);
+    expect(clips).toBe(0);
+    expect(tip.visible).toBe(false);
+    expect(sky.root.getObjectByName('sky:carrierSparks')?.visible).toBe(false);
+    // a shell built afterwards (zone reload at a later checkpoint) picks the same state up
+    const tip2 = sky.scenic.atriumShell().getObjectByName('scenic:atriumShell:clipTip') as THREE.Object3D;
+    sky.update(1 / 60, cam);
+    expect(tip2.visible).toBe(false);
+    sky.reset();
+    expect(tip2.visible).toBe(true);
+  });
+
+  it('two sky systems do not share tower needles', () => {
+    const a = createSkySystem(fakeGame()), b = createSkySystem(fakeGame());
+    const tipA = a.scenic.atriumShell().getObjectByName('scenic:atriumShell:clipTip') as THREE.Object3D;
+    const tipB = b.scenic.atriumShell().getObjectByName('scenic:atriumShell:clipTip') as THREE.Object3D;
+    b.carrier.setProgress(0.9);
+    expect(tipB.visible).toBe(false);
+    expect(tipA.visible).toBe(true);
   });
 
   it('setAnchor moves and rotates the whole pass', () => {
@@ -293,11 +545,11 @@ describe('carrier', () => {
     c.setProgress(0.5);
     const base = c.position.clone();
     c.setAnchor({ x: 100, y: 10, z: -50 }, Math.PI);
-    const want = base.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI).add(new THREE.Vector3(100, 10, -50));
+    const want = base.clone().applyAxisAngle(up, Math.PI).add(new THREE.Vector3(100, 10, -50));
     expect(c.position.distanceTo(want)).toBeLessThan(1e-6);
   });
 
-  it('casts its shadow only while overhead between the atrium and the key light', () => {
+  it('casts its shadow across the atrium around the clip, with a usable footprint', () => {
     const sky = createSkySystem(fakeGame());
     const cam = new THREE.PerspectiveCamera();
     sky.setPreset('battleCeiling');
@@ -306,12 +558,29 @@ describe('carrier', () => {
     c.setProgress(0.05);
     sky.update(1 / 60, cam);
     expect(c.shadow).toBe(0); // hidden
+    expect(c.shadowFootprint.halfLength).toBe(0);
     c.visible = true;
     sky.update(1 / 60, cam);
     expect(c.shadow).toBe(0); // far away
-    let peak = 0;
-    for (let p = 0.4; p <= 0.9; p += 0.01) { c.setProgress(p); sky.update(1 / 60, cam); peak = Math.max(peak, c.shadow); }
-    expect(peak).toBeGreaterThan(0.5);
+    let peak = 0, at = 0;
+    for (let p = 0.4; p <= 1; p += 0.005) {
+      c.setProgress(p);
+      sky.update(1 / 60, cam);
+      expect(c.shadow).toBeGreaterThanOrEqual(0);
+      expect(c.shadow).toBeLessThanOrEqual(1);
+      if (c.shadow > peak) { peak = c.shadow; at = p; }
+    }
+    expect(peak).toBeGreaterThan(0.9);
+    expect(at).toBeGreaterThan(0.7);
+    expect(at).toBeLessThan(0.9); // darkest around the clip (see the api note on `shadow`)
+    c.setProgress(0.8);
+    sky.update(1 / 60, cam);
+    const f = c.shadowFootprint;
+    expect(f.center.y).toBe(0);
+    expect(f.axis.length()).toBeCloseTo(1, 6);
+    expect(f.halfLength).toBeGreaterThan(c.length / 2 - 1);
+    expect(f.halfWidth).toBeGreaterThan(40);
+    expect(f.halfWidth).toBeLessThan(120);
   });
 });
 
@@ -332,25 +601,43 @@ describe('scenic factory', () => {
     });
     return n;
   };
+  /** every vertex / instance position of every mesh is a finite number */
+  const finiteGeometry = (o: THREE.Object3D): boolean => {
+    let ok = true;
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh) return;
+      for (const name of ['position', 'normal', 'iPos', 'iSize']) {
+        const a = m.geometry.getAttribute(name);
+        if (!a) continue;
+        const arr = a.array as ArrayLike<number>;
+        for (let i = 0; i < arr.length; i++) if (!Number.isFinite(arr[i])) { ok = false; return; }
+      }
+    });
+    return ok;
+  };
 
-  it('every piece stays within 12 draw calls and a sane triangle budget', () => {
+  it('every piece stays within 12 draw calls and its triangle budget', () => {
     const f = createSkySystem(fakeGame()).scenic;
-    const pieces: Array<[string, THREE.Object3D, number]> = [
-      ['terminalVista', f.terminalVista(), 120000],
-      ['atriumShell', f.atriumShell(), 60000],
-      ['crownmarkArm', f.crownmarkArm(), 60000],
-      ['megaRibs', f.megaRibs(), 20000],
-      ['dominionShuttle', f.ship('dominionShuttle'), 4000],
-      ['reformationTransport', f.ship('reformationTransport'), 5000],
-      ['dominionCapital', f.ship('dominionCapital'), 5000],
-      ['reformationCapital', f.ship('reformationCapital'), 6000],
-      ['wreck dominion', f.wreck('dominion'), 4000],
-      ['wreck reformation', f.wreck('reformation'), 4000],
+    // [name, piece, at least, at most] — floors guard against a piece silently collapsing to a blockout again
+    const pieces: Array<[string, THREE.Object3D, number, number]> = [
+      ['terminalVista', f.terminalVista(), 70000, 320000],
+      ['atriumShell', f.atriumShell(), 100000, 260000],
+      ['crownmarkArm', f.crownmarkArm(), 12000, 120000],
+      ['megaRibs', f.megaRibs(), 12000, 60000],
+      ['dominionShuttle', f.ship('dominionShuttle'), 6000, 45000],
+      ['reformationTransport', f.ship('reformationTransport'), 6000, 45000],
+      ['dominionCapital', f.ship('dominionCapital'), 500, 12000],
+      ['reformationCapital', f.ship('reformationCapital'), 500, 12000],
+      ['wreck dominion', f.wreck('dominion'), 4000, 45000],
+      ['wreck reformation', f.wreck('reformation'), 4000, 45000],
     ];
-    for (const [name, o, budget] of pieces) {
+    for (const [name, o, min, max] of pieces) {
       expect(drawCalls(o), name).toBeGreaterThan(0);
       expect(drawCalls(o), name).toBeLessThanOrEqual(12);
-      expect(triangles(o), name).toBeLessThan(budget);
+      expect(triangles(o), name).toBeGreaterThan(min);
+      expect(triangles(o), name).toBeLessThan(max);
+      expect(finiteGeometry(o), name).toBe(true);
     }
   });
 
@@ -361,20 +648,73 @@ describe('scenic factory', () => {
     expect(triangles(c)).toBeGreaterThan(triangles(a));
     expect(triangles(f.terminalVista({ corridor: 600 }))).toBeLessThan(triangles(f.terminalVista()));
     expect(f.ship('dominionShuttle', { scale: 2 }).scale.x).toBe(2);
+    expect(triangles(f.atriumShell({ tiers: 2 }))).toBeLessThan(triangles(f.atriumShell({ tiers: 5 })));
   });
 
-  it('falls back instead of throwing on unknown kinds and absurd options', () => {
+  it('falls back instead of throwing, hanging or emitting NaN on unknown kinds and absurd options', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const f = createSkySystem(fakeGame()).scenic;
+    const N = Number.NaN, I = Number.POSITIVE_INFINITY;
+    const nil = null as unknown as undefined;
+    const built: Array<[string, THREE.Object3D]> = [];
     expect(() => {
-      f.ship('yacht' as 'dominionShuttle');
-      f.wreck('pirate' as 'dominion');
-      f.megaRibs({ count: -4, span: Number.NaN, height: 0, spacing: -1 });
-      f.atriumShell({ radius: 1, height: 1, shaftRadius: 9999, tiers: 99 });
-      f.terminalVista({ radius: -5, density: 99 });
-      f.crownmarkArm({ length: 0, width: 0 });
+      built.push(['ship yacht', f.ship('yacht' as 'dominionShuttle')]);
+      built.push(['ship NaN', f.ship('dominionShuttle', { scale: N })]);
+      built.push(['ship null', f.ship('reformationTransport', nil)]);
+      built.push(['capital -1', f.ship('dominionCapital', { scale: -1 })]);
+      built.push(['wreck pirate', f.wreck('pirate' as 'dominion')]);
+      built.push(['wreck NaN', f.wreck('reformation', { scale: I, seed: N })]);
+      built.push(['ribs abs', f.megaRibs({ count: -4, span: N, height: 0, spacing: -1 })]);
+      built.push(['ribs inf', f.megaRibs({ count: I, span: I, height: I, spacing: I, seed: I })]);
+      built.push(['ribs null', f.megaRibs(nil)]);
+      built.push(['atrium abs', f.atriumShell({ radius: 1, height: 1, shaftRadius: 9999, tiers: 99 })]);
+      built.push(['atrium nan', f.atriumShell({ radius: N, height: N, shaftRadius: N, tiers: N, seed: N })]);
+      built.push(['atrium inf', f.atriumShell({ radius: I, height: I, shaftRadius: I, tiers: I })]);
+      built.push(['atrium null', f.atriumShell(nil)]);
+      built.push(['vista abs', f.terminalVista({ radius: -5, density: 99 })]);
+      built.push(['vista nan', f.terminalVista({ radius: N, density: N, drop: N, corridor: N, seed: N })]);
+      built.push(['vista inf', f.terminalVista({ radius: I, density: I, drop: I, corridor: I })]);
+      built.push(['vista null', f.terminalVista(nil)]);
+      built.push(['arm abs', f.crownmarkArm({ length: 0, width: 0 })]);
+      built.push(['arm nan', f.crownmarkArm({ length: N, width: N, drop: N, seed: N })]);
+      built.push(['arm inf', f.crownmarkArm({ length: I, width: I, drop: I })]);
+      built.push(['arm null', f.crownmarkArm(nil)]);
     }).not.toThrow();
+    for (const [name, o] of built) {
+      expect(triangles(o), name).toBeGreaterThan(0); // a real piece, not the empty fallback group
+      expect(finiteGeometry(o), name).toBe(true);
+    }
+    expect(err).not.toHaveBeenCalled(); // three.js reports NaN bounding spheres through console.error
     warn.mockRestore();
+    err.mockRestore();
+  });
+
+  it('nothing shines inside the Wound: no vista / arm light card projects into the disc from the overlook', () => {
+    const f = createSkySystem(fakeGame()).scenic;
+    const cone = woundCone();
+    for (const [name, o] of [
+      ['terminalVista', f.terminalVista()], ['terminalVista+corridor', f.terminalVista({ corridor: 640 })], ['crownmarkArm', f.crownmarkArm()],
+    ] as const) {
+      let cards = 0, inside = 0;
+      o.traverse((c) => {
+        const a = (c as THREE.Mesh).isMesh ? (c as THREE.Mesh).geometry.getAttribute('iPos') : null;
+        if (!a) return;
+        for (let i = 0; i < a.count; i++) {
+          cards++;
+          if (insideWound(cone, a.getX(i), a.getY(i), a.getZ(i), 1)) inside++;
+        }
+      });
+      expect(cards, name).toBeGreaterThan(200);
+      expect(inside, name).toBe(0);
+    }
+    // the rule is opt-out for other skies
+    let lit = 0;
+    f.terminalVista({ clearWound: false }).traverse((c) => {
+      const a = (c as THREE.Mesh).isMesh ? (c as THREE.Mesh).geometry.getAttribute('iPos') : null;
+      if (a) for (let i = 0; i < a.count; i++) if (insideWound(cone, a.getX(i), a.getY(i), a.getZ(i), 1)) lit++;
+    });
+    expect(lit).toBeGreaterThan(0);
   });
 
   it('near-field ships use the material library when it is real', () => {

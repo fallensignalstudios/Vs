@@ -100,6 +100,20 @@ export interface ClipSpec {
   fadeIn?: number;
   /** hold the last key instead of blending out (poses entered by a transition, e.g. death) */
   hold?: boolean;
+  /** a looping pose that the next one-shot releases automatically (charge stances) */
+  transient?: boolean;
+  /** fraction at which this clip starts when it is played out of a `transient` charge pose (skips the wind-up) */
+  releaseAt?: number;
+  /** once held, only stop() releases it — later play() calls are ignored (death) */
+  sticky?: boolean;
+  /** plays in real time even while the figure is frozen / arrested (death, knockdown) */
+  thaw?: boolean;
+  /** both hands are needed: held weapons are sheathed while this clip is active */
+  emptyHands?: boolean;
+  /** fraction at which the held weapon is let go and falls to the floor (death) */
+  dropAt?: number;
+  /** the pelvis rests on a seat this high (reference metres; ~0 = the floor): cloth drapes over it */
+  seat?: number;
 }
 
 export interface Clip {
@@ -116,6 +130,15 @@ export interface Clip {
   rootSpace: [boolean, boolean];
   events: Array<{ t: number; name: string }>;
   hitTimes: number[];
+  transient: boolean;
+  sticky: boolean;
+  thaw: boolean;
+  emptyHands: boolean;
+  /** seconds; −1 = none */
+  releaseAt: number;
+  dropAt: number;
+  /** seat height in reference metres; −1 = standing */
+  seat: number;
 }
 
 // ---- reference torso geometry (identical for every archetype; see rig.ts) ------------------------------------
@@ -313,6 +336,10 @@ export function compileClip(name: string, spec: ClipSpec): Clip {
     rootSpace: [spec.space?.L === 'root', spec.space?.R === 'root'],
     events,
     hitTimes: events.filter((e) => e.name === 'hit' || e.name === 'release').map((e) => e.t),
+    transient: !!spec.transient, sticky: !!spec.sticky, thaw: !!spec.thaw, emptyHands: !!spec.emptyHands,
+    releaseAt: spec.releaseAt !== undefined ? spec.releaseAt * spec.duration : -1,
+    dropAt: spec.dropAt !== undefined ? spec.dropAt * spec.duration : -1,
+    seat: spec.seat ?? -1,
   };
 }
 

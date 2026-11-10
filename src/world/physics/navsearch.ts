@@ -11,6 +11,10 @@ export const DIR_Z: readonly number[] = [0, 0, 1, -1, 1, 1, -1, -1];
 
 const DIAG = Math.SQRT2;
 const OCTILE = DIAG - 1;
+/** distance handicap (m) of nodes on another level when looking for the nearest reachable node */
+const OTHER_LEVEL = 1e4;
+/** metres of closer approach a reachable node must offer per metre of extra walking to be preferred */
+const DETOUR = 0.05;
 
 export class GridSearch {
   private g = new Float32Array(0);
@@ -24,6 +28,11 @@ export class GridSearch {
   private id = 0;
   /** nodes taken off the open list by the last run (a machine-independent measure of search effort) */
   expanded = 0;
+  /**
+   * Of the nodes the last run expanded, the one closest to its reference point (see `run`), or -1 when the
+   * run did not track one. `trace` turns it into a path after a run that could not reach its goal.
+   */
+  nearest = -1;
 
   /** Make room for `slots` graph nodes (keeps arrays when already large enough). */
   resize(slots: number): void {
@@ -74,17 +83,26 @@ export class GridSearch {
   /**
    * Cheapest path start → goal over `nbr` (8 links per slot, -1 = none). Fills `out` with the slot sequence
    * (start first) and returns true, or returns false when the goal is unreachable. `pass` (optional) vetoes
-   * nodes the current agent does not fit on; `cost` (optional) is a per-node multiplier ≥ 1 on the step
-   * into that node, so paths prefer open ground without ever being refused tight ground.
+   * nodes the current agent does not fit on (and diagonal steps past such a node); `cost` (optional) is a
+   * per-node multiplier ≥ 1 on the step into that node, so paths prefer open ground without ever being refused
+   * tight ground.
+   *
+   * With `ny` (node heights) the run also remembers which expanded node lies closest to a reference point —
+   * (refX, refZ) in fractional cell coordinates, where an integer is a cell centre, at height refY — so a
+   * search whose goal turns out to be unreachable still yields "as near as it gets". Nodes more than 2 m
+   * above or below the reference only count when nothing on its own level was reached, and a longer walk
+   * must buy a proportionally closer approach (DETOUR), so of two equally near spots the nearer one wins.
    */
   run(
     start: number, goal: number, nbr: Int32Array, cols: number, cell: number, out: number[],
     pass: ((slot: number) => boolean) | null = null, cost: Uint8Array | null = null,
+    ny: Float32Array | null = null, refX = 0, refZ = 0, refY = 0,
   ): boolean {
     out.length = 0;
     this.expanded = 0;
+    this.nearest = -1;
     if (start < 0 || goal < 0 || start >= this.g.length || goal >= this.g.length) return false;
-    if (start === goal) { out.push(start); return true; }
+    if (start === goal) { out.push(start); this.nearest = start; return true; }
     if (++this.id >= 0xfffffff0) { this.mark.fill(0); this.closed.fill(0); this.id = 1; }
     const id = this.id;
     const g = this.g, f = this.f, parent = this.parent, mark = this.mark, closed = this.closed;
@@ -97,6 +115,7 @@ export class GridSearch {
 
     g[start] = 0; f[start] = 0; parent[start] = -1; mark[start] = id;
     this.size = 1; heap[0] = start; pos[start] = 0;
+    let nearD = Infinity;
 
     while (this.size > 0) {
       const cur = heap[0];
@@ -109,12 +128,23 @@ export class GridSearch {
       }
       closed[cur] = id;
       this.expanded++;
+      if (ny !== null) {
+        const cc = (cur / LEVELS) | 0;
+        const ex = ((cc % cols) - refX) * cell, ez = (((cc / cols) | 0) - refZ) * cell, ey = ny[cur] - refY;
+        const d = Math.sqrt(ex * ex + ez * ez + ey * ey * 2.25) + DETOUR * g[cur] + (ey > 2 || ey < -2 ? OTHER_LEVEL : 0);
+        if (d < nearD) { nearD = d; this.nearest = cur; }
+      }
       const base = cur * 8;
       const gc = g[cur];
       for (let d = 0; d < 8; d++) {
         const nb = nbr[base + d];
         if (nb < 0 || closed[nb] === id) continue;
-        if (pass !== null && !pass(nb)) continue;
+        if (pass !== null) {
+          if (!pass(nb)) continue;
+          // no corner cutting for THIS agent either: a diagonal link only proves the default agent fits on
+          // the two cells beside it (they exist whenever the link does)
+          if (d >= 4 && (!pass(nbr[base + (DIR_X[d] > 0 ? 0 : 1)]) || !pass(nbr[base + (DIR_Z[d] > 0 ? 2 : 3)]))) continue;
+        }
         let step = d < 4 ? cell : diagCost;
         if (cost !== null && cost[nb] !== 0) step *= 1 + cost[nb] * 0.25;
         const ng = gc + step;
@@ -134,5 +164,12 @@ export class GridSearch {
       }
     }
     return false;
+  }
+
+  /** Fill `out` with the slot sequence from the last run's start to `node` (one of the nodes it reached). */
+  trace(node: number, out: number[]): void {
+    out.length = 0;
+    for (let n = node; n !== -1; n = this.parent[n]) out.push(n);
+    out.reverse();
   }
 }

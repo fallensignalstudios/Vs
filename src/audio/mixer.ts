@@ -1,16 +1,22 @@
 /**
- * Mix graph.
+ * Mix graph. Every bus is a PRE-fader collection point and every reverb RETURNS BEFORE the fader of the bus
+ * that fed it, so no signal can reach the output without passing its slider, its duck and its gate:
  *
- *   sfx voices ─► sfx ─┐
- *   ambience ─► amb ─► ambDuck ─┤► world ─► muffle (LP) ─► worldGate ─┐
- *   reverb return ◄─ convolver ◄─ reverbIn ─────────────────┘        │
- *   music decks ─► music ─► tilt EQ ─► peak comp ─► musicDuck ───────┼─► sum ─► master ─► glue comp
- *   ui voices ─► ui ──────────────────────────────────────────────────┘        ─► limiter ─► ceiling ─► out
- *                                                              (a 20 Hz subsonic guard sits after `master`)
+ *   sfx voices ─► sfx ─────────────────────────┐
+ *   ambience ─► amb ─► ambDuck ────────────────┤
+ *   near ─► small room ─┐                      ├─► worldFader ─► muffle (LP) ─► worldGate ─┐
+ *   room ─► small/hall/vast blend ─► tone ─────┘                                          │
+ *   tonal score ─► music ─► tilt EQ ─► levelling ─┐                                       │
+ *   drums/stabs/stingers/recordings ─► musicDirect ┤                                      │
+ *   scoreSend ─► stage reverb ─────────────────────┼─► musicFader ─► side ─► duck ─► gate ─┼─► sum ─► master
+ *   scoreRoom ─► short drum room ──────────────────┘                                      │    ─► 20 Hz guard
+ *   ui voices ─► ui (+ uiSend ─► halo) ─► uiFader ─────────────────────────────────────────┤    ─► glue ─► limiter
+ *   dialogue ─► voice ─► voiceFader ───────────────────────────────────────────────────────┘    ─► ceiling ─► out
  *
- * Reverb sends: every SFX voice has its own send into `sfxSend` (scaled by the room amount of the current
- * ambience); music, ambience and UI have fixed bus sends. The reverb return joins the world bus so the
- * muffle filter and the pause gate act on tails as well.
+ * The world has three convolution spaces (small / hall / vast); each ambience picks a blend and an amount.
+ * Rapid cues send mostly to `near` (early reflections, half a second) so a four-hit combo does not smear;
+ * single large events send to `room` and get the long tail. The score has its own stage reverb, returned into
+ * the music path — the muffle filter and the pause gate act on world sound only.
  */
 import { clamp, clamp01 } from '@/core/mathx';
 import { setQ } from './synth/kit';
@@ -33,8 +39,16 @@ export const REFERENCE_VOLUMES: Volumes = { master: 0.8, music: 0.7, sfx: 0.9 };
 
 const dB = (d: number): number => Math.pow(10, d / 20);
 
-/** Reverb return level (the impulse has unit energy). */
+/** Reverb return level (the impulses have unit energy, so send × return is the wet level). */
 const REVERB_RETURN = 0.5;
+/**
+ * A freshly created DynamicsCompressorNode attenuates for its first ~150 ms. Until this long after the
+ * graph is built the dynamics are bypassed (the soft ceiling still protects the output), so the click that
+ * unlocked audio is heard at its real level.
+ */
+export const PRIME_SECONDS = 0.2;
+/** how far impacts push the score down (dB) — they read without having to be louder */
+const SIDECHAIN_DB = 2.5;
 
 export interface CompParams {
   threshold: number;
@@ -46,42 +60,72 @@ export interface CompParams {
   makeupDb: number;
 }
 
-/** Dynamics stages: the score's own peak control, then the master glue compressor into a fast limiter. */
+/**
+ * Dynamics stages. `music` only levels the tonal score (pads, strings, swells) and is slow enough to let
+ * note attacks through — percussion never passes it. Then the master glue compressor into a fast limiter.
+ */
 export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
-  music: { threshold: -20, knee: 6, ratio: 5, attack: 0.003, release: 0.14, makeupDb: 8.4 },
+  music: { threshold: -17, knee: 8, ratio: 2, attack: 0.025, release: 0.25, makeupDb: 3.2 },
   glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
   limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
 };
 
+/** How much of each world space a place is made of: `[small, hall, vast]` (any scale; normalised here). */
+export type SpaceBlend = readonly [number, number, number];
+
 export class Mixer {
+  /** dry SFX voices */
   readonly sfx: GainNode;
+  /** UI voices (never muffled, never gated) */
   readonly ui: GainNode;
+  /** ambience beds */
   readonly amb: GainNode;
+  /** tonal score — pads, strings, swells, bells — through the tilt EQ and gentle levelling */
   readonly music: GainNode;
-  /** per-voice SFX reverb sends connect here */
-  readonly sfxSend: GainNode;
-  /** direct reverb input for instruments that want to be wetter than their bus */
-  readonly reverbIn: GainNode;
+  /** score percussion, stabs, stingers and recorded tracks: nothing between here and the music fader */
+  readonly musicDirect: GainNode;
+  /** dialogue clips: follow the SFX slider, never muffled or gated */
+  readonly voice: GainNode;
+  /** early/short world reverb for rapid cues */
+  readonly near: GainNode;
+  /** the current world space (blend of small / hall / vast), scaled by the ambience's room amount */
+  readonly room: GainNode;
+  /** score reverb (returns into the music path) */
+  readonly scoreSend: GainNode;
+  /** short drum room for the score (returns into the music path) */
+  readonly scoreRoom: GainNode;
+  /** UI halo: a soft stereo echo instead of a hall */
+  readonly uiSend: GainNode;
+  /** the nodes a signal must pass to be heard — exposed so tests can prove nothing bypasses them */
+  readonly faders: { world: GainNode; ui: GainNode; voice: GainNode; music: GainNode; master: GainNode };
+  /** gain reduction (dB, ≤ 0) of the score's levelling compressor right now */
+  get musicReduction(): number {
+    return this.musicComp.reduction ?? 0;
+  }
 
   private readonly ambDuck: GainNode;
   private readonly musicDuck: GainNode;
+  private readonly musicSide: GainNode;
   private readonly muffle: BiquadFilterNode;
   private readonly worldGate: GainNode;
   private readonly musicGate: GainNode;
-  private readonly reverbTone: BiquadFilterNode;
-  private readonly master: GainNode;
-  private readonly sum: GainNode;
+  private readonly roomTone: BiquadFilterNode;
+  private readonly blend: [GainNode, GainNode, GainNode];
+  private readonly musicComp: DynamicsCompressorNode;
+  private readonly meter: AnalyserNode | null = null;
+  private readonly meterData: Float32Array<ArrayBuffer> | null = null;
+  private sideEnv = 0;
+  private sideGain = 1;
   private duckUntil = 0;
   private duckDepth = 0;
 
   constructor(readonly ac: BaseAudioContext, res: Shared, destination?: AudioNode) {
+    const t0 = ac.currentTime;
     const g = (v = 1): GainNode => {
       const n = ac.createGain();
       n.gain.value = v;
       return n;
     };
-    this.sum = g();
-    // --- master dynamics: gentle glue → fast limiter → soft ceiling (never hard-clips) ---
     const comp = (c: CompParams): DynamicsCompressorNode => {
       const n = ac.createDynamicsCompressor();
       n.threshold.value = c.threshold;
@@ -91,53 +135,112 @@ export class Mixer {
       n.release.value = c.release;
       return n;
     };
-    // WebKit-lineage compressors add fixed make-up gain ((1/fullRangeGain)^0.6). Each stage is trimmed back to
-    // unity below its threshold, so "−6 dBFS in" means −6 dBFS out until the dynamics actually work.
+    const conv = (buffer: AudioBuffer): ConvolverNode => {
+      const n = ac.createConvolver();
+      n.normalize = false;
+      n.buffer = buffer;
+      return n;
+    };
+    const lowpass = (hz: number): BiquadFilterNode => {
+      const f = ac.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = hz;
+      setQ(f, 0.707);
+      return f;
+    };
+    /** `from` → dynamics (`chainIn` … `chainOut`) → `to`, bypassed while the compressors settle. */
+    const primed = (from: AudioNode, chainIn: AudioNode, chainOut: AudioNode, to: AudioNode): void => {
+      const bypass = g(1);
+      const dyn = g(0);
+      from.connect(bypass);
+      bypass.connect(to);
+      from.connect(chainIn);
+      chainOut.connect(dyn);
+      dyn.connect(to);
+      bypass.gain.setValueAtTime(1, t0 + PRIME_SECONDS);
+      bypass.gain.linearRampToValueAtTime(0, t0 + PRIME_SECONDS + 0.03);
+      dyn.gain.setValueAtTime(0, t0 + PRIME_SECONDS);
+      dyn.gain.linearRampToValueAtTime(1, t0 + PRIME_SECONDS + 0.03);
+    };
+
+    // --- master: slider → subsonic guard → gentle glue → fast limiter → soft ceiling (never hard-clips) ---
+    const sum = g();
+    // the master slider sits BEFORE the dynamics so turning it up can never push past the ceiling
+    const master = g();
+    const guard = ac.createBiquadFilter();
+    guard.type = 'highpass';
+    guard.frequency.value = 20;
+    setQ(guard, 0.707);
+    // WebKit-lineage compressors add fixed make-up gain. Each stage is trimmed back to unity below its
+    // threshold, so "−6 dBFS in" means −6 dBFS out until the dynamics actually work.
     const glue = comp(DYNAMICS.glue);
     const glueTrim = g(dB(-DYNAMICS.glue.makeupDb));
     const limiter = comp(DYNAMICS.limiter);
     const limiterTrim = g(dB(-DYNAMICS.limiter.makeupDb));
     const ceiling = ac.createWaveShaper();
     ceiling.curve = res.curves.ceiling;
-    // the master slider sits BEFORE the dynamics so turning it up can never push past the ceiling
-    this.master = g();
-    // subsonic / DC guard: nothing below ~20 Hz reaches the dynamics or the speakers
-    const guard = ac.createBiquadFilter();
-    guard.type = 'highpass';
-    guard.frequency.value = 20;
-    setQ(guard, 0.707);
-    this.sum.connect(this.master);
-    this.master.connect(guard);
-    guard.connect(glue);
+    ceiling.oversample = '4x'; // overshoots are shaped without folding back into the audible band
+    sum.connect(master);
+    master.connect(guard);
     glue.connect(glueTrim);
     glueTrim.connect(limiter);
     limiter.connect(limiterTrim);
-    limiterTrim.connect(ceiling);
+    primed(guard, glue, limiterTrim, ceiling);
     ceiling.connect(destination ?? ac.destination);
 
-    // --- world: sfx + ambience + reverb return through the muffle filter ---
-    const world = g();
-    this.muffle = ac.createBiquadFilter();
-    this.muffle.type = 'lowpass';
-    this.muffle.frequency.value = 20000;
-    setQ(this.muffle, 0.707);
+    // --- world: sfx + ambience + room reverbs → slider → muffle → pause gate ---
+    const worldPre = g();
+    const worldFader = g();
+    this.muffle = lowpass(20000);
     this.worldGate = g();
-    world.connect(this.muffle);
+    worldPre.connect(worldFader);
+    worldFader.connect(this.muffle);
     this.muffle.connect(this.worldGate);
-    this.worldGate.connect(this.sum);
+    this.worldGate.connect(sum);
 
     this.sfx = g();
-    this.sfx.connect(world);
+    this.sfx.connect(worldPre);
     this.amb = g();
     this.ambDuck = g();
     this.amb.connect(this.ambDuck);
-    this.ambDuck.connect(world);
+    this.ambDuck.connect(worldPre);
 
+    // three spaces; `room` feeds the blend the ambience chose, `near` always feeds the small one
+    this.near = g();
+    this.room = g(0.6);
+    const roomMix = g();
+    this.room.connect(roomMix);
+    const small = conv(res.rooms.small);
+    const hall = conv(res.rooms.hall);
+    const vast = conv(res.rooms.vast);
+    this.blend = [g(0.3), g(0.9), g(0.3)];
+    this.roomTone = lowpass(6500);
+    const roomReturn = g(REVERB_RETURN);
+    [small, hall, vast].forEach((c, i) => {
+      roomMix.connect(this.blend[i]);
+      this.blend[i].connect(c);
+      c.connect(this.roomTone);
+    });
+    this.near.connect(small);
+    // rapid cues still excite the big space a little, or they would sound pasted on in the atrium
+    const nearToRoom = g(0.2);
+    this.near.connect(nearToRoom);
+    nearToRoom.connect(this.room);
+    this.roomTone.connect(roomReturn);
+    roomReturn.connect(worldPre);
+    const ambSend = g(0.3);
+    this.ambDuck.connect(ambSend);
+    ambSend.connect(roomMix);
+
+    // --- score ---
     this.music = g();
+    this.musicDirect = g();
+    const musicPre = g();
+    const musicFader = g();
+    this.musicSide = g();
     this.musicDuck = g();
     this.musicGate = g();
-    // score "mastering" tilt: synthesised low strings and drums pile energy under 250 Hz, so ease the bottom
-    // and lift presence — the score sits behind the SFX without turning to mud on small speakers
+    // "mastering" tilt for the synthesised ensemble: ease the bottom, lift presence
     const lowShelf = ac.createBiquadFilter();
     lowShelf.type = 'lowshelf';
     lowShelf.frequency.value = 160;
@@ -146,52 +249,89 @@ export class Mixer {
     presence.type = 'highshelf';
     presence.frequency.value = 2200;
     presence.gain.value = 5;
-    // drums and stabs land together on the bar line: hold those peaks so the score has body without
-    // spiking into the SFX's headroom
-    const musicComp = comp(DYNAMICS.music);
+    this.musicComp = comp(DYNAMICS.music);
     const musicTrim = g(dB(-DYNAMICS.music.makeupDb));
     this.music.connect(lowShelf);
     lowShelf.connect(presence);
-    presence.connect(musicComp);
-    musicComp.connect(musicTrim);
-    musicTrim.connect(this.musicDuck);
+    this.musicComp.connect(musicTrim);
+    primed(presence, this.musicComp, musicTrim, musicPre);
+    this.musicDirect.connect(musicPre);
+
+    this.scoreSend = g();
+    const stage = conv(res.rooms.stage);
+    const scoreReturn = g(REVERB_RETURN);
+    this.scoreSend.connect(stage);
+    stage.connect(scoreReturn);
+    scoreReturn.connect(musicPre);
+    this.scoreRoom = g();
+    const drumRoom = conv(res.rooms.small);
+    const drumReturn = g(REVERB_RETURN);
+    this.scoreRoom.connect(drumRoom);
+    drumRoom.connect(drumReturn);
+    drumReturn.connect(musicPre);
+
+    musicPre.connect(musicFader);
+    musicFader.connect(this.musicSide);
+    this.musicSide.connect(this.musicDuck);
     this.musicDuck.connect(this.musicGate);
-    this.musicGate.connect(this.sum);
+    this.musicGate.connect(sum);
 
+    // --- UI: dry + a soft ping-pong halo, all before the fader ---
     this.ui = g();
-    this.ui.connect(this.sum);
+    const uiFader = g();
+    this.ui.connect(uiFader);
+    uiFader.connect(sum);
+    this.uiSend = g();
+    const haloReturn = g(0.55);
+    const dl = ac.createDelay(0.5);
+    dl.delayTime.value = 0.083;
+    const dr = ac.createDelay(0.5);
+    dr.delayTime.value = 0.127;
+    const fbL = g(0.42);
+    const fbR = g(0.42);
+    const toneL = lowpass(4200);
+    const toneR = lowpass(3600);
+    const panL = ac.createStereoPanner();
+    panL.pan.value = -0.6;
+    const panR = ac.createStereoPanner();
+    panR.pan.value = 0.6;
+    this.uiSend.connect(dl);
+    dl.connect(toneL);
+    toneL.connect(panL);
+    toneL.connect(fbL);
+    fbL.connect(dr);
+    dr.connect(toneR);
+    toneR.connect(panR);
+    toneR.connect(fbR);
+    fbR.connect(dl);
+    panL.connect(haloReturn);
+    panR.connect(haloReturn);
+    haloReturn.connect(this.ui);
 
-    // --- reverb ---
-    this.reverbIn = g();
-    const conv = ac.createConvolver();
-    conv.normalize = false;
-    conv.buffer = res.hallIR;
-    this.reverbTone = ac.createBiquadFilter();
-    this.reverbTone.type = 'lowpass';
-    this.reverbTone.frequency.value = 6500;
-    setQ(this.reverbTone, 0.707);
-    const ret = g(REVERB_RETURN);
-    this.reverbIn.connect(conv);
-    conv.connect(this.reverbTone);
-    this.reverbTone.connect(ret);
-    ret.connect(world);
+    // --- dialogue ---
+    this.voice = g();
+    const voiceFader = g();
+    this.voice.connect(voiceFader);
+    voiceFader.connect(sum);
+    const voiceSend = g(0.06);
+    this.voice.connect(voiceSend);
+    voiceSend.connect(roomMix);
 
-    this.sfxSend = g(0.6);
-    this.sfxSend.connect(this.reverbIn);
-    const musicSend = g(0.22);
-    this.musicDuck.connect(musicSend);
-    musicSend.connect(this.reverbIn);
-    const ambSend = g(0.3);
-    this.ambDuck.connect(ambSend);
-    ambSend.connect(this.reverbIn);
-    const uiSend = g(0.1);
-    this.ui.connect(uiSend);
-    uiSend.connect(this.reverbIn);
+    this.faders = { world: worldFader, ui: uiFader, voice: voiceFader, music: musicFader, master };
+
+    // --- SFX level meter for the score's sidechain (absent in the test fake and very old browsers) ---
+    const make = (ac as unknown as { createAnalyser?: () => AnalyserNode }).createAnalyser;
+    if (typeof make === 'function') {
+      this.meter = make.call(ac);
+      this.meter.fftSize = 1024;
+      this.sfx.connect(this.meter);
+      this.meterData = new Float32Array(this.meter.fftSize);
+    }
 
     this.setVolumes(REFERENCE_VOLUMES, 0);
   }
 
-  /** Apply the three user sliders. Ambience and UI follow the SFX slider. */
+  /** Apply the three user sliders. Ambience, UI and dialogue follow the SFX slider. */
   setVolumes(v: Volumes, fade = 0.05): void {
     const now = this.ac.currentTime;
     const set = (p: AudioParam, val: number): void => {
@@ -199,31 +339,43 @@ export class Mixer {
       else p.setTargetAtTime(val, now, fade / 3);
     };
     // buses carry (slider gain / reference gain): the recipes are calibrated at the reference settings
-    set(this.master.gain, sliderGain(v.master) / sliderGain(REFERENCE_VOLUMES.master));
-    set(this.music.gain, sliderGain(v.music) / sliderGain(REFERENCE_VOLUMES.music));
+    set(this.faders.master.gain, sliderGain(v.master) / sliderGain(REFERENCE_VOLUMES.master));
+    set(this.faders.music.gain, sliderGain(v.music) / sliderGain(REFERENCE_VOLUMES.music));
     const s = sliderGain(v.sfx) / sliderGain(REFERENCE_VOLUMES.sfx);
-    set(this.sfx.gain, s);
-    set(this.amb.gain, s);
-    set(this.ui.gain, s);
+    set(this.faders.world.gain, s);
+    set(this.faders.ui.gain, s);
+    set(this.faders.voice.gain, s);
   }
 
-  /** How reverberant the current space is (0..1.5) and how dark its tail is. Set by the ambience bed. */
-  setRoom(amount: number, toneHz: number, fade = 1.5): void {
+  /**
+   * The space the listener is in: how reverberant (0..1.5), how dark its tail is, and which of the three
+   * rooms it is made of. Set by the ambience bed.
+   */
+  setRoom(amount: number, toneHz: number, space: SpaceBlend, fade = 1.5): void {
     const now = this.ac.currentTime;
-    this.sfxSend.gain.setTargetAtTime(clamp(amount, 0, 1.5), now, fade / 3);
-    this.reverbTone.frequency.setTargetAtTime(clamp(toneHz, 400, 16000), now, fade / 3);
+    const tc = Math.max(0.01, fade) / 3;
+    const a = clamp(Number.isFinite(amount) ? amount : 0.6, 0, 1.5);
+    this.room.gain.setTargetAtTime(a, now, tc);
+    // dry rooms keep their early reflections: `near` never falls as far as the tail does
+    this.near.gain.setTargetAtTime(0.45 + 0.55 * Math.min(1, a / 0.6), now, tc);
+    this.roomTone.frequency.setTargetAtTime(clamp(toneHz, 400, 16000), now, tc);
+    // the impulses are decorrelated and unit-energy: normalise the weights so `amount` alone sets the level
+    const w = space.map((x) => (Number.isFinite(x) && x > 0 ? x : 0));
+    const norm = Math.hypot(w[0], w[1], w[2]) || 1;
+    for (let i = 0; i < 3; i++) this.blend[i].gain.setTargetAtTime(w[i] / norm, now, tc);
   }
 
-  /** 0..1 "muffled pressure" low-pass on the world bus (sfx, ambience, reverb). */
+  /** 0..1 "muffled pressure" low-pass on the world bus (sfx, ambience, world reverb). */
   setMuffle(amount: number, fade = 0.4): void {
     const m = clamp01(Number.isFinite(amount) ? amount : 0);
+    const f = Number.isFinite(fade) ? fade : 0.4;
     // 20 kHz → 280 Hz, perceptually even
     const hz = 20000 * Math.pow(280 / 20000, Math.pow(m, 0.8));
     const now = this.ac.currentTime;
     this.muffle.frequency.cancelScheduledValues(now);
-    this.muffle.frequency.setTargetAtTime(hz, now, Math.max(0.01, fade) / 3);
+    this.muffle.frequency.setTargetAtTime(hz, now, Math.max(0.01, f) / 3);
     // a little resonance at the cutoff as the world closes in (Q is in dB for a low-pass)
-    this.muffle.Q.setTargetAtTime(-3 + m * 6, now, Math.max(0.01, fade) / 3);
+    this.muffle.Q.setTargetAtTime(-3 + m * 6, now, Math.max(0.01, f) / 3);
   }
 
   /** Lower music + ambience by `amount` (0..1) for `seconds`, then recover. Overlapping ducks extend. */
@@ -248,5 +400,31 @@ export class Mixer {
     this.worldGate.gain.setTargetAtTime(paused ? 0 : 1, now, paused ? 0.06 : 0.12);
     this.musicGate.gain.cancelScheduledValues(now);
     this.musicGate.gain.setTargetAtTime(paused ? 0.45 : 1, now, 0.2);
+  }
+
+  /**
+   * Sidechain: follow the SFX bus level and lean the score back by up to 2.5 dB under impacts, recovering in
+   * a quarter of a second. Called once per update(); costs one 1024-sample read.
+   */
+  update(dt: number): void {
+    const m = this.meter;
+    const data = this.meterData;
+    if (!m || !data || !(dt > 0)) return;
+    m.getFloatTimeDomainData(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      const a = data[i] < 0 ? -data[i] : data[i];
+      if (a > peak) peak = a;
+    }
+    if (!Number.isFinite(peak)) return;
+    // instant attack, ~250 ms release
+    this.sideEnv = Math.max(peak, this.sideEnv * Math.exp(-Math.min(dt, 0.5) / 0.25));
+    // nothing below −26 dBFS moves the score; full depth from −8 dBFS up
+    const level = this.sideEnv > 1e-5 ? 20 * Math.log10(this.sideEnv) : -100;
+    const k = clamp01((level + 26) / 18);
+    const target = dB(-SIDECHAIN_DB * k);
+    if (Math.abs(target - this.sideGain) < 0.004) return;
+    this.sideGain = target;
+    this.musicSide.gain.setTargetAtTime(target, this.ac.currentTime, 0.03);
   }
 }

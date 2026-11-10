@@ -201,8 +201,8 @@ export const RAY_GROUND = 8;
 
 /**
  * ADDED (physics-nav): one authoring problem found by `PhysicsWorld.validate()`.
- *  - 'gap'         two surfaces 0.12–0.5 m apart at the same level: a void strip nobody can cross (move the
- *                  modules together, or overlap them)
+ *  - 'gap'         two surfaces 0.12–0.5 m apart at the same level that touch nowhere: a void strip nobody
+ *                  can cross (move the modules together, or overlap them)
  *  - 'low-solid'   a movement-blocking solid no taller than step-up with no surface on top: characters walk
  *                  straight through it at floor level (give it a top surface, or make it taller)
  *  - 'narrow'      a surface too narrow to walk along with the default ledge margin (< 0.6 m of free width)
@@ -276,8 +276,9 @@ export interface PhysicsWorld {
    *  - `from.y` should be the y of the previous result. It is snapped to the ground within step-up above /
    *    max-drop below it. A start that is not standing on anything (a marker at the wrong height or outside
    *    the level, a bridge that retracted), or that is inside a solid with no clean way out, is RELOCATED to
-   *    the nearest standable spot within 4 m with a console warning (`reason: 'recovered'`); with nothing in
-   *    range the position is held (`reason: 'lost'`, `grounded: false`). It never roams through the void —
+   *    the nearest standable spot with a console warning (`reason: 'recovered'`): straight up or down onto
+   *    the level at its XZ when there is one (any height difference), else sideways within 4 m. With nothing
+   *    in range the position is held (`reason: 'lost'`, `grounded: false`). It never roams through the void —
    *    unless `opts.freeRoam` asks for that.
    *  - A character pushed out of a solid that appears on it (a closing door) leaves through the nearest face,
    *    but never to the far side of a different wall.
@@ -368,14 +369,18 @@ export interface PhysicsWorld {
   /**
    * Debug view of surfaces / colliders / triggers / nav as a THREE.Object3D. The same THREE.Group is returned
    * every call and refreshes itself whenever the world changes while it is visible in a scene (only the layer
-   * that changed is rebuilt). Its children are named layers that can be shown or hidden individually:
-   *   'surfaces'  floors tinted by height level (ramps lighter, with uphill chevrons)
+   * that changed is rebuilt). Its children are named layers (THREE.Groups) that can be shown or hidden
+   * individually:
+   *   'surfaces'  floors tinted by height level (green at 0, toward blue going up, toward yellow going down;
+   *               ramps shaded along their slope, with uphill chevrons)
    *   'solids'    red; cover blue (low light / high dark); sight-through orange; move-through violet;
    *               disabled grey. Structure under a walkable top (slabs, ramp fill) is drawn faintly.
-   *   'nav'       the nav grid as merged strips, tinted by level, darker where nodes hug an obstacle
-   *   'triggers'  yellow
-   *   'issues'    magenta markers at every `validate()` finding
-   * `group.userData.layer(name, visible)` toggles one; `group.userData.refresh()` forces an update.
+   *   'nav'       the nav grid as merged strips, tinted by level, darker where nodes hug an obstacle or a ledge
+   *   'triggers'  yellow (grey while disabled)
+   *   'issues'    magenta pins at every `validate()` finding (re-scanned once the world has held still)
+   * `group.userData` carries: `layer(name, visible)` toggles one layer; `refresh()` forces an update now;
+   * `issues` is the list the 'issues' layer shows; `navNodes()` returns the nav node positions as x, y, z
+   * triples (for overlays that colour the grid by a query).
    */
   debugObject(): unknown;
   readonly counts: { colliders: number; surfaces: number; triggers: number };
@@ -417,13 +422,19 @@ export interface NavGrid {
    */
   rebuild(opts?: { cell?: number; agentRadius?: number }): void;
   /**
-   * Smoothed path, or null when unreachable. `points[0]` is `from`. The last point is `to` when the agent can
-   * stand exactly there; otherwise it is the nearest nav point to it (so a goal inside cover, or closer to a
-   * wall than the agent radius, ends beside it — a 0.4 m body can always complete the path). Endpoints up to
-   * 3 m off the grid are snapped to it. Every point except `points[0]` (the caller's own position) keeps
-   * agentRadius clearance from solids and the ledge margin from drops, and the polyline follows the ground
-   * within 0.3 m (waypoints are kept at ramp ends), so it can be drawn as a guide line as well as followed.
-   * Routes prefer open ground over squeezing along walls when the detour is small.
+   * Smoothed path, or null when unreachable. `points[0]` is `from` (its y corrected to the ground there). The
+   * last point is `to` when the agent can stand exactly there; otherwise it is the nearest nav point to it
+   * (so a goal inside cover, or closer to a wall than the agent radius, ends beside it — a 0.4 m body can
+   * always complete the path). Endpoints up to 3 m off the grid are snapped to it. Every point except
+   * `points[0]` (the caller's own position) keeps agentRadius clearance from solids and the ledge margin from
+   * drops, every leg has been tested for the agent by the rules of moveCharacter, and the polyline follows
+   * the ground within 0.3 m (waypoints are kept at ramp ends), so it can be drawn as a guide line as well as
+   * followed. Routes prefer open ground over squeezing along walls when the detour is small.
+   *
+   * Following it: steer straight at each point in turn with moveCharacter. The agent radius (0.45 m) leaves a
+   * 0.4 m body 5 cm of slack from solids; waypoints can sit exactly on the ledge margin and exactly at the
+   * step-up limit beside a ramp, so a follower that cuts a corner there may report one `blocked` frame as it
+   * slides — treat a single blocked frame as contact, not as "stuck".
    */
   findPath(from: Vec3Like, to: Vec3Like): NavPath | null;
   /**
@@ -447,12 +458,21 @@ export interface NavGrid {
 
   /**
    * ADDED (physics-nav): findPath for a BIG agent — wider than agentRadius and / or taller than 1.8 m (the
-   * elite: radius 1.2, height 3.6). Only nav nodes where that body fits are used: its circle clear of every
-   * solid overlapping ITS height band (so a 3.6 m body is never routed under a 3 m balcony), headroom under
-   * surfaces, and its own ledge margin. The fit is tested exactly per node on first use and remembered until
-   * that part of the grid is rebuilt. Endpoints snap to the nearest node that fits; when the goal is somewhere
-   * the body cannot go (under that balcony) the path ends at the nearest place it can. null when no route
-   * exists. Always pass the same radius / height you give moveCharacter for that actor.
+   * elite: radius 1.2, height 3.6). Only nav nodes where that body fits are used: its circle (plus the same
+   * 5 cm of slack the default agent has) clear of every solid overlapping ITS height band (so a 3.6 m body is
+   * never routed under a 3 m balcony), headroom under surfaces, and its own ledge margin; it does not cut
+   * corners past a node it does not fit on. The fit is tested exactly per node on first use and remembered
+   * until that part of the grid is rebuilt.
+   *
+   * Endpoints snap to the nearest node that fits, in the same connected area (never one behind a wall). When
+   * the goal is somewhere the body cannot go — under that balcony, down a corridor narrower than itself — the
+   * path ends at the nearest place it CAN reach on the goal's own level (beside the balcony, not on top of
+   * it; of two equally near spots, the one with the shorter walk). That fallback searches the body's whole
+   * reachable area (≈ 1–2 ms in a 70 × 48 m zone): fine per repath, not per frame. null when the goal is
+   * somewhere no agent could walk to from here (a sealed room).
+   *
+   * Always pass the same radius / height you give moveCharacter for that actor. On the 0.5 m grid a body
+   * needs passages at least 2 · radius + 0.6 m wide to be routed through them (3 m for the elite).
    */
   findPathFor(from: Vec3Like, to: Vec3Like, radius: number, height?: number): NavPath | null;
   /** ADDED (physics-nav): walkable() for a big agent of the given radius (and height, default 1.8). */

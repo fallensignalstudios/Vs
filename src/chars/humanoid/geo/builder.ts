@@ -130,6 +130,35 @@ export class MeshBuilder {
   private skinning: Skin = 0;
   private readonly so: SkinOut = { i0: 0, w0: 1, i1: 0, w1: 0, i2: 0, w2: 0, i3: 0, w3: 0 };
 
+  /**
+   * Level of detail the figure is being sculpted at: 1 = full; lower values make the primitives spend fewer
+   * segments, drop bevels and skip `fine()` parts. The rig, bone layout and silhouette stay identical.
+   */
+  readonly detail: number;
+  /** when set, only geometry inside a `group()` whose name is in the mask is emitted (driver-only figures) */
+  private readonly mask: ReadonlySet<string> | null;
+  /** true while emitted geometry is discarded; primitives return early */
+  dry: boolean;
+
+  constructor(detail = 1, mask: ReadonlySet<string> | null = null) {
+    this.detail = detail;
+    this.mask = mask;
+    this.dry = !!mask;
+  }
+
+  /** Scale a segment count by the detail level (never below `min`). */
+  segs(n: number, min = 3): number { return this.detail >= 1 ? n : Math.max(min, Math.round(n * this.detail)); }
+  /** Run `fn` only at or above detail `level` (rivets, straps, small greebles that vanish with distance). */
+  fine(level: number, fn: () => void): this { if (this.detail >= level && !this.dry) fn(); return this; }
+  /** Tag the geometry emitted by `fn` (e.g. 'cloth', 'melee'); masked builders keep only the listed groups. */
+  group(name: string, fn: () => void): this {
+    const was = this.dry;
+    if (this.mask) this.dry = !this.mask.has(name);
+    fn();
+    this.dry = was;
+    return this;
+  }
+
   get vertexCount(): number { return this.pos.length / 3; }
   get triangleCount(): number { return this.idx.length / 3; }
 
@@ -167,7 +196,7 @@ export class MeshBuilder {
    */
   commit(prim: Prim, slots?: Array<Surf | undefined>): void {
     const n = prim.count;
-    if (n === 0 || prim.t.length === 0) return;
+    if (this.dry || n === 0 || prim.t.length === 0) return;
     const base = this.pos.length / 3;
     const surfs: SurfC[] = [this.cur];
     if (slots) for (let i = 0; i < slots.length; i++) { const s = slots[i]; if (i === 0) { if (s) surfs[0] = compileSurf(s); } else surfs[i] = s ? compileSurf(s) : surfs[0]; }
@@ -229,6 +258,7 @@ export class MeshBuilder {
   /** Finish: produce the BufferGeometry (bounding volumes are set generously for animated figures). */
   build(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
+    this.compact();
     const nv = this.pos.length / 3;
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nrm, 3));
@@ -241,5 +271,23 @@ export class MeshBuilder {
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1, 0), 3.2);
     g.boundingBox = new THREE.Box3(new THREE.Vector3(-3, -0.5, -3), new THREE.Vector3(3, 3.4, 3));
     return g;
+  }
+
+  /** Drop vertices no triangle uses (degenerate faces removed at commit leave some behind at low detail). */
+  private compact(): void {
+    const nv = this.pos.length / 3;
+    const used = new Uint8Array(nv);
+    for (const i of this.idx) used[i] = 1;
+    let kept = 0;
+    const remap = new Int32Array(nv);
+    for (let i = 0; i < nv; i++) remap[i] = used[i] ? kept++ : -1;
+    if (kept === nv) return;
+    const pack = (a: number[], size: number): void => {
+      let w = 0;
+      for (let i = 0; i < nv; i++) if (used[i]) { for (let c = 0; c < size; c++) a[w * size + c] = a[i * size + c]; w++; }
+      a.length = kept * size;
+    };
+    pack(this.pos, 3); pack(this.nrm, 3); pack(this.col, 3); pack(this.emi, 3); pack(this.mat, 4); pack(this.si, 4); pack(this.sw, 4);
+    for (let i = 0; i < this.idx.length; i++) this.idx[i] = remap[this.idx[i]];
   }
 }

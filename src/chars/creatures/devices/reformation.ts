@@ -10,8 +10,9 @@ import * as THREE from 'three';
 import type { CharacterCreateOpts, Game, Vec3Like } from '@/core/api';
 import type { CommandEmitterVisual, ScanHeadVisual } from '@/core/api/creatures';
 import { clamp, clamp01, damp, dampAngle } from '@/core/mathx';
-import { impact, noise1, rot, move } from '../core/anim';
-import { arcPath, band, box, cyl, lathe, prism, sphere, T, torus, tube, type Pt2, type Pt3 } from '../core/geo';
+import type { RigBuilder as Builder } from '../core/rig';
+import { finite3, impact, noise1, rot, move } from '../core/anim';
+import { along, arcPath, band, box, cyl, lathe, prism, sphere, T, torus, tube, type Pt2, type Pt3 } from '../core/geo';
 import { P, tint } from '../core/palette';
 import { getTemplate, RigBuilder, type RigTemplate } from '../core/rig';
 import { DEVICE_ACTIONS, DEVICE_ALIASES, DeviceBase } from './base';
@@ -19,6 +20,34 @@ import { DEVICE_ACTIONS, DEVICE_ALIASES, DeviceBase } from './base';
 const HALF_PI = Math.PI / 2;
 const _v = new THREE.Vector3();
 const mulM = (...m: THREE.Matrix4[]): THREE.Matrix4 => m.reduce((a, x) => a.multiply(x), new THREE.Matrix4());
+
+/** ribbed cable trunk: a rubber hose with steel collars every `step` metres (the visible technical connection) */
+function trunk(b: Builder, bone: string, path: Pt3[], r: number, step = 0.09): void {
+  b.add(bone, P.rubber, tube(path, r, 6), undefined, { crease: 180 });
+  let acc = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!, c = path[i]!;
+    const len = Math.hypot(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    acc += len;
+    if (acc < step) continue;
+    acc = 0;
+    b.add(bone, P.refSteel, cyl(r * 1.35, r * 1.35, r * 0.9, 6), along(c, [c[0] * 2 - a[0], c[1] * 2 - a[1], c[2] * 2 - a[2]]));
+  }
+}
+
+/** hazard collar: alternating pale / dark segments round a mast (a shape cue, not a colour cue) */
+function hazardCollar(b: Builder, bone: string, y: number, radius: number, height: number, segs = 8): void {
+  for (let i = 0; i < segs; i++) {
+    b.add(bone, i % 2 ? P.refDark : P.refPanel, band(radius, 0.012, height, 3, 0.002, (Math.PI * 2) / segs, (i / segs) * Math.PI * 2), T(0, y, 0));
+  }
+}
+
+/** bolted clamp foot gripping the ancient floor without marking it */
+function clampFoot(b: Builder, bone: string, x: number, z: number, yaw: number): void {
+  b.add(bone, P.refDark, box(0.17, 0.028, 0.12, 0.008), T(x, 0.014, z, 0, yaw, 0));
+  b.add(bone, P.refSteel, box(0.05, 0.05, 0.13, 0.008), T(x, 0.045, z, 0, yaw, 0));
+  for (const o of [-0.055, 0.055]) b.add(bone, P.refSteel, cyl(0.014, 0.014, 0.02, 6), mulM(T(x, 0.036, z, 0, yaw, 0), T(o, 0, 0)));
+}
 
 // =========================================================================================================
 // command emitter
@@ -42,7 +71,11 @@ function buildEmitter(): RigTemplate {
     b.add(L, P.refNavy, tube([knee, foot], [0.03, 0.024], 4), undefined, { crease: 20 });
     b.add(L, P.refSteel, sphere(0.04, 1), T(knee[0], knee[1], knee[2]), { crease: 180 });
     b.add(L, P.refDark, cyl(0.08, 0.09, 0.035, 10, 0.008), T(foot[0], 0.018, foot[2]));
-    b.add(L, P.refSteel, tube([[0, 0.56, 0], knee], 0.01, 5), undefined, { crease: 180 });
+    b.add(L, P.refSteel, box(0.05, 0.03, 0.09, 0.006), T(foot[0], 0.05, foot[2], 0, Math.atan2(d[0], d[1]), 0));
+    // pale adjustment collars either side of the knee lock
+    for (const k of [0.34, 0.66]) b.add(L, P.refPanel, cyl(0.034, 0.034, 0.03, 6), along([top[0] + (knee[0] - top[0]) * k, top[1] + (knee[1] - top[1]) * k, top[2] + (knee[2] - top[2]) * k], knee));
+    // spreader brace (stays with the hub when the tripod breaks)
+    b.add('hub', P.refSteel, tube([[0, 0.56, 0], [knee[0] * 0.96, knee[1], knee[2] * 0.96]], 0.01, 5), undefined, { crease: 180 });
   });
   b.add('hub', P.refNavy, cyl(0.115, 0.1, 0.16, 8, 0.02, Math.PI / 8), T(0, 0.92, 0));
   b.add('hub', P.refSteel, band(0.112, 0.022, 0.03, 8, 0.006, Math.PI * 2, Math.PI / 8), T(0, 0.98, 0));
@@ -51,10 +84,15 @@ function buildEmitter(): RigTemplate {
   b.add('hub', P.refSlate, box(0.24, 0.27, 0.15, 0.022), T(0, 0.66, 0.13));
   b.add('hub', P.refSteel, box(0.25, 0.03, 0.16, 0.006), T(0, 0.72, 0.13));
   for (let i = 0; i < 3; i++) b.add('hub', P.refGlow, box(0.03, 0.012, 0.006), T(-0.06 + i * 0.06, 0.6, 0.207), { group: EG.lights });
-  b.add('base', P.rubber, tube(arcPath([0.06, 0.55, 0.2], [0.2, 0.2, 0.5], [0.12, 0.02, 0.26], 8), 0.012, 5), undefined, { crease: 180 });
-  b.add('base', P.rubber, torus(0.1, 0.014, 14, 5), T(0.02, 0.016, 0.26), { crease: 180 });
+  for (const o of [-0.03, 0.03]) b.add('hub', P.refPanel, box(0.004, 0.02, 0.085, 0.001), T(0.122, 0.66 + o, 0.13)); // stencil bars
+  // power trunk down to a floor junction box
+  trunk(b, 'base', arcPath([0.07, 0.53, 0.2], [0.2, 0.22, 0.52], [0.3, 0.045, 0.42], 10), 0.014);
+  b.add('base', P.refNavy, box(0.2, 0.07, 0.15, 0.014), T(0.36, 0.035, 0.4, 0, 0.5, 0));
+  b.add('base', P.refGlowSoft, box(0.05, 0.01, 0.006), T(0.31, 0.05, 0.33, 0, 0.5, 0), { group: EG.lights });
+  b.add('base', P.rubber, tube(arcPath([0.44, 0.03, 0.44], [0.75, 0.03, 0.5], [1.02, 0.014, 0.3], 8), 0.012, 5), undefined, { crease: 180 });
   // mast + yoke
   b.add('hub', P.refSteel, cyl(0.034, 0.03, 0.5, 8), T(0, 1.22, 0));
+  hazardCollar(b, 'hub', 1.12, 0.04, 0.05);
   b.add('hub', P.refNavy, box(0.5, 0.05, 0.07, 0.014), T(0, 1.36, 0));
   b.add('hub', P.refSteel, cyl(0.055, 0.05, 0.09, 8, 0.01), T(0, 1.46, 0));
   // prongs: twin-rail forks on gimbals
@@ -104,21 +142,30 @@ export class CommandEmitter extends DeviceBase implements CommandEmitterVisual {
     this.prongs = [r.b('prongL'), r.b('prongR')];
     this.legs = [0, 1, 2].map((i) => r.b('leg' + i));
     for (const p of this.prongs) p.rotation.order = 'YXZ';
-    this.addChunk(this.crown, [0, 1, 0.3], 0.3, 0, 3);
-    this.addChunk(this.prongs[0]!, [-1, 0.4, -0.3], 0.2, 1);
-    this.addChunk(this.prongs[1]!, [1, 0.4, -0.2], 0.2, 2);
-    this.addChunk(this.hub, [0, 0, 0], 0.72, 3, 0.4);
+    this.addChunk(this.hub, [0.1, 0, -0.2], 3, 0.5, 0.5);
+    this.addChunk(this.crown, [0, 1, 0.3], 0, 3);
+    this.addChunk(this.prongs[0]!, [-1, 0.4, -0.3], 1);
+    this.addChunk(this.prongs[1]!, [1, 0.4, -0.2], 2);
+    // the tripod splays: each leg kicks outward along its own direction
+    this.legs.forEach((leg, i) => this.addChunk(leg, [LEG_DIRS[i]![0] * 0.5, -0.1, LEG_DIRS[i]![1] * 0.5], 4 + i, 1.6, 0.35));
     this.u.uDissolveColor.value.setHex(0xa8d8ff);
   }
 
   setProngTarget(index: number, target: Vec3Like | null): void {
     if (index !== 0 && index !== 1) return;
-    if (!target) { this.targets[index] = null; return; }
+    if (!finite3(target)) { this.targets[index] = null; return; }
     (this.targets[index] ??= new THREE.Vector3()).set(target.x, target.y, target.z);
   }
 
+  protected override heal(): void {
+    super.heal();
+    this.spin = 0; this.sync = 0;
+    this.aimYaw[0] = 0.5; this.aimYaw[1] = -0.5; this.aimPitchV[0] = 0.2; this.aimPitchV[1] = 0.2;
+    this.targets[0] = null; this.targets[1] = null;
+  }
+
   pulseSync(strength = 1): void {
-    this.sync = Math.max(this.sync, clamp01(strength));
+    this.sync = Math.max(this.sync, Number.isFinite(strength) ? clamp01(strength) : 1);
   }
 
   protected override pose(adt: number, dt: number): void {
@@ -137,8 +184,7 @@ export class CommandEmitter extends DeviceBase implements CommandEmitterVisual {
       let pitch = 0.22 + Math.sin(t * 0.4 + i) * 0.08;
       const tg = this.targets[i];
       if (tg && pw > 0.05) {
-        _v.copy(tg);
-        this.rig.group.worldToLocal(_v);
+        _v.copy(tg).applyMatrix4(this.rig.toModel);
         _v.x -= i === 0 ? -0.21 : 0.21; _v.y -= 1.36;
         yaw = Math.atan2(-_v.x, -_v.z);
         pitch = Math.atan2(_v.y, Math.max(0.05, Math.hypot(_v.x, _v.z)));
@@ -149,14 +195,8 @@ export class CommandEmitter extends DeviceBase implements CommandEmitterVisual {
       p.rotation.x += this.aimPitchV[i]! * (1 - droop) - 1.0 * droop;
     }
     for (const s of this.active) {
-      if (s.name === 'death') {
-        this.breakApart(s.t, s.w);
-        for (let i = 0; i < 3; i++) {
-          const k = clamp01(s.t / 0.5) * s.w, d = LEG_DIRS[i]!;
-          rot(this.legs[i]!, d[1] * 0.75 * k, 0, -d[0] * 0.75 * k);
-          move(this.legs[i]!, 0, -0.5 * k * k, 0);
-        }
-      } else if (s.name === 'generic') rot(this.hub, impact(s.t, 0, 0.15, 20) * 0.05 * s.w, 0, 0);
+      if (s.name === 'death') this.breakApart(s.t);
+      else if (s.name === 'generic') rot(this.hub, impact(s.t, 0, 0.15, 20) * 0.05 * s.w, 0, 0);
     }
     const fl = this.flickerLight();
     this.groupGlow('core', (0.75 + this.sync * 2.6 + Math.sin(t * 3.4) * 0.12 + this.exposure('core') * 1.5) * pw * fl);
@@ -184,11 +224,17 @@ function buildRelay(variant: number): RigTemplate {
   for (let i = 0; i < 4; i++) b.add('base', P.refSteel, box(0.2, 0.008, 0.008), T(0, 0.2 + i * 0.012 - 0.01, -0.259));
   b.add('base', P.refDark, box(0.95, 0.04, 0.09, 0.012), T(0, 0.022, 0.16, 0, 0.5, 0));
   b.add('base', P.refDark, box(0.95, 0.04, 0.09, 0.012), T(0, 0.022, -0.1, 0, -0.5, 0));
-  b.add('base', P.rubber, tube(arcPath([0.3, 0.3, 0.2], [0.55, 0.3, 0.45], [0.6, 0.02, 0.1], 8), 0.014, 5), undefined, { crease: 180 });
-  b.add('base', P.rubber, torus(0.11, 0.015, 14, 5), T(0.6, 0.018, 0.0), { crease: 180 });
+  for (const [x, z, yaw] of [[-0.42, 0.36, 0.5], [0.42, -0.04, 0.5], [-0.42, 0.1, -0.5], [0.42, -0.3, -0.5]] as const) clampFoot(b, 'base', x, z, yaw);
+  // variant mark stencilled on the crate: A = one bar, B = two (shape, not colour)
+  for (let i = 0; i <= variant; i++) b.add('base', P.refPanel, box(0.03, 0.2, 0.006, 0.001), T(-0.25 + i * 0.05, 0.25, -0.2535));
+  for (let i = 0; i < 5; i++) b.add('base', i % 2 ? P.refDark : P.refPanel, box(0.1, 0.03, 0.006, 0.001), T(0.345 * (variant ? -1 : 1), 0.08 + i * 0.03, 0.2535)); // hazard ladder
+  trunk(b, 'base', arcPath([0.3, 0.3, 0.2], [0.58, 0.32, 0.46], [0.64, 0.05, 0.14], 10), 0.016);
+  b.add('base', P.refNavy, box(0.18, 0.08, 0.16, 0.014), T(0.66, 0.04, 0.06));
+  b.add('base', P.rubber, tube(arcPath([0.7, 0.03, -0.02], [0.82, 0.03, -0.4], [0.6, 0.014, -0.62], 8), 0.013, 5), undefined, { crease: 180 });
   // mast with collars and braces
   b.add('mast', P.refSteel, cyl(0.042, 0.034, 1.56, 8), T(0, 1.2, 0));
   b.add('mast', P.refNavy, cyl(0.075, 0.065, 0.1, 8, 0.012), T(0, 0.5, 0));
+  hazardCollar(b, 'mast', 0.62, 0.05, 0.07);
   b.add('mast', P.refNavy, cyl(0.055, 0.055, 0.06, 8, 0.01), T(0, 1.2, 0));
   for (const x of [-1, 1]) b.add('mast', P.refSteel, tube([[x * 0.22, 0.44, 0.12], [x * 0.03, 0.95, 0]], 0.009, 5), undefined, { crease: 180 });
   b.add('mast', P.refSlate, box(0.09, 0.14, 0.07, 0.012), T(0, 1.5, 0.055));
@@ -248,7 +294,8 @@ export class RelayReceiver extends DeviceBase {
     this.isB = variant === 1;
     this.mast = this.rig.b('mast'); this.dish = this.rig.b('dish');
     this.dish.rotation.order = 'YXZ';
-    this.addChunk(this.dish, [0.3, 0.6, -0.8], 1.7, 0, 3);
+    this.addChunk(this.mast, [0.5, -0.1, 0.25], 1, 1.3, 0.3);
+    this.addChunk(this.dish, [0.3, 0.6, -0.8], 0, 3);
     this.u.uDissolveColor.value.setHex(0xa8d8ff);
   }
 
@@ -267,11 +314,7 @@ export class RelayReceiver extends DeviceBase {
     this.dish.rotation.x += scanP * pw - off * (this.isB ? 0.25 : 1.05) + this.wobX * 0.6;
     this.dish.rotation.z += off * (this.isB ? 0.6 : 0.22) + this.wobZ * 0.6;
     for (const s of this.active) {
-      if (s.name === 'death') {
-        this.breakApart(s.t, s.w);
-        const k = clamp01(s.t / 0.7);
-        rot(this.mast, 0.4 * k * k * s.w, 0, 1.15 * k * k * s.w);
-      }
+      if (s.name === 'death') this.breakApart(s.t);
     }
     const fl = this.flickerLight(3);
     const chase = 0.55 + 0.45 * Math.max(0, Math.sin(t * 2.6));
@@ -298,6 +341,10 @@ function buildScanHead(): RigTemplate {
   b.add('base', P.refNavy, cyl(0.34, 0.3, 0.07, 20, 0.014), T(0, 0.035, 0));
   b.add('base', P.refSteel, band(0.3, 0.02, 0.02, 20, 0.005), T(0, 0.078, 0));
   b.add('base', P.refDark, cyl(0.12, 0.09, 0.08, 10, 0.012), T(0, 0.11, 0));
+  for (let i = 0; i < 6; i++) b.add('base', P.refSteel, cyl(0.018, 0.018, 0.02, 6), T(Math.cos(i * 1.047 + 0.3) * 0.25, 0.078, Math.sin(i * 1.047 + 0.3) * 0.25));
+  hazardCollar(b, 'base', 0.05, 0.345, 0.03, 12);
+  trunk(b, 'base', arcPath([0.1, 0.1, 0.06], [0.3, 0.16, 0.3], [0.44, 0.02, 0.36], 8), 0.012);
+  b.add('base', P.rubber, tube(arcPath([0.44, 0.02, 0.36], [0.7, 0.02, 0.42], [0.86, 0.012, 0.2], 6), 0.012, 5), undefined, { crease: 180 });
   b.add('mast', P.refSteel, cyl(0.048, 0.042, 1.36, 10), T(0, 0.8, 0));
   for (const y of [0.3, 1.22]) b.add('mast', P.refNavy, cyl(0.066, 0.066, 0.07, 10, 0.01), T(0, y, 0));
   const helix: Pt3[] = [];
@@ -307,6 +354,8 @@ function buildScanHead(): RigTemplate {
   }
   b.add('mast', P.rubber, tube(helix, 0.009, 4), undefined, { crease: 180 });
   b.add('mast', P.refSlate, box(0.11, 0.16, 0.08, 0.014), T(0, 0.92, 0.075));
+  for (const o of [-0.03, 0.01]) b.add('mast', P.refPanel, box(0.004, 0.022, 0.05, 0.001), T(0.057, 0.9 + o, 0.075));
+  hazardCollar(b, 'mast', 1.36, 0.052, 0.05);
   b.add('mast', P.refGlow, box(0.03, 0.012, 0.006), T(0, 0.96, 0.117), { group: SG.lights });
   // yoke
   b.add('yaw', P.refSteel, cyl(0.07, 0.06, 0.06, 10, 0.01), T(0, 1.5, 0));
@@ -348,12 +397,18 @@ export class ScanHead extends DeviceBase implements ScanHeadVisual {
     const r = this.rig;
     this.mast = r.b('mast'); this.yaw = r.b('yaw'); this.head = r.b('head'); this.bar = r.b('bar');
     this.flaps = [r.b('flapL'), r.b('flapR')];
-    this.addChunk(this.yaw, [0.2, 0.7, -0.6], 1.4, 0, 2.6);
+    this.addChunk(this.mast, [0.3, -0.1, 0.5], 1, 1.3, 0.3);
+    this.addChunk(this.yaw, [0.2, 0.7, -0.6], 0, 2.6);
     this.u.uDissolveColor.value.setHex(0xa8d8ff);
   }
 
   setSweep(yaw: number): void {
     if (Number.isFinite(yaw)) this.sweep = yaw;
+  }
+
+  protected override heal(): void {
+    super.heal();
+    this.sweep = 0; this.yawNow = 0;
   }
 
   protected override lookHeight(): number {
@@ -376,11 +431,7 @@ export class ScanHead extends DeviceBase implements ScanHeadVisual {
       rot(this.flaps[i]!, 0, side * (-0.18 * pw + Math.max(0, noise1(t * 1.7 + i * 9)) * 0.22 * pw + off * 0.5 - tel * 0.25), 0);
     }
     for (const s of this.active) {
-      if (s.name === 'death') {
-        this.breakApart(s.t, s.w);
-        const k = clamp01(s.t / 0.8);
-        rot(this.mast, -1.2 * k * k * s.w, 0, 0.25 * k * s.w);
-      }
+      if (s.name === 'death') this.breakApart(s.t);
     }
     const fl = this.flickerLight(5);
     this.groupGlow('eye', (0.9 + tel * 1.5) * pw * fl);
