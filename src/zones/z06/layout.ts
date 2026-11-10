@@ -340,10 +340,10 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('sustainEast', 44, 21, 0);
   // --- grounding (after the fight, at the foot of the refuge ramp) ---
   b.marker('gLyricFrom', 10.4, 6.4, 0, FACE.east);
-  b.marker('gTharneFrom', 9.8, 7.4, 0, FACE.east);
+  b.marker('gTharneFrom', 9.6, 7.3, 0, FACE.east);
   b.marker('gLyric', 12.5, 7, 0, FACE.east);
-  b.marker('gTharne', 12.3, 8.05, 0, 150);
-  b.marker('gTharneBlock', 13.35, 6.7, 0, 110);
+  b.marker('gTharne', 11.6, 7.25, 0, 100);
+  b.marker('gTharneBlock', 13.4, 6.6, 0, 110);
   b.marker('gSelene', 13.5, 7.05, 0, FACE.west);
   b.marker('gSeleneStand', 14.1, 8.3, 0, 240);
   b.marker('gLyessa', 14.7, 9.1, 0, 230);

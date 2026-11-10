@@ -252,6 +252,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     lyric?.face(LY);
     lyessa?.face(L);
 
+    const group = (): void => c.cut({ pos: z.P(13.4, 3.4, 1.45), look: z.P(12.9, 7.3, 0.95), fov: 44 });
     const onLyessa = (): void => c.shot(LY, { yawDeg: 205, distance: 2.3, height: 1.62, lookHeight: 1.62, fov: 32 });
     const onLyricUp = (): void => c.shot(L, { yawDeg: 105, distance: 2.0, height: 1.58, lookHeight: 1.55, fov: 32 });
     onLyessa();
@@ -266,14 +267,14 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     lyric?.play('grounding', { loop: true });
     tharne?.play('kneelTend', { loop: true });
     if (!z.skipping) game.audio.play('armorRattle', { pos: L, volume: 0.6 });
-    c.shot(L, { yawDeg: 165, distance: 2.4, height: 1.2, lookHeight: 0.85, fov: 38 });
+    group();
     yield 0.9;
     yield* z.say('Tharne', 'Lyric.', { actor: tharne });
     // Selene kneels in front of her
     selene?.teleport(SK, z.myaw('gSelene'));
     selene?.play('kneel', { loop: true });
-    const onSelene = (): void => c.shot(SK, { yawDeg: 215, distance: 1.6, height: 1.1, lookHeight: 1.0, fov: 34 });
-    const onLyricLow = (): void => c.shot(L, { yawDeg: 150, distance: 1.5, height: 1.05, lookHeight: 0.9, fov: 34 });
+    const onSelene = (): void => c.cut({ pos: z.P(14.3, 5.0, 1.2), look: z.P(13.5, 7.05, 1.12), fov: 34 });
+    const onLyricLow = (): void => c.cut({ pos: z.P(13.15, 4.9, 1.15), look: z.P(12.5, 7.0, 1.08), fov: 34 });
     onSelene();
     yield* z.say('Selene', 'Look at me.', { actor: selene });
     // «Black patterns race down both arms, and she screams.»
@@ -288,7 +289,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     yield* z.say('Lyric', 'No. No, no…', { actor: lyric });
     // Tharne grips her hand
     holdHands(tharne, lyric, true);
-    c.twoShot(TH, L, { side: 1, distance: 1.4, height: 1.05, fov: 34 });
+    c.cut({ pos: z.P(12.3, 4.9, 1.15), look: z.P(11.6, 7.2, 1.1), fov: 34 });
     yield* z.say('Tharne', 'What do you see?', { actor: tharne });
     onLyricLow();
     yield* z.say('Lyric', 'They aren’t leaking.', { actor: lyric });
@@ -317,7 +318,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     c.shot(T, { yawDeg: 240, distance: 1.4, height: 1.6, lookHeight: 1.45, fov: 32 });
     yield 1.1;
     selene?.actor.visual?.lookAt(SK.clone().add(_v.set(-0.2, 0.6, 0)));
-    c.shot(SK, { yawDeg: 220, distance: 1.3, height: 1.05, lookHeight: 0.95, fov: 34 });
+    onSelene();
     yield 1.0;
     // «Lyric’s head snaps toward Tarrik. The movement is not her choice … something else looks through her.»
     // Selene comes up off her knee and back a step
@@ -329,48 +330,51 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     fig(LYRIC_CORRUPTION.peak);
     lyric?.actor.visual?.flash(VIOLET, 0.9, 0.6);
     if (!z.skipping) game.audio.play('ambWhisper', { pos: L, volume: 0.9 });
-    c.shot(L, { yawDeg: 130, distance: 1.25, height: 0.95, lookHeight: 0.92, fov: 30 });
-    c.dof(1.25, 0.6);
+    c.cut({ pos: z.P(13.7, 5.6, 1.12), look: z.P(12.5, 7.0, 1.1), fov: 30 });
+    c.dof(1.85, 0.6);
     yield 1.3;
     c.dof(null);
     // Tarrik raises his blade — and nothing more
     z.player.visual?.lookAt(L.clone().setY(1.0));
     game.player.playScripted('raiseWeapon', { faceTo: L });
-    c.twoShot(T, L, { side: -1, distance: 2.0, fov: 38 });
+    c.cut({ pos: z.P(11.2, 5.4, 1.35), look: z.P(15.1, 6.0, 1.5), fov: 38 });
     yield 0.9;
     // Tharne moves directly in front of her
     holdHands(tharne, lyric, false);
     tharne?.stopAction();
     tharne?.teleport(TB, z.myaw('gTharneBlock'));
-    c.twoShot(TB, T, { side: 1, distance: 1.8, fov: 36 });
+    c.cut({ pos: z.P(15.7, 5.0, 1.62), look: z.P(13.4, 6.6, 1.5), fov: 36 });
     yield* z.say('Tharne', 'Don’t.', { actor: tharne });
     tharne?.face(L);
     tharne?.play('kneelTend', { loop: true });
-    c.twoShot(L, TB, { side: -1, distance: 1.4, height: 1.05, fov: 34 });
+    const pair = (): void => c.cut({ pos: z.P(12.75, 4.7, 1.15), look: z.P(12.95, 6.8, 1.02), fov: 36 });
+    pair();
     yield* z.say('Tharne', 'Lyric. Stay here.', { actor: tharne });
     // her mouth opens with no voice; her hand closes on his wrist, hard enough to make him wince
     reachWrist(tharne, lyric, true);
-    c.shot(L, { yawDeg: 175, distance: 1.5, height: 0.95, lookHeight: 0.85, fov: 32 });
+    c.cut({ pos: z.P(12.9, 5.5, 0.95), look: z.P(12.95, 6.8, 0.85), fov: 34 });
     yield 1.6;
-    c.twoShot(TB, L, { side: 1, distance: 1.3, height: 1.05, fov: 34 });
+    pair();
     yield* z.say('Tharne', 'Lyric.', { actor: tharne });
     // «She blinks; the presence behind her eyes vanishes.» — the presence, not the infection
     fig(LYRIC_CORRUPTION.after);
     lyric?.actor.visual?.lookAt(TB.clone().setY(1.0));
     game.player.playScripted('lowerWeapon');
     z.player.visual?.lookAt(null);
-    c.twoShot(L, TB, { side: -1, distance: 1.3, height: 1.05, fov: 34 });
+    const onLyricBack = (): void => c.cut({ pos: z.P(13.75, 5.3, 1.15), look: z.P(12.5, 7.0, 1.08), fov: 32 });
+    const onTharneBack = (): void => c.cut({ pos: z.P(12.0, 5.2, 1.2), look: z.P(13.4, 6.6, 1.05), fov: 32 });
+    onLyricBack();
     yield* z.say('Lyric', 'Tharne.', { actor: lyric });
-    c.twoShot(TB, L, { side: 1, distance: 1.3, height: 1.05, fov: 34 });
+    onTharneBack();
     yield* z.say('Tharne', 'I’m here.', { actor: tharne });
     // she sees his wrist and lets go
     reachWrist(tharne, lyric, false);
-    c.twoShot(L, TB, { side: -1, distance: 1.3, height: 1.05, fov: 34 });
+    onLyricBack();
     yield* z.say('Lyric', 'Sorry.', { actor: lyric });
-    c.twoShot(TB, L, { side: 1, distance: 1.3, height: 1.05, fov: 34 });
+    onTharneBack();
     yield* z.say('Tharne', 'Later.', { actor: tharne });
     // her laugh is weak but human
-    c.shot(L, { yawDeg: 175, distance: 2.8, height: 1.3, lookHeight: 0.85, fov: 38 });
+    group();
     yield* z.say('Lyric', 'You keep saying that.', { actor: lyric });
     yield 0.8;
 
