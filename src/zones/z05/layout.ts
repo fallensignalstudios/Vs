@@ -63,8 +63,8 @@ export function bearing(from: readonly [number, number], to: readonly [number, n
 export const MARKS: Readonly<Record<string, readonly [number, number, number, number]>> = {
   // --- entry: Selene's people come off the south bridge ---
   start: [0, -50, 0, 0],
-  tharneStart: [-1.7, -52.6, 0, 0],
-  lyricStart: [1.6, -53.2, 0, 0],
+  tharneStart: [-2.1, -54.8, 0, 0],
+  lyricStart: [2.1, -55.6, 0, 0],
   // the groups stop ≈ 20 m apart; the leaders close to ≈ 10 m
   seleneStop: [-14, -10, 0, 0],
   tharneStop: [-16.4, -12.6, 0, 10],

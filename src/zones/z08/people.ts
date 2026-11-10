@@ -60,12 +60,13 @@ export function makeLitter(z: ZoneRuntime, id: string, at: string, passenger: Hu
   return litter;
 }
 
-/** lay a figure on a litter bed (head toward the litter's −X end) */
+/** lay a figure on a litter bed (head toward the litter's −X end); the figure's own root is never moved */
 export function seatOnLitter(g: THREE.Group, figure: CharacterVisual): void {
-  const root = figure.root;
-  g.add(root);
-  root.position.set(0.05, BED_H + 0.02, 0);
-  root.rotation.set(0, -Math.PI / 2, 0);
+  const hold = new THREE.Group();
+  hold.position.set(0.05, BED_H + 0.02, 0);
+  hold.rotation.set(0, -Math.PI / 2, 0);
+  hold.add(figure.root);
+  g.add(hold);
   figure.play('lieInjured', { loop: true });
   if (isHumanoidVisual(figure)) figure.teleported();
 }

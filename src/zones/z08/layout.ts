@@ -15,7 +15,7 @@
  */
 import type { MissionState, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { BLUE, FACE, GOLD, IVORY } from '../shared';
+import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
 import { S, resetState } from './state';
 
 // =====================================================================================================================
@@ -131,7 +131,6 @@ function buildRecesses(b: ZoneBuilder, west: boolean): void {
     b.ceiling({ x: (r.x0 + r.x1) / 2, n: (r.n0 + r.n1) / 2, w: r.x1 - r.x0, d: r.n1 - r.n0, h: RECESS_H, style: 'flat' });
     // the manual shutter of the recess, raised (S-W / S-E on the drawing)
     b.door({ x: mouthX, n: r.n0, width: mouthW, height: 3.6, style: 'service', open: true }).setState('open');
-    b.panelLight({ x: (r.x0 + r.x1) / 2, n: r.n1 - 1.2, w: 3.2, d: 0.6, h: RECESS_H - 0.12, facing: 'down', intensity: 1.6 });
     // nothing to hide in behind the recess
     b.blocker({ x: (r.x0 + r.x1) / 2, n: (r.n1 + D) / 2, w: r.x1 - r.x0, d: D - r.n1, height: 5 });
   }
@@ -152,11 +151,11 @@ function buildDeck(b: ZoneBuilder): void {
   const w = DECK.x1 - DECK.x0;
   b.deck({
     x: (DECK.x0 + DECK.x1) / 2, n: (DECK.n0 + DECK.n1) / 2, w, d: DECK.n1 - DECK.n0, h: DECK.h, solidBelow: true,
-    rails: ['n', 's', 'e', 'w'], inlay: 'channels', mat: 'blackStoneFloor',
+    rails: ['n', 's', 'e', 'w'], inlay: 'channels',
     railGaps: [{ side: 's', at: RAMP_X - DECK.x0, width: RAMP_W }, { side: 'n', at: RAMP_X - DECK.x0, width: RAMP_W }],
   });
-  b.ramp({ x: RAMP_X, n: DECK.n0 - 5, w: RAMP_W, d: 10, h0: 0, h1: DECK.h, yawDeg: FACE.north, rails: true, mat: 'blackStoneFloor' });
-  b.ramp({ x: RAMP_X, n: DECK.n1 + 5, w: RAMP_W, d: 10, h0: 0, h1: DECK.h, yawDeg: FACE.south, rails: true, mat: 'blackStoneFloor' });
+  b.ramp({ x: RAMP_X, n: DECK.n0 - 5, w: RAMP_W, d: 10, h0: 0, h1: DECK.h, yawDeg: FACE.north, rails: true });
+  b.ramp({ x: RAMP_X, n: DECK.n1 + 5, w: RAMP_W, d: 10, h0: 0, h1: DECK.h, yawDeg: FACE.south, rails: true });
   S.gateS = b.door({ x: RAMP_X, n: DECK.n0 - 10.4, width: RAMP_W, height: 3.6, style: 'service' });
   S.gateN = b.door({ x: RAMP_X, n: DECK.n1 + 10.4, yawDeg: FACE.south, width: RAMP_W, height: 3.6, style: 'service' });
   S.gateS.setState('locked');
@@ -266,6 +265,8 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: 66, n: 39.5, h: 3.4, color: IVORY, intensity: 22, distance: 10 });
   b.point({ x: 35, n: 5.2, h: 2.8, color: BLUE, intensity: 26, distance: 11 });
   b.point({ x: 35, n: 24, h: 10, color: 0xdfe6ff, intensity: 70, distance: 30 });
+  // dark until the finish: the opened core's light on the officer's face (moved there by the script)
+  S.officerGlow = b.point({ x: COURT.x, n: COURT.n, h: 2.2, color: VIOLET, intensity: 0, distance: 3.6 });
 }
 
 function buildMarkers(b: ZoneBuilder): void {
@@ -311,11 +312,11 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('tarrikB', 35, 15.2, 0, FACE.north);
   // --- the finish (positions everyone is cut to) ---
   b.marker('eliteFinish', COURT.x, COURT.n + 1.4, 0, FACE.south);
-  b.marker('tarrikFinish', COURT.x + 0.2, COURT.n - 2.4, 0, FACE.north);
-  b.marker('seleneFinish', COURT.x - 3.6, COURT.n - 1.6, 0, 60);
+  b.marker('tarrikFinish', COURT.x + 0.2, COURT.n - 1.0, 0, FACE.north);
+  b.marker('seleneFinish', COURT.x - 3.4, COURT.n - 0.6, 0, 70);
   b.marker('lyessaFinish', COURT.x + 5.6, COURT.n - 6.2, 0, 320);
-  b.marker('officerFell', COURT.x + 0.3, COURT.n - 0.4, 0, FACE.south);
-  b.marker('officerSalute', COURT.x + 1.8, COURT.n - 2.6, 0, 330);
+  b.marker('officerFell', COURT.x + 0.5, COURT.n + 1.2, 0, FACE.south);
+  b.marker('officerSalute', COURT.x + 2.2, COURT.n - 0.4, 0, 320);
   // --- quarantine ---
   b.marker('lyessaQ', 19.4, 22.6, 0, FACE.east);
   b.marker('lyessaJump', 23.1, 23.2, 0, FACE.east);
@@ -327,7 +328,7 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('seleneWall', 34.2, 10.1, 0, FACE.south);
   b.marker('tarrikGo', 33.8, 38, 0, FACE.north);
   b.marker('seleneGo', 36.4, 38.4, 0, FACE.north);
-  b.marker('litterO2', COURT.x + 1.6, COURT.n - 1.2, 0, FACE.west);
+  b.marker('litterO2', COURT.x + 2.2, COURT.n + 0.6, 0, FACE.west);
   b.marker('southOut', ENTRY_X, -4, 0, FACE.south);
   b.marker('southDoor', ENTRY_X, 1.6, 0, FACE.south);
   b.marker('medicCount', ENTRY_X - 2.6, 2.4, 0, 60);

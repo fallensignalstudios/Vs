@@ -46,7 +46,7 @@ export function* quarantineScene(z: ZoneRuntime, west: boolean, fate: 'killed' |
       mb?.teleport(z.m('litterO2'), z.myaw('litterO2'));
       mb?.play('kneelTend', { loop: true });
     }
-    c.cut({ pos: z.P(30.5, 21.5, 2.1), look: west ? z.P(10, 36, 1.2) : z.P(62, 36, 1.2), fov: 42 });
+    c.cut(west ? { pos: z.P(21.5, 29.5, 2.2), look: z.P(9.5, 39, 1.1), fov: 46 } : { pos: z.P(50.5, 30.5, 2.2), look: z.P(64, 38.5, 1.1), fov: 46 });
     sendOut(z, plan.first);
     if (west) yield* z.say('Medic', 'Stretchers first. One. Two. Keep moving.', { actor: z.cast('medicA') }); // NEW
     else yield* z.say('Survivor', 'Walkers out first. Go, go.', { actor: z.cast('walker1') }); // NEW
@@ -96,13 +96,10 @@ export function* quarantineScene(z: ZoneRuntime, west: boolean, fate: 'killed' |
     // --- 3. “White-gold barriers ignite through the corridors as ancient containment systems wake …” ----------
     game.audio.setMusic('quarantine', 1.5);
     game.player.teleport(z.m('tarrikQ'), z.myaw('tarrikQ'));
-    selene?.stopAction();
-    walkTo(z, selene, 'seleneQ');
-    walkTo(z, lyessa, 'lyessaQ');
-    walkTo(z, s1, 'soldierQ1');
-    walkTo(z, s2, 'soldierQ2');
-    if (z.skipping) {
-      for (const [who, at] of [[lyessa, 'lyessaQ'], [s1, 'soldierQ1'], [s2, 'soldierQ2'], [selene, 'seleneQ']] as const) who?.teleport(z.m(at), z.myaw(at));
+    // on the cut everyone stands where the division finds them (the squad pair may still be crossing the court)
+    for (const [who, at] of [[lyessa, 'lyessaQ'], [s1, 'soldierQ1'], [s2, 'soldierQ2'], [selene, 'seleneQ']] as const) {
+      who?.stopAction();
+      who?.teleport(z.m(at), z.myaw(at));
     }
     c.cut({ pos: z.P(44, 40, 9), look: z.P(26, 16, 0), fov: 52 });
     for (const o of S.seams) o.visible = true;

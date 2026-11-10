@@ -9,7 +9,7 @@
  * medics take him as he is (`quarantine`).
  */
 import * as THREE from 'three';
-import type { Actor, ChoiceOpts, CineCtx, Routine, ZoneRuntime } from '@/core/api';
+import type { Actor, CharacterVisual, ChoiceOpts, CineCtx, Routine, ZoneRuntime } from '@/core/api';
 import { asElite, isHumanoidVisual } from '@/core/api';
 import { AMBER, FROST, VIOLET } from '../shared';
 import { S } from './state';
@@ -34,6 +34,10 @@ export const OFFICER_CHOICE: ChoiceOpts = {
 
 /** the speaker label of the officer's two words */
 const OFFICER = 'Dominion Officer';
+/** how far in front of the organism's chest socket his face is, his lean out of it, and his head height */
+const OFFICER_OUT = 0.55;
+const LEAN = -0.75;
+const HEAD_H = 1.25;
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -52,70 +56,104 @@ function fwd(a: Actor): THREE.Vector3 {
 // The officer
 // ---------------------------------------------------------------------------------------------------------------------
 
+/** the group the officer's figure hangs in (its transform is the zone's; the figure's own root stays untouched) */
+function holder(): THREE.Group | null {
+  return (S.officerRig?.getObjectByName('officer-holder') as THREE.Group | undefined) ?? null;
+}
+
+/** the officer's figure inside a fresh rig (rig → holder → figure root), added to the zone */
+function makeOfficer(z: ZoneRuntime): { rig: THREE.Group; hold: THREE.Group; fig: CharacterVisual } {
+  // a bare face (the book: “his face protruding from the creature’s chest”) — the infantry models are helmeted —
+  // with what is left of his Dominion plate on him: a bronze gorget and an oxblood breast plate
+  const fig = z.game.chars.create('survivor', { seed: 8080 });
+  const rig = new THREE.Group();
+  rig.name = 'z08-officer';
+  const hold = new THREE.Group();
+  hold.name = 'officer-holder';
+  rig.add(hold);
+  hold.add(fig.root);
+  z.builder.add(rig);
+  if (isHumanoidVisual(fig)) fig.setLoadout({ melee: false, ranged: false, hideSheathed: true });
+  const mats = z.game.mats;
+  const plate = new THREE.Group();
+  plate.name = 'officer-plate-dominion';
+  const geos: THREE.BufferGeometry[] = [new THREE.TorusGeometry(0.088, 0.013, 6, 18, Math.PI * 1.3), new THREE.BoxGeometry(0.16, 0.12, 0.025)];
+  const gorget = new THREE.Mesh(geos[0], mats.get('domBronze'));
+  gorget.position.set(0, 0.2, -0.01);
+  gorget.rotation.set(Math.PI / 2, 0, Math.PI * 0.8);
+  plate.add(gorget);
+  const crest = new THREE.Mesh(geos[1], mats.get('domOxblood'));
+  crest.position.set(0, 0.04, -0.13);
+  plate.add(crest);
+  fig.socket('chest').add(plate);
+  S.officer = fig;
+  S.officerRig = rig;
+  z.onDispose(() => {
+    plate.removeFromParent();
+    fig.dispose();
+    for (const g of geos) g.dispose();
+  });
+  return { rig, hold, fig };
+}
+
 /**
- * The armour opens: the officer's head and shoulders lean out of the organism's chest, tissue round him, two
- * broken plates hinged aside. Static while the frost holds the body still.
+ * The armour opens: the officer's head and shoulders lean out of the organism's chest, tissue round him, the
+ * parted plates hinged aside, the core's violet light on his face. Static while the frost holds the body still.
  */
 export function revealOfficer(z: ZoneRuntime): void {
   const elite = S.elite;
   if (S.officerRig || !elite) return;
-  const game = z.game;
-  const mats = game.mats;
-  const rig = new THREE.Group();
-  rig.name = 'z08-officer';
+  const mats = z.game.mats;
+  const { rig, hold, fig } = makeOfficer(z);
   const chest = socketPos(elite, 'chest', _a);
-  const f = fwd(elite);
-  rig.position.copy(chest).addScaledVector(f, 0.5);
-  rig.position.y -= 0.15;
+  rig.position.copy(chest).addScaledVector(fwd(elite), OFFICER_OUT);
+  rig.position.y -= 0.2;
   rig.rotation.y = elite.yaw;
-  z.builder.add(rig);
-
-  const fig = game.chars.create('dominionSoldier', { seed: 8080 });
-  rig.add(fig.root);
-  // leaning out of the chest, the rest of him inside the body behind
-  const lean = -0.55;
-  fig.root.rotation.set(lean, 0, 0);
-  fig.root.position.set(0, -1.62 * Math.cos(lean), 1.62 * Math.sin(-lean));
-  fig.play('trapped', { loop: true });
-  fig.setCorruption(0.55);
-  if (isHumanoidVisual(fig)) {
-    fig.setLoadout({ melee: false, ranged: false, hideSheathed: true });
-    fig.teleported();
-  }
+  // leaning out of the chest (head at the rig's origin), the rest of him inside the body behind and below
+  hold.rotation.set(LEAN, 0, 0);
+  hold.position.set(0, -HEAD_H * Math.cos(LEAN), HEAD_H * Math.sin(-LEAN));
+  fig.play('kneel', { loop: true });
+  fig.setCorruption(0.35);
+  if (isHumanoidVisual(fig)) fig.teleported();
 
   const geos: THREE.BufferGeometry[] = [];
   const tissue = mats.get('eclipseTissue');
   const plate = mats.get('eclipsePlate');
   const vein = mats.emissive(VIOLET, 2.4);
-  // the parted armour: two plates hinged open on either side of him
+  // the parted armour: two narrow plates hinged back on either side of him
   for (const s of [-1, 1]) {
-    const geo = new THREE.BoxGeometry(0.62, 1.05, 0.12);
+    const geo = new THREE.BoxGeometry(0.36, 0.78, 0.07);
     geos.push(geo);
     const m = new THREE.Mesh(geo, plate);
-    m.position.set(s * 0.62, -0.1, -0.05);
-    m.rotation.set(0.1, s * 0.95, s * 0.12);
+    m.name = 'officer-plate';
+    m.position.set(s * 0.5, -0.25, 0.22);
+    m.rotation.set(0.15, s * 1.15, s * 0.2);
     m.castShadow = true;
     rig.add(m);
   }
-  // tissue that still holds him: strands from his shoulders back into the body, a few lit veins
+  // tissue that still holds him: strands from his shoulders and chest back into the body, a few lit veins
   const strands: Array<[number, number, number, boolean]> = [
-    [-0.28, 0.05, 0.03, false], [0.27, 0.0, 0.03, false], [-0.18, -0.32, 0.035, false], [0.2, -0.35, 0.035, false],
-    [0.0, -0.5, 0.04, false], [-0.33, -0.15, 0.012, true], [0.31, -0.2, 0.012, true], [0.05, 0.18, 0.025, false],
+    [-0.24, -0.12, 0.035, false], [0.23, -0.15, 0.035, false], [-0.16, -0.42, 0.04, false], [0.17, -0.45, 0.04, false],
+    [0.0, -0.6, 0.045, false], [-0.3, -0.3, 0.013, true], [0.28, -0.34, 0.013, true], [0.02, -0.25, 0.03, false],
   ];
   for (const [x, y, r, lit] of strands) {
     const pts = [
-      new THREE.Vector3(x * 0.6, y - 0.05, -0.08),
-      new THREE.Vector3(x * 1.1, y + 0.06, 0.12),
-      new THREE.Vector3(x * 1.5, y - 0.05, 0.42),
+      new THREE.Vector3(x * 0.7, y, -0.05),
+      new THREE.Vector3(x * 1.25, y + 0.08, 0.18),
+      new THREE.Vector3(x * 1.6, y - 0.06, 0.5),
     ];
     const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, r, 6, false);
     geos.push(geo);
-    rig.add(new THREE.Mesh(geo, lit ? vein : tissue));
+    const m = new THREE.Mesh(geo, lit ? vein : tissue);
+    m.name = 'officer-tissue';
+    rig.add(m);
   }
-  S.officer = fig;
-  S.officerRig = rig;
+  // the opened core lights him from below: the only light on his face is the thing that holds him
+  if (S.officerGlow) {
+    S.officerGlow.position.copy(rig.position).add(_b.set(0, -0.55, 0)).addScaledVector(fwd(elite), 0.35);
+    S.officerGlow.intensity = 1.8;
+  }
   z.onDispose(() => {
-    fig.dispose();
     for (const g of geos) g.dispose();
   });
 }
@@ -128,24 +166,25 @@ export function updateOfficer(dt: number): void {
 /** after the body falls: what is left of him on the floor where it fell (killed), or held in the frost (spared) */
 export function officerToFloor(z: ZoneRuntime, fate: 'killed' | 'spared'): void {
   const rig = S.officerRig;
+  const hold = holder();
   const fig = S.officer;
-  if (!rig || !fig) return;
-  const at = z.m('officerFell');
-  rig.position.copy(at);
+  if (!rig || !hold || !fig) return;
+  rig.position.copy(z.m('officerFell'));
   rig.rotation.set(0, z.myaw('officerFell'), 0);
-  // the parted plates go with the body; the tissue that held him stays with him
-  for (const c of [...rig.children]) if (c instanceof THREE.Mesh && c.geometry instanceof THREE.BoxGeometry) c.visible = false;
+  if (S.officerGlow) S.officerGlow.intensity = 0;
+  for (const c of rig.children) {
+    if (c.name === 'officer-plate') c.visible = false;
+    if (c.name === 'officer-tissue') c.visible = fate === 'spared';
+  }
   if (fate === 'killed') {
-    fig.root.rotation.set(0, 0, 0);
-    fig.root.position.set(0, 0, 0);
-    fig.setFrozen(0);
+    // the death he asked for has already played: he lies where the body fell
+    hold.rotation.set(0, 0, 0);
+    hold.position.set(0, 0, 0);
     fig.setCorruption(0.8);
-    fig.play('death');
-    for (const c of rig.children) if (c !== fig.root) c.visible = false;
   } else {
-    // lying on his back, still in the frost and the tissue
-    fig.root.rotation.set(Math.PI / 2, 0, 0);
-    fig.root.position.set(0, 0.22, -0.9);
+    // lying on his back, still in the frost and the tissue that held him
+    hold.rotation.set(Math.PI / 2, 0, 0);
+    hold.position.set(0, 0.24, -0.85);
     fig.setFrozen(1);
   }
 }
@@ -155,26 +194,21 @@ export function officerOntoLitter(litterGroup: THREE.Group): void {
   const rig = S.officerRig;
   if (!rig) return;
   litterGroup.add(rig);
-  rig.position.set(0.95, 0.7, 0);
+  rig.position.set(0.05, 0.48, 0);
   rig.rotation.set(0, -Math.PI / 2, 0);
 }
 
 /** restore the officer as `quarantine` finds him (checkpoint / debug entry after the finish) */
 export function restoreOfficer(z: ZoneRuntime, fate: 'killed' | 'spared'): void {
   if (S.officerRig) return;
-  const game = z.game;
-  const fig = game.chars.create('dominionSoldier', { seed: 8080 });
-  const rig = new THREE.Group();
-  rig.name = 'z08-officer';
-  rig.add(fig.root);
-  z.builder.add(rig);
-  if (isHumanoidVisual(fig)) fig.setLoadout({ melee: false, ranged: false, hideSheathed: true });
-  fig.play(fate === 'killed' ? 'death' : 'trapped', { loop: fate !== 'killed' });
-  S.officer = fig;
-  S.officerRig = rig;
-  z.onDispose(() => fig.dispose());
+  const { fig } = makeOfficer(z);
+  if (fate === 'killed') {
+    fig.play('death');
+    fig.update(6);
+  } else {
+    fig.play('idle', { loop: true });
+  }
   officerToFloor(z, fate);
-  if (fate === 'killed') fig.update(5);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -249,7 +283,7 @@ export function* finishScene(z: ZoneRuntime): Routine {
     if (!z.skipping) game.vfx.spawn('frostArrest', chest);
     const face = S.officerRig ? S.officerRig.getWorldPosition(new THREE.Vector3()) : chest;
     const ef = fwd(elite);
-    c.cut({ pos: { x: face.x + ef.x * 2.3 + ef.z * 0.6, y: face.y - 0.15, z: face.z + ef.z * 2.3 - ef.x * 0.6 }, look: face, fov: 30 });
+    c.cut({ pos: { x: face.x + ef.x * 2.2 + ef.z * 0.5, y: face.y - 0.1, z: face.z + ef.z * 2.2 - ef.x * 0.5 }, look: { x: face.x, y: face.y - 0.12, z: face.z }, fov: 25 });
     c.dof(2.3, 0.6);
     yield 1.8;
     // “The man is still alive, his face protruding from the creature’s chest.”
@@ -286,6 +320,7 @@ export function* finishScene(z: ZoneRuntime): Routine {
       // “Black tissue burns, and the officer dies before the body carrying him collapses.”
       S.officer?.setCorruption(1);
       S.officer?.lookAt(null);
+      S.officer?.play('death');
       yield 1.6;
     } else {
       // Tarrik lowers the point. Selene's frost closes over the man and the tissue that holds him.
@@ -327,8 +362,14 @@ export function* finishScene(z: ZoneRuntime): Routine {
       game.vfx.spawn('explosionSmall', chest, { color: VIOLET });
     }
     killElite(z, lyessa ? lyessa.actor : null);
-    yield 0.7;
-    // the body falls; what is left of the officer stays where it fell
+    yield 0.6;
+    // Lyessa lowers the rifle while the body goes down behind the camera
+    if (lyessa) {
+      c.shot(lyessa.actor.pos, { yawDeg: 315, distance: 2.3, height: 1.55, lookHeight: 1.5, fov: 34 });
+      lyessa.play('lowerWeapon');
+      yield 2.2;
+    }
+    // what is left of the officer stays where it fell
     c.cut({ pos: z.P(31, 16.6, 2.2), look: { x: ep.x, y: 0.6, z: ep.z }, fov: 44 });
     officerToFloor(z, fate);
     yield 2.6;

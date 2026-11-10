@@ -94,16 +94,16 @@ function gate(b: ZoneBuilder, bearingDeg: number): ReturnType<ZoneBuilder['door'
   const tn = -Math.sin(a); // tangent (to the right, looking outward)
   const [cx, cn] = pol(r, bearingDeg);
   const half = 5;
-  b.wall({ from: [cx - tx * half, cn - tn * half], to: [cx + tx * half, cn + tn * half], height: 7.5, style: 'ribbed', doors: [{ at: half, width: 5, height: 5 }] });
-  for (const s of [-1, 1]) b.column({ x: cx + tx * (half + 0.9) * s, n: cn + tn * (half + 0.9) * s, r: 0.6, height: 9.5, style: 'pylon', lit: true });
+  b.wall({ from: [cx - tx * half, cn - tn * half], to: [cx + tx * half, cn + tn * half], height: 7.5, style: 'ribbed', mat: 'blackStone', doors: [{ at: half, width: 5, height: 5 }] });
+  for (const s of [-1, 1]) b.column({ x: cx + tx * (half + 0.9) * s, n: cn + tn * (half + 0.9) * s, r: 0.6, height: 9.5, style: 'pylon', lit: true, mat: 'blackStone' });
   const [bx, bn] = pol(r + 6.5, bearingDeg);
   for (const s of [-1, 1]) {
     const [sx, sn] = [cx + tx * 3.4 * s, cn + tn * 3.4 * s];
-    b.wall({ from: [sx, sn], to: [sx + (bx - cx), sn + (bn - cn)], height: 6.2, style: 'plain', noCollider: true });
+    b.wall({ from: [sx, sn], to: [sx + (bx - cx), sn + (bn - cn)], height: 6.2, style: 'plain', mat: 'blackStone', noCollider: true });
   }
-  b.wall({ from: [bx - tx * 3.6, bn - tn * 3.6], to: [bx + tx * 3.6, bn + tn * 3.6], height: 6.2, style: 'panelled', noCollider: true });
+  b.wall({ from: [bx - tx * 3.6, bn - tn * 3.6], to: [bx + tx * 3.6, bn + tn * 3.6], height: 6.2, style: 'panelled', mat: 'blackStone', noCollider: true });
   const [mx, mn] = pol(r + 3.25, bearingDeg);
-  b.ceiling({ x: mx, n: mn, w: 6.8, d: 6.5, h: 6.2, yawDeg: bearingDeg, style: 'flat' });
+  b.ceiling({ x: mx, n: mn, w: 6.8, d: 6.5, h: 6.2, yawDeg: bearingDeg, style: 'flat', mat: 'blackStone' });
   b.panelLight({ x: mx, n: mn, w: 2.4, d: 3, h: 6.1, facing: 'down', intensity: 1.6 });
   return b.door({ x: cx, n: cn, yawDeg: bearingDeg, width: 5, height: 5 });
 }
@@ -131,8 +131,8 @@ function buildExit(b: ZoneBuilder): void {
   b.ceiling({ x: vx, n: CN, w: 6, d: 4.4, h: -EXIT_DROP + 3.7, style: 'flat' });
   b.panelLight({ x: wx - 5.6, n: CN, w: 2.2, d: 2.6, h: -EXIT_DROP + 0.9, facing: 'east', intensity: 2.2 });
   // the white point sits just above platform level, so it reads from the meeting ground as the way out
-  b.whitePoint({ x: wx + 0.5, n: CN, h: -EXIT_DROP + 5.1, intensity: 1.8 });
-  for (const s of [-1, 1]) b.column({ x: wx + 0.9, n: CN + s * 3.5, h: -EXIT_DROP, height: 7.2, style: 'pylon', lit: true });
+  b.whitePoint({ x: wx + 0.5, n: CN, h: 2.4, intensity: 2.0 });
+  for (const s of [-1, 1]) b.column({ x: wx + 0.9, n: CN + s * 3.5, h: -EXIT_DROP, height: 8.4, style: 'pylon', lit: true });
   b.channel([pol(R_PLAT - 6, 270), pol(R_RAMP0, 270)], { width: 0.07, intensity: 1.4 });
 }
 

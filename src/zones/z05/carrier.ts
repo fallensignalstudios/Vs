@@ -10,11 +10,20 @@ import type { CineCtx, Interactable, Routine, ZoneRuntime } from '@/core/api';
 import { clamp01 } from '@/core/mathx';
 import { FROST, standardExit, waitOr } from '../shared';
 import { SOLDIERS, coolBlade } from './cast';
+import { CN, CX, RING, RING_FACE, step } from './layout';
+import { say } from './stage';
 import { S, place } from './state';
 
 /** the readout's countdown starts here (the book: “Impact in ninety seconds.”) and never shows less than CLAMP */
 const IMPACT_SECONDS = 90;
 const CLAMP = 10;
+/**
+ * The pass (sky.carrier): at 0.52 the hull is in the ceiling view, low in the west-south-west; it comes on to 0.7
+ * (high overhead) while the clock runs, then — once the plane holds — crosses overhead (its shadow peaks
+ * 0.72–0.88), shears the tower at 0.8 in the east-north-east, and goes down into the distortion.
+ */
+const CARRIER_START = 0.52;
+const CARRIER_HOLD = 0.7;
 
 const clock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 /** «MISS DISTANCE» over a rising bar — no invented figure */
@@ -79,17 +88,18 @@ function* alarmScene(z: ZoneRuntime): Routine {
     const sel = game.player.actor;
     const tarrik = z.cast('tarrik');
     const tharne = z.cast('tharne');
-    sel.visual?.stop('guard');
+    sel.visual?.stop();
     tarrik?.stopAction();
     tarrik?.play('guard', { loop: true });
     // the crippled carrier is already in the ceiling when the lance takes its engines
     carrier.visible = true;
-    carrier.setProgress(0.3);
-    S.carrierTarget = 0.34;
+    carrier.setProgress(CARRIER_START);
+    S.carrierTarget = CARRIER_START;
     S.carrierRate = 0.01;
-    if (!z.skipping) game.audio.setMusic('carrier', 0.4);
+    game.audio.setMusic('carrier', 0.4);
     const up = carrier.position.clone().sub(sel.pos).normalize();
-    c.cut({ pos: sel.pos.clone().add(new THREE.Vector3(-up.x * 2.2, 1.0, -up.z * 2.2)), look: carrier.position.clone(), fov: 58 });
+    // low, beside her (Tarrik is on her other side), looking up through the ceiling at the hull
+    c.cut({ pos: z.P(0, 0).set(sel.pos.x + 1.1, sel.pos.y + 0.8, sel.pos.z + 1.9), look: carrier.position.clone(), fov: 60 });
     if (!z.skipping) {
       sky.impact({ dir: up, color: 0xd8ecff, strength: 1 });
       game.audio.play('fleetImpact', { volume: 1 });
@@ -138,7 +148,7 @@ function* impactClock(z: ZoneRuntime): Routine {
     game.ui.readout({ label: 'IMPACT', value: clock(shown), tone: 'cold' }); // NEW
     if (S.holo && !S.holoHold) S.holo.setText(`IMPACT ${clock(shown)}`); // NEW
     const k = clamp01((IMPACT_SECONDS - left) / (IMPACT_SECONDS - CLAMP));
-    S.carrierTarget = 0.34 + 0.36 * k;
+    S.carrierTarget = CARRIER_START + (CARRIER_HOLD - CARRIER_START) * k;
     S.carrierRate = 0.02;
     if (S.holo) S.holo.params.progress = 0.8 * k;
     // pressure: the structure groans more often as the hull comes on
@@ -148,7 +158,8 @@ function* impactClock(z: ZoneRuntime): Routine {
       if (shown < 30) game.camera.shake(0.18, 0.5);
     }
     yield 0.25;
-    left -= 0.25;
+    // the strip runs on play time: a scene (watched or skipped) leaves the same pressure behind it
+    if (!game.mission.cinematicActive) left -= 0.25;
   }
 }
 
@@ -179,28 +190,28 @@ function* ringScene(z: ZoneRuntime): Routine {
     }
     c.shot(ring, { yawDeg: (z.myaw('ring') * -180) / Math.PI, distance: 2.4, height: 1.55, lookHeight: 1.4, fov: 38 });
     yield 0.9;
-    yield* z.say('Selene', 'Come on.', { actor: sel });
+    yield* say(z, 'Selene', 'Come on.', sel);
     // the machinery answers from three systems: too much mass and too little power
     S.holoHold = true;
-    S.holo?.setText('INSUFFICIENT POWER'); // NEW
+    S.holo?.setText('TOO LITTLE POWER'); // NEW (the overlay's label holds 16 characters)
     if (!z.skipping) game.audio.play('structuralGroan', { pos: ring, volume: 0.8 });
     c.cut({ pos: z.P(0, 0).copy(ring).add(new THREE.Vector3(2.8, 1.2, 2.6)), look: z.m('planeCenter'), fov: 50 });
     yield 2.2;
     S.holoHold = false;
     // she links her command strip to the Accord's guidance net; Tharne answers across the chamber
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI + 30, distance: 1.7, height: 1.6, lookHeight: 1.5, fov: 32 });
-    yield* z.say('Selene', 'Tharne.', { actor: sel });
+    yield* say(z, 'Selene', 'Tharne.', sel);
     if (tharne) c.shot(tharne.actor.pos, { yawDeg: 250, distance: 2.6, height: 1.55, fov: 32 });
     yield* z.say('Tharne', 'I’m here.', { channel: 'radio', offscreen: true, actor: tharne });
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI - 25, distance: 1.8, height: 1.6, lookHeight: 1.5, fov: 32 });
-    yield* z.say('Selene', 'Give me the carrier’s remaining thrust.', { actor: sel });
+    yield* say(z, 'Selene', 'Give me the carrier’s remaining thrust.', sel);
     yield* z.say('Tharne', 'It has no primary engines.', { channel: 'radio', offscreen: true });
     // he has the angle to kill her: two steps behind her, blade still raised
     if (tarrik) c.twoShot(sel.pos, tarrik.actor.pos, { side: 1, distance: 1.6, fov: 34 });
-    yield* z.say('Selene', 'Maneuvering jets.', { actor: sel });
+    yield* say(z, 'Selene', 'Maneuvering jets.', sel);
     yield* z.say('Tharne', 'They cannot move seven million tons.', { channel: 'radio', offscreen: true });
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI + 15, distance: 1.5, height: 1.62, lookHeight: 1.55, fov: 30 });
-    yield* z.say('Selene', 'They do not need to. Change the miss distance.', { actor: sel });
+    yield* say(z, 'Selene', 'They do not need to. Change the miss distance.', sel);
     if (tharne) c.shot(tharne.actor.pos, { yawDeg: 280, distance: 2.0, height: 1.6, fov: 30 });
     yield* z.say('Tharne', 'Yes.', { channel: 'radio', offscreen: true, actor: tharne });
     // end state
@@ -246,7 +257,7 @@ function* planeFollows(z: ZoneRuntime, hold: Interactable): Routine {
     if (S.stab) S.stab.params.plane = 0.2 + 0.8 * hold.progress;
     S.jetsTarget = 0.9 * hold.progress;
     if (hold.progress > 0.04 && !S.plane && !z.skipping) {
-      S.plane = game.vfx.spawn('coherentPlane', z.m('planeCenter'), { dir: { x: 0, y: 1, z: 0 }, scale: 1.4, color: FROST });
+      S.plane = game.vfx.spawn('coherentPlane', z.m('planeCenter'), { dir: { x: 0, y: 1, z: 0 }, scale: 1.0, color: FROST });
       game.audio.play('stasisField', { pos: z.m('planeCenter'), volume: 0.6 });
     }
     yield;
@@ -277,29 +288,40 @@ function* passScene(z: ZoneRuntime): Routine {
       game.audio.play('carrierPass', { volume: 1 });
       game.vfx.spawn('carrierShadowDust', z.m('centre'), { duration: 9, scale: 1.6 });
     }
-    // the hull overhead, through the ceiling
+    // the hull overhead, through the ceiling (from the shaft's south lip: the plane stays out of the lens)
     const look = (): THREE.Vector3 => carrier.position.clone();
-    c.cut({ pos: z.m('ring').add(new THREE.Vector3(1.5, 0.5, 3.5)), look: look(), fov: 62 });
-    game.camera.cine.track(look);
-    yield 3.2;
+    const cam = game.camera.cine;
+    c.cut({ pos: z.P(CX - 4, CN - 10, 1.0), look: look(), fov: 68 });
+    cam.track(look);
+    yield 3.4;
     // “For several seconds the chamber darkens beneath the shadow of seven million tons of dying ship.”
-    game.camera.cine.track(null);
-    c.cut({ pos: z.P(28, 36, 1.0), look: z.m('planeCenter'), fov: 48 });
-    c.moveAsync({ pos: z.P(29.5, 37.5, 1.3), look: z.m('planeCenter'), fov: 46 }, 4, 'inOut');
-    yield waitOr(z, () => z.skipping || carrier.progress >= 0.79, 8);
+    cam.track(null);
+    c.cut({ pos: z.P(CX - 5.5, CN - 6.5, 1.7), look: z.m('ring').setY(1.6), fov: 46 });
+    c.moveAsync({ pos: z.P(CX - 6.5, CN - 7.2, 1.5), look: z.m('ring').setY(1.9), fov: 44 }, 4, 'inOut');
+    yield waitOr(z, () => z.skipping || carrier.progress >= 0.785, 8);
     // it scrapes across a white-gold tower, breaking it in a shower of pale debris
-    c.cut({ pos: sel.pos.clone().add(new THREE.Vector3(0, 1.6, 0)), look: carrier.clipPoint.clone(), fov: 34 });
+    c.cut({ pos: z.P(CX - 22, CN - 2, 1.7), look: carrier.clipPoint.clone(), fov: 36 });
     yield waitOr(z, () => z.skipping || carrier.progress >= 0.88, 6);
-    // … then continues past the complex and falls into the distortion below
+    // … then continues past the complex and falls into the distortion below: a locked frame on the rim of the
+    // ceiling the hull goes down through and does not come back over
     S.sinkTarget = 1;
-    c.cut({ pos: z.P(40, 52, 2.0), look: look(), fov: 50 });
-    game.camera.cine.track(look);
-    yield 4.6;
-    game.camera.cine.track(null);
-    // the trajectory ends on the strip
+    const eye = z.P(CX - 22, CN - 2, 1.7);
+    const dir = carrier.position.clone().sub(eye).setY(0).normalize();
+    c.cut({ pos: eye, look: eye.clone().addScaledVector(dir, 100).setY(eye.y + 72), fov: 56 });
+    yield 4.8;
+    // the trajectory ends (the strip says «CARRIER SIGNAL LOST» once the scene hands back); she lets the plane go
     S.holoHold = true;
-    S.holo?.setText('CARRIER SIGNAL LOST'); // NEW
-    c.cut({ pos: z.m('ring').add(new THREE.Vector3(-2.6, 1.7, 1.2)), look: z.m('ring').add(new THREE.Vector3(1.6, 1.3, 2.6)), fov: 42 });
+    if (S.holo) {
+      S.holo.setText('');
+      S.holo.params.visible = 0;
+    }
+    if (S.stab) S.stab.params.plane = 0.15;
+    releasePlane();
+    sel.visual?.stop();
+    // over her shoulder from the side Tarrik is not standing on, to the overlay in front of her
+    const [bx, bn] = step(RING[0], RING[1], 2.9, RING_FACE + 52);
+    const [hx, hn] = step(RING[0], RING[1], 3.6, RING_FACE + 180);
+    c.cut({ pos: z.P(CX + bx, CN + bn, 2.0), look: z.P(CX + hx, CN + hn, 1.2), fov: 46 });
     if (tarrik) tarrik.face(sel.pos.clone());
     yield 2.4;
 
@@ -315,12 +337,18 @@ function* passScene(z: ZoneRuntime): Routine {
       S.stab.params.plane = 0;
       S.stab.params.active = 0.25;
     }
-    S.plane?.stop();
-    S.plane = null;
+    releasePlane();
     game.player.actor.visual?.stop('holdPlane');
-    if (!z.skipping) game.audio.setMusic('silence', 3);
+    game.audio.setMusic('silence', 3);
     z.story('carrierLost');
   });
+}
+
+/** stop the coherent-plane effect (cosmetic) */
+function releasePlane(): void {
+  const p = S.plane;
+  S.plane = null;
+  p?.stop();
 }
 
 // ---------------------------------------------------------------------------------------------------------

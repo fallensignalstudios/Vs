@@ -132,7 +132,7 @@ export function updateZone(z: ZoneRuntime, dt: number): void {
     const jets = carrier.stabilized;
     const jn = z.skipping ? S.jetsTarget : jets + (S.jetsTarget - jets) * Math.min(1, dt * 1.6);
     if (Math.abs(jn - jets) > 1e-4) carrier.setStabilized(jn);
-    S.sink = z.skipping ? S.sinkTarget : S.sink + (S.sinkTarget - S.sink) * Math.min(1, dt * 0.55);
+    S.sink = z.skipping ? S.sinkTarget : S.sink + (S.sinkTarget - S.sink) * Math.min(1, dt * 0.3);
     if (S.sink > 1e-4) {
       // the pass is authored level after the clip; the zone takes the hull down into the distortion
       _anchor.copy(S.centre);

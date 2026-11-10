@@ -73,8 +73,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   }
   // Lyessa at the support position chosen in Z07, two soldiers of the squad holding with her
   const post = late ? 'lyessaFinish' : west ? 'lyessaW' : 'lyessaE';
-  const lyessa = z.companion('lyessa', post, 'hold');
-  lyessa.holdAt(z.m(post), z.myaw(post));
+  const lyessa = z.companion('lyessa', post, late ? 'scripted' : 'hold');
+  if (!late) lyessa.holdAt(z.m(post), z.myaw(post));
   z.npc('dominionSoldier', west ? 'soldierW1' : 'soldierE1', 'aimRifle', 'soldier1');
   z.npc('dominionSoldier', west ? 'soldierW2' : 'soldierE2', 'aimRifle', 'soldier2');
   // Tharne and Lyric hold at the staging: rear, protected, silent during E4

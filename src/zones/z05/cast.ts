@@ -31,7 +31,7 @@ export function spawnCast(z: ZoneRuntime, stage: Stage): void {
     lyric.holdAt(z.m('lyricFar'), z.myaw('lyricFar'));
     tharne.play('holdConsole', { loop: true });
   }
-  lyric.actor.visual?.setCorruption(met ? 0.34 : 0.24);
+  lyric.actor.visual?.setCorruption(met ? 0.28 : 0.2);
 
   // --- the Dominion side ---
   const tarrik = z.companion('tarrik', after ? 'tarrikBehind' : met ? 'dTarLock' : 'centre', 'scripted');

@@ -59,6 +59,8 @@ export interface Z08State {
   /** the officer inside the organism (finish) and what is left of him afterwards */
   officer: CharacterVisual | null;
   officerRig: THREE.Group | null;
+  /** the core's violet light on his face (built dark, so the light count never changes) */
+  officerGlow: THREE.PointLight | null;
 }
 
 export let S: Z08State = blank();
@@ -69,7 +71,7 @@ export function blank(): Z08State {
     barrierW: null, barrierS: null, barrierE: null, barrierExit: null, seams: [],
     enc: null, elite: null, ctl: null, weaver: null, anchor: null, frost: null,
     stage: 'A', fractured: false, finishDue: false, vignette: false, announced: false, flankOpen: false, pressureWas: false,
-    litters: [], officer: null, officerRig: null,
+    litters: [], officer: null, officerRig: null, officerGlow: null,
   };
 }
 
