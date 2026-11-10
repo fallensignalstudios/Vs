@@ -81,7 +81,7 @@ export class WeaverBrain extends Brain {
     if (wp) wp.exposed = true;
     a.visual?.setExposed('core', 1);
     this.game.actors.stagger(a, W.allSeveredStagger, by);
-    caption(this.game, 'Links severed — the Weaver falters', 'link', a.pos);
+    caption(this.game, 'Links severed — the source falters', 'link', a.pos);
   }
 
   private setWeaving(a: Actor, on: boolean): void {
