@@ -78,9 +78,9 @@ export function* varoScene(z: ZoneRuntime): Routine {
     const handPos = (): THREE.Vector3 => (malik?.actor.visual ? malik.actor.visual.socket('handL').getWorldPosition(hand) : hand.copy(varo).setY(0.5));
     handPos();
     // in front of him and to his left, low: the hand in his lap, his body behind it
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.3, 0.2, -0.42)), look: hand.clone(), fov: 30 });
-    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(-0.22, 0.16, -0.32)), look: hand.clone(), fov: 26 }, 3.4, 'inOut');
-    c.dof(0.42, 0.7);
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.34, 0.55, -0.52)), look: hand.clone(), fov: 30 });
+    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(-0.26, 0.46, -0.42)), look: hand.clone(), fov: 26 }, 3.4, 'inOut');
+    c.dof(0.66, 0.7);
     if (!z.skipping) {
       game.events.emit('caption', { text: 'A soldier screams', kind: 'alert', pos: varo }); // NEW
       game.audio.play('eclipseBreath', { pos: varo, volume: 0.6 });
@@ -118,7 +118,7 @@ export function* varoScene(z: ZoneRuntime): Routine {
     yield 2.4;
     // and under it, the tissue moves another centimeter beneath his skin
     handPos();
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.2, 0.16, -0.3)), look: hand.clone().add(new THREE.Vector3(0, 0.03, 0)), fov: 24 });
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.24, 0.42, -0.4)), look: hand.clone().add(new THREE.Vector3(0, 0.03, 0)), fov: 24 });
     setInfectionGrowth(0.95);
     yield 1.9;
     c.shot(tp, { yawDeg: 280, distance: 1.6, height: 1.5, lookHeight: 1.65, fov: 34 });

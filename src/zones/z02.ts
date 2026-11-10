@@ -360,8 +360,8 @@ function* cut(z: ZoneRuntime): Routine {
     if (malik && !z.skipping && malik.actor.distanceTo(z.m('varoCut')) > 7) malik.teleport(z.m('varoCut'), z.myaw('varoCut'));
     // behind him at the threshold: the atrium beyond, the light wall holding
     const t = z.m('cutTarrik');
-    c.cut({ pos: t.clone().add(new THREE.Vector3(0.7, 1.8, 2.6)), look: z.P(EXIT_X, D + 40, 6), fov: 46 });
-    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(0.5, 1.7, 1.9)), look: z.P(EXIT_X, D + 40, 7), fov: 42 }, 4.5, 'inOut');
+    c.cut({ pos: t.clone().add(new THREE.Vector3(1.45, 1.8, 1.9)), look: z.P(EXIT_X - 0.6, D + 40, 6), fov: 46 });
+    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(1.2, 1.72, 1.4)), look: z.P(EXIT_X - 0.4, D + 40, 7), fov: 42 }, 4.5, 'inOut');
     yield 1.2;
     // Neon Veil brightens faintly as they near it
     const chest = z.player.visual?.socket('chest');
@@ -383,12 +383,14 @@ function* cut(z: ZoneRuntime): Routine {
     yield 2.3;
     c.moveAsync({ pos: z.P(EXIT_X + 14, D + 70, 32), look: z.P(EXIT_X + 50, D + 230, -10), fov: 56 }, 8, 'out');
     yield 2.6;
-    game.ui.card('ELSEWHERE — THE REFORMATION APPROACH', { style: 'context', seconds: 5 }); // NEW (zone-note text)
-    yield 3.4;
+    game.ui.card('ELSEWHERE — THE REFORMATION APPROACH', { style: 'context', seconds: 5.5 }); // NEW (zone-note text)
+    yield 2.2;
+    // the screen goes dark under the card while the camera is still travelling
+    yield* z.fadeOut(1.4, 'black');
     // end state
     if (S.veil) S.veil.intensity = 0;
   }, { blendOut: 0 });
-  yield* z.exit('Z03', { fade: 'black', seconds: 1.4 });
+  yield* z.exit('Z03', { fade: 'black', seconds: 0.6 });
 }
 
 /** ZoneDef.update: the arm, the carriers' hands, Neon Veil's faint glow */
