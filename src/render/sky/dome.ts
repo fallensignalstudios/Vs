@@ -13,7 +13,8 @@ export interface SkyDome {
 
 export function createSkyDome(shared: SharedUniforms): SkyDome {
   const uniforms = {
-    uTime: shared.uTime, uFarZ: shared.uFarZ,
+    uTime: shared.uTime, uFarZ: shared.uFarZ, uDetail: shared.uDetail,
+    uCamRight: { value: new THREE.Vector3(1, 0, 0) }, uCamUp: { value: new THREE.Vector3(0, 1, 0) },
     uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite,
     uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
     uWoundR: { value: 0.1 }, uWoundVis: { value: 0 }, uWoundLens: { value: 0.55 }, uWoundDebris: { value: 1 },
@@ -38,7 +39,14 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
   mesh.name = 'sky:dome';
   mesh.frustumCulled = false;
   mesh.renderOrder = SKY_ORDER.dome;
-  mesh.onBeforeRender = viewportTracker(shared);
+  const track = viewportTracker(shared);
+  mesh.onBeforeRender = (renderer, scene, camera, geo, mat, group) => {
+    track.call(mesh, renderer, scene, camera, geo, mat, group);
+    // screen axes of the pass being drawn: the white remnant's streak stays level however the camera pitches
+    const e = camera.matrixWorld.elements;
+    uniforms.uCamRight.value.set(e[0], e[1], e[2]).normalize();
+    uniforms.uCamUp.value.set(e[4], e[5], e[6]).normalize();
+  };
   mesh.matrixAutoUpdate = false;
 
   return {

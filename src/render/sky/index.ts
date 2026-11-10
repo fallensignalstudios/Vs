@@ -10,6 +10,7 @@ import { createFleetBattle, type FleetBattle } from './battle';
 import { createCarrier, type Carrier } from './carrier';
 import { createSkyDome, type SkyDome } from './dome';
 import { createScenicFactory, type ScenicRuntime } from './scenic';
+import { ClipTipSlot } from './scenic/clipTower';
 import { SKY_PRESETS, SkyState, blendSkyStates, rotateSkyState } from './presets';
 import { applySharedState, createSharedUniforms, type SharedUniforms } from './shared';
 
@@ -23,6 +24,7 @@ function warnOnce(msg: string): void {
 }
 
 const finite = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+const DETAIL: Record<string, number> = { low: 0, medium: 1, high: 2, ultra: 2 };
 
 class SkySystemImpl implements SkySystem {
   readonly root = new THREE.Group();
@@ -41,6 +43,7 @@ class SkySystemImpl implements SkySystem {
   private readonly dome: SkyDome;
   private readonly battle: FleetBattle;
   private readonly impactDir = new THREE.Vector3();
+  private readonly tips = new ClipTipSlot();
   private readonly from = new SkyState();
   private readonly to = new SkyState();
   private readonly cur = new SkyState();
@@ -64,9 +67,9 @@ class SkySystemImpl implements SkySystem {
     const seed = typeof game.flags?.seed === 'number' ? game.flags.seed : 7283;
     this.battle = createFleetBattle(this.shared, seed);
     this.root.add(this.battle.object);
-    this.carrier = createCarrier(this.shared, seed);
-    this.root.add(this.carrier.object, this.carrier.sparks);
-    this.scenic = createScenicFactory(game, this.shared);
+    this.carrier = createCarrier(this.shared, seed, this.tips);
+    this.root.add(this.carrier.object, this.carrier.effects);
+    this.scenic = createScenicFactory(game, this.shared, this.tips);
     this.to.setFromDef(SKY_PRESETS.void);
     this.from.copy(this.to);
     this.cur.copy(this.to);
@@ -95,13 +98,27 @@ class SkySystemImpl implements SkySystem {
     this.blendT = seconds > 0 ? 0 : 1;
     this.battleTarget = this.to.battleIntensity;
     this.activityTarget = this.to.woundActivity;
+    // the carrier belongs to the Z05 sky; no other preset may inherit it (zones need not remember to hide it)
+    if (id !== 'battleCeiling') this.carrier.visible = false;
     if (seconds <= 0) {
       this.cur.copy(this.to);
       this.battleNow = this.battleTarget;
       this.activityNow = this.activityTarget;
+      // a snap is a cut: nothing fired under the previous sky survives it
+      this.battle.clear();
+      this.battleGlow.setRGB(0, 0, 0);
+      this.shared.uBattleGlow.value.setRGB(0, 0, 0);
       this.pushUniforms();
     }
     this.publishTargets();
+  }
+
+  reset(): void {
+    this.yaw = 0;
+    this.closedTarget = 0;
+    this.closedNow = 0;
+    this.carrier.reset();
+    this.setPreset('void');
   }
 
   setBattleIntensity(n: number): void { this.battleTarget = clamp01(finite(n, 0)); }
@@ -142,9 +159,12 @@ class SkySystemImpl implements SkySystem {
       this.closedNow = Math.abs(d) <= m ? this.closedTarget : this.closedNow + Math.sign(d) * m;
     }
     this.pushUniforms();
-    this.battle.update(step, this.view, this.battleNow, this.reduceFlash());
+    const soft = this.reduceFlash();
+    this.shared.uDetailMain.value = this.detail();
+    this.battle.update(step, this.view, this.battleNow, soft);
     this.battleGlow.copy(this.battle.glow);
-    this.carrier.update(step, this.view.keyDir);
+    this.shared.uBattleGlow.value.copy(this.battle.glow);
+    this.carrier.update(step, this.view.keyDir, soft);
     this.scenic.update(this.shared.uTime.value);
   }
 
@@ -154,6 +174,17 @@ class SkySystemImpl implements SkySystem {
     this.carrier.dispose();
     this.scenic.dispose();
     this.root.removeFromParent();
+  }
+
+  /** dome shading tier from the render quality profile (high when render-core is a stub) */
+  private detail(): number {
+    try {
+      const q = this.game.render?.quality;
+      const level = q && !isStub(q) ? q.level : 'high';
+      return typeof level === 'string' && level in DETAIL ? DETAIL[level] : 2;
+    } catch {
+      return 2;
+    }
   }
 
   private reduceFlash(): boolean {

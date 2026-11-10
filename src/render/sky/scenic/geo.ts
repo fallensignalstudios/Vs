@@ -164,6 +164,15 @@ export class GeoBuilder {
 
   quad(a: P3, b: P3, c: P3, d: P3): this { return this.poly([a, b, c, d]); }
 
+  /** A quad wound so that it faces `toward` (reveals, soffits, anything where "outside" is easier to name). */
+  quadFacing(a: P3, b: P3, c: P3, d: P3, toward: P3): this {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const dot = nx * (toward[0] - a[0]) + ny * (toward[1] - a[1]) + nz * (toward[2] - a[2]);
+    return dot >= 0 ? this.poly([a, b, c, d]) : this.poly([d, c, b, a]);
+  }
+
   /**
    * Axis-aligned box centred at (cx, cy, cz). `top` scales the +Y face about its centre ([x, z] or a number)
    * to make tapered blocks; `shift` slides the top face ([dx, dz]) to make raked / sheared blocks.

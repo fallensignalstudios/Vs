@@ -1,11 +1,16 @@
 /**
  * Sky dome shader: deep-space gradient, stable star field, nebula, the red remnant, the white remnant and
- * the Wound (true-black disc with lensing, orbiting debris and restrained violet movement).
+ * the Wound (true-black disc with lensing, orbiting angular debris and restrained violet movement).
  *
  * The vertex stage ignores camera translation, so the dome sits at infinity for ANY camera (main view, planar
  * reflection camera, PMREM cube faces) without having to follow anything on the CPU. It is pinned to the far
  * plane and drawn after the opaque scene with a depth test and no depth write, so interiors that hide the sky
- * pay nothing for this (fairly rich) fragment shader.
+ * pay nothing for it.
+ *
+ * COST. `uDetail` (0 low · 1 medium · 2 high/ultra, from QualityProfile; forced to 0 for small secondary targets)
+ * scales the noise budget. Worst-case value-noise evaluations per pixel (inside the Wound's halo AND the red
+ * nebula): low ≈ 14, medium ≈ 26, high ≈ 34 (the first version: ≈ 50 everywhere within 7 remnant radii).
+ * Each body is skipped outside its own cone: red nebula 4.6 radii, Wound 3.3 radii.
  */
 import { GLSL_DITHER, GLSL_HAZE, GLSL_NOISE } from './glsl';
 
@@ -24,6 +29,9 @@ precision highp float;
 varying vec3 vDir;
 
 uniform float uTime;
+uniform float uDetail;
+uniform vec3 uCamRight;
+uniform vec3 uCamUp;
 uniform float uWoundR;
 uniform float uWoundVis;
 uniform float uWoundLens;
@@ -47,10 +55,33 @@ ${GLSL_NOISE}
 ${GLSL_HAZE}
 ${GLSL_DITHER}
 
+// fbm with a runtime octave count (quality tiers share one program: no recompile when the profile changes)
+float fbmN(vec3 p, int oct) {
+  float a = 0.5, s = 0.0, n = 0.0;
+  for (int i = 0; i < 5; i++) {
+    if (i >= oct) break;
+    s += a * vnoise(p); n += a;
+    p = FBM_ROT * p * 2.03 + 17.1; a *= 0.5;
+  }
+  return s / n;
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Stars: one jittered star per 3D lattice cell that the unit sphere passes through. Radius is clamped to the
 // pixel footprint (energy conserving) so stars never shimmer when the camera turns; nothing depends on time.
+// Density is NOT uniform: a tilted band of crowded faint stars, cut by dust lanes, with sparse dark gulfs
+// either side — so the field has structure instead of reading as even snow.
 // ---------------------------------------------------------------------------------------------------------
+const vec3 STAR_POLE = vec3(0.3642, 0.7940, -0.4865);
+
+vec2 starDensity(vec3 d) {
+  float lat = dot(d, STAR_POLE);
+  float band = exp(-lat * lat * 13.0);
+  float clump = vnoise(d * 3.3 + 40.0);
+  float lane = uDetail > 0.5 ? smoothstep(0.30, 0.62, vnoise(d * vec3(6.0, 10.0, 6.0) + 11.0)) : 1.0;
+  return vec2(clamp(0.16 + 0.95 * clump * clump + 1.15 * band * lane, 0.0, 1.5), band * lane);
+}
+
 vec3 starLayer(vec3 d, float n, float px, float seed, float occupancy, float r0, float gamma) {
   vec3 c = floor(d * n);
   vec3 h = hash33(c + seed);
@@ -59,118 +90,141 @@ vec3 starLayer(vec3 d, float n, float px, float seed, float occupancy, float r0,
   vec3 sd = normalize(q);
   vec3 sp = sd * n - c - 0.5;
   float edge = 0.5 - max(abs(sp.x), max(abs(sp.y), abs(sp.z)));
-  float r = max(r0, px * 1.15);
+  float r = max(r0, px * 0.8);
   float w = clamp((edge - 2.3 * r * n) * 12.0, 0.0, 1.0);
   if (w <= 0.0) return vec3(0.0);
   vec3 dv = d - sd;
   float i = exp(-dot(dv, dv) / (r * r)) * (r0 * r0) / (r * r);
   float mag = pow(h.y, gamma);
-  vec3 warm = vec3(1.0, 0.80, 0.58), cool = vec3(0.66, 0.80, 1.0);
+  vec3 warm = vec3(1.0, 0.74, 0.50), cool = vec3(0.60, 0.76, 1.0);
   vec3 tint = mix(mix(warm, vec3(1.0), smoothstep(0.0, 0.45, h.z)), cool, smoothstep(0.55, 1.0, h.z));
   return tint * (i * mag * w);
 }
 
 vec3 starField(vec3 d, float px) {
+  vec2 dens = starDensity(d);
   vec3 s = vec3(0.0);
-  s += starLayer(d, 86.0, px, 3.0, 0.50, 0.00050, 6.0) * 7.0;
-  s += starLayer(d, 47.0, px, 11.0, 0.42, 0.00062, 5.0) * 9.0;
-  s += starLayer(d, 23.0, px, 23.0, 0.30, 0.00085, 4.0) * 11.0;
-  // a few bright stars with a soft glare
+  s += starLayer(d, 86.0, px, 3.0, 0.50 * dens.x, 0.00050, 7.5) * 11.0;
+  s += starLayer(d, 47.0, px, 11.0, 0.40 * dens.x, 0.00062, 6.5) * 14.0;
+  s += starLayer(d, 23.0, px, 23.0, 0.26 * dens.x, 0.00085, 5.5) * 17.0;
+  // unresolved stars of the band itself: a faint milky glow that the lanes cut through
+  s += vec3(0.020, 0.021, 0.027) * dens.y * dens.y;
+  // a few bright stars with a soft glare (much rarer than before; none of them rivals the white remnant)
   vec3 c = floor(d * 7.0);
   vec3 h = hash33(c + 71.0);
-  if (h.x < 0.20) {
+  if (h.x < 0.11) {
     vec3 sd = normalize(c + 0.5 + (hash33(c + 90.7) - 0.5) * 0.5);
     vec3 sp = sd * 7.0 - c - 0.5;
     float edge = 0.5 - max(abs(sp.x), max(abs(sp.y), abs(sp.z)));
     float w = clamp((edge - 0.16) * 10.0, 0.0, 1.0);
     vec3 dv = d - sd;
     float a2 = dot(dv, dv);
-    float r = max(0.0011, px * 1.2);
-    float core = exp(-a2 / (r * r)) * (0.0011 * 0.0011) / (r * r) * 14.0;
-    float glare = 0.0000016 / (a2 + 0.00003) * exp(-a2 / 0.00035);
-    vec3 tint = mix(vec3(1.0, 0.86, 0.70), vec3(0.74, 0.86, 1.0), h.z);
-    s += tint * (core + glare) * (0.35 + 0.65 * h.y) * w;
+    float r = max(0.0009, px * 0.9);
+    float core = exp(-a2 / (r * r)) * (0.0009 * 0.0009) / (r * r) * 16.0;
+    float glare = 0.0000009 / (a2 + 0.00002) * exp(-a2 / 0.00022);
+    vec3 tint = mix(vec3(1.0, 0.80, 0.60), vec3(0.68, 0.82, 1.0), h.z);
+    s += tint * (core + glare) * (0.12 + 0.88 * h.y * h.y) * w;
   }
   return s;
 }
 
 vec3 nebula(vec3 d) {
   vec3 p = d * 1.9;
-  vec3 w = vec3(vnoise(p * 1.3 + 3.1), vnoise(p * 1.3 + 41.7), vnoise(p * 1.3 + 77.3)) - 0.5;
-  float n = fbm5(p + w * 1.5);
+  vec3 w = vec3(0.0);
+  float n, n2;
+  if (uDetail > 0.5) {
+    w = vec3(vnoise(p * 1.3 + 3.1), vnoise(p * 1.3 + 41.7), vnoise(p * 1.3 + 77.3)) - 0.5;
+    n = fbmN(p + w * 1.5, uDetail > 1.5 ? 5 : 4);
+    n2 = fbmN(p * 2.9 - w * 1.2 + 9.0, uDetail > 1.5 ? 3 : 2);
+  } else {
+    n = fbmN(p, 3);
+    n2 = vnoise(p * 2.9 + 9.0);
+  }
   float m = smoothstep(0.40, 0.82, n);
-  float n2 = fbm3(p * 2.9 - w * 1.2 + 9.0);
   vec3 c = mix(vec3(0.030, 0.036, 0.062), vec3(0.070, 0.056, 0.086), n2);
   c *= m * m * (0.3 + 0.7 * smoothstep(0.28, 0.72, n2));
   return c;
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Red remnant: a dying shell — turbulent sphere with an HDR limb, corona, and a billowing nebula mass.
+// Red remnant: a dying shell being drawn into the Wound — a sphere lit like a crescent (hot limb on the Wound
+// side, dark terminator on the far side), sunk into a billowing nebula mass that partly veils its own disc.
 // ---------------------------------------------------------------------------------------------------------
 // rgb = emitted light, a = how much of the star field behind it is hidden
 vec4 redRemnant(vec3 d, float px) {
   float cr = dot(d, uRedDir);
   float ang = acos(clamp(cr, -1.0, 1.0));
   float r = ang / uRedR;
-  if (r > 7.0) return vec4(0.0);
-  // which way is the Wound from here: the mass and the bright limb lean toward it (being drawn in)
+  if (r > 4.6) return vec4(0.0);
+  // which way is the Wound from here: the mass and the bright limb lean toward it
   vec3 er = d - uRedDir * cr;
   vec3 en = er / max(length(er), 1e-5);
   vec3 tw = uWoundDir - uRedDir * dot(uWoundDir, uRedDir);
-  float side = dot(en, tw / max(length(tw), 1e-4));
+  vec3 twn = tw / max(length(tw), 1e-4);
+  float side = dot(en, twn);
+  int big = uDetail > 1.5 ? 5 : (uDetail > 0.5 ? 4 : 3);
+  int small = uDetail > 1.5 ? 3 : 2;
 
   float f = 1.1 / uRedR;
   vec3 q = d * f + vec3(0.0, uTime * 0.003, 0.0);
-  vec3 w = vec3(vnoise(q * 0.55 + 11.0), vnoise(q * 0.55 + 37.0), vnoise(q * 0.55 + 71.0)) - 0.5;
-  float n1 = fbm5(q + w * 2.4);
-  float billow = 1.0 - abs(2.0 * fbm3(q * 1.9 - w * 1.7 + 5.0) - 1.0);
-  float fall = exp(-max(r - 0.9, 0.0) * (0.34 - 0.10 * max(side, 0.0))) * (1.0 - smoothstep(3.6, 7.0, r));
+  vec3 w = uDetail > 0.5
+    ? vec3(vnoise(q * 0.55 + 11.0), vnoise(q * 0.55 + 37.0), vnoise(q * 0.55 + 71.0)) - 0.5
+    : vec3(vnoise(q * 0.55 + 11.0) - 0.5);
+  float n1 = fbmN(q + w * 2.4, big);
+  float billow = 1.0 - abs(2.0 * fbmN(q * 1.9 - w * 1.7 + 5.0, small) - 1.0);
+  // the mass thins with distance and is dragged out into a tongue toward the Wound
+  float reach = 0.42 - 0.17 * max(side, 0.0);
+  float fall = exp(-max(r - 0.85, 0.0) * reach) * (1.0 - smoothstep(2.9, 4.6, r));
   float dens = smoothstep(0.47 - 0.22 * fall, 0.80 - 0.18 * fall, n1 * 0.75 + billow * 0.25) * fall;
   float heat = dens * (0.3 + 0.7 * billow) * fall;
   vec3 col = mix(vec3(0.10, 0.004, 0.004), vec3(0.50, 0.024, 0.012), smoothstep(0.05, 0.5, heat));
   col = mix(col, vec3(1.5, 0.14, 0.04), smoothstep(0.5, 1.0, heat) * 0.85);
   col *= dens * (0.3 + 0.7 * billow) * 0.85;
   // dark dust lanes cut through the mass
-  col *= 0.30 + 0.70 * smoothstep(0.30, 0.56, fbm3(q * 0.9 + w + 31.0));
-  // inner corona
-  col += vec3(1.2, 0.085, 0.03) * exp(-max(r - 1.0, 0.0) * 2.8) * 0.22 * (0.5 + n1);
-  // the sphere itself: banded plasma, bright veins, an HDR limb leaning toward the Wound
+  float lanes = uDetail > 1.5 ? fbm3(q * 0.9 + w + 31.0) : vnoise(q * 0.9 + w + 31.0);
+  col *= 0.30 + 0.70 * smoothstep(0.30, 0.56, lanes);
+  // inner corona, brighter on the side that faces the Wound
+  col += vec3(1.2, 0.085, 0.03) * exp(-max(r - 1.0, 0.0) * 2.6) * (0.10 + 0.20 * smoothstep(-0.6, 0.8, side)) * (0.5 + n1);
+
   float aa = max(px / uRedR, 0.004);
   float disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
+  float cover = min(dens * 1.1, 0.8);
   if (disc > 0.0) {
+    // a sphere: lit from the Wound's side and slightly from the viewer, so it reads as a crescent
     float z = sqrt(max(1.0 - r * r, 0.0));
+    float lambert = clamp(side * r * 0.90 + z * 0.36 + 0.12, 0.0, 1.0);
     vec3 sq = d * (f * 2.6) + w * 2.6 + vec3(uTime * 0.005, 0.0, 0.0);
-    float pl = fbm5(sq);
-    float veins = pow(1.0 - abs(2.0 * fbm3(sq * 2.1 + pl * 2.0) - 1.0), 4.0);
+    float pl = fbmN(sq, big);
+    float veins = pow(1.0 - abs(2.0 * fbmN(sq * 2.1 + pl * 2.0, small) - 1.0), 4.0);
     float limb = pow(1.0 - z, 3.0);
-    vec3 surf = mix(vec3(0.035, 0.0015, 0.0015), vec3(0.42, 0.020, 0.008), smoothstep(0.25, 0.8, pl));
+    vec3 surf = mix(vec3(0.030, 0.0012, 0.0012), vec3(0.42, 0.020, 0.008), smoothstep(0.25, 0.8, pl));
     surf += vec3(1.25, 0.085, 0.022) * veins * smoothstep(0.35, 0.8, pl);
-    surf += vec3(2.8, 0.26, 0.05) * limb * (0.25 + 0.75 * smoothstep(-0.4, 0.9, side));
-    col = mix(col, surf + col * 0.25, disc);
+    surf *= 0.06 + 1.25 * lambert * lambert;
+    surf += vec3(3.0, 0.27, 0.05) * limb * smoothstep(-0.25, 0.85, side);
+    // its own nebula drifts in front of the far (dark) side, so the edge there is lost in the mass
+    float veil = clamp(dens * 1.5 * smoothstep(0.5, -0.7, side), 0.0, 0.85);
+    col = mix(col, surf * (1.0 - veil) + col * (0.25 + 0.75 * veil), disc);
+    cover = max(cover, disc);
   }
-  return vec4(col, max(disc, min(dens * 1.1, 0.8)));
+  return vec4(col, cover);
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// White remnant: small, hard, very bright, with a clean glare (no noise anywhere near it).
+// White remnant: small, hard, very bright — a resolved disc (never a point), with a clean glare and a hairline
+// streak that stays level on screen. No noise anywhere near it.
 // ---------------------------------------------------------------------------------------------------------
 vec3 whiteRemnant(vec3 d, float px) {
   vec3 dv = d - uWhiteDir;
-  float a2 = dot(dv, dv);
-  float ang = sqrt(a2);
-  float r0 = max(uWhiteR, px * 1.25);
+  float ang = length(dv);
+  float r0 = max(uWhiteR, px * 1.5);
   float comp = (uWhiteR * uWhiteR) / (r0 * r0);
-  float core = (1.0 - smoothstep(r0 * 0.82, r0 * 1.12, ang)) * 22.0 * max(comp, 0.25);
-  float glare = 0.9 * pow(uWhiteR / (ang + uWhiteR), 2.6) + 0.022 * pow(uWhiteR / (ang + uWhiteR), 1.2);
-  // hairline anamorphic streak + faint vertical counterpart
-  vec3 up = vec3(0.0, 1.0, 0.0);
-  vec3 rt = normalize(cross(up, uWhiteDir));
-  vec3 vt = cross(uWhiteDir, rt);
-  float u = dot(dv, rt), v = dot(dv, vt);
-  float lw = max(uWhiteR * 0.22, px * 0.9);
-  float streak = exp(-abs(v) / lw) * exp(-abs(u) / (uWhiteR * 16.0)) * 0.30;
-  streak += exp(-abs(u) / lw) * exp(-abs(v) / (uWhiteR * 6.0)) * 0.12;
+  float core = (1.0 - smoothstep(r0 * 0.88, r0 * 1.06, ang)) * 24.0 * max(comp, 0.3);
+  float g = uWhiteR / (ang + uWhiteR);
+  float glare = 0.50 * pow(g, 2.3) + 0.032 * pow(g, 1.15);
+  float u = dot(dv, uCamRight), v = dot(dv, uCamUp);
+  float lw = max(uWhiteR * 0.14, px * 0.9);
+  float streak = exp(-abs(v) / lw) * exp(-abs(u) / (uWhiteR * 24.0)) * 0.55;
+  streak += exp(-abs(u) / lw) * exp(-abs(v) / (uWhiteR * 7.0)) * 0.16;
   return vec3(0.80, 0.90, 1.0) * (core + glare + streak);
 }
 
@@ -179,6 +233,53 @@ vec3 whiteRemnant(vec3 d, float px) {
 // ---------------------------------------------------------------------------------------------------------
 float debrisField(vec3 p, float seed) {
   return 0.58 * vnoise(p + seed) + 0.30 * vnoise(p * 2.6 + seed * 1.7) + 0.12 * vnoise(p * 6.1 + seed * 0.3);
+}
+
+// One angular rock per lattice cell in (angle, radius) space around the Wound: an irregular five-sided
+// silhouette (never a round blob), with flat facets lit from the white remnant's side and a thin bright edge.
+// q = cell coordinates, asp = cell width / height, fill = chance that a cell holds a rock (also sets its size),
+// L = direction toward the white remnant in (tangential, radial) coordinates. Returns (coverage, facet light).
+vec2 rock(vec2 q, float asp, float fill, float seed, float na, float aa, vec2 L) {
+  vec2 c = floor(q);
+  vec3 h = hash33(vec3(mod(c.x, na), c.y, seed));
+  if (h.z > fill) return vec2(0.0);
+  float size = 0.07 + 0.37 * pow(1.0 - h.z / fill, 3.0); // many small, few large
+  vec2 r = q - (c + 0.5 + (h.xy - 0.5) * (1.0 - 2.0 * size));
+  r.x *= asp;
+  float a = h.x * 6.2832 + h.y * 40.0;
+  float ca = cos(a), sa = sin(a);
+  vec2 rr = vec2(ca * r.x + sa * r.y, -sa * r.x + ca * r.y);
+  float dmax = -1.0;
+  vec2 nmax = vec2(1.0, 0.0);
+  float k = fract(h.x * 91.7);
+  float e0 = dot(rr, vec2(1.0, 0.0)) / (0.62 + 0.38 * k);
+  float e1 = dot(rr, vec2(0.3746, 0.9272)) / (0.62 + 0.38 * fract(k * 7.3));
+  float e2 = dot(rr, vec2(-0.7660, 0.6428)) / (0.62 + 0.38 * fract(k * 13.1));
+  float e3 = dot(rr, vec2(-0.8192, -0.5736)) / (0.62 + 0.38 * fract(k * 23.9));
+  float e4 = dot(rr, vec2(0.3420, -0.9397)) / (0.62 + 0.38 * fract(k * 31.7));
+  if (e0 > dmax) { dmax = e0; nmax = vec2(1.0, 0.0); }
+  if (e1 > dmax) { dmax = e1; nmax = vec2(0.3746, 0.9272); }
+  if (e2 > dmax) { dmax = e2; nmax = vec2(-0.7660, 0.6428); }
+  if (e3 > dmax) { dmax = e3; nmax = vec2(-0.8192, -0.5736); }
+  if (e4 > dmax) { dmax = e4; nmax = vec2(0.3420, -0.9397); }
+  float m = 1.0 - smoothstep(size - aa, size + aa, dmax);
+  vec2 n2 = vec2(ca * nmax.x - sa * nmax.y, sa * nmax.x + ca * nmax.y);
+  float lam = max(dot(n2, L), 0.0);
+  float edge = smoothstep(size - 3.5 * aa - 0.03, size - aa, dmax);
+  return vec2(m, m * lam * (0.22 + 0.78 * edge));
+}
+
+// Two interleaved lattices per band so rocks overlap and never betray the grid.
+vec2 rockBand(float turn, float rn, float na, float nr, float seed, float fill, float px, vec2 L, bool twice) {
+  vec2 q = vec2(turn * na, rn * nr);
+  float asp = 6.2832 * rn * nr / na;
+  float aa = clamp(px * nr / uWoundR * 0.9, 0.004, 0.4);
+  vec2 a = rock(q, asp, fill, seed, na, aa, L);
+  if (twice) {
+    vec2 b = rock(q + vec2(0.5, 0.37), asp, fill * 0.8, seed + 31.0, na, aa, L);
+    a = vec2(max(a.x, b.x), mix(a.y, b.y, step(a.x, b.x)));
+  }
+  return a;
 }
 
 vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
@@ -196,7 +297,7 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   if (rn < 1.0 + 2.0 * pxn && rn > 0.42) {
     float depth = smoothstep(0.42, 1.0, rn);
     vec3 qi = rotAxis(d, W, -uTime * 0.010 - 2.4 * rn);
-    float m = fbm3(qi * (2.2 / R) + W * (uTime * 0.018));
+    float m = uDetail > 0.5 ? fbm3(qi * (2.2 / R) + W * (uTime * 0.018)) : vnoise(qi * (2.2 / R) + W * (uTime * 0.018));
     float veil = smoothstep(0.50, 0.86, m) * depth * depth;
     inner = vec3(0.085, 0.028, 0.22) * veil * act * 0.42;
     float surge = vnoise(qi * (1.1 / R) + vec3(uTime * 0.11, 3.0, -uTime * 0.07));
@@ -212,27 +313,45 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   vec3 toWhite = tw / max(length(tw), 1e-4);
   float sr = max(dot(e, toRed), 0.0);
   float sw = max(dot(e, toWhite), 0.0);
+  // polar frame: angle measured from the red remnant's bearing, tangent = direction of increasing angle
+  vec3 tang = cross(W, e);
+  float theta = atan(dot(e, cross(W, toRed)), dot(e, toRed));
+  float thetaW = atan(dot(toWhite, cross(W, toRed)), dot(toWhite, toRed));
+  vec2 L = normalize(vec2(dot(toWhite, tang), dot(toWhite, e)) + vec2(1e-4, 0.0));
+
+  // --- two streams of debris being drawn in: a long, heavy one from the red remnant (it spirals as it falls)
+  //     and a thin one crossing in front of the white remnant
+  float lr = log(max(rn, 0.5));
+  float dr = theta + 0.50 * lr;
+  dr = atan(sin(dr), cos(dr));
+  float streamR = exp(-pow(dr * rn / 0.30, 2.0)) * smoothstep(0.95, 1.25, rn) * (1.0 - smoothstep(2.5, 3.3, rn));
+  float dw = theta - thetaW - 0.35 * lr;
+  dw = atan(sin(dw), cos(dw));
+  float streamW = exp(-pow(dw * rn / 0.13, 2.0)) * smoothstep(1.05, 1.4, rn) * (1.0 - smoothstep(2.4, 3.2, rn));
+  float stream = max(streamR, 0.7 * streamW);
 
   // --- swirled dust halo, lit faintly from each remnant's side
   float twist = 1.7 * log(max(rn, 0.35));
   vec3 q = rotAxis(d, W, twist + uTime * 0.0045);
   float fq = 3.0 / R;
-  float dust = fbm5(q * fq + W * (uTime * 0.012));
+  float dust = fbmN(q * fq + W * (uTime * 0.012), uDetail > 1.5 ? 5 : (uDetail > 0.5 ? 4 : 3));
   float ring = exp(-pow(max(rn - 1.0, 0.0) / 0.62, 1.25));
-  float halo = ring * smoothstep(0.28, 0.80, dust) * uWoundHalo * outside;
-  vec3 haloCol = vec3(0.034, 0.030, 0.050) + vec3(0.110, 0.016, 0.010) * sr * sr + vec3(0.040, 0.048, 0.062) * sw * sw;
+  float halo = (ring * smoothstep(0.28, 0.80, dust) + 0.55 * stream * (0.35 + dust)) * uWoundHalo * outside;
+  vec3 haloCol = vec3(0.034, 0.030, 0.050) + vec3(0.110, 0.016, 0.010) * (sr * sr + streamR) + vec3(0.040, 0.048, 0.062) * (sw * sw + streamW);
   col += haloCol * halo * 2.4;
 
   // --- violet: thin filaments riding the swirl, alive only in a few drifting arcs, slow swell (never a strobe)
   float v1 = vnoise(q * fq * 1.6 + vec3(0.0, uTime * 0.045, 3.0));
-  float v2 = vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0));
+  float v2 = uDetail > 0.5 ? vnoise(q * fq * 3.7 + vec3(7.0, -uTime * 0.06, 0.0)) : v1;
   float ridge = 1.0 - abs(2.0 * (0.64 * v1 + 0.36 * v2) - 1.0);
-  float fil = pow(ridge, 16.0);
-  float gate = smoothstep(0.50, 0.78, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
-  float swell = 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * vnoise(q * (0.9 / R) + 4.0));
+  float fil = pow(ridge, 14.0);
+  float gate = smoothstep(0.46, 0.76, vnoise(q * (1.3 / R) + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
+  float swell = uDetail > 0.5 ? 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * vnoise(q * (0.9 / R) + 4.0)) : 0.75;
   float band = smoothstep(0.80, 1.0, rn) * exp(-max(rn - 1.0, 0.0) / 0.34);
-  vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * act * 2.6;
-  violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * act * 0.42;
+  // sub-linear in activity so the default mid settings still show a few live threads
+  float vio = act * (0.55 + 0.45 * act) + 0.5 * sqrt(act) * (1.0 - act);
+  vec3 violet = vec3(0.50, 0.20, 1.0) * fil * gate * swell * band * vio * 3.0;
+  violet += vec3(0.12, 0.035, 0.30) * gate * band * dust * vio * 0.5;
   col += violet * outside;
 
   col = mix(inner, col, outside);
@@ -244,46 +363,38 @@ vec3 woundComposite(vec3 col, vec3 d, float th, vec3 e, float px) {
   vec3 bent = vec3(0.50, 0.56, 0.74) * (0.035 + 0.30 * pow(sw, 6.0)) + vec3(0.9, 0.10, 0.04) * 0.22 * pow(sr, 6.0);
   col += bent * line * (1.0 - uClosed);
 
-  // --- orbiting dark debris: three bands at different angular speeds (inner faster) → differential motion
-  float stream = pow(sr, 5.0);
+  // --- orbiting dark debris. A ragged veil of pulverised matter hugs the rim; around and beyond it, three bands
+  //     of angular rocks orbit at different speeds (inner faster) → differential motion and parallax.
   float occ = 0.0;
   float lit = 0.0;
-  {
-    // ragged mass hugging the rim
+  if (uDetail > 0.5) {
     vec3 p = rotAxis(d, W, uTime * 0.0060 + 0.6) * (5.2 / R);
     float n = debrisField(p, 1.7);
-    float thr = mix(0.36, 0.80, smoothstep(0.92, 1.75 + 0.5 * stream, rn));
+    float thr = mix(0.38, 0.82, smoothstep(0.92, 1.65 + 0.5 * streamR, rn));
     float aa = clamp(5.2 / R * px * 1.4, 0.02, 0.3);
-    float w = smoothstep(0.80, 0.94, rn) * (1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn))) * (1.0 - smoothstep(1.85, 2.2, rn));
-    float mk = w * smoothstep(thr - aa, thr + aa, n);
-    float n2 = debrisField(p + toWhite * 0.22, 1.7);
-    lit += mk * clamp((n - n2) * 5.0, 0.0, 1.0) * (1.0 - smoothstep(thr + 0.02, thr + 0.16, n));
-    occ = max(occ, mk);
+    float w = smoothstep(0.80, 0.94, rn) * (1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn))) * (1.0 - smoothstep(1.7, 2.1, rn));
+    occ = w * smoothstep(thr - aa, thr + aa, n);
+  }
+  float turn = theta / 6.2832 + 0.5;
+  float open = 1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn));
+  {
+    float fill = (0.42 * smoothstep(0.86, 1.02, rn) * (1.0 - smoothstep(1.25, 1.9, rn)) + 0.50 * stream) * open;
+    vec2 rk = rockBand(turn + uTime * 0.00095, rn, 22.0, 7.0, 3.0, fill, px, L, uDetail > 0.5);
+    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
+  }
+  if (uDetail > 0.5) {
+    float fill = (0.30 * smoothstep(0.98, 1.15, rn) * (1.0 - smoothstep(1.7, 2.5, rn)) + 0.55 * stream) * open;
+    vec2 rk = rockBand(turn + uTime * 0.00060 + 0.31, rn, 46.0, 15.0, 9.0, fill, px, L, uDetail > 1.5);
+    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }
   {
-    // mid chunks
-    vec3 p = rotAxis(d, W, uTime * 0.0038 + 2.1) * (11.5 / R);
-    float n = debrisField(p, 9.2);
-    float thr = mix(0.60, 0.84, smoothstep(1.0, 2.3 + 0.4 * stream, rn)) - 0.05 * stream;
-    float aa = clamp(11.5 / R * px * 1.4, 0.02, 0.3);
-    float w = smoothstep(0.95 + 0.12 * uClosed, 1.12 + 0.16 * uClosed, rn) * (1.0 - smoothstep(2.0 - 0.15 * stream, 2.6 - 0.5 * stream, rn));
-    float mk = w * smoothstep(thr - aa, thr + aa, n);
-    float n2 = debrisField(p + toWhite * 0.25, 9.2);
-    lit += mk * clamp((n - n2) * 5.0, 0.0, 1.0) * (1.0 - smoothstep(thr + 0.02, thr + 0.14, n));
-    occ = max(occ, mk);
-  }
-  {
-    // far flecks
-    vec3 p = rotAxis(d, W, uTime * 0.0022 + 4.4) * (25.0 / R);
-    float n = debrisField(p, 23.9);
-    float thr = mix(0.70, 0.88, smoothstep(1.2, 2.8 + 0.3 * stream, rn)) - 0.04 * stream;
-    float aa = clamp(25.0 / R * px * 1.4, 0.02, 0.3);
-    float w = smoothstep(1.05, 1.3, rn) * (1.0 - smoothstep(2.2 - 0.5 * stream, 3.0 - 1.0 * stream, rn));
-    occ = max(occ, w * smoothstep(thr - aa, thr + aa, n));
+    float fill = 0.17 * smoothstep(1.05, 1.3, rn) * (1.0 - smoothstep(2.0, 3.0, rn)) + 0.60 * stream;
+    vec2 rk = rockBand(turn + uTime * 0.00035 + 0.67, rn, 96.0, 34.0, 23.0, fill, px, L, uDetail > 1.5);
+    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }
   occ *= uWoundDebris;
   col *= 1.0 - occ;
-  col += vec3(0.11, 0.125, 0.15) * lit * uWoundDebris * (0.25 + 0.75 * sw) * 0.5;
+  col += (vec3(0.150, 0.165, 0.200) * (0.2 + 0.8 * sw) + vec3(0.20, 0.03, 0.015) * sr * sr) * lit * uWoundDebris;
 
   // --- closed: the torn edge has receded and a thin steady gold rim seals the boundary
   vec3 gold = vec3(1.0, 0.64, 0.24);
@@ -316,9 +427,9 @@ void main() {
   bool buried = uGround > 0.999 && d.y < -0.04;
   bool hidden = buried || (uWoundVis > 0.999 && rn < 0.97);
   if (!hidden) {
-    col += nebula(dl) * uNebula;
+    if (uNebula > 0.01) col += nebula(dl) * uNebula;
     vec4 red = uRedVis > 0.002 ? redRemnant(dl, pxl) * uRedVis : vec4(0.0);
-    col += starField(dl, pxl) * uStars * (1.0 - red.a);
+    if (uStars > 0.01) col += starField(dl, pxl) * uStars * (1.0 - red.a);
     col += red.rgb;
   }
   if (uWoundVis > 0.002 && !buried) col = woundComposite(col, d, th, e, px);

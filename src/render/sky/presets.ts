@@ -54,7 +54,7 @@ export function dirFromAzEl(az: number, el: number, out = new THREE.Vector3()): 
 const D = (o: Partial<SkyPresetDef> & Pick<SkyPresetDef, 'key'>): SkyPresetDef => ({
   wound: { at: [0, 12], radius: 6, vis: 0, lens: 0.55, debris: 1, halo: 1, activity: 0.3 },
   red: { at: [-38, 16], radius: 4, vis: 0 },
-  white: { at: [34, 14], radius: 0.16, vis: 0 },
+  white: { at: [34, 14], radius: 0.24, vis: 0 },
   stars: 1, nebula: 0.6,
   zenith: 0x010207, horizon: 0x05060c, haze: 0x0b0b12, hazeAmt: 0, hazeFall: 9, hazeRed: 0x000000, hazeWhite: 0x000000,
   ground: 0, gain: 1, scenicHaze: 0.00055, scenicAmbient: 0.5,
@@ -73,10 +73,10 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   crashRib: D({
     wound: { at: [0, 21], radius: 2.3, vis: 1, lens: 0.5, debris: 0.55, halo: 0.7, activity: 0.35 },
     red: { at: [-27, 31], radius: 2.1, vis: 0.9 },
-    white: { at: [23, 27], radius: 0.11, vis: 0.9 },
+    white: { at: [23, 27], radius: 0.20, vis: 0.9 },
     stars: 0.9, nebula: 0.7, zenith: 0x010207, horizon: 0x07070f, haze: 0x12111a, hazeAmt: 0.55, hazeFall: 7,
     hazeRed: 0x2a0806, hazeWhite: 0x10141c, ground: 1, scenicHaze: 0.0009, scenicAmbient: 0.8,
-    battle: { at: [38, 44], spread: 34, fleet: 1, intensity: 0.6 },
+    battle: { at: [56, 50], spread: 26, fleet: 1, intensity: 0.6 },
     key: { at: [23, 38], color: 0xe6edff, intensity: 2.2 },
     fill: { at: [-27, 31], color: 0xff5a3c, intensity: 0.35 },
   }),
@@ -94,11 +94,12 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   battleCeiling: D({
     wound: { at: [0, 36], radius: 4.6, vis: 1, lens: 0.55, debris: 0.8, halo: 0.9, activity: 0.5 },
     red: { at: [-64, 34], radius: 3.6, vis: 1 },
-    white: { at: [58, 44], radius: 0.13, vis: 1 },
+    white: { at: [58, 44], radius: 0.24, vis: 1 },
     stars: 1, nebula: 0.85, zenith: 0x020309, horizon: 0x080810, haze: 0x15131c, hazeAmt: 0.5, hazeFall: 6,
     hazeRed: 0x2c0a07, hazeWhite: 0x11161f, ground: 1, scenicHaze: 0.0012, scenicAmbient: 0.75,
     battle: { at: [8, 68], spread: 42, fleet: 1, intensity: 0.85 },
-    key: { at: [58, 62], color: 0xfff0dd, intensity: 1.8 },
+    // the key sits high over the carrier's pass, so the hull's shadow crosses the atrium as it clips the tower
+    key: { at: [62, 74], color: 0xfff0dd, intensity: 1.8 },
     fill: { at: [-64, 34], color: 0xff5a3c, intensity: 0.3 },
   }),
   // Z06–Z08: enclosed. Only muffled impacts leak in.
@@ -112,7 +113,7 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   woundVista: D({
     wound: { at: [0, 8.5], radius: 14, vis: 1, lens: 0.6, debris: 1, halo: 1, activity: 0.45 },
     red: { at: [-37, 16], radius: 7.4, vis: 1 },
-    white: { at: [33, 11], radius: 0.17, vis: 1 },
+    white: { at: [33, 11], radius: 0.30, vis: 1 },
     stars: 1, nebula: 1, zenith: 0x010207, horizon: 0x06060d, haze: 0x2b2c38, hazeAmt: 0.8, hazeFall: 15,
     hazeRed: 0x3a0c08, hazeWhite: 0x1a2028, ground: 1, scenicHaze: 0.00042, scenicAmbient: 1.0,
     battle: { at: [62, 30], spread: 26, fleet: 0.6, intensity: 0.15 },
@@ -129,7 +130,7 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   observation: D({
     wound: { at: [0, 12], radius: 9, vis: 1, lens: 0.6, debris: 0.9, halo: 0.9, activity: 0.25 },
     red: { at: [-40, 17], radius: 5.2, vis: 1 },
-    white: { at: [36, 15], radius: 0.15, vis: 1 },
+    white: { at: [36, 15], radius: 0.28, vis: 1 },
     stars: 1, nebula: 0.9, zenith: 0x010207, horizon: 0x05050b, haze: 0x13131a, hazeAmt: 0.45, hazeFall: 14,
     hazeRed: 0x2e0a07, hazeWhite: 0x141a22, ground: 1, scenicHaze: 0.0005,
     battle: { at: [70, 26], spread: 24, fleet: 0.7, intensity: 0.08 },
@@ -140,7 +141,7 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   hangar: D({
     wound: { at: [0, 10], radius: 5.5, vis: 1, lens: 0.55, debris: 0.8, halo: 0.8, activity: 0.15 },
     red: { at: [-52, 15], radius: 3.4, vis: 1 },
-    white: { at: [46, 13], radius: 0.13, vis: 1 },
+    white: { at: [46, 13], radius: 0.22, vis: 1 },
     stars: 1, nebula: 0.8, zenith: 0x010207, horizon: 0x05060c, haze: 0x111219, hazeAmt: 0.35, hazeFall: 12,
     hazeRed: 0x220806, hazeWhite: 0x12171f, ground: 0.6, scenicHaze: 0.0006, scenicAmbient: 0.9,
     battle: { at: [0, 20], spread: 50, fleet: 1, intensity: 0 },

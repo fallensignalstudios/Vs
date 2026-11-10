@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
+import { RAY_SHOT, RAY_SIGHT } from '@/core/api';
 import type { CameraFollowTarget, PhysicsWorld, Vec3Like } from '@/core/api';
 import { DEG } from '@/core/mathx';
 import { nullObject } from '@/core/stub';
 import { FOLLOW, orbitPitchFor } from './follow';
-import { DT, camDir, setup } from './testkit';
+import { DT, REST, armLength, camDir, setup } from './testkit';
 
 describe('conventions', () => {
   it('yaw 0 looks toward −Z; positive yaw turns left; positive pitch looks up', () => {
@@ -56,11 +57,21 @@ describe('follow', () => {
     rig.pitch = 0;
     tick(30);
     const p = rig.camera.position;
-    expect(p.x).toBeCloseTo(FOLLOW.shoulder, 4);
+    expect(FOLLOW.distance).toBe(3.4);
+    expect(FOLLOW.shoulder).toBe(0.55);
+    expect(armLength(rig)).toBeCloseTo(3.4, 4); // the arm is 3.4 m from the shoulder anchor…
+    expect(p.x).toBeCloseTo(REST.x, 4); // …toed out so the hero sits left of centre, not on it
+    expect(p.x).toBeCloseTo(FOLLOW.shoulder + FOLLOW.lookOffset, 4);
     expect(p.y).toBeCloseTo(1.55, 4);
-    expect(p.z).toBeCloseTo(FOLLOW.distance, 4);
+    expect(p.z).toBeCloseTo(REST.z, 4);
     expect(rig.camera.fov).toBeCloseTo(62, 4);
-    expect(rig.targetDistance).toBeCloseTo(Math.hypot(FOLLOW.shoulder, FOLLOW.distance), 4);
+    expect(rig.targetDistance).toBeCloseTo(Math.hypot(REST.x, REST.z), 4);
+    expect(camDir(rig).x).toBeCloseTo(0, 6); // the VIEW still looks straight along yaw
+    const hero = { x: 0, y: 0 };
+    expect(rig.worldToScreen({ x: 0, y: 1.2, z: 0 }, hero)).toBe(true);
+    expect(hero.x).toBeGreaterThan(1280 * 0.3); // between the left third and the centre
+    expect(hero.x).toBeLessThan(1280 * 0.42);
+    expect(rig.playerFade).toBe(1);
     expect(rig.mode).toBe('follow');
   });
 
@@ -90,18 +101,27 @@ describe('follow', () => {
     rig.setTarget(target);
     rig.snapBehind(0);
     for (const deg of [-55, -20, 0, 8]) expect(orbitPitchFor(deg * DEG)).toBe(deg * DEG);
-    expect(orbitPitchFor(70 * DEG)).toBeLessThanOrEqual(FOLLOW.orbitMax);
-    expect(orbitPitchFor(30 * DEG)).toBeGreaterThan(orbitPitchFor(20 * DEG)); // monotonic, no dead zone
-    rig.pitch = 70 * DEG;
-    tick(30);
-    expect(rig.camera.position.y).toBeGreaterThanOrEqual(FOLLOW.floorClearance - 1e-6);
-    expect(rig.targetDistance).toBeGreaterThan(2.6); // not squeezed against the player
-    expect(camDir(rig).y).toBeCloseTo(Math.sin(70 * DEG), 5); // the view still reaches the full pitch
-    rig.pitch = 45 * DEG;
-    tick(30);
+    expect(orbitPitchFor(30 * DEG)).toBeLessThanOrEqual(FOLLOW.orbitMax); // the body stops sinking…
+    let prev = orbitPitchFor(-56 * DEG);
+    for (let deg = -55; deg <= 70; deg += 1) {
+      const o = orbitPitchFor(deg * DEG);
+      expect(o).toBeGreaterThan(prev); // monotonic, no dead zone, no kink
+      expect(o - prev).toBeLessThan(1.6 * DEG);
+      prev = o;
+    }
     const head = { x: 0, y: 0 };
-    expect(rig.worldToScreen({ x: 0, y: 1.8, z: 0 }, head)).toBe(true);
-    expect(head.y).toBeGreaterThan(720 * 0.8); // head near the bottom edge: the sky is clear
+    for (const deg of [30, 45, 60, 70]) {
+      rig.pitch = deg * DEG;
+      tick(30);
+      expect(rig.camera.position.y).toBeGreaterThanOrEqual(FOLLOW.floorClearance - 1e-6);
+      expect(camDir(rig).y).toBeCloseTo(Math.sin(deg * DEG), 5); // the view still reaches the full pitch
+      // …and the helmet stays in the bottom of the frame all the way up: the hero never leaves the shot
+      expect(rig.worldToScreen({ x: 0, y: 1.77, z: 0 }, head), `${deg}°`).toBe(true);
+      expect(head.y, `${deg}°`).toBeGreaterThan(720 * 0.6);
+      expect(head.y, `${deg}°`).toBeLessThan(720 * 0.97);
+      expect(head.x).toBeGreaterThan(0);
+    }
+    expect(rig.targetDistance).toBeGreaterThan(1.2); // low and close at the top, not inside the player
   });
 
   it('swaps shoulder on input unless the press was consumed', () => {
@@ -113,8 +133,9 @@ describe('follow', () => {
     input.virtual.press('swapShoulder');
     tick();
     expect(rig.shoulder).toBe(-1);
+    expect(input.pressed('swapShoulder')).toBe(false); // the rig took the press: nobody else toggles too
     tick(90);
-    expect(rig.camera.position.x).toBeCloseTo(-FOLLOW.shoulder, 3);
+    expect(rig.camera.position.x).toBeCloseTo(-REST.x, 3);
     input.virtual.press('swapShoulder');
     input.update(DT);
     input.consume('swapShoulder');
@@ -139,20 +160,25 @@ describe('follow', () => {
     const s = { x: 0, y: 0 };
     expect(rig.worldToScreen({ x: 0, y: 1.55, z: 0 }, s)).toBe(true);
     expect(s.x).toBeLessThan(640 - 150); // player well left of the reticle
+    expect(rig.worldToScreen({ x: 0, y: 1.77, z: 0 }, s)).toBe(true);
+    expect(s.y).toBeGreaterThan(360); // and the head sits below the reticle line
     rig.setAim(false);
     tick(120);
     expect(rig.camera.fov).toBeCloseTo(62, 2);
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance, 2);
+    expect(rig.camera.position.z).toBeCloseTo(REST.z, 2);
   });
 
   it('pulls in instantly on collision and eases back out', () => {
     let allowed = 1;
     let whisker = 1;
     const radii = new Set<number>();
+    const masks = new Set<number | undefined>();
     const physics = {
-      sweepSphere(from: Vec3Like, to: Vec3Like, radius: number) {
+      sweepSphere(from: Vec3Like, to: Vec3Like, radius: number, mask?: number) {
         radii.add(radius);
-        if (radius < FOLLOW.probe) return whisker; // anticipation probes are thinner
+        masks.add(mask);
+        if (radius < FOLLOW.probe * 0.55) return 1; // line-of-sight probe: clear
+        if (radius < FOLLOW.probe) return whisker; // anticipation probes are thinner than the arm
         // of the full-radius sweeps only the arm (shoulder → camera, mostly along z) is obstructed
         return Math.abs(to.z - from.z) > 1 ? allowed : 1;
       },
@@ -163,33 +189,35 @@ describe('follow', () => {
     rig.snapBehind(0);
     rig.pitch = 0;
     tick(10);
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance, 4);
+    expect(armLength(rig)).toBeCloseTo(FOLLOW.distance, 4);
     expect(radii.has(FOLLOW.probe)).toBe(true); // the arm itself is swept with the 0.25 m probe
+    // opaque + physical see-through solids; never the default mask (which adds invisible move-only volumes)
+    expect([...masks]).toEqual([RAY_SIGHT | RAY_SHOT]);
 
-    allowed = 0.4; // a wall appears behind the player
+    allowed = 0.5; // a wall appears behind the player
     tick();
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance * 0.4, 4); // same frame
+    expect(armLength(rig)).toBeCloseTo(FOLLOW.distance * 0.5, 3); // same frame
 
     allowed = 1;
     tick();
-    const z1 = rig.camera.position.z;
-    expect(z1).toBeGreaterThan(FOLLOW.distance * 0.4);
-    expect(z1).toBeLessThan(FOLLOW.distance * 0.4 + 0.2); // not a pop
-    tick(120);
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance, 3);
+    const a1 = armLength(rig);
+    expect(a1).toBeGreaterThan(FOLLOW.distance * 0.5);
+    expect(a1).toBeLessThan(FOLLOW.distance * 0.5 + 0.2); // not a pop
+    tick(180);
+    expect(armLength(rig)).toBeCloseTo(FOLLOW.distance, 3);
 
     // an obstacle beside the arm (whisker only): ease most of the way in ahead of it — eased, never snapped
-    whisker = 0.25;
+    whisker = 0.6;
     tick();
-    expect(rig.camera.position.z).toBeGreaterThan(FOLLOW.distance - 0.4);
+    expect(armLength(rig)).toBeGreaterThan(FOLLOW.distance - 0.4);
     tick(120);
-    const anticipated = FOLLOW.distance + (FOLLOW.distance * 0.25 - FOLLOW.distance) * FOLLOW.whiskerPull;
-    expect(rig.camera.position.z).toBeCloseTo(anticipated, 2);
+    const anticipated = FOLLOW.distance + (FOLLOW.distance * 0.6 - FOLLOW.distance) * FOLLOW.whiskerPull;
+    expect(armLength(rig)).toBeCloseTo(anticipated, 2);
     whisker = 1;
     tick();
-    expect(rig.camera.position.z).toBeLessThan(anticipated + 0.2); // and eases back out, no outward pop
+    expect(armLength(rig)).toBeLessThan(anticipated + 0.2); // and eases back out, no outward pop
     tick(300);
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance, 2);
+    expect(armLength(rig)).toBeCloseTo(FOLLOW.distance, 2);
   });
 
   it('lags behind a moving target without drifting away, and snaps on teleport', () => {
@@ -202,41 +230,35 @@ describe('follow', () => {
       target.pos.z -= 5.2 * DT; // run north
       tick();
     }
-    const lag = rig.camera.position.z - (target.pos.z + FOLLOW.distance);
+    const lag = rig.camera.position.z - (target.pos.z + REST.z);
     expect(lag).toBeGreaterThan(0.1);
     expect(lag).toBeLessThan(0.6);
-    target.pos.set(100, 3, -50);
+    target.pos.set(100, 3, -50); // far beyond a blink: a teleport cuts
     tick();
-    expect(rig.camera.position.x).toBeCloseTo(100 + FOLLOW.shoulder, 3);
+    expect(rig.camera.position.x).toBeCloseTo(100 + REST.x, 3);
     expect(rig.camera.position.y).toBeCloseTo(3 + 1.55, 3);
-    expect(rig.camera.position.z).toBeCloseTo(-50 + FOLLOW.distance, 3);
+    expect(rig.camera.position.z).toBeCloseTo(-50 + REST.z, 3);
   });
 
-  it('adds sprint FOV and recentres gently behind movement only when look is idle', () => {
-    const { rig, target, input, tick } = setup();
+  it('adds sprint FOV from speed in simulated time (slow-motion keeps it, hit-stop does not drop it)', () => {
+    const { rig, target, tick } = setup();
     rig.setTarget(target);
     rig.snapBehind(0);
-    input.virtual.active = true; // not "assisted": the long idle delay applies
     tick(5);
-    for (let i = 0; i < 60; i++) {
-      target.pos.x += 7.2 * DT; // sprint east while the camera still faces north
+    for (let i = 0; i < 90; i++) {
+      target.pos.z -= 7.2 * DT; // sprint north
       tick();
     }
-    expect(rig.camera.fov).toBeGreaterThan(62 + 3);
-    expect(rig.yaw).toBeCloseTo(0, 6); // within the idle delay: untouched
-    for (let i = 0; i < 360; i++) {
-      target.pos.x += 7.2 * DT;
-      tick();
+    expect(rig.camera.fov).toBeGreaterThan(62 + 3.5);
+    for (let i = 0; i < 90; i++) {
+      target.pos.z -= 7.2 * DT * 0.2; // the same sprint at 20 % time scale
+      tick(1, DT, 0.2);
     }
-    expect(rig.yaw).toBeLessThan(-0.5); // easing toward east (yaw −90°)
-    expect(rig.yaw).toBeGreaterThan(-Math.PI / 2 - 1e-3);
-    const before = rig.yaw;
-    for (let i = 0; i < 60; i++) {
-      target.pos.x += 7.2 * DT;
-      input.virtual.addLook(0.0005, 0);
-      tick();
-    }
-    expect(rig.yaw).toBeCloseTo(before + 60 * 0.0005, 4); // player input cancels the assist
+    expect(rig.camera.fov).toBeGreaterThan(62 + 3.5);
+    tick(12, DT, 0); // hit-stop: nothing moves, the camera does not conclude the hero stopped
+    expect(rig.camera.fov).toBeGreaterThan(62 + 3.5);
+    tick(120); // really standing still
+    expect(rig.camera.fov).toBeCloseTo(62, 1);
   });
 
   it('survives stub subsystems and bad input without throwing', () => {
@@ -286,7 +308,7 @@ describe('robustness', () => {
     rig.snapBehind(0);
     rig.pitch = 0;
     expect(() => tick(5)).not.toThrow();
-    expect(rig.camera.position.z).toBeCloseTo(FOLLOW.distance, 4);
+    expect(rig.camera.position.z).toBeCloseTo(REST.z, 4);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
@@ -414,7 +436,7 @@ describe('lock-on dynamics and hand-over', () => {
     expect(rig.yaw).toBeCloseTo(yaw, 4);
   });
 
-  it('a zone load cancels shake and blends', () => {
+  it('a zone load is a hard cut: shake, blends, lock-on, aim, guided turn and framing are all dropped', () => {
     const { rig, target, game, settings, tick } = setup();
     settings.set('reduceShake', false);
     rig.setTarget(target);
@@ -423,13 +445,27 @@ describe('lock-on dynamics and hand-over', () => {
     rig.shake(1, 5);
     rig.kick(3);
     rig.fovPunch(8, 5);
+    let lockReads = 0;
+    rig.setLockOn(() => {
+      lockReads++;
+      return { x: 5, y: 1, z: -5 };
+    });
+    rig.setFraming({ distance: 8, fov: 50 }, 0);
     tick(3);
     expect(rig.trauma).toBeGreaterThan(0);
+    rig.setAim(true);
+    rig.aimAt({ x: -10, y: 1.55, z: 0 }, 3);
     game.events.emit('zone:loading', { zone: 'Z01' });
     settings.set('reduceShake', true);
-    tick();
+    lockReads = 0;
+    const yaw = rig.yaw;
+    tick(120);
     expect(rig.trauma).toBe(0);
-    expect(rig.camera.fov).toBeCloseTo(62, 6);
+    expect(lockReads).toBe(0); // the closure over the previous zone's actor is gone
+    expect(rig.aiming).toBe(false);
+    expect(rig.yaw).toBeCloseTo(yaw, 6); // neither the lock nor the guide is still steering
+    expect(rig.camera.fov).toBeCloseTo(62, 4);
+    expect(rig.targetDistance).toBeLessThan(4); // back to the default framing
   });
 });
 

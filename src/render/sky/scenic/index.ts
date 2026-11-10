@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Game, ScenicFactory } from '@/core/api';
 import type { SharedUniforms } from '../shared';
 import { buildAtriumShell } from './atriumShell';
+import type { ClipTipSlot } from './clipTower';
 import { buildCrownmarkArm } from './crownmarkArm';
 import { buildMegaRibs } from './megaRibs';
 import { ShipMaterials, buildShip, buildWreck } from './ships';
@@ -32,11 +33,11 @@ function guarded(what: string, build: () => THREE.Object3D): THREE.Object3D {
   }
 }
 
-export function createScenicFactory(game: Game, shared: SharedUniforms): ScenicRuntime {
+export function createScenicFactory(game: Game, shared: SharedUniforms, tips: ClipTipSlot): ScenicRuntime {
   const shipMats = new ShipMaterials(game);
   return {
     terminalVista: (opts) => guarded('terminalVista', () => buildTerminalVista(shared, opts)),
-    atriumShell: (opts) => guarded('atriumShell', () => buildAtriumShell(shared, opts)),
+    atriumShell: (opts) => guarded('atriumShell', () => buildAtriumShell(shared, tips, opts)),
     crownmarkArm: (opts) => guarded('crownmarkArm', () => buildCrownmarkArm(shared, opts)),
     megaRibs: (opts) => guarded('megaRibs', () => buildMegaRibs(shared, opts)),
     ship: (kind, opts) => guarded('ship', () => {

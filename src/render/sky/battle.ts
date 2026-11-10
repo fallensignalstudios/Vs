@@ -108,11 +108,14 @@ export interface FleetBattle {
   update(dt: number, state: SkyState, intensity: number, reduceFlash: boolean): void;
   /** scripted impact; `dir` null = somewhere inside the battle */
   impact(dir: THREE.Vector3 | null, colorHex: number | null, strength: number): void;
+  /** kill every live tracer, flash and arc and zero the glow (snap preset changes, zone loads) */
+  clear(): void;
   dispose(): void;
 }
 
 const _amber = new THREE.Color(PALETTE.domAmber);
-const _blue = new THREE.Color(PALETTE.refBlue);
+// Reformation fire leans cyan so it never reads as a second white remnant
+const _blue = new THREE.Color(PALETTE.refBlue).multiply(new THREE.Color(0.72, 0.95, 1.0));
 const _violet = new THREE.Color(PALETTE.eclipseViolet);
 const _tmp = new THREE.Color();
 const _uv = { u: 0, v: 0 };
@@ -141,6 +144,9 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
     geometry.setAttribute(['iA', 'iB', 'iC', 'iD'][i], a);
     return a;
   });
+  const touch = (): void => {
+    for (let i = 0; i < attrs.length; i++) attrs[i].needsUpdate = true;
+  };
   geometry.instanceCount = COUNT;
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
   const material = new THREE.ShaderMaterial({
@@ -181,8 +187,14 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
   const glow = new THREE.Color(0, 0, 0);
 
   const spawnFlash = (u: number, v: number, size: number, peak: number, decay: number, c: THREE.Color, whiten: number): void => {
-    let slot = flashes.find((f) => !f.live);
-    if (!slot) slot = flashes.reduce((a, b) => (a.age / a.decay > b.age / b.decay ? a : b));
+    // a free slot, else recycle the flash that has decayed the furthest (indexed loops: no closures per shot)
+    let slot = flashes[0], spent = -1;
+    for (let i = 0; i < MAX_FLASHES; i++) {
+      const f = flashes[i];
+      if (!f.live) { slot = f; break; }
+      const k = f.age / f.decay;
+      if (k > spent) { spent = k; slot = f; }
+    }
     slot.live = true; slot.u = u; slot.v = v; slot.age = 0; slot.size = size;
     slot.atk = softFlash ? 0.28 : 0.045;
     slot.decay = softFlash ? decay * 2.2 : decay;
@@ -201,7 +213,8 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
 
   const fire = (si: number, gun: Gun): void => {
     const from = ships[si], to = ships[gun.target];
-    const tr = tracers.find((t) => !t.live);
+    let tr: Tracer | null = null;
+    for (let i = 0; i < MAX_TRACERS; i++) if (!tracers[i].live) { tr = tracers[i]; break; }
     if (!tr || !to) return;
     const big = from.size > 0.09 && rand() < 0.3;
     tr.live = true; tr.faction = from.faction; tr.big = big;
@@ -236,9 +249,12 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       fleet.uniforms.uFleet.value = fleetVis;
       fleet.uniforms.uWhiteLight.value.setRGB(2.2, 2.45, 2.8).multiplyScalar(0.25 + 0.75 * state.whiteVis);
       fleet.uniforms.uRedLight.value.setRGB(1.5, 0.26, 0.12).multiplyScalar(state.redVis);
-      let anyFlash = false;
-      for (let i = 0; i < MAX_FLASHES; i++) anyFlash = anyFlash || flashes[i].live;
-      object.visible = fleetVis > 0.004 || anyFlash;
+      // anything still in flight keeps the layer alive, so a tracer never pops off when the last flash ends
+      let anyLive = false;
+      for (let i = 0; i < MAX_FLASHES && !anyLive; i++) anyLive = flashes[i].live;
+      for (let i = 0; i < MAX_TRACERS && !anyLive; i++) anyLive = tracers[i].live;
+      for (let i = 0; i < MAX_ARCS && !anyLive; i++) anyLive = arcs[i].live;
+      object.visible = fleetVis > 0.004 || anyLive;
       const k = clamp01(intensity);
       let gr = 0, gg = 0, gb = 0;
 
@@ -274,7 +290,8 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
         arcCool -= dt * k;
         if (arcCool <= 0 && k > 0.2) {
           arcCool = 3.5 + rand() * 7;
-          const a = arcs.find((x) => !x.live);
+          let a: Arc | null = null;
+          for (let i = 0; i < MAX_ARCS; i++) if (!arcs[i].live) { a = arcs[i]; break; }
           const s = ships[Math.floor(rand() * ships.length)];
           if (a && s.rank < fleetVis) {
             const ang = rand() * Math.PI * 2, len = 0.08 + rand() * 0.16;
@@ -295,8 +312,9 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
             if (tr.hit) {
               const c = tr.faction === 0 ? _amber : _blue;
               const major = rand() < 0.07 + 0.08 * k;
-              if (major) spawnFlash(tr.u1, tr.v1, 0.030 + rand() * 0.022, 7 + rand() * 6, 0.45 + rand() * 0.5, c, 0.18);
-              else spawnFlash(tr.u1, tr.v1, (tr.big ? 0.014 : 0.008) + rand() * 0.005, (tr.big ? 5 : 3) + rand() * 2, 0.14 + rand() * 0.14, c, 0.3);
+              // little whitening: pure white belongs to the white remnant alone
+              if (major) spawnFlash(tr.u1, tr.v1, 0.030 + rand() * 0.022, 7 + rand() * 6, 0.45 + rand() * 0.5, c, 0.1);
+              else spawnFlash(tr.u1, tr.v1, (tr.big ? 0.014 : 0.008) + rand() * 0.005, (tr.big ? 5 : 3) + rand() * 2, 0.14 + rand() * 0.14, c, 0.12);
             }
           }
         }
@@ -353,7 +371,7 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       }
 
       glow.setRGB(gr, gg, gb);
-      for (const a of attrs) a.needsUpdate = true;
+      touch();
     },
     impact(dir, colorHex, strength) {
       const s = clamp01(strength);
@@ -364,6 +382,14 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       const size = (0.022 + 0.05 * s) / Math.max(spread, 0.2);
       spawnFlash(u, v, size, 7 + 16 * s, 0.45 + 0.9 * s, c, 0.4);
       spawnFlash(u + (rand() - 0.5) * size, v + (rand() - 0.5) * size, size * 0.45, 5 + 8 * s, 0.25 + 0.3 * s, c, 0.7);
+    },
+    clear() {
+      for (let i = 0; i < MAX_TRACERS; i++) { tracers[i].live = false; const o = (T0 + i) * 4; iC[o] = 0; iC[o + 1] = 0; iC[o + 2] = 0; }
+      for (let i = 0; i < MAX_FLASHES; i++) { flashes[i].live = false; const o = (F0 + i) * 4; iC[o] = 0; iC[o + 1] = 0; iC[o + 2] = 0; }
+      for (let i = 0; i < MAX_ARCS; i++) { arcs[i].live = false; const o = (A0 + i) * 4; iC[o] = 0; iC[o + 1] = 0; iC[o + 2] = 0; }
+      for (let i = 0; i < guns.length; i++) { guns[i].left = 0; guns[i].target = -1; }
+      glow.setRGB(0, 0, 0);
+      touch();
     },
     dispose() {
       fleet.dispose();

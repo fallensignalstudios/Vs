@@ -33,7 +33,7 @@ export const FOLLOW = {
   aimRise: 0.32,
   /** look-over rise when a wall is right behind the hero (see arm.ts), exploring / aiming */
   overRise: 0.6,
-  overRiseAim: 0.4,
+  overRiseAim: 0.18,
   /** the squeezed view opens up by this many degrees so the room still reads with the camera this close */
   nearFov: 7,
   /** when the camera is this close behind the hero the shoulder offset has shrunk to `nearShoulder` of itself */
@@ -147,6 +147,7 @@ export class FollowCamera {
   private near = 0;
   private idle = 0;
   private calm = 10;
+  private travel = 0;
   private nudgeYaw = 0;
   private nudgePitch = 0;
   private nudgeIdle = 0;
@@ -319,11 +320,9 @@ export class FollowCamera {
     const baseFov = this.fFov.step(f?.fov ?? FOLLOW.fov, ft, dt);
     const heightOffset = this.fHeight.step(f?.heightOffset ?? 0, ft, dt);
     const dist = baseDist + (FOLLOW.aimDistance - baseDist) * aimK + FOLLOW.lockDistance * lockK * (1 - aimK);
-    // Close behind the hero (squeezed by a wall) the lateral offset shrinks, or the hero would leave the frame.
-    const nearScale = 1 - (1 - FOLLOW.nearShoulder) * this.near;
-    const lateral = (baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK) * nearScale;
-    const toe = FOLLOW.lookOffset * Math.min(1.5, baseShoulder / FOLLOW.shoulder) * (1 - aimK) * nearScale;
-    const shoulder = lateral * sideK;
+    // Lateral offset of the anchor, and the toe-out that composes the hero off-centre (none while aiming).
+    const lateral = baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK;
+    const toe = FOLLOW.lookOffset * Math.min(1.5, baseShoulder / FOLLOW.shoulder) * (1 - aimK);
 
     // --- smoothed pivot (critically damped lag; vertical is softer to swallow steps) --------------
     let sx: number;
@@ -372,7 +371,7 @@ export class FollowCamera {
     // Scripted turns slow down while the arm is brushing geometry: a fast swing past a pillar is what pops.
     const ease = 1 - 0.55 * arm.crowded;
     if (lockPoint) {
-      this.updateLock(dt, lockPoint, lx, ly, looking, dist, Math.abs(lateral) + toe, sideK, ease);
+      this.updateLock(dt, lockPoint, lx, ly, looking, dist, (lateral + toe) * (1 - (1 - FOLLOW.nearShoulder) * this.near), sideK, ease);
     } else {
       this.yaw += lx;
       this.pitch += ly;
@@ -394,21 +393,26 @@ export class FollowCamera {
     // --- spring arm ------------------------------------------------------------------------------
     const yaw = this.yaw;
     const pitch = this.pitch;
-    // `dir` is the direction of the arm (camera sits at anchor − dir·arm); the view itself uses yaw / pitch.
-    const toeAngle = toe > 0 ? Math.asin(Math.min(0.5, toe / Math.max(dist, 0.5))) * sideK : 0;
-    viewDir(this.dir, yaw + toeAngle, orbitPitchFor(pitch));
     const req = this.req;
     req.floorY = sy;
     req.yaw = yaw;
     req.dist = dist;
-    req.shoulder = shoulder;
     req.lift = heightOffset + FOLLOW.aimRise * aimK;
     req.overRise = FOLLOW.overRise + (FOLLOW.overRiseAim - FOLLOW.overRise) * aimK;
-    arm.solve(dt, this.fresh, world, req);
+    const orbit = orbitPitchFor(pitch);
+    // (a fresh seat iterates: how close the camera ends up decides the shoulder offset, and vice versa)
+    for (let pass = this.fresh ? 3 : 1; pass > 0; pass--) {
+      // Close behind the hero (squeezed by a wall) the lateral offset shrinks, or the hero would leave the frame.
+      const nearScale = 1 - (1 - FOLLOW.nearShoulder) * this.near;
+      // `dir` is the direction of the arm (camera sits at anchor − dir·arm); the view itself uses yaw / pitch.
+      const toeAngle = toe > 0 ? Math.asin(Math.min(0.5, (toe * nearScale) / Math.max(dist, 0.5))) * sideK : 0;
+      viewDir(this.dir, yaw + toeAngle, orbit);
+      req.shoulder = lateral * nearScale * sideK;
+      arm.solve(dt, this.fresh, world, req);
+      const nearTarget = arm.length < arm.reach - 0.05 ? 1 - smoothstep(FOLLOW.nearMin, FOLLOW.nearMax, arm.backRoom) : 0;
+      this.near = this.fresh ? nearTarget : damp(this.near, nearTarget, nearTarget > this.near ? 10 : 3, dt);
+    }
     const cam = arm.cam;
-
-    const nearTarget = arm.length < arm.reach - 0.05 ? 1 - smoothstep(FOLLOW.nearMin, FOLLOW.nearMax, arm.backRoom) : 0;
-    this.near = this.fresh ? nearTarget : damp(this.near, nearTarget, nearTarget > this.near ? 10 : 3, dt);
 
     // --- output ----------------------------------------------------------------------------------
     const sprintTarget = smoothstep(5.9, 7.0, this.speed);
@@ -508,6 +512,8 @@ export class FollowCamera {
     const mode = input.recentre === RECENTRE_ASSIST ? RECENTRE_ASSIST : input.recentre === RECENTRE_GENTLE ? RECENTRE_GENTLE : RECENTRE_OFF;
     if (mode === RECENTRE_OFF) return;
     const delay = RECENTRE_DELAY[mode];
+    // (it also eases in over the first couple of seconds of a run, so setting off never swings the view)
+    this.travel = this.speed < 1 ? 0 : this.travel + dt;
     if (this.idle <= delay || this.calm < RECENTRE_CALM[mode] || this.speed < 1) return;
     const heading = Math.atan2(-this.velX, -this.velZ);
     const diff = angleDelta(this.yaw, heading);
@@ -515,7 +521,7 @@ export class FollowCamera {
     // A bot steering by world direction can be followed round almost any corner; running toward the camera is
     // still a deliberate choice, so the view never swings round on the player.
     const forward = input.absolute ? 1 - smoothstep(2.0, 2.6, off) : 1 - smoothstep(30 * DEG, 55 * DEG, off);
-    const moving = smoothstep(1, 4, this.speed) * forward;
+    const moving = smoothstep(1, 4, this.speed) * forward * smoothstep(0.4, 1.8, this.travel);
     const w = smoothstep(delay, delay + 1.2, this.idle) * moving;
     if (w > 0) {
       const cap = (input.absolute ? 60 * DEG : RECENTRE_CAP[mode]) * ease * dt;

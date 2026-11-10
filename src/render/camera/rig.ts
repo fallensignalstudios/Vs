@@ -54,6 +54,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   private blendUnchecked = false;
   private fade = 1;
   private lastSimNow = NaN;
+  private stalled = 0;
   private disposed = false;
   private readonly offs: Array<() => void> = [];
 
@@ -499,8 +500,15 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     this.lastSimNow = now;
     if (!SIM_PHASES.has(game.phase as string)) return d;
     const step = now - prev;
+    if (step === 0) {
+      // Hit-stop freezes the clock for at most 0.25 s. A clock that stays frozen longer while the game is
+      // neither paused nor loading is a host that does not run one (a bare sandbox): never stall on it.
+      this.stalled += d;
+      return this.stalled > 0.3 ? d : 0;
+    }
+    this.stalled = 0;
     // first frame, a rewound clock or a jump (checkpoint reload): fall back to real time for this frame
-    return step >= 0 && step <= d * 1.5 + 1e-4 ? step : d;
+    return step > 0 && step <= d * 1.5 + 1e-4 ? step : d;
   }
 
   /**
