@@ -26,7 +26,7 @@ import { subtitleSeconds, type HitKind } from './logic';
 import { MenuInput, ModalStack } from './menu';
 import { StatusBoard, type BoardRow } from './narrative/board';
 import { ChoicePanel } from './narrative/choice';
-import { Card, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor } from './narrative/stage';
+import { Card, FlashText, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor } from './narrative/stage';
 import { Subtitles } from './narrative/subtitles';
 import { CompleteScreen, DeathScreen, LoadingScreen, type LoadingOpts } from './screens/overlays';
 import { PauseScreen, type PauseOpts } from './screens/pause';
@@ -60,6 +60,7 @@ class UiSystemImpl implements UiSystem {
   private readonly letterboxW: Letterbox;
   private readonly fadeW: ScreenFade;
   private readonly cardW: Card;
+  private readonly flashW: FlashText;
   private readonly board: StatusBoard;
   private readonly talk: Subtitles;
   private readonly skip: SkipHint;
@@ -88,6 +89,7 @@ class UiSystemImpl implements UiSystem {
     this.letterboxW = new Letterbox();
     this.fadeW = new ScreenFade();
     this.cardW = new Card();
+    this.flashW = new FlashText(game);
     this.board = new StatusBoard();
     this.talk = new Subtitles(game);
     this.skip = new SkipHint(game);
@@ -103,7 +105,7 @@ class UiSystemImpl implements UiSystem {
     // paint order, bottom → top
     this.root.append(
       this.hud.worldEl, this.hud.edgeEl, this.hud.panelEl, this.hud.noticeEl,
-      this.letterboxW.el, this.fadeW.el, this.cardW.el, this.board.el, this.talk.el, this.skip.el,
+      this.letterboxW.el, this.fadeW.el, this.cardW.el, this.flashW.el, this.board.el, this.talk.el, this.skip.el,
       this.choiceW.el, this.loading.el, this.death.el, this.complete.el, this.title.el, this.pause.el, this.settings.el,
       this.hud.diagnostics.fpsEl, this.hud.diagnostics.debugEl,
     );
@@ -149,6 +151,7 @@ class UiSystemImpl implements UiSystem {
     this.objective(null);
     this.talk.show(null);
     this.cardW.set(null);
+    this.flashW.show(null);
     this.board.set(null);
     this.skip.set(false);
     this.letterbox(false, 0);
@@ -277,7 +280,11 @@ class UiSystemImpl implements UiSystem {
   }
 
   card(text: string | null, opts?: { sub?: string; seconds?: number; style?: CardStyle }): void {
-    this.cardW.set(text, opts);
+    if (opts?.style === 'flash') {
+      this.flashW.show(text, opts.seconds);
+      return;
+    }
+    this.cardW.set(text, opts as Parameters<Card['set']>[1]);
   }
 
   choice(opts: ChoiceOpts): ChoiceHandle {
@@ -330,6 +337,7 @@ class UiSystemImpl implements UiSystem {
       this.letterboxW.update(d);
       this.fadeW.update(d);
       this.cardW.update(d);
+      this.flashW.update(d);
       this.board.update(d);
       this.talk.update(d);
       this.skip.update(d);

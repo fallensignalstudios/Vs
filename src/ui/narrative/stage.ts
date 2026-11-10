@@ -147,8 +147,13 @@ export class SkipHint {
 }
 
 // ---------------------------------------------------------------------------------------------- card
-export type CardStyle = 'context' | 'witness' | 'consequence' | 'title';
+export type CardStyle = 'context' | 'witness' | 'consequence' | 'title' | 'flash';
 const CARD_STYLES: readonly CardStyle[] = ['context', 'witness', 'consequence', 'title'];
+/** a flash is on screen this long unless `seconds` says otherwise: long enough to register, too short to read twice */
+export const FLASH_SECONDS = 0.14;
+/** with the reduce-flash setting the same words fade in and out gently instead of cutting */
+const FLASH_SOFT_SECONDS = 0.9;
+const FLASH_SOFT_FADE = 0.22;
 
 interface CardSpec {
   text: string;
@@ -181,7 +186,7 @@ export class Card {
     this.fader = new Fader(this.el, { in: 0.9, out: 0.6, display: 'flex' });
   }
 
-  set(text: string | null, options?: { sub?: string; seconds?: number; style?: CardStyle } | null): void {
+  set(text: string | null, options?: { sub?: string; seconds?: number; style?: Exclude<CardStyle, 'flash'> } | null): void {
     const opts = options ?? {};
     const t = text === null || text === undefined ? '' : String(text).trim();
     if (!t) {
@@ -232,5 +237,64 @@ export class Card {
     }
     const visible = this.fader.update(dt);
     if (!visible && this.pending) this.present(this.pending);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------- flash
+/**
+ * One-flash text (`card(text, { style: 'flash' })`): typeset words that CUT in, hold for a fraction of a second
+ * and cut out — no ornament, no plate, drawn above the fade. Independent of the narrative card (a flash never
+ * replaces a card that is up). With `reduceFlash` it becomes a short soft fade instead of a cut.
+ */
+export class FlashText {
+  readonly el: HTMLElement;
+  private readonly text: Txt;
+  private left = 0;
+  private total = 0;
+  private soft = false;
+  private readonly opacity: Num;
+
+  constructor(private readonly game: Game) {
+    const text = h('div', 'aur-flash-text');
+    this.el = h('div', 'aur-flash', text);
+    this.el.style.display = 'none';
+    this.text = new Txt(text);
+    this.opacity = new Num((v) => {
+      this.el.style.display = v <= 0.001 ? 'none' : 'flex';
+      this.el.style.opacity = v.toFixed(3);
+    }, 0.001);
+  }
+
+  /** true while the words are on screen */
+  get on(): boolean {
+    return this.left > 0;
+  }
+
+  show(text: string | null, seconds?: number): void {
+    const t = text === null || text === undefined ? '' : String(text).trim();
+    if (!t) {
+      this.left = 0;
+      this.opacity.set(0);
+      return;
+    }
+    this.soft = this.game.settings.get('reduceFlash') === true;
+    const want = num(seconds, 0) > 0 ? num(seconds, 0) : FLASH_SECONDS;
+    this.total = this.soft ? Math.max(want, FLASH_SOFT_SECONDS) : want;
+    this.left = this.total;
+    this.text.set(t);
+    this.opacity.set(this.soft ? 0.001 : 1);
+  }
+
+  update(dt: number): void {
+    if (this.left <= 0) return;
+    this.left -= dt;
+    if (this.left <= 0) {
+      this.left = 0;
+      this.opacity.set(0);
+      return;
+    }
+    if (!this.soft) return;
+    const age = this.total - this.left;
+    this.opacity.set(Math.max(0.001, Math.min(1, age / FLASH_SOFT_FADE, this.left / FLASH_SOFT_FADE)));
   }
 }

@@ -25,9 +25,9 @@ const out = `/**
  * Every value was measured at the final output, through the whole mix chain, at the reference volume
  * settings, on a chain that had been running for half a second (never on a cold one).
  *  SFX_NORM[id]    scales a recipe so that its LOUDNESS (loudest 100 ms, K-weighted) lands on \`db − 9\`, with
- *                  its true peak held under \`min(−3, db + 8)\` dBFS — see sfx/recipe.ts.
+ *                  its true peak held under \`min(−5, db + 8)\` dBFS — see sfx/recipe.ts.
  *  MUSIC_NORM[s]   scales a score state so that its RMS at the reference intensity lands on its \`db\`, and at
- *                  full intensity stays within \`db + 2.5\` RMS and −5 dBFS peak. \`stinger:*\` as SFX.
+ *                  full intensity stays within \`db + 2.5\` RMS and −5.5 dBFS peak (99.99th percentile). \`stinger:*\` as SFX.
  *  AMB_NORM[id]    scales a bed so that its RMS lands on its \`db\`.
  * Missing entries fall back to defaults and the sandbox report flags them NOCAL.
  */

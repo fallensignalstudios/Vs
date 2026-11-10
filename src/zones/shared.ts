@@ -333,19 +333,21 @@ export function sustainDrops(z: ZoneRuntime, at: Array<string | Vec3Like>): void
 }
 
 /**
- * Music follows an encounter: `combat` from the moment it is active (intensity up FIRST so a recorded combat
- * track starts on its body), `calm` when it clears. Run it with `z.fork(encounterMusic(...))`.
+ * Music follows an encounter: `combat` once it is live, `calm` when it clears. The AI system drives the music
+ * INTENSITY from the fight by itself; this only switches states. `begin` delays the switch for encounters whose
+ * members start dormant (default: as soon as the encounter is active). Run it with `z.fork(encounterMusic(...))`.
  */
-export function* encounterMusic(z: ZoneRuntime, enc: Encounter, combat: MusicState, calm: MusicState, fade = 1.2): Routine {
+export function* encounterMusic(
+  z: ZoneRuntime, enc: Encounter, combat: MusicState, calm: MusicState, opts?: { begin?: () => boolean; fade?: number },
+): Routine {
   const audio = z.game.audio;
-  yield () => enc.state !== 'idle';
-  if (enc.state === 'active') {
-    audio.setIntensity(0.7);
-    audio.setMusic(combat, fade);
+  const begin = opts?.begin;
+  yield () => enc.cleared || (enc.state === 'active' && (!begin || begin()));
+  if (!enc.cleared) {
+    audio.setMusic(combat, opts?.fade ?? 1.2);
     audio.stinger('encounterStart');
+    yield () => enc.cleared;
   }
-  yield () => enc.cleared || enc.state === 'cleared';
-  audio.setIntensity(0);
   audio.setMusic(calm, 2.5);
 }
 

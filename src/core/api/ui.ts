@@ -180,8 +180,12 @@ export interface UiSystem {
    * drawn ABOVE the fade (use them over black). A new card cross-fades with the old one; `seconds` auto-hides.
    * Styles: 'context' serif statement · 'witness' gold caption in the lower third · 'consequence' wide
    * small-caps verdict with a rule · 'title' the large lockup ("Aurelion" / sub "Contrary Witness").
+   * ADDED — 'flash': ONE-FLASH TEXT (Z05 `DO NOT LET HIM KNEEL.`). The words cut in, hold for `seconds`
+   * (default 0.14 — a fraction of a second) and cut out; typeset capitals, no ornament or plate, above the fade.
+   * A flash is independent of the narrative card: it neither replaces nor clears one, and `sub` is ignored.
+   * With the reduce-flash setting it is a short soft fade (≥ 0.9 s) instead of a cut.
    */
-  card(text: string | null, opts?: { sub?: string; seconds?: number; style?: 'context' | 'witness' | 'consequence' | 'title' }): void;
+  card(text: string | null, opts?: { sub?: string; seconds?: number; style?: 'context' | 'witness' | 'consequence' | 'title' | 'flash' }): void;
   /**
    * present the Z07 local decision. Explicit, untimed, confirm-to-commit: the player selects a card, then
    * confirms on a separate "Commit" control (cancel returns to browsing). Pauses nothing itself. `modalOpen`

@@ -2,8 +2,9 @@
  * App flow glue (FOUNDATION): title → play → pause / death / completion.
  * Thin by design — all presentation lives in the UI system, all progression in the mission system.
  */
-import type { Game, MissionSummary } from './api';
+import type { Game } from './api';
 import { reportError } from './events';
+import { buildMissionSummary } from './summary';
 
 export function installFlow(game: Game): void {
   const { events, ui, mission, input, audio } = game;
@@ -83,21 +84,7 @@ export function installFlow(game: Game): void {
     game.setPhase('complete');
     input.setContext('menu');
     input.exitPointerLock();
-    const mins = Math.floor(state.stats.playSeconds / 60);
-    const secs = Math.floor(state.stats.playSeconds % 60);
-    const summary: MissionSummary = {
-      state,
-      lines: [
-        { label: 'Containment', value: 'Closed' },
-        { label: 'Meridian', value: 'Complete — 5 / 5' },
-        { label: 'Release', value: 'Withheld' },
-        { label: 'Local priority', value: state.rescuePriority === 'WestStretchers' ? 'West — stretcher cases first' : state.rescuePriority === 'EastWalkers' ? 'East — walking wounded first' : 'Unrecorded' },
-        { label: 'Evidence', value: 'Exchanged' },
-        { label: 'Pact', value: 'Agreed' },
-        { label: 'Optional records', value: `${Object.values(state.optional).filter(Boolean).length} / 4` },
-        { label: 'Mission time', value: `${mins}:${String(secs).padStart(2, '0')}` },
-      ],
-    };
+    const summary = buildMissionSummary(state);
     ui.showMissionComplete(summary, { onTitle: toTitle });
   });
 

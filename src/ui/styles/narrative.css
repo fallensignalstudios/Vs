@@ -764,3 +764,27 @@
   text-transform: uppercase;
   color: rgba(246, 242, 234, 0.42);
 }
+
+/* ================================================================ one-flash text (card style 'flash') */
+.aur-flash {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.aur-flash-text {
+  max-width: 82%;
+  font-family: var(--f-title);
+  font-weight: 600;
+  font-size: calc(var(--u) * 58);
+  line-height: 1.2;
+  letter-spacing: 0.34em;
+  padding-left: 0.34em;
+  text-transform: uppercase;
+  white-space: pre-line;
+  color: #fbf6ea;
+  text-shadow: 0 0 calc(var(--u) * 3) rgba(0, 0, 0, 0.95), 0 0 calc(var(--u) * 26) rgba(0, 0, 0, 0.85);
+}
