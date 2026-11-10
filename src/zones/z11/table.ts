@@ -110,10 +110,10 @@ export function* conversationScene(z: ZoneRuntime): Routine {
       ['Selene', 'You know the version we teach. You do not know the version he gave.', 'otsS'],
       // she activates a small projection over the table (her command strip)
       () => projection(z, c, ['PEOPLE FLOURISH THROUGH ORDER.']),
-      () => z.say('Command strip', 'PEOPLE FLOURISH THROUGH ORDER.', { channel: 'system' }), // speaker label NEW (Z05's)
+      () => z.say('Command strip', 'PEOPLE FLOURISH THROUGH ORDER.', { channel: 'system' }), // NEW (speaker label, as in Z05)
       1.0,
       () => projection(z, c, ['ORDER EXISTS THAT PEOPLE MAY FLOURISH.', 'PEOPLE DO NOT EXIST THAT ORDER MAY ENDURE.']),
-      () => z.say('Command strip', 'ORDER EXISTS THAT PEOPLE MAY FLOURISH. PEOPLE DO NOT EXIST THAT ORDER MAY ENDURE.', { channel: 'system' }),
+      () => z.say('Command strip', 'ORDER EXISTS THAT PEOPLE MAY FLOURISH. PEOPLE DO NOT EXIST THAT ORDER MAY ENDURE.', { channel: 'system' }), // NEW (speaker label; the text is the book's)
       1.4,
       ['Tarrik', 'They reversed it.', 'T'],
       ['Selene', 'Yes.', 'S'],
@@ -203,7 +203,7 @@ export function* conversationScene(z: ZoneRuntime): Routine {
     const f: Step[] = [
       // she activates the terminal authority summary
       () => projection(z, c, ['BOUNDARY STATE: CLOSED', 'TERMINAL RELEASE: AVAILABLE', 'RELEASE AUTHORITY: CONTRARY BEARER CONCURRENCE']),
-      () => z.say('Command strip', 'BOUNDARY STATE: CLOSED · TERMINAL RELEASE: AVAILABLE · RELEASE AUTHORITY: CONTRARY BEARER CONCURRENCE', { channel: 'system' }),
+      () => z.say('Command strip', 'BOUNDARY STATE: CLOSED · TERMINAL RELEASE: AVAILABLE · RELEASE AUTHORITY: CONTRARY BEARER CONCURRENCE', { channel: 'system' }), // NEW (speaker label; the text is the book's)
       ['Tarrik', 'So Caelus cannot open it.', 'T'],
       ['Selene', 'No.', 'S'],
       ['Tarrik', 'Voss cannot.', 'T'],
@@ -399,7 +399,7 @@ export function* alertScene(z: ZoneRuntime): Routine {
     alert?.show(1, 0.3);
     if (!z.skipping) g.audio.play('ambPA', { pos: z.m('window') });
     yield 0.6;
-    yield* z.say('Fleet alert', 'CEASEFIRE VIOLATION RISK: RISING', { channel: 'system' }); // speaker label NEW
+    yield* z.say('Fleet alert', 'CEASEFIRE VIOLATION RISK: RISING', { channel: 'system' }); // NEW (speaker label)
     yield* run(z, c, [['Tarrik', 'We’re running out of time.', 'T'], ['Selene', 'Yes.', 'S']], tarrik);
     // “Selene rises. Tarrik remains seated for half a second before standing.” — she takes the recorder; he the wafer
     frame(z, c, 'T', 4);

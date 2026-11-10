@@ -25,7 +25,7 @@ export function sitPlayer(z: ZoneRuntime): void {
   const g = z.game;
   g.player.teleport(z.m(SEAT_S), z.myaw(SEAT_S));
   z.player.fixed = true;
-  humanoid(z.player)?.setLoadout({ hideSheathed: true });
+  humanoid(z.player)?.setLoadout({ melee: false, ranged: false, hideSheathed: true });
   g.player.playScripted('sit');
   humanoid(z.player)?.teleported();
   S.seated = true;
@@ -57,7 +57,7 @@ export function sitTarrik(z: ZoneRuntime, t: Companion | null): void {
   if (!t) return;
   t.stopAction();
   t.teleport(z.m(SEAT_T), z.myaw(SEAT_T));
-  humanoid(t.actor)?.setLoadout({ hideSheathed: true });
+  humanoid(t.actor)?.setLoadout({ melee: false, ranged: false, hideSheathed: true });
   t.play('sit');
   S.pair.t = t.actor;
 }

@@ -206,8 +206,9 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   // light: warm inside, the cold stays outside
   b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffd6a6, shadow: false });
   // the remnants' spill through the glass: red from the north-west (Tarrik's side), cold from the north-east (Selene's)
-  b.point({ x: 4.5, n: n1 + 2.5, h: 5.2, color: 0xff6040, intensity: 40, distance: 22 });
-  b.point({ x: 19.5, n: n1 + 2.5, h: 5.2, color: 0xc4d6ff, intensity: 30, distance: 22 });
+  // (high, so their highlight in the mirror floor falls by the glass, not across the room)
+  b.point({ x: 4.5, n: n1 + 2.5, h: 8.5, color: 0xff6040, intensity: 46, distance: 24 });
+  b.point({ x: 19.5, n: n1 + 2.5, h: 8.5, color: 0xc4d6ff, intensity: 34, distance: 24 });
   b.point({ x: PASSAGE.x + 0.5, n: n0 + 2.2, h: 3.2, color: IVORY, intensity: 12, distance: 10 });
 }
 

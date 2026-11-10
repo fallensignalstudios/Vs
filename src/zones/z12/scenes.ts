@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { atPost, feet, waitOr, walkTo } from '../shared';
+import { sheathe, toward } from '../z11/framing';
 import { FAREWELL } from './layout';
 import { FLIGHT_END, RISE, S, carry, humanoid, prepareFlights } from './state';
 
@@ -40,25 +41,28 @@ export function* concourseScene(z: ZoneRuntime): Routine {
       b?.holdAt(z.m(m), z.myaw(m));
     }
     // “Lyessa notices the Cauldron recorder in Selene's hand before anyone speaks.”
-    const rec = S.recorder?.position ?? at(selene, 'seleneMeet').setY(1);
-    c.cut({ pos: at(lyessa, 'lyessaMeet').add(new THREE.Vector3(0.35, 1.62, 0.55)), look: rec.clone(), fov: 30 });
+    sheathe(z.player, selene);
+    const rec = at(selene, 'seleneMeet').setY(0.98);
+    const lf = at(lyessa, 'lyessaMeet');
+    const back = lf.clone().sub(rec).setY(0).normalize();
+    c.cut({ pos: lf.clone().addScaledVector(back, 0.55).add(new THREE.Vector3(0, 1.58, 0.35)), look: rec.clone(), fov: 30 });
     humanoid(lyessa?.actor)?.lookAt(rec);
     yield 2.4;
     humanoid(lyessa?.actor)?.lookAt(null);
     c.twoShot(T(), at(lyessa, 'lyessaMeet'), { side: 1, distance: 1.8, fov: 32 });
     yield* say('Lyessa', 'You told her.', lyessa);
     // he offers neither excuse nor apology
-    c.shot(T(), { yawDeg: 230, distance: 2.0, height: 1.66, lookHeight: 1.66, fov: 29 });
+    toward(c, z.player, selene, -35, 2.0, 29, 1.66);
     yield* say('Tarrik', 'Yes.', 'player');
     c.twoShot(at(selene, 'seleneMeet'), at(lyessa, 'lyessaMeet'), { side: 1, distance: 2.0, fov: 32 });
     yield* say('Lyessa', 'What did he tell you?', lyessa);
-    c.shot(at(selene, 'seleneMeet'), { yawDeg: 200, distance: 2.0, height: 1.58, lookHeight: 1.55, fov: 29 });
+    toward(c, selene, lyessa, 35, 2.0, 29, 1.58);
     yield* say('Selene', 'The truth.', selene);
     if (z.state.optional.O4) {
       // only if O4 was heard (ruling 11): otherwise “Gate Nine” means nothing
       yield* say('Selene', 'I don’t know whether you were wrong at Gate Nine.', selene);
       yield* say('Selene', 'I know you were wrong every day after.', selene);
-      c.shot(at(lyessa, 'lyessaMeet'), { yawDeg: 150, distance: 1.8, height: 1.62, lookHeight: 1.62, fov: 27 });
+      toward(c, lyessa, selene, -35, 1.8, 27, 1.62);
       yield 0.6;
       yield* say('Lyessa', 'So do I.', lyessa);
       // she does not argue; it repairs nothing; it matters anyway
@@ -80,7 +84,7 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     c.twoShot(at(lyessa, 'lyessaMeet'), T(), { side: -1, distance: 1.8, fov: 32 });
     yield* say('Tarrik', 'You don’t have to come.', 'player');
     yield* say('Lyessa', 'I know.', lyessa);
-    c.shot(at(lyessa, 'lyessaMeet'), { yawDeg: 140, distance: 1.9, height: 1.62, lookHeight: 1.62, fov: 28 });
+    toward(c, lyessa, z.player, 30, 1.9, 28, 1.62);
     yield* say('Lyessa', 'Still coming.', lyessa);
     // the answer mirrors Lyric's; both women notice
     c.cut({ pos: z.P(FAREWELL.x, 4.6, 1.7), look: z.P(FAREWELL.x, 9.6, 1.45), fov: 40 });
@@ -93,25 +97,25 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     c.twoShot(at(tharne, 'tharneMeet'), at(selene, 'seleneMeet'), { side: 1, distance: 1.9, fov: 32 });
     tharne?.play('point');
     yield* say('Tharne', 'There is no evident mechanism for remote substitution.', tharne);
-    c.shot(at(selene, 'seleneMeet'), { yawDeg: 110, distance: 1.9, height: 1.58, lookHeight: 1.55, fov: 29 });
+    toward(c, selene, tharne, -35, 1.9, 29, 1.58);
     yield* say('Selene', 'You don’t see one.', selene);
-    c.shot(at(tharne, 'tharneMeet'), { yawDeg: 230, distance: 2.0, height: 1.6, lookHeight: 1.55, fov: 29 });
+    toward(c, tharne, selene, 35, 2.0, 29, 1.6);
     yield* say('Tharne', 'No.', tharne);
     yield* say('Tharne', 'The command grammar distributed to the active nodes can interrogate terminal state,', tharne);
     yield* say('Tharne', 'model release conditions, and authenticate partial authority pathways.', tharne);
     yield* say('Tharne', 'It should not be capable of executing final release without contrary concurrence.', tharne);
-    c.shot(at(lyric, 'lyricMeet'), { yawDeg: 200, distance: 1.9, height: 1.6, lookHeight: 1.58, fov: 28 });
+    toward(c, lyric, tharne, -40, 1.9, 28, 1.6);
     yield* say('Lyric', 'Should.', lyric);
-    c.shot(at(tharne, 'tharneMeet'), { yawDeg: 230, distance: 2.0, height: 1.6, lookHeight: 1.55, fov: 29 });
+    toward(c, tharne, lyric, 35, 2.0, 29, 1.6);
     yield* say('Tharne', 'Yes.', tharne);
-    c.shot(at(lyric, 'lyricMeet'), { yawDeg: 200, distance: 1.9, height: 1.6, lookHeight: 1.58, fov: 28 });
+    toward(c, lyric, tharne, -40, 1.9, 28, 1.6);
     yield* say('Lyric', 'That word is doing a remarkable amount of labor.', lyric);
     // the alert over the concourse
     c.cut({ pos: z.P(FAREWELL.x, 3.2, 1.8), look: z.P(FAREWELL.x, 17.5, 4.6), fov: 46 });
     S.alert?.show(1, 0.3);
     if (!z.skipping) g.audio.play('ambPA', { pos: z.P(FAREWELL.x, 17, 5) });
     yield 0.5;
-    yield* z.say('Hangar alert', 'CEASEFIRE VIOLATION RISK: ELEVATED', { channel: 'system' }); // speaker label NEW
+    yield* z.say('Hangar alert', 'CEASEFIRE VIOLATION RISK: ELEVATED', { channel: 'system' }); // NEW (speaker label)
     c.twoShot(at(selene, 'seleneMeet'), T(), { side: 1, distance: 1.7, fov: 31 });
     yield* say('Selene', 'We need to leave.', selene);
     yield 0.6;
@@ -152,6 +156,7 @@ export function* farewellScene(z: ZoneRuntime): Routine {
     selene?.teleport(z.m('seleneFarewell'), z.myaw('seleneFarewell'));
     selene?.holdAt(z.m('seleneFarewell'), z.myaw('seleneFarewell'));
     toShips(z, false);
+    sheathe(z.player, selene);
     const T = z.m('tarrikFarewell');
     const Sx = z.m('seleneFarewell');
     const mid = T.clone().lerp(Sx, 0.5);
@@ -188,10 +193,10 @@ export function* farewellScene(z: ZoneRuntime): Routine {
     c.twoShot(Sx, T, { side: 1, distance: 1.6, fov: 31 });
     yield* say('Selene', 'Try not to commit regicide.', selene);
     // the humor fades from her face
-    c.shot(Sx, { yawDeg: 150, distance: 1.7, height: 1.58, lookHeight: 1.56, fov: 27 });
+    toward(c, Sx, T, -32, 1.7, 27, 1.58);
     yield 0.6;
     yield* say('Selene', 'Do not kneel.', selene);
-    c.shot(T, { yawDeg: 210, distance: 1.8, height: 1.66, lookHeight: 1.66, fov: 27 });
+    toward(c, T, Sx, 32, 1.8, 27, 1.66);
     yield* say('Tarrik', 'I wasn’t planning to.', 'player');
     c.twoShot(Sx, T, { side: 1, distance: 1.55, fov: 30 });
     yield* say('Selene', 'Plans change.', selene);
@@ -201,9 +206,9 @@ export function* farewellScene(z: ZoneRuntime): Routine {
     yield* say('Selene', 'Try not to require it.', selene);
     c.twoShot(T, Sx, { side: -1, distance: 1.55, fov: 30 });
     yield* say('Tarrik', 'And you?', 'player');
-    c.shot(Sx, { yawDeg: 150, distance: 1.7, height: 1.58, lookHeight: 1.56, fov: 27 });
+    toward(c, Sx, T, -32, 1.7, 27, 1.58);
     yield* say('Selene', 'The eagle.', selene);
-    c.shot(T, { yawDeg: 210, distance: 1.8, height: 1.66, lookHeight: 1.66, fov: 27 });
+    toward(c, T, Sx, 32, 1.8, 27, 1.66);
     yield* say('Tarrik', 'Yes.', 'player');
     c.twoShot(Sx, T, { side: 1, distance: 1.6, fov: 31 });
     yield* say('Selene', 'I intend to come back.', selene);
@@ -211,14 +216,18 @@ export function* farewellScene(z: ZoneRuntime): Routine {
     yield* say('Tarrik', 'That is not what Vesryn saw.', 'player');
     c.twoShot(Sx, T, { side: 1, distance: 1.6, fov: 31 });
     yield* say('Selene', 'Vesryn doesn’t get a vote.', selene);
-    c.shot(T, { yawDeg: 210, distance: 1.8, height: 1.66, lookHeight: 1.66, fov: 27 });
+    toward(c, T, Sx, 32, 1.8, 27, 1.66);
     yield* say('Tarrik', 'Good.', 'player');
-    c.shot(Sx, { yawDeg: 150, distance: 1.7, height: 1.58, lookHeight: 1.56, fov: 27 });
+    toward(c, Sx, T, -32, 1.7, 27, 1.58);
     yield* say('Selene', 'Neither does prophecy.', selene);
-    c.shot(T, { yawDeg: 210, distance: 1.8, height: 1.66, lookHeight: 1.66, fov: 27 });
+    toward(c, T, Sx, 32, 1.8, 27, 1.66);
     yield* say('Tarrik', 'No.', 'player');
     // “Tarrik offers his forearm in an old Dominion military gesture.” She looks at it, then at him.
     const clasp = mid.clone().setY(1.18);
+    // a step in, for the old Dominion gesture
+    g.player.teleport(T.clone().lerp(mid, 0.4), z.myaw('tarrikFarewell'));
+    selene?.teleport(Sx.clone().lerp(mid, 0.4), z.myaw('seleneFarewell'));
+    selene?.holdAt(Sx.clone().lerp(mid, 0.4), z.myaw('seleneFarewell'));
     c.cut({ pos: mid.clone().add(new THREE.Vector3(0.05, 1.52, 1.9)), look: clasp.clone().setY(1.3), fov: 34 });
     humanoid(z.player)?.setHandTarget('R', clasp.clone().add(new THREE.Vector3(0.14, 0, 0)), 1);
     humanoid(selene?.actor)?.lookAt(clasp);
@@ -239,10 +248,10 @@ export function* farewellScene(z: ZoneRuntime): Routine {
       const chestS = new THREE.Vector3();
       z.player.visual?.socket('chest').getWorldPosition(chestT);
       selene?.actor.visual?.socket('chest').getWorldPosition(chestS);
-      g.vfx.spawn('goldRecognition', chestT, { scale: 0.35 });
+      g.vfx.spawn('goldRecognition', chestT, { scale: 0.16 });
       g.audio.play('recognitionTone', { pos: chestT, volume: 0.45 });
       yield 0.7;
-      g.vfx.spawn('goldRecognition', chestS, { scale: 0.2, color: 0xcfeeff });
+      g.vfx.spawn('goldRecognition', chestS, { scale: 0.09, color: 0xcfeeff });
     }
     yield 2.6;
   }, { blendOut: 0 });
@@ -259,6 +268,7 @@ export function* releaseScene(z: ZoneRuntime): Routine {
   yield* z.cinematic('z12-release', function* (c: CineCtx): Routine {
     humanoid(z.player)?.setHandTarget('R', null);
     humanoid(selene?.actor)?.setHandTarget('R', null);
+    sheathe(z.player, selene);
     const T = z.m('tarrikFarewell');
     c.cut({ pos: z.P(FAREWELL.x, 5.0, 1.55), look: z.P(FAREWELL.x, FAREWELL.n + 2, 1.5), fov: 38 });
     yield 0.8;
@@ -294,6 +304,7 @@ export function* departureScene(z: ZoneRuntime): Routine {
   const sp = S.sp;
   const party = [z.cast('lyessa'), z.cast('selene'), z.cast('tharne'), z.cast('lyric')];
   yield* z.cinematic('z12-departure', function* (c: CineCtx): Routine {
+    S.alert?.show(0, 0.4);
     // aboard: the bodies go inside, the ramps rise
     for (const b of party) b?.actor.visual?.setVisible(false);
     z.player.visual?.setVisible(false);
@@ -314,20 +325,20 @@ export function* departureScene(z: ZoneRuntime): Routine {
     S.t = 0;
     if (!z.skipping) g.audio.play('shipDepart', { pos: z.m('centre') });
     yield RISE + 0.8;
-    yield* z.say('Dominion Command', 'CROWNWATCH · SOVEREIGN PRIORITY · IMMEDIATE RETURN', { channel: 'system', offscreen: true });
+    yield* z.say('Dominion Command', 'CROWNWATCH · SOVEREIGN PRIORITY · IMMEDIATE RETURN', { channel: 'system', offscreen: true }); // NEW (speaker label; the text is the book's)
     c.cut({ pos: z.P(21, 21.4, 1.4), look: z.P(21, 120, 24), fov: 58 });
-    yield* z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true });
+    yield* z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true }); // NEW (speaker label; the text is the book's)
     yield waitOr(z, () => z.skipping || S.t >= FLIGHT_END - 3, 14);
     if (!z.skipping) ui.card('Each now carries the truth the other civilization buried.\nEach possesses one half of the authority required to open the prison.\nEach believes the other will refuse.', { style: 'context' });
     yield 9;
     // the final visual: restrained — two rooms, two displays, neither knowing of the other
     if (!z.skipping) ui.fade(1, 1.6, 'black');
     yield 1.8;
-    if (!z.skipping) ui.card('CONTRARY BEARER CONCURRENCE REQUIRED', { style: 'consequence', sub: 'Crownwatch' }); // sub NEW (place name)
+    if (!z.skipping) ui.card('CONTRARY BEARER CONCURRENCE REQUIRED', { style: 'consequence', sub: 'Crownwatch' }); // NEW (sub: place name)
     yield 3.4;
-    if (!z.skipping) ui.card('ALTERNATIVE SOVEREIGN AUTHORITY PATH\nFEASIBILITY ASSESSMENT', { style: 'consequence', sub: 'Crownwatch' }); // sub NEW
+    if (!z.skipping) ui.card('ALTERNATIVE SOVEREIGN AUTHORITY PATH\nFEASIBILITY ASSESSMENT', { style: 'consequence', sub: 'Crownwatch' }); // NEW (sub: place name)
     yield 4.2;
-    if (!z.skipping) ui.card('TERMINAL DENIAL PROTOCOL\nCONCURRENCE OVERRIDE ANALYSIS', { style: 'consequence', sub: 'Mestria' }); // sub NEW
+    if (!z.skipping) ui.card('TERMINAL DENIAL PROTOCOL\nCONCURRENCE OVERRIDE ANALYSIS', { style: 'consequence', sub: 'Mestria' }); // NEW (sub: place name)
     yield 4.4;
     if (!z.skipping) ui.card('No one in the room believes they are trying to open the prison.\nNeither team knows the other has begun.', { style: 'context' });
     yield 7;

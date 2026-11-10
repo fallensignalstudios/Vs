@@ -28,6 +28,7 @@ import { callbackLine, restAtBench, reunionScene } from './z11/reunion';
 import { alertScene, conversationScene, evidenceAfterExchange } from './z11/table';
 import { o4Scene } from './z11/o4';
 import { SEAT_S, sitPlayer, sitTarrik } from './z11/stage';
+import { sheathe } from './z11/framing';
 
 // =====================================================================================================================
 // Build
@@ -57,6 +58,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   z.spawnPlayer('selene', reunion ? 'liftSelene' : stage === 'gallery' ? 'galleryIn' : SEAT_S);
   const tarrik = z.companion('tarrik', reunion ? 'liftTarrik' : stage === 'gallery' ? 'tarrikIn' : 'tarrikApproach', reunion ? 'hold' : 'follow');
   if (reunion) tarrik.holdAt(z.m('liftTarrik'), z.myaw('liftTarrik'));
+  sheathe(z.player, tarrik); // nobody here is fighting
   const lyessa = z.companion('lyessa', reunion ? 'lyessaGate' : 'lyessaPost', 'hold');
   lyessa.holdAt(z.m(reunion ? 'lyessaGate' : 'lyessaPost'), z.myaw(reunion ? 'lyessaGate' : 'lyessaPost'));
   z.npc('dominionSoldier', reunion ? 'soldier1Gate' : 'soldier1Post', undefined, 'soldier1');

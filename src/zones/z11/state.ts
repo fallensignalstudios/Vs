@@ -215,7 +215,7 @@ export function updateZ11(z: ZoneRuntime, dt: number): void {
     const v = actor.visual;
     if (v) v.socket('handL').getWorldPosition(tmp);
     else tmp.copy(actor.pos).setY(actor.pos.y + 1.1);
-    panel.object.position.set(tmp.x, tmp.y + 0.28, tmp.z);
+    panel.object.position.set(tmp.x, tmp.y + 0.62, tmp.z);
   }
 }
 

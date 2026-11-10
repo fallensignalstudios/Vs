@@ -19,6 +19,7 @@
  */
 import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { walkTo } from './shared';
+import { sheathe } from './z11/framing';
 import { buildScenic, buildSpace } from './z12/layout';
 import { S, buildObjects, carry, resetZ12, updateZ12 } from './z12/state';
 import { concourseScene, departureScene, farewellScene, releaseScene, toShips } from './z12/scenes';
@@ -46,6 +47,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   const lyric = z.companion('lyric', 'lyricWait', 'hold');
   lyric.holdAt(z.m('lyricWait'), z.myaw('lyricWait'));
   lyric.actor.visual?.setCorruption(0.24);
+  sheathe(z.player, selene); // nobody here is fighting
   // she still has the Cauldron recorder in her hand
   carry(S.recorder, selene.actor, 'handL');
   if (!first) toShips(z, false);

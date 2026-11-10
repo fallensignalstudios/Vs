@@ -82,6 +82,8 @@ export function buildSpace(b: ZoneBuilder): Z12Space {
   b.point({ x: DOM.x + 2, n: DOM.n - 5, h: 4.5, color: AMBER, intensity: 46, distance: 18 });
   b.point({ x: REF.x - 2, n: REF.n - 5, h: 4.5, color: BLUE, intensity: 46, distance: 18 });
   b.point({ x: W / 2, n: 3, h: 4.2, color: IVORY, intensity: 18, distance: 14 });
+  // a soft cool fill at face height for the farewell (the shaft above leaves eyes in shadow)
+  b.point({ x: FAREWELL.x, n: FAREWELL.n - 2.4, h: 1.9, color: 0xdfe6f4, intensity: 9, distance: 6.5 });
   b.point({ x: 3.5, n: D - 1.5, h: 5, color: 0xff6a4a, intensity: 24, distance: 16 }); // the red remnant's spill
   b.panelLight({ x: W / 2, n: -4.6, w: 2.2, d: 2.4, h: 0.9, facing: 'north', intensity: 1.6 });
 
@@ -98,8 +100,8 @@ export function buildSpace(b: ZoneBuilder): Z12Space {
   b.marker('tharneMeet', W / 2 + 3.1, 9.0, 0, 265);
   b.marker('lyricMeet', W / 2 + 2.5, 10.2, 0, 245);
   b.marker('lyricAlone', W / 2 + 1.9, 9.6, 0, 245);
-  b.marker('tarrikFarewell', FAREWELL.x - 0.62, FAREWELL.n, 0, FACE.east);
-  b.marker('seleneFarewell', FAREWELL.x + 0.62, FAREWELL.n, 0, FACE.west);
+  b.marker('tarrikFarewell', FAREWELL.x - 0.85, FAREWELL.n, 0, FACE.east);
+  b.marker('seleneFarewell', FAREWELL.x + 0.85, FAREWELL.n, 0, FACE.west);
   b.marker('tarrikTurn', FAREWELL.x - 1.4, FAREWELL.n - 0.4, 0, 250);
   b.marker('seleneTurn', FAREWELL.x + 1.4, FAREWELL.n - 0.4, 0, 110);
   b.marker('lookBack', FAREWELL.x - 4.2, FAREWELL.n - 1.6, 0, 250);
