@@ -27,7 +27,7 @@ export const G_PISTOL: PoseSpec = {
 /** Two-handed pistol presentation, square to the target. */
 const AIM_POSE: PoseSpec = {
   spine: [4, 0, 0], chest: [3, 0, 0], neck: [-3, 0, 0], head: [-3, 0, 2],
-  armR: { p: [0.06, 0.27, 0.5], barrel: [0, 0, 1], up: [0, 1, 0], pole: [0.7, -0.7, -0.1] },
+  armR: { p: [0.06, 0.27, 0.5], barrel: [0, 0.122, 0.992], up: [0, 0.992, -0.122], pole: [0.7, -0.7, -0.1] },
   armL: { p: [0.0, 0.225, 0.47], fingers: [0.55, 0.2, 0.8], palm: [0.85, 0, -0.5], pole: [-0.6, -0.75, -0.1], fist: 0.9 },
   grip: 0,
 };
@@ -39,15 +39,16 @@ const aim: ClipSpec = {
 
 /** Rifle shouldered, body bladed, cheek on the stock. */
 const AIM_RIFLE_POSE: PoseSpec = {
-  hipsR: [2, -14, 0], spine: [4, -4, 0], chest: [3, -8, 0], neck: [-2, 10, 0], head: [-2, 14, 7],
-  armR: { p: [0.11, 0.1, 0.26], barrel: [-0.42, 0, 0.9], up: [0, 1, 0], pole: [0.9, -0.3, -0.2] },
+  hipsR: [2, -14, 0], spine: [4, -4, 0], chest: [3, -8, 0], neck: [4, 12, 6], head: [5, 13, 11],
+  clavR: [8, 6],
+  armR: { p: [0.1, 0.22, 0.3], barrel: [-0.42, 0.11, 0.9], up: [0, 0.99, -0.12], pole: [0.95, -0.25, -0.15] },
   armL: { sh: [30, 10, 0], el: 50 },
   grip: 1,
 };
 
 const aimRifle: ClipSpec = {
   duration: 2.8, loop: true, upperOnly: true, fadeIn: 0.14,
-  keys: [{ t: 0, ...AIM_RIFLE_POSE }, { t: 0.5, armR: { p: [0.11, 0.103, 0.26] } }],
+  keys: [{ t: 0, ...AIM_RIFLE_POSE }, { t: 0.5, armR: { p: [0.1, 0.223, 0.3] } }],
 };
 
 const shoot: ClipSpec = {
@@ -65,7 +66,7 @@ const shootRifle: ClipSpec = {
   duration: 0.3, upperOnly: true, base: AIM_RIFLE_POSE, fadeIn: 0.03, fadeOut: 0.12,
   keys: [
     { t: 0 },
-    { t: 0.18, ease: 'out', chest: [1, -9, 0], armR: { p: [0.115, 0.115, 0.225], barrel: [-0.42, 0.07, 0.9], up: [0, 1, -0.07] } },
+    { t: 0.18, ease: 'out', chest: [1, -9, 0], armR: { p: [0.108, 0.232, 0.268], barrel: [-0.42, 0.17, 0.9], up: [0, 0.98, -0.18] } },
     { t: 1, ease: 'inOut', ...AIM_RIFLE_POSE },
   ],
   events: [[0.03, 'release']],
@@ -180,13 +181,15 @@ const guardBreak: ClipSpec = {
 /** Supine on the floor (shared end pose of knockdown / lieInjured). */
 export const LYING: PoseSpec = {
   hips: [0, -0.85, -0.32], hipsR: [-86, 0, 0], spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [6, 0, 0], head: [6, 10, 0],
-  armL: { sh: [-6, 38, 0], el: 26, fk: true, fist: 0.2 }, armR: { sh: [-6, 30, 0], el: 40, fk: true, fist: 0.2 }, grip: 0,
+  armL: { sh: [-6, 38, 0], el: 26, fk: true, fist: 0.2 },
+  // root space: the right hand rests on the floor beside the hip, whatever it holds lying flat and pointing away
+  armR: { p: [0.5, 0.05, -0.18], blade: [0.35, 0.02, 0.94], edge: [0.94, 0, -0.35], pole: [0.9, 0.2, 0.3], fist: 0.2 }, grip: 0,
   legL: { p: [-0.16, 0.02, 0.5], pitch: 62, yaw: 22, air: true, knee: [-0.3, 0.9, 0.3] },
   legR: { p: [0.13, 0.03, 0.42], pitch: 56, yaw: 14, air: true, knee: [0.2, 0.95, 0.2] },
 };
 
 const knockdown: ClipSpec = {
-  duration: 1.0, hold: true, fadeIn: 0.06,
+  duration: 1.0, hold: true, fadeIn: 0.06, thaw: true, seat: 0.02, space: { R: 'root' },
   keys: [
     { t: 0 },
     { t: 0.22, ease: 'out', hips: [0, -0.12, -0.2], hipsR: [-28, 0, 0], spine: [-14, 0, 0], chest: [-8, 0, 0], neck: [12, 0, 0], head: [14, 0, 0],
@@ -203,12 +206,12 @@ const knockdown: ClipSpec = {
 };
 
 const getUp: ClipSpec = {
-  duration: 1.2, base: LYING, fadeIn: 0.1, fadeOut: 0.3,
+  duration: 1.2, base: LYING, fadeIn: 0.1, fadeOut: 0.3, space: { R: 'root' },
   keys: [
     { t: 0 },
     // roll up to sitting, one hand planted
     { t: 0.3, ease: 'inOut', hips: [0, -0.78, -0.2], hipsR: [-30, 10, 0], spine: [14, 0, 0], chest: [10, 0, 0], neck: [-4, 0, 0], head: [-6, 0, 0],
-      armL: { sh: [-50, 30, 0], el: 20 }, armR: { sh: [30, 20, 0], el: 60 },
+      armL: { sh: [-50, 30, 0], el: 20 }, armR: { sh: [30, 20, 0], el: 60, fk: true },
       legL: { p: [-0.18, 0, 0.3], pitch: 0, yaw: 20, air: false, knee: [-0.3, 0.9, 0.3] }, legR: { p: [0.15, 0.02, 0.44], pitch: 40, air: true } },
     // onto one knee
     { t: 0.62, ease: 'inOut', hips: [0, -0.46, 0], hipsR: [14, 0, 0], spine: [16, 0, 0], chest: [8, 0, 0], neck: [-8, 0, 0], head: [-8, 0, 0],
@@ -220,7 +223,7 @@ const getUp: ClipSpec = {
 };
 
 const death: ClipSpec = {
-  duration: 1.5, hold: true, fadeIn: 0.08,
+  duration: 1.5, hold: true, fadeIn: 0.08, sticky: true, thaw: true, dropAt: 0.4, seat: 0.02,
   keys: [
     { t: 0 },
     // the hit takes the breath: stagger back
@@ -232,11 +235,11 @@ const death: ClipSpec = {
       armL: { sh: [10, 16, 0], el: 20 }, armR: { sh: [14, 14, 0], el: 24 },
       legL: { p: [-0.14, 0.05, -0.3], pitch: -76, air: true, knee: [-0.1, -0.7, 0.7] }, legR: { p: [0.15, 0.05, -0.36], pitch: -76, yaw: 10, air: true, knee: [0.1, -0.7, 0.7] } },
     // topple forward onto the left side
-    { t: 0.74, ease: 'in', hips: [-0.06, -0.8, 0.12], hipsR: [72, 26, -34], spine: [6, 10, 0], chest: [4, 12, 0], neck: [-10, 20, 0], head: [-10, 30, 0],
-      armL: { sh: [70, 30, 0], el: 60 }, armR: { sh: [30, 20, 0], el: 50 },
+    { t: 0.74, ease: 'in', hips: [-0.06, -0.78, 0.12], hipsR: [72, 26, -34], spine: [6, 10, 0], chest: [4, 12, 0], neck: [-10, 20, 0], head: [-10, 30, 0],
+      armL: { sh: [78, 34, 0], el: 70 }, armR: { sh: [50, 24, 10], el: 64 },
       legL: { p: [-0.2, 0.04, -0.62], pitch: -80, yaw: 30, air: true, knee: [-0.6, -0.3, 0.3] }, legR: { p: [0.02, 0.1, -0.56], pitch: -70, yaw: -20, air: true, knee: [-0.4, 0.2, 0.6] } },
-    { t: 0.86, ease: 'out', hips: [-0.06, -0.84, 0.13], hipsR: [80, 28, -40] },
-    { t: 1, ease: 'inOut', hips: [-0.06, -0.85, 0.13] },
+    { t: 0.86, ease: 'out', hips: [-0.06, -0.81, 0.13], hipsR: [80, 28, -40] },
+    { t: 1, ease: 'inOut', hips: [-0.06, -0.82, 0.13] },
   ],
   events: [[0.48, 'impact'], [0.76, 'impact']],
 };

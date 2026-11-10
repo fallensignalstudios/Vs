@@ -5,7 +5,7 @@
  */
 import type { Moveset } from '../anim/moveset';
 import type { ClipSpec, PoseSpec } from '../anim/clip';
-import { GENERIC } from './generic';
+import { GENERIC, dodgeVariants } from './generic';
 
 /** Low ready: bladed stance, left shoulder leading, point low and forward. */
 export const T_READY: PoseSpec = {
@@ -84,16 +84,17 @@ const light3: ClipSpec = {
     { t: 0.45, ease: 'in', hips: [0, -0.15, 0.14], hipsR: [10, 0, 0], spine: [18, 0, 0], chest: [12, 0, 0], neck: [-10, 0, 0], head: [-12, 0, 0],
       armR: { p: [0.05, -0.08, 0.42], blade: [0, -0.35, 0.94], edge: [0, -0.94, -0.35], pole: [0.7, -0.5, -0.5] },
       legL: { p: [-0.13, 0, 0.38], yaw: 0 }, legR: { p: [0.16, 0, -0.3], pitch: -30, yaw: 24 } },
-    // buried low
-    { t: 0.56, ease: 'out', spine: [24, 0, 0], chest: [14, 0, 0], armR: { p: [0.05, -0.2, 0.4], blade: [0, -0.56, 0.83], edge: [0, -0.83, -0.56] } },
-    { t: 0.72, ease: 'inOut', spine: [22, 0, 0] },
+    // the edge stops ON the floor (the solver's ground constraint keeps the point above the stone): sparks at 'impact'
+    { t: 0.54, ease: 'out', spine: [22, 0, 0], chest: [13, 0, 0], armR: { p: [0.05, -0.15, 0.43], blade: [0, -0.2, 0.98], edge: [0, -0.98, -0.2] } },
+    { t: 0.6, ease: 'out', spine: [20, 0, 0], armR: { p: [0.05, -0.12, 0.42], blade: [0, -0.12, 0.99], edge: [0, -0.99, -0.12] } },
+    { t: 0.72, ease: 'inOut', spine: [20, 0, 0] },
     { t: 1, ease: 'inOut', ...T_READY },
   ],
-  events: [[0.34, 'step'], [0.45, 'hit'], [0.52, 'impact']],
+  events: [[0.34, 'step'], [0.45, 'hit'], [0.54, 'impact']],
 };
 
 const heavy: ClipSpec = {
-  duration: 1.05, base: T_READY, fadeIn: 0.08, fadeOut: 0.26,
+  duration: 1.05, base: T_READY, fadeIn: 0.08, fadeOut: 0.26, releaseAt: 0.42,
   keys: [
     { t: 0 },
     // long coil: blade trails low behind the right hip
@@ -114,7 +115,7 @@ const heavy: ClipSpec = {
 };
 
 const heavyCharge: ClipSpec = {
-  duration: 0.9, base: T_READY, loop: true, fadeIn: 0.25,
+  duration: 0.9, base: T_READY, loop: true, fadeIn: 0.25, transient: true,
   keys: [
     { t: 0, hips: [0.04, -0.12, -0.08], hipsR: [6, -40, 0], spine: [6, -16, 0], chest: [2, -20, 0], neck: [0, 26, 0], head: [-2, 36, 0],
       armR: { p: [0.26, -0.16, 0.05], blade: [0.52, -0.1, -0.85], edge: [0.6, -0.5, 0.6] },
@@ -180,9 +181,9 @@ const slam: ClipSpec = {
       armR: { p: [0.05, 0.5, 0.2], blade: [0, -0.9, 0.42], edge: [0, 0.42, 0.9], pole: [0.9, -0.2, 0.2] },
       legL: { p: [-0.16, 0, 0.12], yaw: 12 }, legR: { p: [0.17, 0, -0.1], yaw: 24 } },
     { t: 0.5, ease: 'in', hips: [0, -0.3, 0.06], hipsR: [12, 0, 0], spine: [16, 0, 0], chest: [10, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0],
-      armR: { p: [0.03, 0.22, 0.36], blade: [0, -1, 0.06], edge: [0, 0.06, 1], pole: [0.8, -0.5, -0.3] },
+      armR: { p: [0.03, 0.46, 0.38], blade: [0, -1, 0.06], edge: [0, 0.06, 1], pole: [0.8, -0.5, -0.3] },
       legL: { p: [-0.2, 0, 0.16], yaw: 16 }, legR: { p: [0.2, 0, -0.14], yaw: 28, pitch: -10 } },
-    { t: 0.74, ease: 'out', hips: [0, -0.32, 0.06], armR: { p: [0.03, 0.2, 0.36] } },
+    { t: 0.74, ease: 'out', hips: [0, -0.32, 0.06], armR: { p: [0.03, 0.45, 0.38] } },
     { t: 1, ease: 'inOut', ...T_READY },
   ],
   events: [[0.5, 'impact'], [0.5, 'hit']],
@@ -197,7 +198,7 @@ const floorStrike: ClipSpec = {
       armR: { p: [0.04, 0.46, 0.22], blade: [0, -0.92, 0.38], edge: [0, 0.38, 0.92], pole: [0.9, -0.2, 0.2] },
       legL: { p: [-0.15, 0, 0.1], yaw: 12 }, legR: { p: [0.16, 0, -0.08], yaw: 22 } },
     { t: 0.52, ease: 'in', hips: [0, -0.24, 0.05], hipsR: [9, 0, 0], spine: [12, 0, 0], chest: [8, 0, 0], neck: [-6, 0, 0], head: [-8, 0, 0],
-      armR: { p: [0.03, 0.17, 0.36], blade: [0, -1, 0.05], edge: [0, 0.05, 1], pole: [0.8, -0.5, -0.3] } },
+      armR: { p: [0.03, 0.4, 0.38], blade: [0, -1, 0.05], edge: [0, 0.05, 1], pole: [0.8, -0.5, -0.3] } },
     { t: 0.85, ease: 'inOut', hips: [0, -0.25, 0.05] },
     { t: 1, ease: 'inOut', ...T_READY },
   ],
@@ -238,7 +239,7 @@ const lowerWeapon: ClipSpec = {
   keys: [
     { t: 0 },
     { t: 1, ease: 'inOut', hips: [0, 0, 0], hipsR: [0, -6, 0], spine: [2, -2, 0], chest: [0, -2, 0], neck: [0, 4, 0], head: [2, 6, 0],
-      armR: { p: [0.22, -0.34, 0.1], blade: [0.05, -0.92, 0.38], edge: [0, -0.38, -0.92] }, grip: 0, armL: { sh: [2, 6, 0], el: 14, fk: true },
+      armR: { p: [0.2, -0.28, 0.16], blade: [0.02, -0.62, 0.78], edge: [0, -0.78, -0.62] }, grip: 0, armL: { sh: [2, 6, 0], el: 14, fk: true },
       legL: { p: [-0.12, 0, 0.06], yaw: 8 }, legR: { p: [0.13, 0, -0.04], yaw: 16 } },
   ],
   events: [[1, 'impact']],
@@ -246,7 +247,7 @@ const lowerWeapon: ClipSpec = {
 
 const raiseWeapon: ClipSpec = {
   duration: 0.8, fadeIn: 0.25,
-  base: { ...T_READY, armR: { p: [0.22, -0.34, 0.1], blade: [0.05, -0.92, 0.38], edge: [0, -0.38, -0.92] }, grip: 0 },
+  base: { ...T_READY, armR: { p: [0.2, -0.28, 0.16], blade: [0.02, -0.62, 0.78], edge: [0, -0.78, -0.62] }, grip: 0 },
   keys: [{ t: 0 }, { t: 1, ease: 'inOut', ...T_READY }],
 };
 
@@ -256,6 +257,7 @@ export const TARRIK_MOVES: Moveset = {
   clips: {
     attackLight1: light1, attackLight2: light2, attackLight3: light3, attackHeavy: heavy, attackHeavyCharge: heavyCharge,
     counter, parry, guard, guardBreak, slam, groundSlam: slam, floorStrike, throw: throwClip, dodge, lowerWeapon, raiseWeapon,
+    ...dodgeVariants(T_READY, { armR: { p: [0.2, -0.22, 0.12], blade: [0.3, -0.25, -0.92], edge: [0, -1, 0] }, grip: 0, armL: { sh: [40, 14, 20], el: 95, fk: true } }),
   },
   alias: { attackLight4: 'attackLight2', deflect: 'parry' },
   stances: {

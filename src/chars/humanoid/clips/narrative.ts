@@ -135,7 +135,8 @@ const receive: ClipSpec = {
 const KNEEL: PoseSpec = {
   hips: [0, -0.44, 0.02], hipsR: [6, 0, 0], spine: [6, 0, 0], chest: [4, 0, 0], neck: [-4, 0, 0], head: [-4, 0, 0],
   legL: { p: [-0.13, 0, 0.3], pitch: 0, yaw: 6, air: false, knee: [-0.1, 0.3, 1] },
-  legR: { p: [0.12, 0.055, -0.4], pitch: -80, yaw: 4, air: true, knee: [0.08, -0.8, 0.6] },
+  // the rear foot stands on the ball, toes bent flat (not air: the heel-off pivot does exactly this)
+  legR: { p: [0.12, 0, -0.36], pitch: -76, yaw: 4, air: false, knee: [0.08, -0.8, 0.6] },
   armL: { sh: [26, 8, 10], el: 62, fist: 0.3 }, armR: { sh: [10, 8, 0], el: 30, fist: 0.3 },
 };
 

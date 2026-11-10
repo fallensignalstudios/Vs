@@ -78,6 +78,8 @@ export class BodySolver {
   readonly curl = new Float32Array([0.3, 0.3]);
   private readonly restHips: THREE.Vector3;
   readonly bodyCount: number;
+  /** radius of the pelvis / ribcage including armour: neither sinks into the floor when the figure lies down */
+  torsoRadius = 0.13;
   /** bones apply() writes, in hierarchy order */
   private readonly body: number[];
   /** chest transform before additives (for follow hands) */
@@ -133,6 +135,9 @@ export class BodySolver {
     this.fk(I.spine, I.hips, _q);
     _q.fromArray(q, FK.chest * 4); if (add) _q.multiply(add.chest);
     this.fk(I.chest, I.spine, _q);
+    // lying poses: lift the whole torso until pelvis and ribcage rest on the floor instead of in it
+    const low = Math.min(this.wp[I.hips].y, this.wp[I.chest].y) - this.torsoRadius;
+    if (low < 0) { this.wp[I.hips].y -= low; this.wp[I.spine].y -= low; this.wp[I.chest].y -= low; }
   }
 
   /**

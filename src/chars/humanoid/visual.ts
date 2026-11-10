@@ -111,6 +111,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.animator = new Animator(fig.spec, { resolve: (name) => resolveClip(fig.moveset, name), has: (name) => hasClip(fig.moveset, name) });
     this.animator.headBias.set(fig.headBias[0] * DEG, fig.headBias[1] * DEG, fig.headBias[2] * DEG);
     this.animator.breath = fig.breath;
+    this.animator.solver.torsoRadius = 0.125 * fig.spec.prop.bulk * fig.girth;
     this.animator.loco.onStep = (side) => {
       if (!this.onFootstep) return;
       const bone = this.rig.byName[side < 0 ? 'footL' : 'footR'];
