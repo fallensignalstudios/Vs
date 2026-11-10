@@ -16,10 +16,11 @@ import { clamp, clamp01, damp, smoothstep, TAU } from '@/core/mathx';
 import { gaitFoot, gaitRate, groundDeficit, Limb2, move, noise1, PlantYaw, probe, rot, type GaitOut, type GroundProbe } from '../core/anim';
 import { CreatureBase, type Slot } from '../core/base';
 import { getTemplate } from '../core/rig';
-import { getCreatureSkin, loadCreatureSkin, skinsEnabled } from '../core/skinlib';
+import { getCreatureSkin, loadCreatureSkin, skinQuality, skinsEnabled } from '../core/skinlib';
 import { applyEliteAction, ELITE_ACTIONS, ELITE_ALIASES, ELITE_STEPS, type ElitePose } from './actions';
 import { buildElite, ELITE_GROUPS, ELITE_MODEL_SCALE, eliteWarp, EW as E, TENDRIL_BONES, TENDRIL_COUNT } from './build';
 import { ELITE_SKIN_SIZE, EliteSkin } from './skin';
+import { measureTendril, solveTendrils, type Tendril, type TendrilDrive } from './tendrils';
 
 const STRIDE_DUTY = 0.64;
 const TURN_LIMIT = 0.42, TURN_STEP_TIME = 0.36;
@@ -63,13 +64,6 @@ export interface EliteArmState {
   w: number;
 }
 
-interface Tendril {
-  bones: THREE.Bone[];
-  dir: THREE.Vector3[];
-  len: number[];
-  onArm: boolean;
-}
-
 export class Elite extends CreatureBase implements EliteVisual, ElitePose {
   onFootfall: ((side: 'L' | 'R', strength: number) => void) | null = null;
   private isFractured = false;
@@ -85,6 +79,8 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
   private readonly tendrils: Tendril[] = [];
   private readonly chestPrev = new THREE.Vector3();
   private readonly chestVel = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  private readonly tendrilFrames = [new THREE.Matrix4(), new THREE.Matrix4()];
+  private readonly drive: TendrilDrive = { t: 0, life: 1, flare: 0, beat: 0, vel: this.chestVel, floor: 0.07 };
   private hasPrev = false;
   private readonly bodyProbes: GroundProbe[];
   private skin: EliteSkin | null = null;
@@ -125,18 +121,11 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
     this.clawL = [0, 1, 2].map((i) => r.b('clawL' + i));
     this.petals = [0, 1, 2, 3].map((i) => r.b('petal' + i));
     this.jointCore = r.b('jointCore'); this.stump = r.b('stump');
-    const a = new THREE.Vector3(), c = new THREE.Vector3();
+    const restOf = (bone: THREE.Bone, out: THREE.Vector3): THREE.Vector3 => r.restOf(r.indexOf(bone), out);
     for (let i = 0; i < TENDRIL_COUNT; i++) {
-      const bones: THREE.Bone[] = [], dir: THREE.Vector3[] = [], len: number[] = [];
+      const bones: THREE.Bone[] = [];
       for (let j = 0; j < TENDRIL_BONES; j++) bones.push(r.b(`t${i}_${j}`));
-      for (let j = 0; j < TENDRIL_BONES; j++) {
-        const k = Math.min(j, TENDRIL_BONES - 2);
-        r.restOf(r.indexOf(bones[k]!), a); r.restOf(r.indexOf(bones[k + 1]!), c);
-        c.sub(a);
-        len.push(c.length());
-        dir.push(c.clone().normalize());
-      }
-      this.tendrils.push({ bones, dir, len, onArm: bones[0]!.parent === this.armL });
+      this.tendrils.push(measureTendril(bones, restOf, bones[0]!.parent === this.armL ? 1 : 0));
     }
     const fwd = new THREE.Vector3(0, 0, -1);
     this.legs = [
@@ -167,7 +156,7 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
     if (!skinsEnabled()) return;
     const ready = getCreatureSkin('elite');
     if (ready) { this.wear(ready); return; }
-    void loadCreatureSkin('elite').then((tpl) => { if (tpl && !this.gone && !this.skin && skinsEnabled()) this.wear(tpl); });
+    void loadCreatureSkin('elite', skinQuality(this.game)).then((tpl) => { if (tpl && !this.gone && !this.skin && skinsEnabled()) this.wear(tpl); });
   }
 
   private wear(tpl: NonNullable<ReturnType<typeof getCreatureSkin>>): void {
@@ -175,7 +164,8 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
       const skin = new EliteSkin(tpl, this.u, this.rig.sockets);
       skin.group.scale.setScalar((this.scale / ELITE_MODEL_SCALE) * ELITE_SKIN_SIZE);
       this.root.add(skin.group);
-      this.extraMaterials.push(skin.material);
+      this.adoptMaterial(skin.material);
+      this.adoptMaterial(skin.wreath.material);
       this.rig.mesh.visible = false;
       this.skin = skin;
     } catch (err) {
@@ -189,7 +179,7 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
 
   protected override setCastShadow(on: boolean): void {
     this.rig.mesh.castShadow = on;
-    if (this.skin) this.skin.mesh.castShadow = on;
+    if (this.skin) { this.skin.mesh.castShadow = on; this.skin.wreath.rig.mesh.castShadow = on; }
   }
 
   protected override onDispose(): void {
@@ -372,9 +362,11 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
 
     // ---- turn-stepping: planted feet hold the world while the root yaws, and re-plant one at a time
     const release = Math.max(mv, this.dead ? 1 : 0);
+    // a fast turn takes quicker steps, so the waiting foot is never wound far round before its turn comes
+    const stepTime = TURN_STEP_TIME / (1 + (dt > 1e-5 ? Math.abs(this.yawDelta) / dt : 0) * 0.55);
     for (let i = 0; i < 2; i++) {
       const leg = this.legs[i]!, other = this.legs[1 - i]!;
-      leg.plant.update(this.yawDelta, dt, !other.plant.stepping && mv < 0.3 && alive > 0, release, TURN_LIMIT, TURN_STEP_TIME);
+      leg.plant.update(this.yawDelta, dt, !other.plant.stepping && mv < 0.3 && alive > 0, release, TURN_LIMIT, stepTime);
       if (leg.plant.landed) this.footfall(i === 0 ? 'R' : 'L', 0.5);
     }
 
@@ -425,7 +417,7 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
     this.u.uKnit.value.w = this.knitLift;
     this.rig.setBoundsCenter(hips.position.x, 2.3 + (hips.position.y - E.hips[1]) * 0.5, hips.position.z, 1.5);
 
-    if (this.skin) this.skin.update(this, ELITE_MODEL_SCALE / ELITE_SKIN_SIZE, alive, on);
+    if (this.skin) this.skin.update(this, ELITE_MODEL_SCALE / ELITE_SKIN_SIZE, alive, on, this.drive);
   }
 
   private knitWave(amount: number): void {
@@ -460,17 +452,13 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
     hand.quaternion.premultiply(_q2.copy(_qp).invert().multiply(_q).multiply(_qp));
   }
 
-  /**
-   * Tendrils are solved as chains in model space: each segment takes a direction (hang + writhe + flare +
-   * drag behind the chest's motion), the end point is kept on or above the floor, and only then is the
-   * direction turned into a bone rotation — so a collapsed body's tendrils lie along the ground.
-   */
+  /** track the chest's motion (the wreath trails behind it) and pose this body's tendrils — see ./tendrils */
   private poseTendrils(t: number, adt: number, beat: number, alive: number): void {
     const { chest, armL } = this;
     const toModel = this.rig.toModel;
     chest.updateWorldMatrix(true, false);
-    armL.updateWorldMatrix(true, false);
-    _p.setFromMatrixPosition(_m4.multiplyMatrices(toModel, chest.matrixWorld));
+    this.tendrilFrames[0]!.multiplyMatrices(toModel, chest.matrixWorld);
+    _p.setFromMatrixPosition(this.tendrilFrames[0]!);
     if (this.hasPrev && adt > 1e-5) {
       _t.subVectors(_p, this.chestPrev).multiplyScalar(1 / adt);
       _t.x += this.velX; _t.z += this.velZ;
@@ -482,40 +470,12 @@ export class Elite extends CreatureBase implements EliteVisual, ElitePose {
       }
     }
     if (Number.isFinite(_p.x + _p.y + _p.z)) { this.chestPrev.copy(_p); this.hasPrev = true; }
-    const life = (1 - this.limp) * alive;
-    const flare = this.flare;
-    for (let i = 0; i < TENDRIL_COUNT; i++) {
-      const td = this.tendrils[i]!;
-      const parent = td.onArm ? armL : chest;
-      _m4.multiplyMatrices(toModel, parent.matrixWorld);
-      _p.copy(td.bones[0]!.position).applyMatrix4(_m4); // root, model space
-      _qp.setFromRotationMatrix(_m4);                  // parent orientation, model space
-      const rx = _p.x, rz = _p.z - 0.3;
-      const rl = Math.hypot(rx, rz) || 1;
-      for (let j = 0; j < TENDRIL_BONES; j++) {
-        const rest = td.dir[j]!, v = this.chestVel[Math.min(2, j)]!;
-        const amp = (0.1 + j * 0.07) * life;
-        const out = flare * (j === 0 ? 0.9 : 0.45);
-        _d.set(
-          rest.x * 0.5 + Math.sin(t * 0.9 + i * 1.7 - j * 0.85) * amp - v.x * 0.05 * (j + 1) + (rx / rl) * out,
-          -1 + flare * (0.75 - j * 0.14) + clamp(-v.y * 0.04 * (j + 1), -0.4, 0.7) + beat * 0.04 * j * life,
-          rest.z * 0.5 + 0.2 + Math.cos(t * 0.7 + i * 2.3 - j * 0.9) * amp - v.z * 0.05 * (j + 1) + (rz / rl) * out,
-        ).normalize();
-        const len = td.len[j]!, floor = 0.07 - j * 0.012;
-        if (_p.y + _d.y * len < floor) {
-          // the segment would end under the floor: lay it down, keeping its heading
-          const dy = clamp((floor - _p.y) / len, -1, 1);
-          const h = Math.hypot(_d.x, _d.z);
-          const k = h > 1e-4 ? Math.sqrt(1 - dy * dy) / h : 0;
-          if (k > 0) _d.set(_d.x * k, dy, _d.z * k);
-          else _d.set((rx / rl) * Math.sqrt(1 - dy * dy), dy, (rz / rl) * Math.sqrt(1 - dy * dy));
-        }
-        _q.setFromUnitVectors(rest, _d);
-        td.bones[j]!.quaternion.copy(_q2.copy(_qp).invert().multiply(_q));
-        _qp.copy(_q);
-        _p.addScaledVector(_d, len);
-      }
-    }
+    const d = this.drive;
+    d.t = t; d.life = (1 - this.limp) * alive; d.flare = this.flare; d.beat = beat;
+    if (this.skin) return; // the skin wears its own wreath, posed from the same drive in skin.update()
+    armL.updateWorldMatrix(true, false);
+    this.tendrilFrames[1]!.multiplyMatrices(toModel, armL.matrixWorld);
+    solveTendrils(this.tendrils, this.tendrilFrames, d);
   }
 
   /** joint petals: always shifting a little, opening when exposed, thrown clear when the joint shatters */

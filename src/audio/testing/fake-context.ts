@@ -60,7 +60,10 @@ export class FakeParam {
 
 export class FakeNode {
   readonly outputs = new Set<FakeNode | FakeParam>();
+  /** the WebAudio interface name (`type` is overwritten by oscillators and filters with their waveform / response) */
+  readonly nodeType: string;
   constructor(readonly ctx: FakeContext, readonly type: string) {
+    this.nodeType = type;
     ctx.nodes++;
     ctx.all.push(this);
   }
@@ -90,7 +93,7 @@ export class FakeSource extends FakeNode {
     if (!Number.isFinite(when) || when < 0) this.ctx.problem(`${this.type}.start: bad time ${when}`);
     if (!Number.isFinite(offset) || offset < 0) this.ctx.problem(`${this.type}.start: bad offset ${offset}`);
     this.started = true;
-    this.span = { kind: this.type === 'OscillatorNode' ? 'osc' : 'buffer', start: Math.max(when, this.ctx.currentTime), stop: Infinity, offset };
+    this.span = { kind: this.nodeType === 'OscillatorNode' ? 'osc' : 'buffer', start: Math.max(when, this.ctx.currentTime), stop: Infinity, offset };
     this.ctx.spans.push(this.span);
   }
 

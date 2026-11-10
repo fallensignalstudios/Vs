@@ -137,7 +137,7 @@ export interface FigureDef extends FigureDraft {
 const cache = new Map<string, FigureDef>();
 let clock = 0;
 /** unreferenced figures kept warm before the oldest is disposed */
-const KEEP_UNUSED = 14;
+const KEEP_UNUSED = 24;
 const DEFAULT_LODS: readonly number[] = [0.5, 0.25];
 
 function newDraft(): FigureDraft {

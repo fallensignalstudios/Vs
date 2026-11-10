@@ -17,82 +17,13 @@ import type { ActionInfo, AnimAction, Archetype, CharacterCreateOpts, CharacterV
 import { clamp, clamp01, damp, smoothstep, wrapAngle } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import { finite3 } from './anim';
-import { Rig, warnOnce, type RigTemplate } from './rig';
+import { Rig, warnOnce } from './rig';
+import type { ActionDef, CreatureSpec, Slot } from './spec';
 import { createStateMaterial, GROUPS, setDissolveActive, type StateUniforms } from './shader';
 import { cadenceFor, cadenceRelease, cadenceRetain, type Cadence } from './cadence';
 
-export interface ActionDef {
-  /** seconds */
-  dur: number;
-  loop?: boolean;
-  /** keep the final pose until another main action starts (deaths, disabled states) */
-  hold?: boolean;
-  /** seconds at which 'hit' (or `hitName`) fires */
-  hits?: readonly number[];
-  hitName?: 'hit' | 'release';
-  /** extra named events: [seconds, name] */
-  events?: readonly (readonly [number, string])[];
-  /** default blend-in / blend-out seconds */
-  fade?: number;
-  out?: number;
-  /** additive reaction: layered over the main action and never interrupts it */
-  react?: boolean;
-  /** runs in real (game) time even while the body is frozen — deaths, the fracture, hit reactions */
-  ignoreFreeze?: boolean;
-  /** starting it shatters the frost: the visual thaws itself and stays thawed until setFrozen(0) */
-  thaw?: boolean;
-  /** brings a dead visual back (spawn) */
-  revive?: boolean;
-  /** [t0, t1] seconds over which the body dissolves away by itself (Eclipse deaths) */
-  dissolveOut?: readonly [number, number];
-  /** seconds over which the body materialises out of a full dissolve (spawns) */
-  dissolveIn?: number;
-}
 
-/** A playing action. `t` is seconds since start, `w` the eased blend weight 0..1. */
-export interface Slot {
-  /** pose name: a key of the archetype's action table, or 'generic' */
-  name: string;
-  /** what the caller asked for (canonical name, or the raw string for unknown actions) — isPlaying / stop match this */
-  key: string;
-  def: ActionDef;
-  t: number;
-  w: number;
-  speed: number;
-  fadeIn: number;
-  fadeOut: number;
-  /** 0 = playing, 1 = holding final pose, 2 = fading out */
-  state: 0 | 1 | 2;
-  raw: number;
-  loop: boolean;
-  react: boolean;
-  onEvent?: (name: string) => void;
-}
-
-export interface CreatureSpec {
-  archetype: Archetype;
-  height: number;
-  radius: number;
-  template: RigTemplate;
-  actions: Readonly<Record<string, ActionDef>>;
-  /** action name → canonical action of this creature */
-  aliases?: Readonly<Record<string, string>>;
-  /** group name → shader group id (setExposed / group glow) */
-  groups?: Readonly<Record<string, number>>;
-  /** bind-space origin + range of the frost creep */
-  frostOrigin?: readonly [number, number, number];
-  frostRange?: number;
-  /** Eclipse-made: follows the shared cadence and dissolves on death */
-  eclipse?: boolean;
-  /** baseline corruption the creature is authored with (setCorruption adds on top, clamped) */
-  baseCorruption?: number;
-  /** vein pattern frequency multiplier (default 1; big bodies < 1) */
-  veinScale?: number;
-  /** uniform scale from authored model units to metres (default 1); `height`/`radius` are already in metres */
-  modelScale?: number;
-  /** authored readability rim [sRGB hex, amount 0..1] the creature always carries (setRim layers on top) */
-  rim?: readonly [number, number];
-}
+export type { ActionDef, CreatureSpec, Slot } from './spec';
 
 const GENERIC: ActionDef = { dur: 0.6, react: true, ignoreFreeze: true };
 const NO_OPTS: PlayOpts = Object.freeze({});
@@ -633,6 +564,12 @@ export abstract class CreatureBase implements CharacterVisual {
     this.material.dispose();
     for (const m of this.extraMaterials) m.dispose();
     this.root.removeFromParent();
+  }
+
+  /** register a material that shares this creature's uniform block (a skin), in step with the dissolve program */
+  protected adoptMaterial(m: THREE.Material): void {
+    this.extraMaterials.push(m);
+    setDissolveActive(m, this.dissolveOn);
   }
 
   /** hook: free archetype-owned resources */

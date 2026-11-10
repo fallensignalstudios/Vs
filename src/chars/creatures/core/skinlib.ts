@@ -13,6 +13,8 @@
  * the canonical side of the 'joint' socket (see api/creatures.ts).
  */
 import * as THREE from 'three';
+import type { Game } from '@/core/api';
+import { isStub } from '@/core/stub';
 import { warnOnce } from './rig';
 
 export interface SkinBone {
@@ -60,15 +62,43 @@ export function getCreatureSkin(archetype: string): SkinTemplate | null {
   return cache.get(archetype) ?? null;
 }
 
-/** Load (once) and convert an archetype's generated mesh. Resolves null when there is none or it cannot load. */
-export function loadCreatureSkin(archetype: string): Promise<SkinTemplate | null> {
+/**
+ * Hand the library an already-converted skin (a shared model cache that loaded the file itself, or a test), or
+ * null to forget one. Creatures created afterwards wear it.
+ */
+export function registerCreatureSkin(archetype: string, tpl: SkinTemplate | null): void {
+  if (tpl) cache.set(archetype, tpl);
+  else { cache.delete(archetype); pending.delete(archetype); }
+}
+
+/** the texture budget the running game's quality profile allows (undefined outside a game: maps load as authored) */
+export function skinQuality(game: Game | null | undefined): SkinQuality | undefined {
+  try {
+    if (!game || isStub(game.render) || !game.render.quality) return undefined;
+    return { textureSize: game.render.quality.textureSize, anisotropy: game.render.quality.anisotropy };
+  } catch {
+    return undefined;
+  }
+}
+
+/** texture budget for skins: maps larger than `textureSize` are downscaled on load (QualityProfile fields) */
+export interface SkinQuality {
+  textureSize?: number;
+  anisotropy?: number;
+}
+
+/**
+ * Load (once) and convert an archetype's generated mesh. Resolves null when there is none or it cannot load.
+ * `quality` applies to the first load only (the result is cached and shared).
+ */
+export function loadCreatureSkin(archetype: string, quality?: SkinQuality): Promise<SkinTemplate | null> {
   const def = SKINS[archetype];
   if (!def || typeof document === 'undefined') return Promise.resolve(null);
   const hit = cache.get(archetype);
   if (hit) return Promise.resolve(hit);
   let p = pending.get(archetype);
   if (!p) {
-    p = fetchSkin(archetype, def.file, def.height).catch((err: unknown) => {
+    p = fetchSkin(archetype, def.file, def.height, quality).catch((err: unknown) => {
       warnOnce('skin:' + archetype, `[creatures] generated mesh for "${archetype}" unavailable (${String((err as Error)?.message ?? err)}) — using the procedural body`);
       return null;
     });
@@ -77,7 +107,7 @@ export function loadCreatureSkin(archetype: string): Promise<SkinTemplate | null
   return p;
 }
 
-async function fetchSkin(archetype: string, file: string, height: number): Promise<SkinTemplate | null> {
+async function fetchSkin(archetype: string, file: string, height: number, quality?: SkinQuality): Promise<SkinTemplate | null> {
   const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
     import('three/addons/loaders/GLTFLoader.js'),
     import('three/addons/libs/meshopt_decoder.module.js'),
@@ -87,8 +117,34 @@ async function fetchSkin(archetype: string, file: string, height: number): Promi
   const base = import.meta.env?.BASE_URL ?? '/';
   const gltf = await loader.loadAsync(`${base}models/${file}`);
   const tpl = convertSkin(archetype, gltf.scene, height);
-  if (tpl) cache.set(archetype, tpl);
+  if (tpl) {
+    const m = tpl.material;
+    const limit = Number.isFinite(quality?.textureSize) ? Math.max(256, quality!.textureSize as number) : 2048;
+    for (const map of new Set([m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap])) {
+      if (!map) continue;
+      // a towering body is mostly seen at grazing angles: a little anisotropy keeps its maps from smearing
+      map.anisotropy = Math.max(1, Math.min(8, quality?.anisotropy ?? 4));
+      fitTexture(map, limit);
+    }
+    cache.set(archetype, tpl);
+  }
   return tpl;
+}
+
+/** downscale a texture's image to the quality profile's budget (2048² is for hero surfaces at ultra only) */
+function fitTexture(map: THREE.Texture, limit: number): void {
+  const img = map.image as { width?: number; height?: number } | undefined;
+  const w = img?.width ?? 0, h = img?.height ?? 0;
+  if (!img || Math.max(w, h) <= limit) return;
+  const k = limit / Math.max(w, h);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * k));
+  canvas.height = Math.max(1, Math.round(h * k));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(img as CanvasImageSource, 0, 0, canvas.width, canvas.height);
+  map.image = canvas;
+  map.needsUpdate = true;
 }
 
 /**

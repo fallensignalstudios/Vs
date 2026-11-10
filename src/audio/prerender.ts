@@ -1,11 +1,12 @@
 /**
  * What gets pre-rendered when audio starts, and the per-sample-rate cache of the result:
  *  - every SFX recipe marked `bake` (frequent one-shots) and every `exact` one (the Eclipse voices);
+ *  - the sustaining loops marked `bake` (drone, link, emitter hums …) as seamless buffer loops;
  *  - every percussion stroke the score can play: instrument × tuning × three velocity tiers;
  *  - the ensemble loops (pads, strings, brass) for the registers the score actually uses.
  * One render per sample rate serves the live context and every offline measurement render.
  */
-import { bake, canBake, type BakeJob } from './synth/bake';
+import { bake, bakeLoops, canBake, type BakeJob, type LoopJob } from './synth/bake';
 import { bakeWaves, waveKey, waveOctave, type EnsembleName, type WaveBank } from './synth/waves';
 import { SFX } from './sfx';
 import { MUSIC } from './music/defs';
@@ -28,6 +29,12 @@ function sfxJobs(): BakeJob[] {
   return jobs;
 }
 
+function loopJobs(): LoopJob[] {
+  const jobs: LoopJob[] = [];
+  for (const [id, r] of Object.entries(SFX)) if (r.loop && r.bake > 0) jobs.push({ id, build: r.make });
+  return jobs;
+}
+
 function percJobs(): BakeJob[] {
   const seen = new Set<string>();
   const jobs: BakeJob[] = [];
@@ -44,6 +51,7 @@ function percJobs(): BakeJob[] {
     for (const l of def.layers) {
       if (l.kind === 'perc') add(l.inst, l.tune ?? 0);
       if (l.kind === 'strings' && l.gate?.length) add('bow', 0);
+      if (l.kind === 'cadence') add('cadence', 0);
     }
   }
   for (const [inst, tune] of STINGER_PERC) add(inst, tune);
@@ -68,8 +76,10 @@ export function waveNeeds(): Set<string> {
           need('brass', f2);
           need('brass', f1 * 2);
         }
-      } else if (l.kind === 'motif' && l.voice === 'horn') {
-        for (const phrase of l.phrases) for (const note of phrase) need('horn', mtof(l.base + note[1]));
+      } else if (l.kind === 'motif' && (l.voice === 'horn' || l.voice === 'glass')) {
+        for (const phrase of l.phrases) for (const note of phrase) need(l.voice === 'horn' ? 'horn' : 'glassy', mtof(l.base + note[1]));
+      } else if (l.kind === 'pulse' && (l.voice === 'glass' || l.voice === 'pluck')) {
+        for (const c of chords) for (const m of voicing(def.tonic, c, l.low, 8)) need(l.voice === 'glass' ? 'glassy' : 'pluck', mtof(m));
       }
     }
   }
@@ -79,6 +89,8 @@ export function waveNeeds(): Set<string> {
 export interface Prerendered {
   /** sample-bank id → variants */
   samples: Map<string, AudioBuffer[]>;
+  /** sustaining id → seamless loop */
+  loops: Map<string, AudioBuffer>;
 }
 
 const cache = new Map<number, Promise<Prerendered>>();
@@ -91,14 +103,15 @@ export function prerender(sampleRate: number, waves: WaveBank): Promise<Prerende
   let p = cache.get(sampleRate);
   if (!p) {
     p = (async (): Promise<Prerendered> => {
-      if (!canBake()) return { samples: new Map() };
+      if (!canBake()) return { samples: new Map(), loops: new Map() };
       // percussion first: the score is usually the first thing heard
       const samples = await bake(sampleRate, [...percJobs(), ...sfxJobs()]);
       await bakeWaves(sampleRate, waveNeeds(), waves);
-      return { samples };
+      const loops = await bakeLoops(sampleRate, loopJobs());
+      return { samples, loops };
     })().catch((err) => {
       console.warn('[audio] pre-render failed — everything stays live-synthesised:', err);
-      return { samples: new Map<string, AudioBuffer[]>() };
+      return { samples: new Map<string, AudioBuffer[]>(), loops: new Map<string, AudioBuffer>() };
     });
     cache.set(sampleRate, p);
   }

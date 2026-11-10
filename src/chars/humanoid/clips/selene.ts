@@ -303,7 +303,8 @@ export const SELENE_MOVES: Moveset = {
   clips: {
     attackLight1: light1, attackLight2: light2, attackLight3: light3, attackLight4: light4, attackHeavy: heavy, attackHeavyCharge: heavyCharge,
     deflect, guard, counter, dispatch, throw: throwClip, dodge, tetherStop, holdPlane, lowerWeapon, raiseWeapon,
-    ...dodgeVariants(S_READY, { armR: DODGE_ARM, armL: { sh: [20, 20, 10], el: 70 } }),
+    // side-steps carry Verity upright in her guard, out of the way of the reaching leg
+    ...dodgeVariants(S_READY, { armR: DODGE_ARM, armL: { sh: [20, 20, 10], el: 70 } }, { armR: GUARD_ARM, armL: { sh: [-10, 26, 0], el: 50 } }),
   },
   alias: { parry: 'deflect' },
   stances: {

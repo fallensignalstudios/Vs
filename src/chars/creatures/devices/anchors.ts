@@ -122,7 +122,7 @@ function buildWeaverAnchor(): RigTemplate {
     // a stolen plate bedded on the first run, and light threading the root
     if (i < 3) {
       const m: Pt3 = [(src[0]![0] + src[1]![0]) / 2, 0.092, (src[0]![2] + src[1]![2]) / 2];
-      addPlate(b, `r${i}_0`, [P.whiteGold, P.refNavy, P.domBronze][i]!, bladeOutline(0.13, 0.26, 310 + i), facing(m, [0, 1, 0], [src[1]![0] - src[0]![0], 0, src[1]![2] - src[0]![2]], 0.15), { thick: 0.022, lift: 0.02, shift: 0.02 });
+      addPlate(b, `r${i}_0`, [tint(P.ivoryWorn, { c: 0x7f7869, r: 0.8 }), P.refNavy, P.domBronze][i]!, bladeOutline(0.12, 0.24, 310 + i), facing(m, [i === 0 ? 0.3 : 0, 1, 0.2], [src[1]![0] - src[0]![0], 0, src[1]![2] - src[0]![2]], 0.15), { thick: 0.022, lift: 0.02, shift: 0.02 });
     }
     for (let k = 1; k < src.length; k++) b.add(k === 1 ? `r${i}_0` : `r${i}_1`, P.violet, sphere(0.014, 1), T(src[k]![0], 0.094 - k * 0.012, src[k]![2]), { group: WG.nodes, crease: 180 });
   });
@@ -225,8 +225,8 @@ function buildFrostAnchor(): RigTemplate {
     b.add('base', tint(P.goldChannel, { e: 0.9 }), box(0.012, 0.006, 0.1), T(Math.cos(a) * 0.71, 0.072, Math.sin(a) * 0.71, 0, -a + Math.PI / 2, 0), { group: FG.gold });
   }
   // the pale ring (two fine lines: recognisable shape as well as colour)
-  b.add('ring', tint(P.frostGlow, { e: 1.5 }), torus(0.44, 0.014, 48, 5), T(0, 0.084, 0), { group: FG.ring, crease: 180 });
-  b.add('ring', tint(P.frostGlow, { e: 0.9 }), torus(0.36, 0.007, 40, 4), T(0, 0.082, 0), { group: FG.ring, crease: 180 });
+  b.add('ring', tint(P.frostGlow, { e: 1.15 }), torus(0.44, 0.014, 48, 5), T(0, 0.084, 0), { group: FG.ring, crease: 180 });
+  b.add('ring', tint(P.frostGlow, { e: 0.8 }), torus(0.36, 0.007, 40, 4), T(0, 0.082, 0), { group: FG.ring, crease: 180 });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
     b.add('ring', tint(P.frostGlow, { e: 1.1 }), box(0.07, 0.006, 0.012), T(Math.cos(a) * 0.4, 0.082, Math.sin(a) * 0.4, 0, -a, 0), { group: FG.ring });

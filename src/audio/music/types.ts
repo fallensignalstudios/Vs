@@ -24,7 +24,7 @@ interface LayerBase {
 export type PadVoice = 'warm' | 'glass' | 'choir' | 'air' | 'wrong' | 'felt';
 export type PulseVoice = 'pluck' | 'tick' | 'glass' | 'bass' | 'clock';
 export type MotifVoice = 'bell' | 'glass' | 'horn' | 'felt';
-export type PercInst = 'taiko' | 'odaiko' | 'shime' | 'kane' | 'metal' | 'anvil' | 'hat' | 'shaker' | 'bow' | 'rim' | 'kick' | 'boom' | 'clack';
+export type PercInst = 'taiko' | 'odaiko' | 'shime' | 'kane' | 'metal' | 'anvil' | 'hat' | 'shaker' | 'bow' | 'rim' | 'kick' | 'boom' | 'clack' | 'cadence';
 
 /** `[step, semitones above base, length in steps, velocity]` */
 export type MotifNote = readonly [number, number, number, number?];

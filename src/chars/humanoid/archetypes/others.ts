@@ -118,7 +118,8 @@ export const linkbound: ArchetypeDef = {
     draft.moveset = LINKBOUND_MOVES;
     draft.corruption = 0.38;
     draft.headBias = [10, 0, domSide * 22];
-    draft.rim = { color: 0xb58cff, amount: 0.3 };
+    // dark, corroded gear on black stone: a stronger cool rim keeps the silhouette (violet stays in the veins)
+    draft.rim = { color: 0xa8b4e8, amount: 0.5 };
     draft.breath = 1.6;
   },
 };

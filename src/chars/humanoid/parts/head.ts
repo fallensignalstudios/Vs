@@ -1,10 +1,12 @@
 /**
  * Heads: a sculpted stylised face (brow, sockets, nose, lips, ears), hair styles and beards.
- * Everything is authored relative to the head joint (base of the skull) and bound rigidly to the head bone.
+ * Everything is authored relative to the head joint (base of the skull). The skull is bound to the head bone;
+ * the chin, lower lip and beard follow the `jaw` bone (speech), the upper lids the `lids` bone (blinks).
  */
 import { MeshBuilder, PART, ZONE, type Surf } from '../geo/builder';
 import { loft, ball, box, tube, type Sec, type V3 } from '../geo/prims';
-import type { RigView } from '../rig';
+import { mixSkin, smooth01, type RigView } from '../rig';
+import type { SkinFn } from '../geo/builder';
 
 export type HairStyle = 'crop' | 'bun' | 'tail' | 'bob' | 'tied' | 'bald' | 'buzz';
 
@@ -64,11 +66,21 @@ export function buildHead(b: MeshBuilder, rig: RigView, look: HeadLook): void {
   const jaw = look.jaw ?? 1;
   const fem = look.fem ?? 0;
   const nk = 1 - 0.22 * fem, ek = 1 + 0.16 * fem;
+  const jawBone = rig.i('jaw'), lidBone = rig.i('lids');
+  const rigid: SkinFn = (_x, _y, _z, o) => { o.i0 = head; o.w0 = 1; };
+  // the mandible: below the mouth line, in front of the ear — it swings on the jaw bone, the cheeks stretch
+  const jawSkin = mixSkin(rigid, jawBone, (_x, y, z) => smooth01(0.03, 0.008, y - hy) * smooth01(0.05, 0.0, z - hz));
   b.skin(head);
   b.scope(() => {
     b.translate(hx, hy, hz);
     b.surf(skin);
+    b.skin(jawSkin);
     loft(b, skullSecs(jaw), { seg: 28, smooth: 4, capB: { dome: 0.014, k: 2 }, fn: faceFn(fem) });
+    b.skin(head);
+    // the dark of the mouth, seen when the jaw drops
+    b.surf({ color: 0x1a0a0b, rough: 0.6, part: PART.skin, zone: ZONE.head });
+    b.scope(() => { b.translate(0, 0.016, -0.083); ball(b, 0.017 * (0.6 + 0.4 * jaw), 0.0075, 0.008, 8, 4); });
+    b.surf(skin);
 
     // nose: a broad wedge that grows out of the brow rather than a stick
     b.scope(() => {
@@ -84,7 +96,9 @@ export function buildHead(b: MeshBuilder, rig: RigView, look: HeadLook): void {
     b.surf({ ...skin, color: mixHex(look.skin.color, fem > 0.5 ? 0x7a2f33 : 0x5a2a26, 0.38 + 0.1 * fem), rough: 0.42 });
     b.scope(() => { b.translate(0, 0.0205, -0.0915); ball(b, 0.0205 * (0.6 + 0.4 * jaw), 0.0042 + 0.0012 * fem, 0.0072, 10, 4); });
     b.surf({ ...skin, color: mixHex(look.skin.color, fem > 0.5 ? 0x7a2f33 : 0x5a2a26, 0.16 + 0.2 * fem), rough: 0.46 });
+    b.skin(jawBone);
     b.scope(() => { b.translate(0, 0.0125 + 0.001 * fem, -0.09); ball(b, 0.0165 * (0.6 + 0.4 * jaw), 0.005 + 0.0012 * fem, 0.0075, 10, 4); });
+    b.skin(head);
     // ears
     b.surf(skin);
     for (const s of [-1, 1]) b.scope(() => { b.at(s * 0.0745, 0.082, 0.012, 0, s * -18, s * -6); ball(b, 0.007, 0.026, 0.015, 8, 5); });
@@ -99,13 +113,24 @@ export function buildHead(b: MeshBuilder, rig: RigView, look: HeadLook): void {
         } else {
           b.surf({ color: 0xcfc8be, rough: 0.25, part: PART.glass, zone: ZONE.head });
           ball(b, 0.0128 * ek, 0.0056 * ek, 0.006, 10, 4);
-          b.surf({ color: look.eye ?? 0x2a1c12, rough: 0.1, part: PART.glass, zone: ZONE.head });
-          b.translate(-s * 0.0008, 0, -0.0026);
-          ball(b, 0.0066 * ek, 0.0056 * ek, 0.0046, 8, 4);
-          // upper lid: a sliver of skin that gives the eye its shape (a dark lash line on finer faces)
+          // iris + pupil face straight ahead (the socket follows the skull, the gaze does not), with a catchlight
+          b.scope(() => {
+            b.translate(-s * 0.0022, 0, -0.0024); b.rotate(0, s * 10, s * -4);
+            b.surf({ color: look.eye ?? 0x2a1c12, rough: 0.1, part: PART.glass, zone: ZONE.head });
+            ball(b, 0.0066 * ek, 0.006 * ek, 0.0046, 10, 4);
+            b.surf({ color: 0x060404, rough: 0.05, part: PART.glass, zone: ZONE.head });
+            b.scope(() => { b.translate(0, 0, -0.0026); ball(b, 0.003 * ek, 0.003 * ek, 0.0024, 8, 4); });
+            b.fine(0.9, () => {
+              b.surf({ color: 0xffffff, rough: 0.05, part: PART.glow, zone: ZONE.head, emissive: 0xfff4e6, glow: 0.9 });
+              b.scope(() => { b.translate(s * 0.002, 0.0022 * ek, -0.0042); ball(b, 0.0011, 0.0011, 0.0009, 6, 3); });
+            });
+          });
+          // upper lid: a sliver of skin that gives the eye its shape (a dark lash line on finer faces); it blinks
           b.surf(fem > 0.5 ? { ...skin, color: mixHex(look.skin.color, 0x140c0a, 0.7) } : skin);
-          b.translate(s * 0.0008, 0.0046 * ek, 0.0012);
+          b.skin(lidBone);
+          b.translate(0, 0.0046 * ek, -0.0014);
           ball(b, 0.0145 * ek, fem > 0.5 ? 0.0022 : 0.0034, 0.0062, 10, 4);
+          b.skin(head);
         }
       });
     }
@@ -115,7 +140,7 @@ export function buildHead(b: MeshBuilder, rig: RigView, look: HeadLook): void {
     for (const s of [-1, 1]) b.scope(() => { b.at(s * 0.032, 0.1195 + 0.004 * fem, -0.0895 + 0.0015 * fem, 12, s * -22, s * (-5 + 10 * fem)); box(b, 0.036, 0.0075 - 0.0032 * fem, 0.01 - 0.003 * fem, { bevel: 0.002, edge: 0 }); });
 
     if (look.style !== 'bald') buildHair(b, look.style, hair);
-    if (look.beard) buildBeard(b, hair, jaw);
+    if (look.beard) { b.skin(jawSkin); buildBeard(b, hair, jaw); b.skin(head); }
   });
 }
 

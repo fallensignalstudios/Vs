@@ -62,7 +62,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private readonly equip: Equipment;
   private readonly cloth: ClothSim[] = [];
   private readonly caps: ClothCapsule[] = [];
-  /** the subset cloth collides with: torso, legs, upper arms, pelvis, weapon */
+  /** the subset cloth collides with: torso, legs, upper arms, pelvis, head, weapon */
   private readonly clothCaps: ClothCapsule[] = [];
   private readonly sockets: Record<string, THREE.Object3D> = {};
   private readonly overlays: Array<{ mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; base: number; with?: string }> = [];
@@ -80,6 +80,14 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private readonly lookLocal = new THREE.Vector3();
   private readonly pins: Array<{ pos: THREE.Vector3; w: number; target: number } | null> = [null, null];
   private disposed = false;
+  // face: speech drives the jaw, blinks come on their own
+  private speak = 0;
+  private speakTarget = 0;
+  private blinkAt = 0;
+  private blinkT = -1;
+  private blinkN = 0;
+  private readonly faceSeed: number;
+  private readonly lidRestY: number;
 
   constructor(private readonly fig: FigureDef, opts: VisualOpts) {
     retainFigure(fig);
@@ -110,6 +118,9 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
     this.animator = new Animator(fig.spec, { resolve: (name) => resolveClip(fig.moveset, name), has: (name) => hasClip(fig.moveset, name) });
     this.animator.headBias.set(fig.headBias[0] * DEG, fig.headBias[1] * DEG, fig.headBias[2] * DEG);
+    this.faceSeed = seed * 7.3 + fig.spec.prop.height * 13;
+    this.blinkAt = 1.5 + hash01(this.faceSeed) * 3;
+    this.lidRestY = this.rig.byName.lids.position.y;
     this.animator.breath = fig.breath;
     this.animator.solver.torsoRadius = 0.125 * fig.spec.prop.bulk * fig.girth;
     this.animator.loco.onStep = (side) => {
@@ -120,7 +131,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
     for (let i = 0; i < fig.cloth.length; i++) this.cloth.push(new ClothSim(fig.cloth[i], this.rig.bones, seed * 3.1 + i));
     for (let i = 0; i < CAP_COUNT; i++) this.caps.push({ a: new THREE.Vector3(), b: new THREE.Vector3(), r: 0 });
-    for (let i = 0; i < CAP_COUNT; i++) if (i <= 8 || i === CAP_WEAPON) this.clothCaps.push(this.caps[i]);
+    for (let i = 0; i < CAP_COUNT; i++) if (i <= 8 || i === 11 || i === CAP_WEAPON) this.clothCaps.push(this.caps[i]);
 
     for (const o of fig.overlays) {
       const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(o.color).multiplyScalar(o.intensity), transparent: true, opacity: o.opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
@@ -327,6 +338,8 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
   setVisible(v: boolean): void { this.root.visible = !!v; }
 
+  setSpeaking(amount: number): void { this.speakTarget = clamp01(amount); }
+
   teleported(): void {
     this.first = true;
   }
@@ -379,7 +392,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     } else an.setLook(null);
 
     // equipment follows the action (two-handed work sheathes the weapon, a dying hand lets go)
-    if (this.equip.sync(an.emptyHands, an.dropped)) { this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey); this.syncOverlays(); }
+    if (this.equip.sync(an.emptyHands, an.dropped, an.stow)) { this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey); this.syncOverlays(); }
     const lf = an.loco.flags;
     an.setAuto(lf.guarding ? 'guard' : lf.aiming && this.equip.rangedHeld ? 'aim' : null);
 
@@ -389,6 +402,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     if (!visible) { this.hidden = true; return; }
     if (this.hidden) { this.hidden = false; for (const c of this.cloth) c.reset(); }
 
+    this.updateFace(dt * (1 - this.frozen));
     const sv = an.solver;
     const needCaps = this.cloth.length > 0 || !!this.fig.items.melee?.blades;
     if (needCaps) this.updateCapsules();
@@ -431,6 +445,22 @@ export class HumanoidVisualImpl implements HumanoidVisual {
       this.pinOut[s] = slot;
     }
     return this.pinOut;
+  }
+
+  /** jaw flap while speaking, and blinks every few seconds (both stop with the figure when it is arrested) */
+  private updateFace(dt: number): void {
+    const t = this.time;
+    this.speak += (this.speakTarget - this.speak) * (1 - Math.exp(-14 * dt));
+    const syll = Math.abs(Math.sin(t * 13.1 + this.faceSeed) * Math.sin(t * 7.7 + this.faceSeed * 0.37));
+    this.rig.byName.jaw.quaternion.setFromAxisAngle(_v.set(1, 0, 0), -this.speak * (0.04 + 0.2 * syll));
+    if (this.blinkT < 0 && t >= this.blinkAt && dt > 0) this.blinkT = 0;
+    let lid = 0;
+    if (this.blinkT >= 0) {
+      this.blinkT += dt / 0.15;
+      if (this.blinkT >= 1) { this.blinkT = -1; this.blinkAt = t + 2.2 + hash01(this.faceSeed + ++this.blinkN * 1.7) * 3.6; }
+      else lid = Math.sin(Math.PI * this.blinkT);
+    }
+    this.rig.byName.lids.position.y = this.lidRestY - 0.0095 * lid;
   }
 
   private updateCapsules(): void {

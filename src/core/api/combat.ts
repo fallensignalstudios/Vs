@@ -35,6 +35,16 @@ export interface HitInfo {
   freeze?: number;
   /** free-form tag ('counter', 'dispatch', 'thermalFracture', 'cinderSlam', …) */
   tag?: string;
+  /**
+   * ADDED. Minimum weak-point multiplier of this weapon: a weak-point hit uses max(weakPoint.multiplier, this).
+   * (Axiom = 2.5.) Ignored when no weak point is struck.
+   */
+  weakPointScale?: number;
+  /**
+   * ADDED. Skip the resolver's default presentation (impact VFX / SFX, hit-stop, shake, hit reaction) because the
+   * caller stages its own (Thermal Fracture, scripted beats). State changes and events still happen.
+   */
+  silent?: boolean;
 }
 
 export interface HitResult {
@@ -50,6 +60,24 @@ export interface HitResult {
   weakPoint: boolean;
   /** damage was reduced by link armour / regeneration state */
   resisted: boolean;
+  /** ADDED. the hit arrived from behind the target (more than 100° off its facing); `flankMultiplier` was applied */
+  flanked?: boolean;
+  /** ADDED. a guarding target ran out of poise: guard dropped, long stagger (`staggered` is true as well) */
+  guardBroken?: boolean;
+  /** ADDED. the hit froze the target (HitInfo.freeze took effect) */
+  froze?: boolean;
+}
+
+/** ADDED. What a body is made of, for impact VFX / SFX selection. */
+export type ActorMaterial = 'flesh' | 'metal' | 'shield' | 'eclipse';
+
+/** ADDED. Extra locomotion flags the ActorManager forwards to `visual.setLocomotion` every tick. */
+export interface ActorLocoFlags {
+  sprint?: boolean;
+  aiming?: boolean;
+  /** defaults to `actor.guarding` when omitted */
+  guarding?: boolean;
+  injured?: boolean;
 }
 
 export interface WeakPoint {
@@ -63,6 +91,18 @@ export interface WeakPoint {
   exposed: boolean;
 }
 
+/**
+ * A brain for one Actor. HOW AN ACTOR IS DRIVEN (ActorManager.update, once per sim tick, in spawn order):
+ *  1. `controller.update(actor, dt)` — ALWAYS called while the actor is alive, also while it is staggered or
+ *     frozen (so a brain can react); check `actor.staggered` / `actor.frozen` yourself. Write `desiredVel`
+ *     (walking, reported to the visual as locomotion) and/or `carryVel` (pounces, charges, dodges: displacement
+ *     the feet do not walk), set `yaw` or call `face()`, start actions on `actor.visual`.
+ *  2. The manager integrates `desiredVel + carryVel + impulse` through `physics.moveCharacter` (never through
+ *     walls, never off a ledge), adds soft separation from other bodies, and clears `desiredVel` / `carryVel`.
+ *     A frozen actor does not move at all; a staggered one only by `impulse` (knockback).
+ *  3. Regeneration, poise recovery (after 2.5 s without poise damage), then the visual is posed and updated.
+ * Exceptions thrown by a controller are caught, reported once per actor and never stop the tick.
+ */
 export interface ActorController {
   /** called every tick before movement integration */
   update(actor: Actor, dt: number): void;
@@ -139,6 +179,45 @@ export interface Actor {
   distanceTo(other: Actor | Vec3Like): number;
   /** face toward a world point, optionally limited by turn rate (rad/s * dt) */
   face(target: Vec3Like, maxTurn?: number): void;
+
+  // ---- ADDED by combat-player. Optional so hand-built actors (tests, UI fakes) stay valid; every Actor returned
+  // ---- by ActorManager.spawn has all of them.
+  /**
+   * ADDED. Velocity (m/s) of displacement the feet do NOT walk this tick: dodges, pounces, charges, attack
+   * lunges. Integrated exactly like `desiredVel` (collision, fall protection) but not reported to the visual as
+   * locomotion, so the figure is "carried" instead of sliding its stride. Cleared each tick after integration.
+   */
+  readonly carryVel?: THREE.Vector3;
+  /**
+   * ADDED. true = the manager never moves this actor: no physics integration, no ground snapping, no separation
+   * push, no un-sticking (devices on walls and pedestals, seated or lying NPCs, set pieces). Others still walk
+   * round it. Its `pos` is whatever you write.
+   */
+  fixed?: boolean;
+  /** ADDED. Extra flags for `visual.setLocomotion` (sprint / aiming / injured); `guarding` follows `actor.guarding`. */
+  loco?: ActorLocoFlags;
+  /**
+   * ADDED. false = a guard that is not perfect does not stop `heavy` hits — they land in full (Selene's deflect
+   * stance; give it to a shield that heavy blows should go through). Default true.
+   */
+  guardStopsHeavy?: boolean;
+  /** ADDED. Fraction of a blocked hit's damage that still reaches hp (0 = a full block, the default). */
+  guardChip?: number;
+  /**
+   * ADDED. Sim time until which RANGED hits on a guarding actor count as perfect whatever `perfectGuardUntil`
+   * says (a deflect stance turns every projectile for its whole length). Default 0.
+   */
+  deflectUntil?: number;
+  /** ADDED. Damage multiplier for hits arriving from behind (see HitResult.flanked). Default 1; Enforcers 1.5. */
+  flankMultiplier?: number;
+  /** ADDED. Multiplier on freeze seconds (0 = cannot be frozen; the elite resists stasis). Default 1. */
+  freezeScale?: number;
+  /** ADDED. Sim time until which poise damage is ignored (committed heavy attacks cannot be interrupted). */
+  superArmorUntil?: number;
+  /** ADDED. Impact presentation; inferred from archetype / team when omitted. */
+  material?: ActorMaterial;
+  /** ADDED. Sim time of the last hit that got through to hp or poise (0 = never). */
+  lastHitAt?: number;
 }
 
 export interface ActorDesc {
@@ -160,6 +239,22 @@ export interface ActorDesc {
   protectedNpc?: boolean;
   tags?: string[];
   weakPoints?: WeakPoint[];
+  // ---- ADDED by combat-player ----
+  /** ADDED. see Actor.fixed */
+  fixed?: boolean;
+  /** ADDED. see Actor.material */
+  material?: ActorMaterial;
+  /** ADDED. frontal guard arc in radians (default 120°) */
+  guardArc?: number;
+  /** ADDED. hp/s regeneration */
+  regen?: number;
+  /**
+   * ADDED. Seconds a dead body stays before it is removed (default 2.5). `Infinity` keeps the wreck until
+   * despawn() / clear(). Actors tagged 'persist' (the player) are never removed automatically.
+   */
+  corpseSeconds?: number;
+  /** ADDED. Dissolve the visual on death with the Eclipse look (default: true for team 'eclipse'). */
+  dissolveOnDeath?: boolean;
 }
 
 export interface ActorRayHit {
@@ -169,11 +264,37 @@ export interface ActorRayHit {
   weakPoint: WeakPoint | null;
 }
 
+/**
+ * Owns every Actor. NOTES FOR AI / ZONE AUTHORS (implementation: src/combat/manager.ts):
+ *  - `spawn` takes ownership of `desc.visual`: its root is added to `game.scene`, posed every tick and disposed
+ *    when the actor is removed. Bad descriptions (NaN position, hp ≤ 0) are repaired with a warning, never thrown.
+ *    `poise` omitted or ≤ 0 = the actor has no poise bar and is only staggered by `stagger()`.
+ *  - Flying actors: `pos` is the CENTRE of the body at `hoverHeight` above the ground below (the manager eases
+ *    the height over ramps and steps and adds a small visual bob); `height` is the body's vertical size.
+ *  - ARRAYS RETURNED BY QUERIES (`hostilesOf`, `inRadius`, `inArc`, `byTag`) and the hit returned by `raycast`
+ *    are scratch buffers taken from a small ring: valid for immediate iteration — including nested queries and
+ *    applyHit calls inside the loop — and recycled after 16 further queries. `slice()` to keep one.
+ *    Results are sorted nearest first. Queries only see LIVING actors; `filter` narrows further.
+ *  - DEFAULT HOSTILITY: eclipse ⟷ every other team except neutral; contaminated ⟷ every other team except
+ *    neutral; so player ⟷ eclipse / contaminated. dominion / reformation are hostile to the player (or to each
+ *    other) only after `setHostile`. A team is never hostile to itself; protected NPCs are hostile to nobody.
+ *  - `applyHit` ORDER: dead / untargetable / invulnerable / protectedNpc / i-frames → `immune`; guard (frontal
+ *    `guardArc`, not `unblockable`): perfect → no damage and a melee attacker is staggered, else blocked (hp
+ *    damage × `guardChip`, poise × 0.6, guard break at 0 poise) unless `heavy` and `guardStopsHeavy === false`;
+ *    weak point (forced, or `point` inside an exposed weak-point sphere — every weak point counts as exposed
+ *    while the target is frozen); flank; frozen ×1.5; `damageTakenScale` / `poiseTakenScale`; difficulty when
+ *    the target is the player; hp, poise → stagger, freeze, knockback, death. Then presentation (flash, hit
+ *    reaction, impact VFX / SFX by material, hit-stop and shake when the player is involved) and `actor:hit`.
+ *    The controller's `onHit` is called for every hit that was not `immune`.
+ */
 export interface ActorManager {
   readonly all: readonly Actor[];
   spawn(desc: ActorDesc): Actor;
-  /** remove immediately, or after a dissolve */
-  despawn(actor: Actor, opts?: { dissolve?: boolean; seconds?: number }): void;
+  /**
+   * remove immediately, or after a dissolve. `keepVisual` (ADDED): take the visual's root out of the scene but do
+   * not dispose it — the caller keeps the figure for reuse.
+   */
+  despawn(actor: Actor, opts?: { dissolve?: boolean; seconds?: number; keepVisual?: boolean }): void;
   /** kill through the normal death path (events, dissolve) */
   kill(actor: Actor, killer?: Actor | null): void;
 
@@ -202,6 +323,23 @@ export interface ActorManager {
   update(dt: number): void;
   /** remove all actors except those tagged 'persist' (zone unload) */
   clear(): void;
+
+  // ---- ADDED by combat-player ----
+  /**
+   * ADDED. Bring a dead (not yet removed) actor back: alive, targetable as before, hp = `hp` (default max), poise
+   * full, stagger / freeze cleared, death pose released. Used for the player on checkpoint reload and for
+   * companions that recover. No-op on a living actor apart from the heal.
+   */
+  revive(actor: Actor, hp?: number): void;
+  /** ADDED. true when `dir` (the hit's travel direction) strikes `target` from behind (> 100° off its facing). */
+  isFlank(target: Actor, dir: Vec3Like): boolean;
+  /**
+   * ADDED. World position of an actor's exposed weak point (the first exposed one, or `id`), or null. Weak points
+   * also count as exposed while the actor is frozen. `out` is filled and returned.
+   */
+  weakPointPosition(actor: Actor, out: THREE.Vector3, id?: string): THREE.Vector3 | null;
+  /** ADDED. Is team `a` hostile to team `b` (the matrix `areHostile` reads)? */
+  teamsHostile(a: Team, b: Team): boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -266,6 +404,13 @@ export interface PlayerController {
 
   echo: number;
   readonly echoMax: number;
+  /**
+   * Add Echo (clamped to 0..echoMax; no passive gain exists). RULE REASONS — 'blocked', 'counter', 'poiseBreak',
+   * 'heavyHit', 'kill', 'weakPoint', 'flank', 'sever', 'deflect', 'device', 'hit' — are paid from the current
+   * protagonist's table in the brief (`TUNING.kits[id].echo`), whatever `amount` says, and pay nothing to a
+   * protagonist who does not earn from that rule (Tarrik gets no Echo for a sever). Any other reason adds
+   * `amount` as given (scripts, pickups, debug). Emits `player:echo` when the value changes.
+   */
   addEcho(amount: number, reason: string): void;
   heal(amount: number): void;
   /** mission-authored recovery values for a checkpoint: full hp, authored ammo + echo */
@@ -277,6 +422,12 @@ export interface PlayerController {
   /** 0..1 bounded local threat meter value shown on the HUD (set by AI corruption-pressure logic) */
   threat: number;
 
+  /**
+   * Open a contextual prompt. The window (seconds, final once set) is widened by the difficulty window scale;
+   * with `settings.autoPrompts` an `autoConfirmable` action confirms itself after a short readable beat.
+   * `onConfirm` or `onExpire` fires exactly once. Replacing the action or passing null cancels the old one
+   * silently (neither callback). Works while `enabled` is false (authored duel / Resonance beats).
+   */
   setContextAction(action: ContextAction | null): void;
   readonly contextAction: ContextAction | null;
 
@@ -285,9 +436,45 @@ export interface PlayerController {
 
   getHudState(): PlayerHudState;
   update(dt: number): void;
+
+  // ---- ADDED by combat-player ----
+  /**
+   * ADDED. What the protagonist is doing: 'free' (moving / guarding / aiming), 'attack', 'charge' (heavy held),
+   * 'dodge', 'deflect', 'counter', 'ability', 'stagger', 'dead'. For bots, tutorials and debug overlays.
+   */
+  readonly action: PlayerAction;
+  /**
+   * ADDED. true during the 3 s tactical-read pulse ('scan'). AI / zone code may brighten links, traces and weak
+   * points while it is. The pulse itself flashes hostiles and devices and puts HUD markers on devices, actors
+   * tagged 'objective' / 'source' and link midpoints.
+   */
+  readonly scanning: boolean;
+  /** ADDED. true while movement is locked by setMovementLocked(true). */
+  readonly movementLocked: boolean;
 }
 
-/** Tunable numbers shared by combat + AI (single source of truth lives in src/combat/tuning.ts). */
+/** ADDED. See PlayerController.action. */
+export type PlayerAction = 'free' | 'attack' | 'charge' | 'dodge' | 'deflect' | 'counter' | 'ability' | 'stagger' | 'dead';
+
+/** ADDED. Pickup kinds for `spawnPickup` (exported from src/combat). */
+export type PickupKind = 'sustain' | 'ammo' | 'echo';
+
+/**
+ * ADDED. Handle of a floating pickup made by `spawnPickup(game, kind, pos)` (import from '@/combat').
+ * Collected when the living protagonist comes within 1.3 m AND it is useful (sustain below full health, ammo
+ * below a full reserve, Echo below 100): +35 hp / magazine + reserve refilled / +20 Echo, `player:pickup`.
+ * Pickups are removed on 'zone:loading'.
+ */
+export interface PickupHandle {
+  readonly kind: PickupKind;
+  readonly collected: boolean;
+  remove(): void;
+}
+
+/**
+ * Tunable numbers shared by combat + AI (single source of truth lives in src/combat/tuning.ts — import
+ * `TUNING` from '@/combat/tuning'; it also carries the kits, movement, hit feel and the enemy stat table).
+ */
 export interface CombatTuning {
   difficultyDamageTaken: Record<'story' | 'standard' | 'hard', number>;
   difficultyWindow: Record<'story' | 'standard' | 'hard', number>;

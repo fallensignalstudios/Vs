@@ -111,19 +111,21 @@ const NEUTRAL: PoseSpec = {
  * per archetype). `arms` is what the arms do while the body goes — tuck the weapon, keep the shield in.
  * play('dodge', { dir }) picks among them.
  */
-export function dodgeVariants(base: PoseSpec | undefined, arms: PoseSpec = {}): Record<string, ClipSpec> {
+export function dodgeVariants(base: PoseSpec | undefined, arms: PoseSpec = {}, sideArms: PoseSpec = arms): Record<string, ClipSpec> {
   const home = base ?? NEUTRAL;
   const side = (s: number): ClipSpec => ({
     duration: 0.45, base, fadeIn: 0.04, fadeOut: 0.14,
     keys: [
       { t: 0 },
       // push off the trailing foot, the leading leg reaches for the floor a long step away
-      { t: 0.3, ease: 'out', hips: [s * 0.14, -0.3, 0], hipsR: [12, s * -8, s * 14], spine: [12, 0, s * 10], chest: [8, s * 6, s * 6], neck: [-8, s * -10, s * -8], head: [-8, s * -14, s * -8], ...arms,
+      { t: 0.3, ease: 'out', hips: [s * 0.14, -0.3, 0], hipsR: [12, s * -8, s * 14], spine: [12, 0, s * 10], chest: [8, s * 6, s * 6], neck: [-8, s * -10, s * -8], head: [-8, s * -14, s * -8], ...sideArms,
         legL: s < 0 ? { p: [-0.42, 0.07, 0.02], yaw: 20, pitch: 10, air: true } : { p: [-0.02, 0, 0], yaw: 6, pitch: -34, air: false },
         legR: s < 0 ? { p: [0.02, 0, 0], yaw: 6, pitch: -34, air: false } : { p: [0.42, 0.07, 0.02], yaw: 20, pitch: 10, air: true } },
       { t: 0.66, ease: 'inOut', hips: [s * 0.2, -0.26, 0], hipsR: [10, 0, s * 6],
         legL: s < 0 ? { p: [-0.36, 0, 0.02], yaw: 16, pitch: 0, air: false } : { p: [0.1, 0.06, 0], yaw: 6, pitch: -10, air: true },
         legR: s < 0 ? { p: [-0.1, 0.06, 0], yaw: 6, pitch: -10, air: true } : { p: [0.36, 0, 0.02], yaw: 16, pitch: 0, air: false } },
+      // feet come home first; whatever the hands carry returns to its stance only once the legs are out of its way
+      { t: 0.88, ease: 'inOut', hips: [s * 0.03, -0.08, 0], hipsR: [4, 0, 0], spine: [5, 0, 0], chest: [3, 0, 0], legL: home.legL ?? NEUTRAL.legL, legR: home.legR ?? NEUTRAL.legR },
       { t: 1, ease: 'inOut', ...home },
     ],
     events: [[0.08, 'step'], [0.66, 'step']],
@@ -183,7 +185,7 @@ export const LYING: PoseSpec = {
   hips: [0, -0.85, -0.32], hipsR: [-86, 0, 0], spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [6, 0, 0], head: [6, 10, 0],
   armL: { sh: [-6, 38, 0], el: 26, fk: true, fist: 0.2 },
   // root space: the right hand rests on the floor beside the hip, whatever it holds lying flat and pointing away
-  armR: { p: [0.5, 0.05, -0.18], blade: [0.35, 0.02, 0.94], edge: [0.94, 0, -0.35], pole: [0.9, 0.2, 0.3], fist: 0.2 }, grip: 0,
+  armR: { p: [0.46, 0.05, -0.4], blade: [0.85, 0.02, 0.52], edge: [0.52, 0, -0.85], pole: [0.9, 0.2, 0.3], fist: 0.2 }, grip: 0,
   legL: { p: [-0.16, 0.02, 0.5], pitch: 62, yaw: 22, air: true, knee: [-0.3, 0.9, 0.3] },
   legR: { p: [0.13, 0.03, 0.42], pitch: 56, yaw: 14, air: true, knee: [0.2, 0.95, 0.2] },
 };

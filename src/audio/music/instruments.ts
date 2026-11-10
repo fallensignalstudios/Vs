@@ -6,7 +6,7 @@
  */
 import type { Kit } from '../synth/kit';
 import type { SampleBank } from '../synth/samples';
-import { glass, struck } from '../sfx/parts';
+import { struck } from '../sfx/parts';
 import type { MotifVoice, PadVoice, PercInst, PulseVoice } from './types';
 
 // ---------------------------------------------------------------------------------------------
@@ -15,11 +15,11 @@ import type { MotifVoice, PadVoice, PercInst, PulseVoice } from './types';
 
 /** chū-daiko: a hard stick attack, a short tuned body, the skin's slap. */
 function taiko(k: Kit, at: number, v: number, f: number): void {
-  k.osc('sine', [f * 2.4, f, 0.035], { a: 0.0015, d: 0.16 + 0.1 * v, g: v }, { at });
+  k.osc('sine', [f * 2.4, f, 0.035], { a: 0.0015, d: 0.13 + 0.08 * v, g: v }, { at });
   k.osc('sine', [f * 3.6, f * 1.6, 0.03], { a: 0.0015, d: 0.09, g: v * 0.35 }, { at });
   k.noise('brown', { a: 0.001, d: 0.07, g: v * 0.7 }, { at, bp: f * 2.5, q: 1.3 });
   k.noise('pink', { a: 0.0008, d: 0.045, g: v * 0.75 }, { at, bp: f * 8, q: 1 }); // head slap
-  k.noise('white', { a: 0.0005, d: 0.014, g: v * (0.45 + 0.55 * v) }, { at, hp: 2200, lp: 9000 }); // bachi
+  k.noise('white', { a: 0.0008, d: 0.024, g: v * (0.5 + 0.5 * v) }, { at, hp: 2200, lp: 9000 }); // bachi
 }
 
 /** ō-daiko: the one great drum on the bar line. Longer, but still out of the way of the next beat. */
@@ -35,7 +35,7 @@ function odaiko(k: Kit, at: number, v: number, f: number): void {
 function shime(k: Kit, at: number, v: number, f: number): void {
   k.osc('sine', [f * 1.5, f, 0.012], { a: 0.0008, d: 0.055, g: v * 0.7 }, { at });
   k.osc('triangle', f * 2.31, { a: 0.0008, d: 0.03, g: v * 0.22 }, { at });
-  k.noise('white', { a: 0.0005, d: 0.02, g: v * 0.95 }, { at, bp: 4300, q: 0.8 });
+  k.noise('white', { a: 0.001, d: 0.036, g: v * 0.8 }, { at, bp: 4300, q: 0.8 });
   k.noise('pink', { a: 0.0005, d: 0.035, g: v * 0.4 }, { at, bp: 1500, q: 1.2 });
 }
 
@@ -48,7 +48,7 @@ function kane(k: Kit, at: number, v: number, f: number): void {
 
 function anvil(k: Kit, at: number, v: number, f: number): void {
   struck(k, 'plate', f, 0.3, v * 0.6, { at, tilt: 0.7 });
-  k.noise('white', { a: 0.0005, d: 0.018, g: v * 0.75 }, { at, hp: 3200 });
+  k.noise('white', { a: 0.0008, d: 0.03, g: v * 0.6 }, { at, hp: 3200 });
 }
 
 function metal(k: Kit, at: number, v: number, f: number): void {
@@ -64,10 +64,10 @@ function shaker(k: Kit, at: number, v: number): void {
   k.noise('white', { a: 0.006, d: 0.03 + 0.025 * v, g: v }, { at, bp: 5600, q: 0.9 });
 }
 
-/** The rosin bite at the start of a marcato bow stroke. */
+/** The rosin at the start of a marcato bow stroke: a soft "chff", never a click. */
 function bow(k: Kit, at: number, v: number): void {
-  k.noise('pink', { a: 0.004, d: 0.055, g: v }, { at, bp: 3400, q: 0.7 });
-  k.noise('white', { a: 0.003, d: 0.03, g: v * 0.35 }, { at, bp: 6200, q: 1 });
+  k.noise('pink', { a: 0.012, d: 0.08, g: v }, { at, bp: 3400, q: 0.7 });
+  k.noise('white', { a: 0.01, d: 0.05, g: v * 0.3 }, { at, bp: 6200, q: 1 });
 }
 
 /** Reformation's precise click: almost no tail. */
@@ -95,7 +95,7 @@ function clack(k: Kit, at: number, v: number): void {
 
 /** Each drum's fundamental when a layer does not tune it (Hz; 0 = unpitched). */
 export const PERC_TUNE: Readonly<Record<PercInst, number>> = {
-  taiko: 78, odaiko: 49, shime: 340, kane: 2700, anvil: 540, metal: 1150, hat: 0, shaker: 0, bow: 0, rim: 0, kick: 50, boom: 36.7, clack: 0,
+  taiko: 78, odaiko: 49, shime: 340, kane: 2700, anvil: 540, metal: 1150, hat: 0, shaker: 0, bow: 0, rim: 0, kick: 50, boom: 36.7, clack: 0, cadence: 0,
 };
 
 /** Velocities percussion is pre-rendered at: ghost, normal, accent (see theory.parsePattern). */
@@ -123,6 +123,7 @@ export function hit(inst: PercInst, k: Kit, at: number, vel: number, tune = 0): 
     case 'rim': return rim(k, at, vel);
     case 'kick': return kick(k, at, vel, f);
     case 'boom': return boom(k, at, vel, f);
+    case 'cadence': return cadenceHit(k, at, vel, 0);
     default: return clack(k, at, vel);
   }
 }
@@ -136,8 +137,9 @@ export function strike(bank: SampleBank, rnd: () => number, inst: PercInst, k: K
 }
 
 /**
- * The Eclipse cadence tick. With `wobble` 0 it is stamped out bit-identical on every beat; with wobble the
- * pitch and length drift — what a severed, no-longer-synchronised body sounds like.
+ * The Eclipse cadence tick. With `wobble` 0 it is stamped out identically on every beat (as the 'cadence'
+ * percussion instrument it is pre-rendered once, so the beats are the same samples); with wobble the pitch
+ * and length drift — what a severed, no-longer-synchronised body sounds like.
  */
 export function cadenceHit(k: Kit, at: number, vel: number, wobble: number): void {
   const p = wobble > 0 ? 1 + k.jit(0.18 * wobble) : 1;
@@ -157,8 +159,7 @@ export function pulseNote(voice: PulseVoice, k: Kit, at: number, f: number, vel:
   switch (voice) {
     case 'pluck': {
       const lp = k.filter('lowpass', [f * (4 + 9 * vel) + 600, f * 2, 0.12], 1.4, { at, to: k.pan(pan) });
-      k.osc('sawtooth', f, { a: 0.003, d: Math.min(len * 1.6, 0.35), g: vel * 0.5 }, { at, to: lp, detune: -5 });
-      k.osc('square', f, { a: 0.003, d: Math.min(len * 1.4, 0.3), g: vel * 0.25 }, { at, to: lp, detune: 6 });
+      k.ens('pluck', f, { a: 0.003, d: Math.min(len * 1.6, 0.35), g: vel }, { at, to: lp });
       return;
     }
     case 'bass': {
@@ -177,8 +178,12 @@ export function pulseNote(voice: PulseVoice, k: Kit, at: number, f: number, vel:
       k.osc('sine', f, { a: 0.002, d: 0.22, g: vel * 0.55 }, { at, pan });
       k.osc('sine', f * 3, { a: 0.001, d: 0.05, g: vel * 0.12 }, { at, pan });
       return;
-    default:
-      glass(k, f, { a: 0.003, d: Math.max(0.35, len * 2.5), g: vel * 0.6 }, { at, pan });
+    default: {
+      const d = Math.max(0.35, len * 2.5);
+      const dst = k.pan(pan);
+      k.ens('glassy', f, { a: 0.003, d, g: vel * 0.6 }, { at, to: dst });
+      k.osc('sine', f * 2.32, { a: 0.003, d: d * 0.5, g: vel * 0.15 }, { at, to: dst });
+    }
   }
 }
 
@@ -191,10 +196,15 @@ export function motifNote(voice: MotifVoice, k: Kit, at: number, f: number, vel:
       // the strike itself: a breath of bright metal that the long partials grow out of
       k.noise('white', { a: 0.0008, d: 0.03, g: vel * 0.1 }, { at, bp: f * 5.4, q: 2.5, pan });
       return;
-    case 'glass':
-      glass(k, f, { a: 0.004, h: len * 0.25, d: Math.max(0.9, len * 1.4), g: vel * 0.6 }, { at, pan });
-      k.noise('white', { a: 0.001, d: 0.012, g: vel * 0.12 }, { at, bp: f * 4, q: 3, pan });
+    case 'glass': {
+      // the held body is one ensemble source; the inharmonic partial that makes it glass dies away over it
+      const d = Math.max(0.9, len * 1.4);
+      const dst = k.pan(pan);
+      k.ens('glassy', f, { a: 0.004, h: len * 0.25, d, g: vel * 0.6 }, { at, to: dst });
+      k.osc('sine', f * 2.32, { a: 0.004, h: len * 0.1, d: d * 0.5, g: vel * 0.15 }, { at, to: dst });
+      k.noise('white', { a: 0.001, d: 0.012, g: vel * 0.12 }, { at, bp: f * 4, q: 3, to: dst });
       return;
+    }
     case 'horn': {
       // solo low brass: brightness swells with the note, vibrato arrives late
       const dst = k.pan(pan);

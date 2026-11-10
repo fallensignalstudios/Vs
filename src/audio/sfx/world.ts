@@ -21,7 +21,7 @@ function seat(k: Kit, at: number, g: number): void {
 }
 
 export const DEVICE_SFX: RecipeTable = {
-  emitterHum: sfx(-19, { loop: true, max: 2, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
+  emitterHum: sfx(-19, { loop: true, max: 2, prio: 1, send: 0.3, vary: 0, ref: 5, bake: 1 }, (k) => {
     // command emitter: a clean chord with an exact sync pulse — the thing the drones are listening to
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     const sync = k.gain(0.6);
@@ -42,7 +42,7 @@ export const DEVICE_SFX: RecipeTable = {
     blast(k, 0.6, 0.7, 0.05);
     struck(k, 'glass', 2400, 0.4, 0.25, { at: 0.03 });
   }),
-  relayHum: sfx(-19, { loop: true, max: 3, prio: 1, send: 0.3, vary: 0, ref: 5 }, (k) => {
+  relayHum: sfx(-19, { loop: true, max: 3, prio: 1, send: 0.3, vary: 0, ref: 5, bake: 1 }, (k) => {
     // contaminated relay: a clean carrier with something riding it a few hertz off
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     k.osc('triangle', 140, { ...e, g: 0.6 });
@@ -62,7 +62,7 @@ export const DEVICE_SFX: RecipeTable = {
     struck(k, 'bar', 420, 0.15, 0.5, { at: 0.82 }); // contactor drops out
     thump(k, 120, 70, 0.08, 0.5, 0.82);
   }),
-  scanSweep: sfx(-17, { loop: true, gap: 0.2, max: 3, prio: 1, send: 0.35, vary: 0, ref: 6 }, (k) => {
+  scanSweep: sfx(-17, { loop: true, gap: 0.2, max: 3, prio: 1, send: 0.35, vary: 0, ref: 6, bake: 1 }, (k) => {
     const e = { a: 0.25, h: Infinity, d: 0.5 };
     const sw = k.filter('bandpass', 2400, 9);
     k.lfo(0.45, 1100, sw.frequency);
@@ -193,7 +193,7 @@ export const WORLD_SFX: RecipeTable = {
     k.noise('brown', { a: 0.01, d: 0.9, g: 0.8 }, { at: 0.06, lp: [1800, 140, 0.8] });
     debris(k, 8, 1.0, 0.35, 0.3);
   }),
-  debrisFall: sfx(-11, { gap: 0.25, max: 2, prio: 1, send: 0.5, ref: 7 }, (k) => {
+  debrisFall: sfx(-11, { gap: 0.25, max: 2, prio: 1, send: 0.5, ref: 7, bake: 2 }, (k) => {
     debris(k, 11, 1.2, 1, 0, 180, 1200);
     k.noise('pink', { a: 0.2, d: 1.2, g: 0.18 }, { at: 0.2, hp: 3500 }); // dust
     thump(k, 80, 44, 0.2, 0.6, k.rr(0.1, 0.3));
@@ -269,7 +269,7 @@ export const WORLD_SFX: RecipeTable = {
     debris(k, 4, 0.8, 0.3, 0.5);
     seat(k, 1.5, 0.8);
   }),
-  liftMove: sfx(-15, { loop: true, max: 1, prio: 1, send: 0.4, vary: 0, ref: 8 }, (k) => {
+  liftMove: sfx(-15, { loop: true, max: 1, prio: 1, send: 0.4, vary: 0, ref: 8, bake: 1 }, (k) => {
     const e = { a: 0.5, h: Infinity, d: 0.8 };
     k.osc('sine', 60, { ...e, g: 0.3 });
     k.osc('triangle', 120.4, { ...e, g: 0.4 });

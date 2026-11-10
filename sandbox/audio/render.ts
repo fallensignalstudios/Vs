@@ -55,8 +55,12 @@ export async function prepare(): Promise<AudioEngine> {
   const e = new AudioEngine(new OfflineAudioContext(2, 128, SR), { seed: 7283 });
   await e.prerender();
   e.dispose();
+  prepared = e;
   return e;
 }
+
+/** the engine `prepare()` pre-rendered on: its sample bank is what every later render plays from */
+export let prepared: AudioEngine | null = null;
 
 /** engines whose render has finished but whose result is still being read (released by the next render) */
 const spent: AudioEngine[] = [];

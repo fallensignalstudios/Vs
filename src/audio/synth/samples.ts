@@ -32,6 +32,16 @@ export class SampleBank {
     for (const [id, bufs] of all) this.baked.set(id, bufs.map((buffer) => ({ buffer, gain: 1, loop: false })));
   }
 
+  /** Install pre-rendered seamless loops for sustaining ids. */
+  setBakedLoops(all: ReadonlyMap<string, AudioBuffer>): void {
+    for (const [id, buffer] of all) this.baked.set(id, [{ buffer, gain: 1, loop: true }]);
+  }
+
+  /** The pre-rendered buffers of an id (inspection only). */
+  bakedOf(id: string): readonly Sample[] {
+    return this.baked.get(id) ?? [];
+  }
+
   /** Add a recording for an id. Several calls with the same id add round-robin variants. */
   register(id: string, buffer: AudioBuffer, opts: SampleOpts = {}, loopDefault = false): void {
     const g = opts.gain;

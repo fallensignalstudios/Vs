@@ -306,7 +306,8 @@ export class Voices {
   /** Fill a kit with one instance of an id: a buffer when the bank has one, the live recipe otherwise. */
   private fill(id: string, r: Recipe, k: Kit): void {
     const s = this.samples.pick(id, this.rnd);
-    if (s) k.sample(s.buffer, { g: s.gain, loop: s.loop });
+    // a pre-rendered LOOP is the steady state only: a one-shot excerpt of that id still needs the recipe's envelope
+    if (s && !(s.loop && this.has(id) && !this.samples.isRegistered(id))) k.sample(s.buffer, { g: s.gain });
     else r.make(k);
   }
 
@@ -407,7 +408,8 @@ export class Voices {
     const sample = this.samples.pick(s.id, this.rnd);
     const sustains = sample ? sample.loop : r.loop;
     const v = this.strip(s.id, r, s.pos ?? undefined, s.authoredVolume, s.authoredPitch, t0, sustains, this.instances(s.id, now));
-    if (sample) v.kit.sample(sample.buffer, { g: sample.gain, loop: sample.loop });
+    // every voice of a loop starts somewhere else in it (two drones never phase-lock) — except the Eclipse
+    if (sample) v.kit.sample(sample.buffer, { g: sample.gain, loop: sample.loop, fadeIn: 0.3, offset: r.exact ? 0 : this.rnd() * sample.buffer.duration });
     else r.make(v.kit);
     if (!sustains) {
       // a one-shot under loop(): re-trigger it end to end

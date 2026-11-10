@@ -65,4 +65,55 @@ describe('cloth', () => {
     for (let i = 0; i < 10; i++) s.sim.update(1 / 60, m, s.jp, s.jq, s.rest, caps, 1);
     expect(s.bones[s.bone0].position.y - top.y).toBeCloseTo(0.2, 3);
   });
+
+  it('keeps the pinned row exactly on its bone at any frame time', () => {
+    const cases: Array<[string, (i: number) => number]> = [
+      ['144 Hz', () => 1 / 144], ['jittered 60 Hz', (i) => 1 / 60 + (((i * 7919) % 13) / 13 - 0.5) * 0.003], ['slow motion', () => 1 / 300], ['hitch', (i) => (i % 9 === 0 ? 0.11 : 1 / 60)],
+    ];
+    for (const [, dtf] of cases) {
+      const s = setup();
+      const m = new THREE.Matrix4();
+      const pos = new THREE.Vector3();
+      const rest0 = new THREE.Vector3(-0.25, 1.5, 0.18);
+      for (let i = 0; i < 400; i++) {
+        const dt = dtf(i);
+        pos.z -= 5.2 * dt; // the wearer runs
+        m.makeRotationY(Math.sin(i * 0.05) * 0.4).setPosition(pos);
+        s.sim.update(dt, m, s.jp, s.jq, s.rest, caps, 1);
+        // bones are written in model space: the pinned particle must sit on its rest spot under the pin bone
+        expect(s.bones[s.bone0].position.distanceTo(rest0)).toBeLessThan(1e-4);
+      }
+      expect(maxStretch(s)).toBeLessThan(1.65);
+    }
+  });
+
+  it('rides with the wearer when time is stopped or the wearer is arrested', () => {
+    for (const [dt, carry] of [[0, 0], [1 / 60, 1]] as const) {
+      const s = setup();
+      const m = new THREE.Matrix4();
+      for (let i = 0; i < 90; i++) s.sim.update(1 / 60, m, s.jp, s.jq, s.rest, caps, 1);
+      const hem = s.bones[s.bone0 + 5].position.clone();
+      const pos = new THREE.Vector3();
+      for (let i = 0; i < 30; i++) {
+        pos.x += 0.05;
+        m.makeRotationY(i * 0.03).setPosition(pos);
+        s.sim.update(dt, m, s.jp, s.jq, s.rest, caps, 1, carry);
+      }
+      // 1.5 m and a quarter turn later the hem has not moved relative to the body
+      expect(s.bones[s.bone0 + 5].position.distanceTo(hem)).toBeLessThan(1e-3);
+    }
+  });
+
+  it('trails behind a running wearer and settles when they stop', () => {
+    const s = setup();
+    const m = new THREE.Matrix4();
+    const pos = new THREE.Vector3();
+    for (let i = 0; i < 120; i++) s.sim.update(1 / 60, m, s.jp, s.jq, s.rest, caps, 1);
+    const restZ = s.bones[s.bone0 + 2 * 6 + 5].position.z;
+    for (let i = 0; i < 180; i++) { pos.z -= 6 / 60; m.setPosition(pos); s.sim.update(1 / 60, m, s.jp, s.jq, s.rest, caps, 1); }
+    // model faces −Z: the hem streams out behind (+Z)
+    expect(s.bones[s.bone0 + 2 * 6 + 5].position.z - restZ).toBeGreaterThan(0.08);
+    for (let i = 0; i < 240; i++) s.sim.update(1 / 60, m, s.jp, s.jq, s.rest, caps, 1);
+    expect(Math.abs(s.bones[s.bone0 + 2 * 6 + 5].position.z - restZ)).toBeLessThan(0.06);
+  });
 });

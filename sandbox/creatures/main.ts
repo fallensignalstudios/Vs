@@ -10,13 +10,13 @@
  *   ?view=states&who=weaver              shader states: base, flash, frozen, corrupted, dissolving, telegraph
  *   ?view=wreck                          every device destroyed (front row, end pose) behind its live self
  *   ?view=bodies                         the elite's two bodies side by side: procedural fallback | generated skin
- *   &stage=pale|dark  &variant=1  &seed=3  &manual=1  &skin=0 (procedural bodies only)
+ *   &stage=pale|dark  &variant=1  &seed=3  &manual=1  &skin=0 (procedural bodies only)  &tex=1024 (skin map budget)
  *
  * Globals for tools/shot.cjs: __c (visuals), __play(action, i?), __seek(action, t, i?), __call(method, ...args),
  * __cam(preset | [pos], [look]), __info().
  */
 import * as THREE from 'three';
-import type { CharacterVisual, CreatureArchetype, DeviceArchetype } from '@/core/api';
+import type { CharacterVisual, CreatureArchetype, DeviceArchetype, Game } from '@/core/api';
 import { asDevice, asDrone, asElite, asWallrunner, asWeaver, CREATURE_ACTIONS } from '@/core/api/creatures';
 import { createCreature, preloadCreatureSkins, setCreatureSkinsEnabled } from '@/chars/creatures';
 import { createHarness, miniGame } from '../harness';
@@ -31,7 +31,11 @@ h.scene.environmentIntensity = stage === 'dark' ? 0.3 : 0.55;
 const game = miniGame(h);
 // generated-mesh skins: loaded up front so captures never catch the procedural → skin swap
 if (q.get('skin') === '0') setCreatureSkinsEnabled(false);
-else await preloadCreatureSkins();
+else {
+  // &tex=1024 loads the skin maps under a quality profile's texture budget (default: as authored)
+  const tex = Number(q.get('tex') ?? 0);
+  await preloadCreatureSkins(undefined, tex > 0 ? ({ render: { quality: { textureSize: tex, anisotropy: 4 } } } as unknown as Game) : null);
+}
 
 // ---------------------------------------------------------------------------------------------- stage
 function buildStage(): void {

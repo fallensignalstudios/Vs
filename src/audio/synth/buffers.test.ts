@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillNoise, makeCurve, makeHallIR, STONE_HALL, type NoiseColor } from './buffers';
+import { fillNoise, makeCurve, makeHallIR, ROOMS, STONE_HALL, type NoiseColor, type RoomName } from './buffers';
 
 const SR = 44100;
 
@@ -87,5 +87,44 @@ describe('hall impulse', () => {
     let lr = 0, ll = 0, rr = 0;
     for (let i = 0; i < l.length; i++) { lr += l[i] * r[i]; ll += l[i] * l[i]; rr += r[i] * r[i]; }
     expect(Math.abs(lr / Math.sqrt(ll * rr))).toBeLessThan(0.2);
+  });
+});
+
+describe('the spaces', () => {
+  /** seconds for the impulse's energy to fall 30 dB from its first 20 ms (a T30-style decay time) */
+  const decay = (name: RoomName): number => {
+    const [l] = makeHallIR(SR, ROOMS[name], 7);
+    const win = Math.floor(0.02 * SR);
+    const energy: number[] = [];
+    for (let p = 0; p + win <= l.length; p += win) {
+      let e = 0;
+      for (let i = 0; i < win; i++) e += l[p + i] * l[p + i];
+      energy.push(e);
+    }
+    const peak = Math.max(...energy);
+    const at = energy.findIndex((e) => e === peak);
+    for (let i = at; i < energy.length; i++) if (energy[i] < peak * 1e-3) return (i - at) * 0.02;
+    return energy.length * 0.02;
+  };
+
+  it('differ in decay time, not just in level: small < hall < vast', () => {
+    const small = decay('small'), hall = decay('hall'), vast = decay('vast');
+    expect(small).toBeLessThan(0.45);
+    expect(hall).toBeGreaterThan(small * 2);
+    expect(hall).toBeLessThan(1.3);
+    expect(vast).toBeGreaterThan(hall * 1.6);
+  });
+
+  it('the vast space answers late (pre-delay) and every impulse has unit energy', () => {
+    expect(ROOMS.vast.preDelay).toBeGreaterThanOrEqual(0.05);
+    expect(ROOMS.small.preDelay).toBeLessThanOrEqual(0.006);
+    for (const name of Object.keys(ROOMS) as RoomName[]) {
+      const [l, r] = makeHallIR(SR, ROOMS[name], 3);
+      for (const ch of [l, r]) {
+        let e = 0;
+        for (const v of ch) e += v * v;
+        expect(e, name).toBeCloseTo(1, 3);
+      }
+    }
   });
 });

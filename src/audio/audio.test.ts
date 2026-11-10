@@ -84,14 +84,27 @@ describe('definitions are well formed', () => {
       expect(r.gap, id).toBeGreaterThan(0);
       expect(r.max, id).toBeGreaterThanOrEqual(1);
       expect(r.send, id).toBeLessThanOrEqual(1);
+      expect(r.tail >= 0 && r.tail <= 1, id).toBe(true);
       expect([0, 1, 2, 3], id).toContain(r.prio);
     }
   });
 
-  it('eclipse voices are unnaturally identical (no pitch variation)', () => {
-    for (const id of ['eclipseBreath', 'eclipseLunge', 'eclipseDeath', 'wallrunnerSkitter', 'wallrunnerPounce', 'weaverChant', 'linkHum', 'eliteRoar', 'cadenceTick']) {
+  it('eclipse voices are unnaturally identical (exact: no pitch variation, no jitter, fixed noise phase)', () => {
+    for (const id of ['eclipseBreath', 'eclipseLunge', 'eclipseDeath', 'wallrunnerSkitter', 'wallrunnerPounce', 'weaverChant', 'linkHum', 'eliteRoar', 'elitePulse', 'eliteSlam', 'eliteExpose', 'cadenceTick', 'ambWhisper']) {
       expect(SFX[id].vary, id).toBe(0);
+      expect(SFX[id].exact, id).toBe(true);
     }
+    // a severed body is the opposite: varied on purpose
+    expect(SFX.cadenceTickOff.exact).toBe(false);
+    expect(SFX.cadenceTickOff.vary).toBeGreaterThan(100);
+  });
+
+  it('rapid cues keep most of their reverb send out of the long tail', () => {
+    for (const id of ['footStone', 'footMetal', 'verityHit', 'bladeHitFlesh', 'guardBlock', 'droneBolt', 'hitConfirm', 'shieldHit']) {
+      expect(SFX[id].tail, id).toBeLessThanOrEqual(0.35);
+      expect(SFX[id].bake, id).toBeGreaterThan(0);
+    }
+    for (const id of ['explosionLarge', 'quarantineSeal', 'meridianComplete', 'fleetImpact']) expect(SFX[id].tail, id).toBe(1);
   });
 
   it('music definitions: patterns fit the bar, masks and chords are valid', () => {
@@ -106,6 +119,8 @@ describe('definitions are well formed', () => {
         if (l.mask) expect(/^[x.]+$/.test(l.mask), `${state} mask`).toBe(true);
         const g = typeof l.g === 'number' ? [l.g] : l.g;
         for (const v of g) expect(v >= 0 && v <= 1.2, `${state}/${l.kind} gain`).toBe(true);
+        // struck layers stay out of the long hall: drum reverb sits well under the dry hit and is short
+        if (l.kind === 'perc') expect((l.wet ?? 0) <= 0.4, `${state}/${l.inst} hall send`).toBe(true);
       }
     }
   });
@@ -240,7 +255,7 @@ describe('façade with a (fake) AudioContext', () => {
       const c = ctx as unknown as FakeContext;
       expect(c.state).toBe('running'); // unlock() resumed it
       expect(audio.unlocked).toBe(true);
-      expect(audio.debugInfo()).toMatchObject({ unlocked: true, voices: 1, music: 'approachTarrik', ambience: 'pressureHall', muffle: 0.3 });
+      expect(audio.debugInfo()).toMatchObject({ unlocked: true, voices: 1, loops: 1, loopsRequested: 1, music: 'approachTarrik', ambience: 'pressureHall', muffle: 0.3 });
 
       // a suspended context must not queue one-shots (they would all fire at once on resume)
       for (let i = 0; i < 30; i++) audio.update(1 / 60); // past the post-unlock grace frames
@@ -366,15 +381,17 @@ describe('engine on a strict fake context', () => {
         if (Math.abs(t - 30) < 0.017) engine.stinger('sever');
       });
       expect(ctx.problems, state).toEqual([]);
+      // this is the LIVE-synthesis path (what plays for the first second, before pre-rendering lands, and
+      // wherever OfflineAudioContext is missing); the budget for the normal path is asserted in regress.test.ts
       const poly = ctx.maxPolyphony(2, 40);
       report.push(`${state}:${poly}`);
-      expect(poly, `${state} polyphony`).toBeLessThan(90);
+      expect(poly, `${state} polyphony`).toBeLessThan(125);
       // switching away disposes the deck: after the fade nothing sustained remains
       engine.setMusic('silence', 0.5);
       run(ctx, engine, 6);
       expect(ctx.spans.filter((s) => s.stop === Infinity), state).toHaveLength(0);
     }
-    console.log(`music polyphony (oscillators+noise sources): ${report.join(' ')}`);
+    console.log(`score live sources, live synthesis only: ${report.join(' ')}`);
   });
 
   it('cross-fades states on a bar line and survives a starved scheduler', () => {

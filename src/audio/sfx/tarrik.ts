@@ -72,7 +72,7 @@ export const TARRIK_SFX: RecipeTable = {
     roar(k, { a: 0.12, h: 0.1, d: 0.5, g: 0.7 }, 420, 0.08);
     embers(k, 0.7, 0.9, 0.14);
   }),
-  cinderSlam: sfx(-4.5, { gap: 0.4, max: 1, prio: 3, send: 0.5, ref: 9, vary: 25 }, (k) => {
+  cinderSlam: sfx(-4.5, { gap: 0.4, max: 1, prio: 3, send: 0.5, ref: 9, vary: 25, bake: 2 }, (k) => {
     crack(k, 1, 0, 700, 0.03);
     thump(k, 150, 58, 0.55, 0.8);
     k.osc('sine', 44, { a: 0.03, d: 0.6, g: 0.35 }, { at: 0.02 });
@@ -109,7 +109,7 @@ export const TARRIK_SFX: RecipeTable = {
       k.osc('sawtooth', (1180 + i * 150) / 2, { a: 0.003, h: 0.035, d: 0.03, g: 0.25 }, { at, lp: 2000 });
     });
   }),
-  stickyBlast: sfx(-4.5, { gap: 0.25, max: 2, prio: 3, send: 0.55, ref: 10 }, (k) => {
+  stickyBlast: sfx(-4.5, { gap: 0.25, max: 2, prio: 3, send: 0.55, ref: 10, bake: 2 }, (k) => {
     blast(k, 1.1, 1);
     roar(k, { a: 0.02, d: 0.7, g: 0.5 }, 420, 0.03);
     embers(k, 0.9, 0.5, 0.08);

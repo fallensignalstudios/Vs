@@ -11,9 +11,11 @@ import type { SkinFn, SkinOut } from './geo/builder';
 export const REF_HEIGHT = 1.85;
 /** distance from Verity's grip to the emitter each blade leaves the hilt ring at */
 export const BLADE_ROOT = 0.128;
+/** jaw hinge relative to the head joint */
+export const JAW_PIVOT: readonly [number, number, number] = [0, 0.062, 0.028];
 
 export const BODY_BONES = [
-  'root', 'hips', 'spine', 'chest', 'neck', 'head',
+  'root', 'hips', 'spine', 'chest', 'neck', 'head', 'jaw', 'lids',
   'clavL', 'uArmL', 'fArmL', 'handL', 'fingAL', 'fingBL',
   'clavR', 'uArmR', 'fArmR', 'handR', 'fingAR', 'fingBR',
   'thighL', 'shinL', 'footL', 'toeL',
@@ -24,7 +26,7 @@ export const BODY_BONES = [
 export type BoneName = (typeof BODY_BONES)[number];
 
 const PARENTS: Record<BoneName, BoneName | null> = {
-  root: null, hips: 'root', spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck',
+  root: null, hips: 'root', spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck', jaw: 'head', lids: 'head',
   clavL: 'chest', uArmL: 'clavL', fArmL: 'uArmL', handL: 'fArmL', fingAL: 'handL', fingBL: 'fingAL',
   clavR: 'chest', uArmR: 'clavR', fArmR: 'uArmR', handR: 'fArmR', fingAR: 'handR', fingBR: 'fingAR',
   thighL: 'hips', shinL: 'thighL', footL: 'shinL', toeL: 'footL',
@@ -67,6 +69,8 @@ export function buildRigSpec(prop: Proportions): RigSpec {
     chest: [0, 1.29, 0.005],
     neck: [0, 1.535, 0.012],
     head: [0, 1.625, 0.0],
+    // face: the jaw hinges just below the ear, the lids slide down over the eyes
+    jaw: [0, 1.625 + JAW_PIVOT[1], JAW_PIVOT[2]], lids: [0, 1.73, -0.08],
     clavL: [-0.03, 1.47, 0.0], uArmL: [-sw, 1.455, 0.0], fArmL: [-(sw + 0.03), 1.158, 0.012], handL: [-(sw + 0.045), 0.89, -0.012],
     fingAL: [-(sw + 0.047), 0.802, -0.016], fingBL: [-(sw + 0.047), 0.762, -0.016],
     clavR: [0.03, 1.47, 0.0], uArmR: [sw, 1.455, 0.0], fArmR: [sw + 0.03, 1.158, 0.012], handR: [sw + 0.045, 0.89, -0.012],

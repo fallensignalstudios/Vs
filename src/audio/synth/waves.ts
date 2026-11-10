@@ -18,7 +18,7 @@ export interface EnsembleVoice {
   pan: number;
 }
 
-export type EnsembleName = 'warm' | 'strings' | 'choir' | 'glass' | 'wrong' | 'brass' | 'horn';
+export type EnsembleName = 'warm' | 'strings' | 'choir' | 'glass' | 'glassy' | 'wrong' | 'brass' | 'horn' | 'pluck';
 
 export const ENSEMBLES: Readonly<Record<EnsembleName, readonly EnsembleVoice[]>> = {
   /** warm pad: a detuned saw pair over a soft octave below */
@@ -42,6 +42,11 @@ export const ENSEMBLES: Readonly<Record<EnsembleName, readonly EnsembleVoice[]>>
     { type: 'sine', ratio: 1, cents: 4.3, g: 0.4, pan: 0.4 },
     { type: 'triangle', ratio: 2, cents: 2.6, g: 0.14, pan: -0.2 },
   ],
+  /** a struck-glass note's held body: the still tone and its slow beat (Frost, Selene's motif) */
+  glassy: [
+    { type: 'sine', ratio: 1, cents: 0, g: 1, pan: 0 },
+    { type: 'sine', ratio: 1, cents: 5.2, g: 0.5, pan: 0 },
+  ],
   /** Eclipse: an exact quarter-tone pair over a sub a semitone off */
   wrong: [
     { type: 'sawtooth', ratio: 1, cents: 0, g: 0.4, pan: -0.5 },
@@ -53,6 +58,11 @@ export const ENSEMBLES: Readonly<Record<EnsembleName, readonly EnsembleVoice[]>>
     { type: 'sawtooth', ratio: 1, cents: -7, g: 0.5, pan: 0 },
     { type: 'sawtooth', ratio: 1, cents: 8, g: 0.5, pan: 0 },
     { type: 'square', ratio: 0.5, cents: 0, g: 0.22, pan: 0 },
+  ],
+  /** Reformation's plucked ostinato before its filter: a saw with a hollow square inside it */
+  pluck: [
+    { type: 'sawtooth', ratio: 1, cents: -5, g: 0.5, pan: 0 },
+    { type: 'square', ratio: 1, cents: 6, g: 0.25, pan: 0 },
   ],
   /** solo horn before its filter */
   horn: [

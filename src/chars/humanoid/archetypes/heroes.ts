@@ -73,7 +73,7 @@ export const tarrik: ArchetypeDef = {
 
     // hip half-cape: wraps the left hip round the back, longest behind the left leg
     draft.cloth.push(clothPanel(b, spec, {
-      name: 'cape', cols: 6, rows: 6, pin: 'hips', sub: 4, shape: 0.04, damping: 0.035, folds: [7, 0.016],
+      name: 'cape', cols: 8, rows: 9, pin: 'hips', sub: 3, shape: 0.035, damping: 0.03, folds: [7, 0.014],
       at: hipWrap(ctx, 296, 118, (u) => 0.5 + 0.2 * Math.sin(Math.PI * Math.min(1, u * 1.25)) - 0.12 * u, 0.2, 0.05),
       surf: { ...pal.cloth, zone: ZONE.back }, lining: { color: 0x2a0c0e }, trim: { color: 0x8a6a36, rough: 0.55, metal: 0.5 }, trimWidth: 0.022,
     }));
@@ -107,7 +107,7 @@ export const selene: ArchetypeDef = {
     buildHead(b, rig, { skin, hair: { color: 0x15110f }, style: 'bun', jaw: 0.86, eye: 0x2c3a4a, fem: 1 });
 
     cuirass(b, rig, pal, { faction: 'ref', heft: 0.014, lames: 3, keel: 0.03 });
-    gorget(b, rig, pal, { faction: 'ref', height: 0.045 });
+    gorget(b, rig, pal, { faction: 'ref', height: 0.07 });
     // spine light: thin cold line down the backplate
     const chest = rig.i('chest');
     const T = torsoSecs(rig);
@@ -139,7 +139,7 @@ export const selene: ArchetypeDef = {
       return [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t, a[2] + (c[2] - a[2]) * t];
     };
     draft.cloth.push(clothPanel(b, spec, {
-      name: 'cloak', cols: 6, rows: 5, pin: 'chest', sub: 4, shape: 0.035, damping: 0.045, folds: [6, 0.014],
+      name: 'cloak', cols: 8, rows: 8, pin: 'chest', sub: 3, shape: 0.03, damping: 0.04, folds: [6, 0.012],
       at: (u, v) => {
         const a = poly(topPts, u), c = poly(botPts, u);
         const w = Math.pow(v, 0.9);

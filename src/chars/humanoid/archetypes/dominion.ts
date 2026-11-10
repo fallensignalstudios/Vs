@@ -46,7 +46,7 @@ export const enforcer: ArchetypeDef = {
     holster(b, rig, pal, 1);
     draft.loadout = { melee: true, ranged: false, shield: true, prop: 'none' };
     draft.moveset = ENFORCER_MOVES;
-    draft.rim = { color: 0xffb070, amount: 0.22 };
+    draft.rim = { color: 0xffb070, amount: 0.3 };
     draft.radius = 0.5;
     draft.girth = 1.3;
   },

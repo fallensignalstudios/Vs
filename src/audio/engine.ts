@@ -73,7 +73,10 @@ export class AudioEngine {
    */
   prerender(): Promise<void> {
     if (!this.useSamples) return Promise.resolve();
-    this.ready ??= prerender(this.ac.sampleRate, this.res.waves).then((p) => this.samples.setBaked(p.samples));
+    this.ready ??= prerender(this.ac.sampleRate, this.res.waves).then((p) => {
+      this.samples.setBaked(p.samples);
+      this.samples.setBakedLoops(p.loops);
+    });
     return this.ready;
   }
 

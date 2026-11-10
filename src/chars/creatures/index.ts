@@ -1,11 +1,13 @@
 /**
  * Creature + device visual factory. Everything non-human the player fights or shoots:
  * drones, Eclipse bodies, the elite breach organism and the encounter devices.
- * See src/core/api/creatures.ts for sockets, actions and the typed extension interfaces.
+ * See src/core/api/creatures.ts for the action model, sockets, bounds and the typed extension interfaces.
+ * The elite can wear a generated mesh (public/models/elite.glb) over its procedural animator: see
+ * preloadCreatureSkins() below and core/skinlib.ts.
  */
 import type { CharacterCreateOpts, CharacterVisual, CreatureArchetype, DeviceArchetype, Game } from '@/core/api';
 import { warnOnce } from './core/rig';
-import { loadCreatureSkin, setSkinsEnabled, skinnable, skinsEnabled } from './core/skinlib';
+import { loadCreatureSkin, setSkinsEnabled, skinnable, skinQuality, skinsEnabled } from './core/skinlib';
 import { createDrone } from './drone';
 import { createElite } from './elite';
 import { createWeaver } from './weaver';
@@ -49,11 +51,14 @@ export function createCreature(game: Game | null, archetype: CreatureArchetype |
  * Skins are optional: a creature made before its skin has loaded shows its procedural body and swaps when the
  * file arrives. Await this during a loading screen to avoid that swap. Resolves once every requested skin has
  * loaded or failed; never rejects. Outside a browser it resolves immediately and nothing is loaded.
+ * Pass `game` so the maps are fitted to its quality profile (textureSize / anisotropy); without it they load
+ * as authored (2048²).
  */
-export function preloadCreatureSkins(archetypes?: readonly string[]): Promise<void> {
+export function preloadCreatureSkins(archetypes?: readonly string[], game?: Game | null): Promise<void> {
   const list = (archetypes ?? skinnable()).filter((a) => skinnable().includes(a));
   if (!skinsEnabled()) return Promise.resolve();
-  return Promise.all(list.map((a) => loadCreatureSkin(a))).then(() => undefined);
+  const q = skinQuality(game);
+  return Promise.all(list.map((a) => loadCreatureSkin(a, q))).then(() => undefined);
 }
 
 /** Master switch for generated-mesh skins (default on). Off: creatures created from now on stay procedural. */

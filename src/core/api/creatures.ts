@@ -52,14 +52,16 @@
  *  - Eclipse-made things twitch / pulse on one shared cadence: game.ai.links.cadence when the link system is
  *    live, otherwise an internal clock of the same period (CADENCE_PERIOD in src/chars/creatures/core/cadence).
  *  - CharacterCreateOpts.seed desynchronises idle phases and wreck trajectories; it does not vary geometry.
- *  - Cost: one draw call and one shared shader program per creature/device, no lights, no textures (a skinned
- *    elite: one draw call, the generated mesh's three 2K maps).
+ *  - Cost: one draw call and one shared shader program per creature/device, no lights, no textures (the
+ *    skinned elite: two draw calls and the generated mesh's maps).
  *  - A hidden visual (setVisible(false)) still runs its action clocks and events but is not posed.
  *
  * THE ELITE'S TWO BODIES
  *  - The elite's animator can wear the generated hero mesh (public/models/elite.glb) as a skin. Skins are
- *    optional: await preloadCreatureSkins() (src/chars/creatures) during loading; an elite created before
- *    the file has arrived shows its procedural body and swaps when it does; with no file it stays procedural.
+ *    optional: await preloadCreatureSkins(['elite'], game) (src/chars/creatures) during loading — its maps are
+ *    fitted to game.render.quality.textureSize; an elite created before the file has arrived shows its
+ *    procedural body and swaps when it does; with no file (or setCreatureSkinsEnabled(false)) it stays
+ *    procedural. The skinned elite is two draw calls: the generated body and its procedural tendril wreath.
  *    Actions, events, timings and sockets are identical on both bodies.
  *  - The regenerating joint is the creature's RIGHT shoulder (+X in model space) on BOTH bodies. The generated
  *    file has it on its left; it is mirrored on load. (manifest.json's `weakPoint` is in the file's own

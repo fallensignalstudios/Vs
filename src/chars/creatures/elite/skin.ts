@@ -10,7 +10,8 @@
  *  - a hand the driver has planted on the ground is planted here too: the generated arms are much shorter
  *    than the procedural club arm, so the body is lowered until they reach, then the arms are solved by IK.
  * The driver's sockets are re-parented onto the skin's bones, and the weak-point joint, eyes and chest core
- * are marked as bind-space regions for the state shader (core/shader.ts, CREATURE_SKIN).
+ * are marked as bind-space regions for the state shader (core/shader.ts, CREATURE_SKIN). The file has no
+ * tendrils, so the skin also wears a procedural wreath (./wreath) anchored to its upper spine.
  */
 import * as THREE from 'three';
 import { clamp, clamp01 } from '@/core/mathx';
@@ -18,6 +19,8 @@ import { aimQuat, solveTwoBone } from '../core/anim';
 import { createSkinMaterial, type StateUniforms } from '../core/shader';
 import { SkinInstance, type SkinTemplate } from '../core/skinlib';
 import { EW } from './build';
+import type { TendrilDrive } from './tendrils';
+import { Wreath } from './wreath';
 
 /** driver hips bind position (model units) — the reference the driver's hips motion is measured from */
 const HIPS_REST = EW.hips;
@@ -72,6 +75,9 @@ export class EliteSkin {
   readonly group: THREE.Group;
   readonly mesh: THREE.SkinnedMesh;
   readonly material: THREE.MeshStandardMaterial;
+  /** the tendril wreath worn over the back (a second, procedural draw call) */
+  readonly wreath: Wreath;
+  private readonly iSpine: number;
   private readonly inst: SkinInstance;
   private readonly bones: THREE.Bone[];
   /** posture ∘ bind, model space */
@@ -155,6 +161,9 @@ export class EliteSkin {
     u.uVeinScale.value = 0.55;
     u.uSkin.value.set(1, 0.66, 0, 0);
     const iSpine = I('Spine'), iHead = I('Head');
+    this.iSpine = iSpine;
+    this.wreath = new Wreath(u);
+    this.group.add(this.wreath.rig.group);
     const seat = (name: string, bone: number, x: number, y: number, z: number): void => {
       const o = sockets.get(name);
       if (!o || bone < 0) return;
@@ -188,7 +197,7 @@ export class EliteSkin {
    * @param alive  1 alive … 0 dead (the posture's poise relaxes on a corpse)
    * @param lights 1 lit … 0 (violet seams fade with the death)
    */
-  update(d: EliteDriver, ds: number, alive: number, lights: number): void {
+  update(d: EliteDriver, ds: number, alive: number, lights: number, wreathDrive: TendrilDrive): void {
     const { bones, qm, pm, parent, drive, base, restLocalQ, restLocalP } = this;
     const k = this.k;
     // ---- driver rotations in model space (its bones bind with identity rotation: local chain = delta)
@@ -291,6 +300,9 @@ export class EliteSkin {
     }
     bones[this.iHips]!.position.copy(pm[this.iHips]!);
 
+    // ---- the wreath rides the upper spine
+    if (this.iSpine >= 0) this.wreath.pose(pm[this.iSpine]!, _q.copy(qm[this.iSpine]!).multiply(_q2.copy(this.inst.restQuat[this.iSpine]!).invert()), wreathDrive);
+
     // ---- presentation
     const us = this.u.uSkin.value;
     us.x = 1.15 * lights;
@@ -306,6 +318,7 @@ export class EliteSkin {
   }
 
   dispose(): void {
+    this.wreath.dispose();
     this.inst.dispose();
   }
 }

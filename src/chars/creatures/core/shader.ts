@@ -284,15 +284,15 @@ const FRAG_EMISSIVE = /* glsl */ `
   float cPulse = 0.75 + 0.25 * sin(uTime * 2.1 + cP.y * 3.0);
   cE += vec3(0.5, 0.22, 1.0) * cViolet * uSkin.x * (0.35 + 0.4 * uGroup[4]) * cPulse * (1.0 - cJoint);
   float cMot = 0.25 + 1.5 * smoothstep(0.3, 0.72, cNoise(cP * 9.0 + 4.0));
-  vec3 cJc = mix(vec3(0.62, 0.36, 1.0), uHot.rgb, uHot.a);
-  cE += cJc * cJoint * (0.3 + 1.7 * cViolet + 0.5 * cDark) * cMot * uGroup[3] * (1.0 - uSkin.w);
+  vec3 cJc = mix(vec3(0.5, 0.2, 1.0), uHot.rgb, uHot.a);
+  cE += cJc * cJoint * (0.22 + 1.1 * cViolet + 0.4 * cDark) * cMot * uGroup[3] * (1.0 - uSkin.w);
   float cEmber = smoothstep(0.62, 0.8, cNoise(cP * 14.0 + 2.0)) * cJoint;
   cE += vec3(1.0, 0.36, 0.08) * cEmber * uGroup[5];
   float cEye = max(cSphere(uEyeA, cP), cSphere(uEyeB, cP));
   cE += vec3(0.6, 0.42, 1.0) * cEye * (0.3 + 0.7 * cDark) * uGroup[1] * 1.15;
   cE += vec3(0.48, 0.2, 1.0) * cSphere(uCore, cP) * (cViolet * 0.8 + cDark * 0.4) * uGroup[2] * 0.6;
   cE *= uGlow * (1.0 - cFrost * 0.75);
-  cLit = clamp(cViolet * uSkin.x + cEye + cJoint * 0.5, 0.0, 1.0);
+  cLit = clamp(cViolet * uSkin.x + cEye, 0.0, 1.0);
 #else
   float cHotMask = vPart.x > 0.5 ? uHot.a * clamp(cGroup - 1.0, 0.0, 1.0) : 0.0;
   vec3 cBase = mix(vColor.rgb, uHot.rgb, cHotMask);
@@ -363,10 +363,10 @@ function finish(material: THREE.MeshStandardMaterial, uniforms: StateUniforms, k
 /**
  * Create one state material instance for a PROCEDURAL rig. All instances share compiled programs (per `bump`
  * flag and dissolve state); `bump` adds derivative-based micro surface detail and is switched off on the low
- * quality profile.
+ * quality profile. Pass `shared` to drive a second procedural mesh from an existing creature's uniform block.
  */
-export function createStateMaterial(bump = true): StateMaterial {
-  const uniforms = createStateUniforms();
+export function createStateMaterial(bump = true, shared?: StateUniforms): StateMaterial {
+  const uniforms = shared ?? createStateUniforms();
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1, envMapIntensity: 1 });
   material.name = 'creatureState';
   material.defines = { ...(material.defines ?? {}) };

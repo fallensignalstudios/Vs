@@ -30,7 +30,7 @@ import type {
 import type { CamPose, EaseName, ButtonAction } from './camera';
 import type { ZoneBuilder, DoorHandle } from './kit';
 import type { Encounter, EncounterDef, Companion, CompanionMode } from './ai';
-import type { HumanoidArchetype } from './chars';
+import type { Archetype, HumanoidArchetype } from './chars';
 import type { ChoiceOpts } from './ui';
 import type { Actor } from './combat';
 
@@ -95,6 +95,12 @@ export interface ZoneDef {
   update?(z: ZoneRuntime, dt: number): void;
   /** optional cleanup beyond automatic disposal */
   dispose?(z: ZoneRuntime): void;
+  /**
+   * ADDED (mission). Character models this zone shows (enemy roles, named NPCs). While the zone loads the
+   * mission system awaits `game.chars.preload(cast)` — both protagonists and the common companions (Lyessa,
+   * Tharne, Lyric) are always included — so no figure pops in after the fade.
+   */
+  cast?: Archetype[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -102,6 +108,10 @@ export interface ZoneDef {
 // ---------------------------------------------------------------------------------------------
 
 export interface SayOpts {
+  /**
+   * seconds the line stays up. Default: the voice-over clip's length + 0.25 s when one exists, otherwise
+   * clamp(1.6 + 0.055 × characters, 2, 8).
+   */
   duration?: number;
   offscreen?: boolean;
   channel?: DialogueLine['channel'];
@@ -151,9 +161,18 @@ export interface CineCtx {
   move(pose: CamPose, seconds: number, ease?: EaseName): Routine;
   /** start a move without waiting */
   moveAsync(pose: CamPose, seconds: number, ease?: EaseName): void;
-  /** conversational two-shot helper: frames `subject` over the shoulder of `over` */
+  /**
+   * conversational two-shot helper: frames `subject` (feet position) over the shoulder of `over` (feet position).
+   * The camera sits behind `over` on `side` (+1 right shoulder, default) at eye level; the subject lands on the
+   * opposite third of the frame. Defaults: distance 1.7 m behind `over`, height 1.62, fov 38.
+   */
   twoShot(subject: Vec3Like, over: Vec3Like, opts?: { side?: 1 | -1; distance?: number; height?: number; fov?: number }): void;
-  /** single close/medium shot of a point from a yaw/distance */
+  /**
+   * single close/medium shot of a point from a yaw/distance. `yawDeg` is the compass bearing of the CAMERA as
+   * seen from the subject, in plan degrees (0 = camera north of the subject looking south, 90 = camera east).
+   * Defaults: yawDeg 180 (camera south of the subject), distance 3.2, height 1.55, lookHeight 1.45, fov 40.
+   * Like twoShot, the camera is pulled in toward the subject if geometry is in the way.
+   */
   shot(subject: Vec3Like, opts?: { yawDeg?: number; distance?: number; height?: number; lookHeight?: number; fov?: number }): void;
   drift(opts: { around: Vec3Like; radius?: number; yawRate?: number; height?: number; lookHeight?: number }): void;
   dof(focusDistance: number | null, strength?: number): void;
@@ -171,7 +190,10 @@ export interface ZoneRuntime {
   // --- space ---
   /** plan → world */
   P(x: number, n: number, h?: number): THREE.Vector3;
-  /** marker world position (throws a clear error for unknown names) */
+  /**
+   * marker world position (a fresh vector). Unknown names never throw (BRIEF rule 5): they warn once and
+   * resolve to the player's position, or the zone origin before a player exists.
+   */
   m(name: string): THREE.Vector3;
   /** marker world yaw (radians) */
   myaw(name: string): number;
@@ -180,7 +202,7 @@ export interface ZoneRuntime {
   until(pred: () => boolean): Wait;
   /** wait until the player is within radius of a marker/position (default 3 m) */
   untilNear(at: string | Vec3Like, radius?: number): Wait;
-  /** wait until the player is inside a plan-space rectangle */
+  /** wait until the player is inside a plan-space rectangle: centre (x, n), size w (east–west) × d (north–south) */
   untilInRect(x: number, n: number, w: number, d: number): Wait;
   /** run a routine in parallel for the lifetime of the zone */
   fork(routine: Routine<unknown>, name?: string): ScriptHandle;
@@ -221,14 +243,24 @@ export interface ZoneRuntime {
    * Run a cinematic: disables player input, letterboxes, hides HUD, gives the camera to `body`, restores
    * everything afterwards. Skippable by default (fast-forward semantics).
    */
-  cinematic(id: string, body: (c: CineCtx) => Routine, opts?: { skippable?: boolean; keepHud?: boolean; blendOut?: number }): Routine;
+  cinematic(id: string, body: (c: CineCtx) => Routine, opts?: {
+    skippable?: boolean; keepHud?: boolean; blendOut?: number;
+    /** ADDED (mission). false = hostiles keep attacking during the scene (default true: global ceasefire). */
+    ceasefire?: boolean;
+    /** ADDED (mission). false = no letterbox bars (in-play vignettes). Default true. */
+    letterbox?: boolean;
+  }): Routine;
   /**
    * Authored protagonist handoff: the player recognises the new lead before movement resumes.
    * Camera glides from the old lead to the new one, kit/HUD swap, old lead becomes a companion (mode) and
    * the previous companion body for `to` is consumed.
    */
   handoff(to: ProtagonistId, opts?: { partnerMode?: CompanionMode; seconds?: number; line?: [SpeakerId, string] }): Routine;
-  /** present the local decision; resolves with the chosen option id */
+  /**
+   * present the local decision; resolves with the chosen option id. The answer is recorded in the mission state
+   * (flag `choice:<id>`): asking the same choice again — a checkpoint retry — returns the recorded answer at
+   * once without showing the panel or emitting `choice:made` a second time.
+   */
   choice(opts: ChoiceOpts): Routine<string>;
   /** commit the ONE variable consequence exactly once (no-op if already committed) */
   commitRescuePriority(p: Exclude<RescuePriority, 'pending'>): void;
@@ -274,6 +306,37 @@ export interface CheckpointInfo {
   label: string;
 }
 
+/** ADDED (mission). The decision panel that is waiting for an answer (autoplay / tests select through it). */
+export interface ActiveChoice {
+  readonly id: string;
+  /** option ids in display order */
+  readonly options: readonly string[];
+  /** programmatic commit (same path as the player's confirm). Unknown ids are ignored. */
+  select(option: string): void;
+}
+
+/** ADDED (mission). One entry of the beat trail kept by the mission system. */
+export interface BeatLogEntry {
+  zone: string;
+  beat: string;
+  /** `game.time.now` when the beat began */
+  t: number;
+}
+
+/**
+ * How the pieces behave (implementation notes callers can rely on):
+ *  - LOADING is asynchronous and sequential: `gotoZone` / `loadCheckpoint` / `newGame` calls queue behind a load
+ *    that is in flight. `loading` is true from the call until the zone is live; the Game does not simulate
+ *    meanwhile. A zone whose `build` or `enter` throws is reported (reportError) and still goes live with
+ *    whatever was built — the screen always fades back in.
+ *  - SAVES: `saveCheckpoint(id)` snapshots the whole MissionState under that id (localStorage key
+ *    `aurelion.save.v1`, validated on load, corrupt data discarded). A snapshot resumes at the beat that was
+ *    running when it was taken (or the nearest earlier beat that has an `enter`). `loadCheckpoint(id)` restores
+ *    that snapshot; for an id that was never saved in this profile it starts the table's beat with the current
+ *    state. Deaths, retries and play time survive a restore.
+ *  - A beat whose routine throws is reported and skipped; the next beat starts (the mission never hangs on a
+ *    script error).
+ */
 export interface MissionSystem {
   readonly state: MissionState;
   readonly zones: ReadonlyMap<ZoneId, ZoneDef>;
@@ -302,4 +365,14 @@ export interface MissionSystem {
   skipCinematic(): void;
   clearSave(): void;
   update(dt: number): void;
+
+  // --- ADDED (mission) ---
+  /** the choice panel currently waiting for the player, else null */
+  readonly activeChoice: ActiveChoice | null;
+  /** every beat started since boot, oldest first (capped at 512 entries) */
+  readonly beatLog: readonly BeatLogEntry[];
+  /** `z.log()` lines and mission-system notes, oldest first (capped at 300 lines) */
+  readonly journal: readonly string[];
+  /** true while a cinematic is running that the player may skip */
+  readonly cinematicSkippable: boolean;
 }

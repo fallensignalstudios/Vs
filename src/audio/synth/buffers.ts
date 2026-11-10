@@ -5,7 +5,7 @@
 import { mulberry32 } from '@/core/mathx';
 
 export type NoiseColor = 'white' | 'pink' | 'brown' | 'crackle';
-export type CurveName = 'soft' | 'hard' | 'fold' | 'asym' | 'ceiling';
+export type CurveName = 'soft' | 'hard' | 'fold' | 'asym' | 'ceiling' | 'drum';
 
 /** Scale `a` in place so its absolute peak equals `peak`. */
 export function normalize(a: Float32Array, peak = 1): void {
@@ -99,6 +99,15 @@ export function makeCurve(name: CurveName, n = 2049): Float32Array<ArrayBuffer> 
         // even harmonics: softer on the negative half (brass rasp)
         y = x >= 0 ? Math.tanh(2.4 * x) : Math.tanh(1.2 * x) * 0.85;
         break;
+      case 'drum': {
+        // drum-bus saturation: clean below −17 dBFS, then leaning into a −8 dBFS shoulder — stick clicks and
+        // coincident strokes on a downbeat are rounded off instead of standing 18 dB proud of the ensemble
+        const a = Math.abs(x);
+        const knee = 0.14;
+        const top = 0.4;
+        y = Math.sign(x) * (a <= knee ? a : knee + (top - knee) * Math.tanh((a - knee) / (top - knee)));
+        break;
+      }
       default: {
         // 'ceiling': transparent below 0.75, then a smooth knee that can never exceed ~0.97
         const a = Math.abs(x);

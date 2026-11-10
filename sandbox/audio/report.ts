@@ -27,7 +27,8 @@ import { makeShared } from '@/audio/synth/shared';
 import type { AudioEngine } from '@/audio/engine';
 import type { AmbienceId, MusicState } from '@/core/api';
 import { analyze, type Metrics } from './analyze';
-import { Probe, WARM, cut, render, renderFull, renderGraph, type RenderOpts } from './render';
+import { loopSeam } from '@/audio/synth/bake';
+import { Probe, WARM, cut, prepared, render, renderFull, renderGraph, type RenderOpts } from './render';
 import { ADAPTIVE, COMBAT, LOOP_IDS, SCENES, renderAmbience, renderLoop, renderMusic, renderMusicFull, renderScene, renderSfx, renderStinger, musicOpts } from './lab';
 
 export type Kind = 'chain' | 'sfx' | 'loop' | 'music' | 'ambience' | 'stinger' | 'scene' | 'mix' | 'perf' | 'exact';
@@ -196,7 +197,7 @@ async function musicRows(state: Exclude<MusicState, 'silence'>, o: ReportOpts, p
     if (hiRow.punchDb < 6) hiRow.flags.push(`PUNCH${f1(hiRow.punchDb)}`);
     if (hiRow.bands[3] < 0.06) hiRow.flags.push(`DARK${(hiRow.bands[3] * 100).toFixed(1)}%`);
     const dry = analyze(await renderMusic(state, o.secs, 1, { tap: (e) => { e.mixer.scoreSend.gain.value = 0; e.mixer.scoreRoom.gain.value = 0; } }), 1);
-    const wet = analyze(await renderMusic(state, o.secs, 1, { tap: (e) => { e.mixer.music.gain.value = 0; e.mixer.musicDirect.gain.value = 0; } }), 1);
+    const wet = analyze(await renderMusic(state, o.secs, 1, { tap: (e) => { e.mixer.music.gain.value = 0; e.mixer.musicDrums.gain.value = 0; e.mixer.musicDirect.gain.value = 0; } }), 1);
     hiRow.note += ` · dry ${f1(dry.rmsDb)} / wet ${f1(wet.rmsDb)}`;
     if (dry.rmsDb - wet.rmsDb < 6) hiRow.flags.push(`WET${signed(wet.rmsDb - dry.rmsDb)}`);
   }
@@ -431,11 +432,26 @@ export async function buildReport(o: ReportOpts): Promise<Row[]> {
 
   for (const id of LOOP_IDS) {
     if (!want('loop', id)) continue;
-    const buf = await renderLoop(id);
-    const row: Row = { kind: 'loop', id, targetDb: SFX[id].db, note: `sustain ${f1(sliceDb(buf, 1.5, 2.5))} dB rms`, flags: [], ...analyze(buf) };
+    // 12 s: long enough to pass the wrap point of a pre-rendered loop at least once
+    const buf = await renderLoop(id, {}, 12);
+    const sustain = sliceDb(buf, 1.5, 10);
+    const row: Row = { kind: 'loop', id, targetDb: SFX[id].db, note: `sustain ${f1(sustain)} dB rms`, flags: [], ...analyze(buf) };
     baseFlags(row, buf);
     // a stopped loop must have fallen well below its sustain level
-    if (sliceDb(buf, 4.2, 4.5) > sliceDb(buf, 1.5, 2.5) - 24) row.flags.push('NOSTOP');
+    if (sliceDb(buf, 11.7, 12) > sustain - 24) row.flags.push('NOSTOP');
+    const baked = prepared?.samples.bakedOf(id)[0];
+    if (baked?.loop) {
+      // pre-rendered as one seamless buffer: no click at the wrap, and the same level as the live patch
+      const seam = loopSeam(baked.buffer);
+      const live = sliceDb(await renderLoop(id, { baked: false }, 6), 1.5, 4);
+      row.note += ` · one ${baked.buffer.duration.toFixed(2)} s buffer loop (wrap step ×${f1(seam)}) · live patch ${f1(live)} dB`;
+      if (seam > 6) row.flags.push(`SEAM×${f1(seam)}`);
+      if (Math.abs(sustain - live) > 1.5) row.flags.push(`PARITY${signed(sustain - live)}`);
+      // the level over the loop must not lurch where the cross-fade sits: compare 250 ms windows
+      let lo = Infinity, hi = -Infinity;
+      for (let t = 2; t + 0.25 <= 10; t += 0.25) { const v = sliceDb(buf, t, t + 0.25); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      row.note += ` · level range ${f1(hi - lo)} dB`;
+    }
     push(row, buf);
   }
 

@@ -426,7 +426,7 @@ export function buildElite(): RigTemplate {
   addPlate(b, 'head', IVORY, slab(0.56, 0.5, 103, 2), hm(facing([H[0] + 0.02, H[1] + 0.3, H[2] + 0.06], [0.05, 0.95, -0.25], [0, 0, 1], 0.1)), { thick: 0.06, rx: 0.45, lift: 0.03 });
   // the eye: a dark recess under the brow holding a single hot slit, wide enough to read at range
   b.add('head', tint(P.domBlack, { c: 0x060507, r: 0.9 }), box(0.56, 0.17, 0.2, 0.02), hm(T(H[0], H[1] + 0.04, H[2] - 0.2, 0.2, 0, 0.05)));
-  b.add('head', tint(P.violetEye, { e: 3.2 }), box(0.42, 0.036, 0.05, 0.01), hm(T(H[0] - 0.01, H[1] + 0.045, H[2] - 0.3, 0.2, 0, 0.05)), { group: G.eye });
+  b.add('head', tint(P.violetEye, { e: 2.5 }), box(0.42, 0.036, 0.05, 0.01), hm(T(H[0] - 0.01, H[1] + 0.045, H[2] - 0.3, 0.2, 0, 0.05)), { group: G.eye });
   b.add('head', tint(P.violetEye, { e: 1.6 }), box(0.03, 0.2, 0.04), hm(T(H[0] - 0.012, H[1] - 0.1, H[2] - 0.3, 0.3, 0, 0.07)), { group: G.eye });
   const crest: [Pt3, Pt3, number, number][] = [
     [[0.05, 3.38, -0.9], [0.14, 3.8, -0.26], 0.22, 1], [[-0.2, 3.36, -0.86], [-0.6, 3.72, -0.28], 0.18, 2], [[0.28, 3.34, -0.86], [0.7, 3.64, -0.34], 0.16, 3],

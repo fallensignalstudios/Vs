@@ -17,7 +17,7 @@ const _q = new THREE.Quaternion(), _q1 = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _a = new THREE.Vector3(), _p = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 /** samples along a Verity blade for the clearance test, and the blade's half-width */
-const BLADE_SAMPLES = 10, BLADE_HALF = 0.03;
+const BLADE_SAMPLES = 16, BLADE_HALF = 0.035;
 /** seconds a released weapon takes to reach the floor */
 const DROP_TIME = 0.42;
 
@@ -49,9 +49,12 @@ export class Equipment {
   private readonly barrelV = new THREE.Vector3();
   private readonly tipPool = [new THREE.Vector3(), new THREE.Vector3()];
   private emptyHands = false;
+  private stow = false;
   private drop: Drop | null = null;
   private bladeExt = 1;
   private bladeTarget = 1;
+  /** Verity is being put away: it stays in the hand until its blades have retracted */
+  private sheathing = false;
 
   constructor(private readonly fig: FigureDef, private readonly rig: RigInstance) {
     this.loadout = { ...fig.loadout };
@@ -73,11 +76,13 @@ export class Equipment {
 
   /**
    * Follow the animator: `emptyHands` = the active action needs both hands (weapons go to their sheaths until
-   * it ends), `dropped` = the hand has let go. Returns true when the carry stance changed.
+   * it ends), `dropped` = the hand has let go, `stow` = the figure sits, kneels or lies (long sheathed weapons
+   * are set aside: a greatsword on the back does not fit a chair or the floor). Returns true when the carry
+   * stance changed.
    */
-  sync(emptyHands: boolean, dropped: boolean): boolean {
+  sync(emptyHands: boolean, dropped: boolean, stow: boolean): boolean {
     let changed = false;
-    if (emptyHands !== this.emptyHands) { this.emptyHands = emptyHands; if (!this.drop) { this.apply(false); changed = true; } }
+    if (emptyHands !== this.emptyHands || stow !== this.stow) { this.emptyHands = emptyHands; this.stow = stow; if (!this.drop) { this.apply(false); changed = true; } }
     if (dropped && !this.drop) changed = this.startDrop() || changed;
     else if (!dropped && this.drop) { this.drop = null; this.apply(true); changed = true; }
     return changed;
@@ -91,11 +96,11 @@ export class Equipment {
     bone.scale.setScalar(1);
   }
 
-  private place(item: ItemDef | undefined, held: boolean): void {
+  private place(item: ItemDef | undefined, held: boolean, long = false): void {
     if (!item) return;
     const bone = this.rig.byName[item.bone];
     if (held) this.mount(bone, item.held);
-    else if (item.sheath && !this.loadout.hideSheathed) this.mount(bone, item.sheath);
+    else if (item.sheath && !this.loadout.hideSheathed && !(long && this.stow)) this.mount(bone, item.sheath);
     else bone.scale.setScalar(HIDDEN);
   }
 
@@ -105,8 +110,10 @@ export class Equipment {
     const rifleProp = lo.prop === 'rifle' && !!it.ranged?.rifle;
     const rangedHeld = (lo.ranged || rifleProp) && !!it.ranged && free;
     const meleeHeld = lo.melee && !!it.melee && !rangedHeld && free;
-    this.place(it.melee, meleeHeld);
-    this.place(it.ranged, rangedHeld);
+    // a bladed hilt goes to its sheath only once the blades are in (see update)
+    this.sheathing = !snap && !meleeHeld && this.meleeHeld && !!it.melee?.blades && this.bladeExt > 0.1;
+    if (!this.sheathing) this.place(it.melee, meleeHeld, !it.melee?.blades);
+    this.place(it.ranged, rangedHeld, !!it.ranged?.rifle);
     this.place(it.shield, lo.shield);
     this.place(it.case, lo.prop === 'case');
     this.bladeTarget = meleeHeld ? 1 : 0;
@@ -127,9 +134,10 @@ export class Equipment {
     }
     this.barrel = null;
     if (rangedHeld && it.ranged) this.barrel = this.barrelV.set(0, 0, -1).applyQuaternion(mountQuat(it.ranged.held, _q));
-    this.ring = meleeHeld && it.melee?.blades ? this.ringV.set(0, 0, -1).applyQuaternion(mountQuat(it.melee.held, _q)) : null;
+    this.ring = (meleeHeld || this.sheathing) && it.melee?.blades ? this.ringV.set(0, 0, -1).applyQuaternion(mountQuat(it.melee.held, _q)) : null;
     this.tips = null;
-    if (meleeHeld && it.melee?.sockets) {
+    // (energy blades are not held off the floor by the arm: they shorten on it, like on their wielder)
+    if (meleeHeld && it.melee?.sockets && !it.melee.blades) {
       const m = it.melee.held, s = it.melee.sockets;
       mountQuat(m, _q);
       const tips: THREE.Vector3[] = [];
@@ -184,7 +192,11 @@ export class Equipment {
     }
     const blades = this.fig.items.melee?.blades;
     if (!blades) return;
-    this.bladeExt += (this.bladeTarget - this.bladeExt) * (1 - Math.exp(-14 * dt));
+    this.bladeExt += (this.bladeTarget - this.bladeExt) * (1 - Math.exp(-(this.sheathing ? 22 : 14) * dt));
+    if (this.sheathing && (this.bladeExt < 0.08 || this.meleeHeld)) {
+      this.sheathing = false;
+      if (!this.meleeHeld && !this.drop) { this.place(this.fig.items.melee, false, false); this.ring = null; }
+    }
     const item = this.fig.items.melee as ItemDef;
     if (this.meleeHeld) {
       // blade axis and grip in model space, straight from the solve
@@ -198,6 +210,7 @@ export class Equipment {
         for (let j = 0; j <= BLADE_SAMPLES && allowed === 1; j++) {
           const s = blades[0] + blades[1] * (j / BLADE_SAMPLES);
           _v.copy(_p).addScaledVector(_a, sign * s);
+          if (_v.y < 0.012) { allowed = Math.max(0, (j - 1) / BLADE_SAMPLES); break; }
           for (const ci of bladeCaps) {
             const c = caps[ci];
             if (c.r <= 0) continue;
@@ -205,7 +218,8 @@ export class Equipment {
           }
         }
         const cur = this.bladeLen[k];
-        this.bladeLen[k] = cur + (allowed - cur) * (1 - Math.exp(-(allowed < cur ? 40 : 9) * dt));
+        // shorten at once (a blade is never drawn inside anything), grow back smoothly
+        this.bladeLen[k] = allowed < cur ? allowed : cur + (allowed - cur) * (1 - Math.exp(-9 * dt));
       }
     } else { this.bladeLen[0] += (1 - this.bladeLen[0]) * 0.2; this.bladeLen[1] += (1 - this.bladeLen[1]) * 0.2; }
     this.rig.byName.bladeA.scale.set(1, 1, Math.max(HIDDEN, this.bladeExt * this.bladeLen[0]));
@@ -219,7 +233,7 @@ export class Equipment {
   weaponSegment(solver: BodySolver, a: THREE.Vector3, b: THREE.Vector3): boolean {
     const item = this.fig.items.melee;
     if (!item || !item.sockets || this.drop || item.blades) return false;
-    const m = this.meleeHeld ? item.held : this.loadout.hideSheathed ? null : item.sheath;
+    const m = this.meleeHeld ? item.held : this.loadout.hideSheathed || this.stow ? null : item.sheath;
     const base = item.sockets.weaponBase, tip = item.sockets.weaponTip;
     if (!m || !base || !tip) return false;
     const pi = solver.spec.index[m.parent];

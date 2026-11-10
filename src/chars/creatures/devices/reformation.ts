@@ -135,7 +135,7 @@ export class CommandEmitter extends DeviceBase implements CommandEmitterVisual {
   constructor(game: Game | null, opts?: CharacterCreateOpts) {
     super(game, {
       archetype: 'commandEmitter', height: 2.0, radius: 0.55, template: getTemplate('commandEmitter', buildEmitter),
-      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: EG, frostOrigin: [0, 1.4, 0], frostRange: 1.5,
+      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: EG, frostOrigin: [0, 1.4, 0], frostRange: 1.5, rim: [0xa8d8ff, 0.16],
     }, opts);
     const r = this.rig;
     this.hub = r.b('hub'); this.crown = r.b('crown');
@@ -220,7 +220,7 @@ function buildRelay(variant: number): RigTemplate {
   for (const x of [-0.27, 0.27]) b.add('base', P.refSteel, box(0.05, 0.4, 0.52, 0.01), T(x, 0.23, 0));
   b.add('base', P.refSlate, box(0.5, 0.03, 0.4, 0.008), T(0, 0.43, 0));
   b.add('base', P.refDark, box(0.3, 0.12, 0.01), T(0, 0.25, -0.252));
-  for (let i = 0; i < 4; i++) b.add('base', P.refGlow, box(0.045, 0.014, 0.008), T(-0.105 + i * 0.07, 0.27, -0.259), { group: RG.lights, rand: i * 0.25 });
+  for (let i = 0; i < 4; i++) b.add('base', tint(P.refGlow, { e: 1.5 }), box(0.045, 0.014, 0.008), T(-0.105 + i * 0.07, 0.27, -0.259), { group: RG.lights, rand: i * 0.25 });
   for (let i = 0; i < 4; i++) b.add('base', P.refSteel, box(0.2, 0.008, 0.008), T(0, 0.2 + i * 0.012 - 0.01, -0.259));
   b.add('base', P.refDark, box(0.95, 0.04, 0.09, 0.012), T(0, 0.022, 0.16, 0, 0.5, 0));
   b.add('base', P.refDark, box(0.95, 0.04, 0.09, 0.012), T(0, 0.022, -0.1, 0, -0.5, 0));
@@ -289,7 +289,7 @@ export class RelayReceiver extends DeviceBase {
     const variant = (opts.variant ?? 0) % 2 === 1 ? 1 : 0;
     super(game, {
       archetype: 'relayReceiver', height: variant ? 2.8 : 2.55, radius: 0.5, template: getTemplate('relayReceiver:' + variant, () => buildRelay(variant)),
-      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: RG, frostOrigin: [0, 1.6, 0], frostRange: 2,
+      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: RG, frostOrigin: [0, 1.6, 0], frostRange: 2, rim: [0xa8d8ff, 0.16],
     }, opts);
     this.isB = variant === 1;
     this.mast = this.rig.b('mast'); this.dish = this.rig.b('dish');
@@ -392,7 +392,7 @@ export class ScanHead extends DeviceBase implements ScanHeadVisual {
   constructor(game: Game | null, opts?: CharacterCreateOpts) {
     super(game, {
       archetype: 'scanHead', height: 2.0, radius: 0.35, template: getTemplate('scanHead', buildScanHead),
-      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: SG, frostOrigin: [0, 1.66, 0], frostRange: 1.7,
+      actions: DEVICE_ACTIONS, aliases: DEVICE_ALIASES, groups: SG, frostOrigin: [0, 1.66, 0], frostRange: 1.7, rim: [0xa8d8ff, 0.16],
     }, opts);
     const r = this.rig;
     this.mast = r.b('mast'); this.yaw = r.b('yaw'); this.head = r.b('head'); this.bar = r.b('bar');

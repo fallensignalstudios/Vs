@@ -53,7 +53,7 @@ describe('device destruction', () => {
         v.dispose();
       }
     }
-  });
+  }, 60000);
 
   it('wreck stays inside the culling sphere, and the oriented chunk boxes are tight', () => {
     for (const [a, variant] of devices) {

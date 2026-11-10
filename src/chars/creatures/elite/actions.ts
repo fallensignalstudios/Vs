@@ -384,8 +384,8 @@ export function applyEliteAction(p: ElitePose, s: Slot): number {
       rot(neck, 0.3 * arch - 0.2 * fall, 0, 0);
       rot(head, 0.7 * arch - 0.3 * fall, 0, 0.3 * settle);
       rot(jaw, -0.7 * arch - 0.35 * settle, 0, 0);
-      rot(armR, -0.5 * arch + 0.8 * fall, 0, 0.8 * arch + 0.3 * settle);
-      rot(armL, -0.4 * arch + 0.8 * fall, 0, -0.8 * arch - 0.4 * settle);
+      rot(armR, -0.75 * arch + 0.8 * fall, 0, 0.45 * arch + 0.3 * settle);
+      rot(armL, -0.15 * arch + 0.8 * fall, 0.3 * arch, -0.7 * arch - 0.4 * settle);
       rot(foreL, 0.6 * fall, 0, 0);
       legR.off.z += 0.5 * fall; legL.off.z += 0.62 * fall;
       legR.off.x += 0.12 * settle; legL.off.x -= 0.18 * settle;

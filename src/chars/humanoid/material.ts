@@ -171,8 +171,8 @@ fgPart = vCode - fgZone * 16.0;
     vec3 cell = hCells( ( vRest + uSeed * 0.37 ) * vec3( 36.0, 17.0, 36.0 ) );
     float grow = hFbm( vRest * 5.0 + uSeed );
     float up = clamp( vRestN.y * 0.5 + 0.5, 0.0, 1.0 );
-    float seedv = cell.z * 0.42 + grow * 0.48 + up * 0.2 + ( 1.0 - ao ) * 0.35;
-    float th = mix( 1.08, 0.36, uFrozen );
+    float seedv = cell.z * 0.34 + grow * 0.5 + up * 0.28 + ( 1.0 - ao ) * 0.45;
+    float th = mix( 0.98, 0.38, uFrozen );
     fgFrost = smoothstep( th, th + 0.14, seedv );
     fgRidge = fgFrost * smoothstep( 0.1, 0.0, cell.y );
     fgCell = cell.z;
@@ -180,7 +180,7 @@ fgPart = vCode - fgZone * 16.0;
     float l = dot( diffuseColor.rgb, vec3( 0.3, 0.55, 0.15 ) );
     // arrested: colour drains toward a cold grey, but the faction hue survives underneath
     diffuseColor.rgb = mix( diffuseColor.rgb, mix( vec3( l ), diffuseColor.rgb, 0.45 ) * vec3( 0.82, 0.93, 1.06 ), uFrozen * 0.8 );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.4, 0.55, 0.68 ) + cell.z * 0.12, fgFrost * 0.7 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.27, 0.41, 0.56 ) + cell.z * 0.14, fgFrost * 0.72 );
   }
 
   // Eclipse corruption: it climbs from ONE flank (which one differs per body), darkens what it takes and runs
@@ -198,9 +198,10 @@ fgPart = vCode - fgZone * 16.0;
     float front = smoothstep( 0.0, 0.25, fgCorr ) * smoothstep( 0.8, 0.3, fgCorr );
     float v1 = abs( hNoise( cp * 17.0 + vec3( 0.0, uTime * 0.05, 0.0 ) ) - 0.5 );
     float v2 = abs( hNoise( cp * 37.0 + 5.0 ) - 0.5 );
-    float lines = smoothstep( 0.022, 0.0, v1 ) + 0.4 * smoothstep( 0.014, 0.0, v2 );
-    fgVein = fgCorr * ( lines * clamp( seam * 0.9 + front * 0.6, 0.0, 1.0 ) + seam * 0.22 * smoothstep( 0.05, 0.0, v2 ) );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.03, 0.022, 0.042 ), fgCorr * 0.78 );
+    float lines = smoothstep( 0.03, 0.0, v1 ) + 0.45 * smoothstep( 0.018, 0.0, v2 );
+    // veins thread the taken tissue, crowd into seams and burn brightest along the advancing edge
+    fgVein = fgCorr * ( lines * clamp( 0.4 + seam * 0.6 + front * 0.7, 0.0, 1.0 ) + seam * 0.25 * smoothstep( 0.05, 0.0, v2 ) );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.045, 0.03, 0.07 ), fgCorr * 0.74 );
   }
 }
 `;
@@ -275,7 +276,7 @@ const FRAG_EMISSIVE = /* glsl */ `
   // corruption: light lives in the seams and pulses slowly
   float pulse = 0.65 + 0.35 * sin( uTime * 3.1 + vRest.y * 9.0 );
   totalEmissiveRadiance *= 1.0 - fgCorr * 0.35;
-  totalEmissiveRadiance += vec3( 0.48, 0.2, 1.0 ) * fgVein * pulse * 2.4;
+  totalEmissiveRadiance += vec3( 0.48, 0.2, 1.0 ) * ( fgVein * pulse * 3.4 + fgCorr * fres * 0.35 );
   // telegraph (about to act)
   float tp = 0.7 + 0.3 * sin( uTime * 18.0 );
   totalEmissiveRadiance += uTelegraph.rgb * uTelegraph.a * tp * ( 0.06 + fres * 1.3 );
@@ -292,8 +293,12 @@ const FRAG_EMISSIVE = /* glsl */ `
 const FRAG_ALPHA = /* glsl */ `
 #ifdef FIGURE_GHOST
 {
+  // a figure of light: solid where it faces the viewer (nothing of the body shows through the robe), thinning to
+  // translucent at its edges; white at the head, warming to gold toward the hem
   float ndvA = clamp( dot( normal, normalize( vViewPosition ) ), 0.0, 1.0 );
-  diffuseColor.a *= mix( 1.0, 0.82, ndvA );
+  diffuseColor.a *= mix( 0.5, 1.0, smoothstep( 0.05, 0.55, ndvA ) );
+  float gy = clamp( vRest.y / 1.9, 0.0, 1.0 );
+  totalEmissiveRadiance += mix( vec3( 1.0, 0.7, 0.34 ), vec3( 1.0, 0.94, 0.82 ), gy ) * ( 0.16 + 0.22 * gy + 0.5 * pow( 1.0 - ndvA, 2.0 ) );
 }
 #endif
 `;
@@ -331,7 +336,7 @@ export function createFigureMaterial(opts: FigureMaterialOpts = {}): FigureMater
   };
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff, roughness: 1, metalness: 1, vertexColors: true,
-    transparent: !!opts.ghost, opacity: opts.ghost ? 0.94 : 1,
+    transparent: !!opts.ghost, opacity: 1,
   });
   material.defines = { ...(material.defines ?? {}), ...DISSOLVE_DEFINES };
   if (opts.ghost) material.defines.FIGURE_GHOST = '';
@@ -347,7 +352,7 @@ export function createFigureMaterial(opts: FigureMaterialOpts = {}): FigureMater
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE + FRAG_ALPHA);
   };
-  material.customProgramCacheKey = () => 'aurelion-humanoid-3' + (opts.ghost ? '-ghost' : '');
+  material.customProgramCacheKey = () => 'aurelion-humanoid-4' + (opts.ghost ? '-ghost' : '');
 
   // shadow pass: same skinning, same dissolve
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });

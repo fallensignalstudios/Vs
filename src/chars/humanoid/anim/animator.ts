@@ -160,6 +160,11 @@ export class Animator {
   }
   /** seat height (reference metres) of the active full-body pose; −1 when standing */
   get seat(): number { return this.base ? this.base.clip.seat : this.shot && !this.shot.upperOnly ? this.shot.clip.seat : -1; }
+  /** the figure sits, kneels or lies in a held pose: long sheathed weapons are set aside (not while dying) */
+  get stow(): boolean {
+    const a = this.shot && !this.shot.upperOnly && this.shot.clip.seat >= 0 ? this.shot : this.base;
+    return !!a && a.clip.seat >= 0 && a.clip.dropAt < 0;
+  }
   /** locomotion owns the legs (no full-body clip, no lower-body cross-fade in flight) */
   get legsFree(): boolean { return !this.base && (!this.shot || this.shot.upperOnly) && !(this.xfade < 1 && this.xfadeLower); }
   /** the upper body is free for the aim loop to steer (aim pose in, nothing recoiling) */
@@ -396,7 +401,7 @@ export class Animator {
     add.head.copy(_q2).multiply(_q);
     _q.setFromAxisAngle(Z, -hb.z);
     add.head.multiply(_q);
-    const push = this.hitBack.x * 0.12;
+    const push = this.hitBack.x * 0.26;
     add.hip.set(this.pushX * push, br * 0.003 * mvQuiet, this.pushZ * push);
     add.handKick.set(0, this.kick.x * 0.02, this.kick.x * 0.09);
 

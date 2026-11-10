@@ -31,12 +31,14 @@ type Extra = Partial<Pick<RenderOpts, 'baked' | 'cold' | 'norm'>>;
 export const renderSfx = (id: string, extra: Extra = {}, tail = 2.6): Promise<AudioBuffer> =>
   render({ seconds: Math.min(14, sfxLength(id) + tail), setup: (e) => void e.play(id), ...extra });
 
-export const renderLoop = (id: string, norm?: Partial<NormTables>): Promise<AudioBuffer> => {
+/** Start a loop, hold it, stop it at `seconds − 1.7` with a 0.4 s fade. */
+export const renderLoop = (id: string, extra: Extra = {}, seconds = 4.5): Promise<AudioBuffer> => {
   let h: LoopHandle | null = null;
   return render({
-    seconds: 4.5, norm, stepped: true,
+    seconds, stepped: true,
     setup: (e) => { h = e.loop(id); },
-    tick: (_e, t) => { if (t >= 2.8 && h) { h.stop(0.4); h = null; } },
+    tick: (_e, t) => { if (t >= seconds - 1.7 && h) { h.stop(0.4); h = null; } },
+    ...extra,
   });
 };
 

@@ -79,6 +79,14 @@ export class Kit {
   readonly open: AudioScheduledSourceNode[] = [];
   /** parameters that follow LoopHandle.setPitch */
   readonly pitched: Array<{ p: AudioParam; base: number }> = [];
+  /**
+   * Loop baking: when > 0, every *sustaining* oscillator and free-running LFO is tuned to a whole multiple of
+   * this many hertz, so that the whole patch repeats exactly every `1 / grid` seconds and can be cut into a
+   * seamless buffer loop. The shift is at most half a grid step (a couple of cents at audio rates).
+   */
+  grid = 0;
+  /** rates of the free-running LFOs built so far (the loop baker sizes the loop from the slowest) */
+  readonly lfoRates: number[] = [];
   private readonly panners = new WeakMap<AudioNode, Map<number, StereoPannerNode>>();
 
   constructor(
@@ -95,6 +103,11 @@ export class Kit {
   /** A kit sharing this one's context/resources with a different output / start (music notes, sub-mixes). */
   fork(out: AudioNode, t = this.t, pitch = this.pitch): Kit {
     return new Kit(this.ac, this.res, out, t, pitch, this.rnd, this.sustain);
+  }
+
+  /** A frequency moved onto the loop grid (no-op unless `grid` is set). */
+  private onGrid(hz: number): number {
+    return this.grid > 0 ? Math.max(1, Math.round(hz / this.grid)) * this.grid : hz;
   }
 
   /** uniform random in [lo, hi) */
@@ -217,7 +230,8 @@ export class Kit {
     const mul = o?.fixed ? 1 : this.pitch;
     const osc = this.ac.createOscillator();
     osc.type = type;
-    this.sweep(osc.frequency, f, t0, Number.isFinite(len) ? len : 1, mul);
+    if (this.grid > 0 && typeof f === 'number' && !Number.isFinite(len)) osc.frequency.setValueAtTime(this.onGrid(f * mul), t0);
+    else this.sweep(osc.frequency, f, t0, Number.isFinite(len) ? len : 1, mul);
     if (o?.detune) osc.detune.value = o.detune;
     const g = this.ac.createGain();
     this.inline(osc, t0, Number.isFinite(len) ? len : 1, mul, o).connect(g);
@@ -284,7 +298,7 @@ export class Kit {
    * with `loop` on a sustaining kit the source loops until the voice is stopped, and follows setPitch.
    * The kit pitch becomes the playback rate.
    */
-  sample(buf: AudioBuffer, o?: { at?: number; g?: number; rate?: number; to?: AudioNode; pan?: number; loop?: boolean }): AudioBufferSourceNode {
+  sample(buf: AudioBuffer, o?: { at?: number; g?: number; rate?: number; to?: AudioNode; pan?: number; loop?: boolean; offset?: number; fadeIn?: number }): AudioBufferSourceNode {
     const t0 = this.t + (o?.at ?? 0);
     const src = this.ac.createBufferSource();
     src.buffer = buf;
@@ -297,7 +311,7 @@ export class Kit {
       const g = this.ac.createGain();
       if (sustain) {
         g.gain.setValueAtTime(0, t0);
-        g.gain.linearRampToValueAtTime(level, t0 + 0.06);
+        g.gain.linearRampToValueAtTime(level, t0 + Math.max(0.01, o?.fadeIn ?? 0.06));
       } else {
         g.gain.value = level;
       }
@@ -306,7 +320,8 @@ export class Kit {
     } else {
       src.connect(dst);
     }
-    src.start(t0);
+    const offset = o?.offset ?? 0;
+    src.start(t0, offset > 0 && offset < buf.duration ? offset : 0);
     if (sustain) {
       src.loop = true;
       this.pitched.push({ p: src.playbackRate, base: rate });
@@ -331,10 +346,15 @@ export class Kit {
     const mul = o?.fixed ? 1 : this.pitch;
     const car = this.ac.createOscillator();
     car.type = o?.type ?? 'sine';
-    this.sweep(car.frequency, f, t0, fin, mul);
-    if (o?.detune) car.detune.value = o.detune;
     const mod = this.ac.createOscillator();
-    this.sweep(mod.frequency, f, t0, fin, mul * ratio);
+    if (this.grid > 0 && typeof f === 'number' && !Number.isFinite(len)) {
+      car.frequency.setValueAtTime(this.onGrid(f * mul), t0);
+      mod.frequency.setValueAtTime(this.onGrid(f * mul * ratio), t0);
+    } else {
+      this.sweep(car.frequency, f, t0, fin, mul);
+      this.sweep(mod.frequency, f, t0, fin, mul * ratio);
+    }
+    if (o?.detune) car.detune.value = o.detune;
     const f0 = (typeof f === 'number' ? f : typeof f[0] === 'number' ? f[0] : (f[0] as Pt)[1]) * mul * ratio;
     const depth = this.ac.createGain();
     this.sweep(depth.gain, index, t0, fin, f0);
@@ -373,7 +393,9 @@ export class Kit {
     const t0 = this.t + (o?.at ?? 0);
     const osc = this.ac.createOscillator();
     osc.type = o?.type ?? 'sine';
-    osc.frequency.value = rate;
+    const free = o?.dur === undefined;
+    if (free) this.lfoRates.push(rate);
+    osc.frequency.value = free ? this.onGrid(rate) : rate;
     const g = this.ac.createGain();
     g.gain.value = depth;
     osc.connect(g);

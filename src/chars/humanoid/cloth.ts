@@ -161,6 +161,8 @@ const STEP = 1 / 60;
 const MAX_SUB = 4;
 const ITERATIONS = 4;
 const MAX_CAPS = 16;
+/** fastest a particle may move relative to its pin (m/s at reference scale) */
+const MAX_REL_SPEED = 3.2;
 
 export class ClothSim {
   private readonly n: number;
@@ -179,6 +181,7 @@ export class ClothSim {
   private readonly lastRoot = new THREE.Vector3();
   private readonly restLen: { v: Float32Array; h: Float32Array; v2: Float32Array; h2: Float32Array; tether: Float32Array };
   private time = 0;
+  private seated = false;
   /**
    * Seat disc in MODEL space: particles within `r` of (x, z) are kept above `y` (sitting on a chair or the
    * floor). r = 0 disables it.
@@ -260,6 +263,28 @@ export class ClothSim {
       tg[i * 3] = _v.x; tg[i * 3 + 1] = _v.y; tg[i * 3 + 2] = _v.z;
     }
 
+    // seated: the rest shape would hang through the seat — lay it out over the seat instead (what would be below
+    // slides outward, and over the edge once it runs out of seat) so the panel drapes rather than crumples
+    this.seated = false;
+    if (this.seat.r > 0) {
+      _w.set(this.seat.x, this.seat.y, this.seat.z).applyMatrix4(modelWorld);
+      const sy = _w.y + this.def.radius * scale, r = this.seat.r * scale;
+      for (let i = 0; i < n; i++) {
+        if (i % rows < pinRows) continue;
+        const k = i * 3;
+        const under = sy - tg[k + 1];
+        if (under <= 0) continue;
+        let dx = tg[k] - _w.x, dz = tg[k + 2] - _w.z;
+        const d = Math.hypot(dx, dz);
+        if (d > r) continue;
+        if (d < 1e-4) { dx = 0; dz = 1; } else { dx /= d; dz /= d; }
+        const out = d + under * 0.9, over = Math.max(0, out - r);
+        tg[k] = _w.x + dx * Math.min(out, r + over * 0.15); tg[k + 2] = _w.z + dz * Math.min(out, r + over * 0.15);
+        tg[k + 1] = sy - over * 0.9;
+      }
+      this.seated = true;
+    }
+
     if (this.fresh) {
       pos.set(tg); prev.set(tg); tp.set(tg);
       this.fresh = false;
@@ -296,7 +321,7 @@ export class ClothSim {
       let seatOn = false, sx = 0, sy = 0, sz = 0, sr2 = 0;
       if (seat.r > 0) { _v.set(seat.x, seat.y, seat.z).applyMatrix4(modelWorld); sx = _v.x; sy = _v.y + rad; sz = _v.z; sr2 = seat.r * seat.r * scale * scale; seatOn = true; }
       const floorY = this.lastRoot.y + 0.02 * scale;
-      for (let s = 1; s <= steps; s++) this.step(h, s / steps, scale, nc, floorY, seatOn, sx, sy, sz, sr2);
+      for (let s = 1; s <= steps; s++) this.step(h, s / steps, 1 / steps, scale, nc, floorY, seatOn, sx, sy, sz, sr2);
     }
     // the pinned rows sit exactly on the body, whether or not anything was simulated
     for (let i = 0; i < n; i++) {
@@ -324,7 +349,7 @@ export class ClothSim {
   }
 
   /** One sub-step of `h` seconds; `a` = how far through the frame it ends (pins move with the body). */
-  private step(h: number, a: number, scale: number, nc: number, floorY: number, seatOn: boolean, sx: number, sy: number, sz: number, sr2: number): void {
+  private step(h: number, a: number, share: number, scale: number, nc: number, floorY: number, seatOn: boolean, sx: number, sy: number, sz: number, sr2: number): void {
     const { cols, rows, pinRows } = this.def;
     const pos = this.pos, prev = this.prev, tg = this.target, tp = this.targetPrev, nrm = this.nrm, n = this.n;
     const { v: lv, h: lh, v2, h2, tether } = this.restLen;
@@ -333,7 +358,9 @@ export class ClothSim {
     this.time += h;
     const kStep = h / STEP;
     const damp = Math.pow(1 - this.def.damping, kStep);
-    const air = 1 - Math.exp(-5.5 * h);
+    const air = 1 - Math.exp(-3.4 * h);
+    // cloth cannot outrun its wearer by more than this (an abrupt stop swings it forward, it does not launch it)
+    const vmax = MAX_REL_SPEED * scale * h;
     const g = -9.8 * scale * 0.9 * h * h;
     this.normals();
     for (let i = 0; i < n; i++) {
@@ -347,6 +374,13 @@ export class ClothSim {
       // still air resists motion ACROSS the fabric: a moving wearer makes the panel trail and lift
       const vn = (vx * nrm[k] + vy * nrm[k + 1] + vz * nrm[k + 2]) * air;
       vx -= nrm[k] * vn; vy -= nrm[k + 1] * vn; vz -= nrm[k + 2] * vn;
+      {
+        const t = (i - r) * 3;
+        const px = (tg[t] - tp[t]) * share, py = (tg[t + 1] - tp[t + 1]) * share, pz = (tg[t + 2] - tp[t + 2]) * share;
+        const rx = vx - px, ry = vy - py, rz = vz - pz;
+        const rl = Math.hypot(rx, ry, rz);
+        if (rl > vmax) { const f = vmax / rl; vx = px + rx * f; vy = py + ry * f; vz = pz + rz * f; }
+      }
       prev[k] = pos[k]; prev[k + 1] = pos[k + 1]; prev[k + 2] = pos[k + 2];
       const speed = Math.hypot(vx, vy, vz) / (h * scale);
       // a little turbulence keeps hanging cloth alive; more of it in an air stream
@@ -354,7 +388,7 @@ export class ClothSim {
       pos[k] += vx + fl; pos[k + 1] += vy + g; pos[k + 2] += vz + fl * 0.6;
       // pull toward the rest shape (weave stiffness / hidden weights); it lets go as the cloth starts to fly
       if (this.def.shape > 0) {
-        const base = this.def.shape * (1 - 0.6 * (r / (rows - 1))) / (1 + speed * speed * 0.16);
+        const base = this.seated ? 0.32 : this.def.shape * (1 - 0.6 * (r / (rows - 1))) / (1 + speed * speed * 0.09);
         const s = 1 - Math.pow(1 - Math.min(0.95, base), kStep);
         pos[k] += (tg[k] - pos[k]) * s; pos[k + 1] += (tg[k + 1] - pos[k + 1]) * s; pos[k + 2] += (tg[k + 2] - pos[k + 2]) * s;
       }

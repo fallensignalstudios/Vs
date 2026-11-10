@@ -140,3 +140,101 @@ export async function bake(sampleRate: number, jobs: readonly BakeJob[]): Promis
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// sustaining loops
+// ---------------------------------------------------------------------------------------------------------
+
+export interface LoopJob {
+  id: string;
+  /** build the sustaining patch into a kit in sustain mode */
+  build(k: Kit): void;
+}
+
+/** seconds rendered before the loop is cut: every attack has finished, every filter has settled */
+const LOOP_LEAD = 1.4;
+/** cross-fade that joins the loop's end to its start (only the non-periodic, noise part needs it) */
+const LOOP_XFADE = 0.35;
+const LOOP_TARGET = 4.5;
+
+/**
+ * Render sustaining patches (a drone's hum, a link's whine) as seamless buffer loops: five or six live
+ * oscillators, noises and LFOs per voice become one looping source — and LoopHandle.setPitch can then move
+ * the whole sound, noise included.
+ *
+ * Each patch is rendered with the kit's loop grid on: its slowest LFO fixes the loop length (a whole number
+ * of its cycles, about 4.5 s) and every sustained oscillator and LFO is tuned to repeat exactly in that time,
+ * so the tonal content needs no cross-fade at all. What does not repeat — the looping noise sources — is
+ * cross-faded linearly over 350 ms. Never rejects; a patch that fails stays live-synthesised.
+ */
+export async function bakeLoops(sampleRate: number, jobs: readonly LoopJob[]): Promise<Map<string, AudioBuffer>> {
+  const out = new Map<string, AudioBuffer>();
+  const Offline = offlineCtor();
+  if (!Offline || !jobs.length) return out;
+  let scratch: OfflineAudioContext;
+  try {
+    scratch = new Offline(1, 128, sampleRate);
+  } catch {
+    return out;
+  }
+  const res = makeShared(scratch);
+  const lead = Math.round(LOOP_LEAD * sampleRate);
+  const xf = Math.round(LOOP_XFADE * sampleRate);
+  for (const job of jobs) {
+    try {
+      const seed = hashString(job.id);
+      // what is its slowest free-running LFO?
+      const probe = new Kit(scratch, res, scratch.destination, 0, 1, mulberry32(seed), true);
+      job.build(probe);
+      probe.stopAll(0);
+      const slowest = probe.lfoRates.reduce((m, r) => (r > 0 && r < m ? r : m), Infinity);
+      let seconds = LOOP_TARGET;
+      if (Number.isFinite(slowest)) seconds = Math.max(1, Math.round(LOOP_TARGET * slowest)) / slowest;
+      if (seconds > 9) continue; // an LFO too slow to loop sensibly: leave it live
+      const n = Math.round(seconds * sampleRate);
+      const ctx = new Offline(2, lead + n + xf, sampleRate);
+      const k = new Kit(ctx, res, ctx.destination, 0, 1, mulberry32(seed), true);
+      k.grid = sampleRate / n;
+      job.build(k);
+      const rendered = await ctx.startRendering();
+      const l = rendered.getChannelData(0);
+      const r = rendered.getChannelData(1);
+      let stereo = false;
+      let peak = 0;
+      for (let i = lead; i < lead + n; i += 7) {
+        if (Math.abs(l[i] - r[i]) > 1e-4) stereo = true;
+        if (Math.abs(l[i]) > peak) peak = Math.abs(l[i]);
+      }
+      if (peak < SILENCE) continue;
+      const buf = ctx.createBuffer(stereo ? 2 : 1, n, sampleRate);
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const src = c === 0 ? l : r;
+        const dst = buf.getChannelData(c);
+        dst.set(src.subarray(lead, lead + n));
+        // the head of the loop is blended with what followed its end, so the wrap is continuous
+        for (let i = 0; i < xf; i++) {
+          const w = i / xf;
+          dst[i] = src[lead + i] * w + src[lead + n + i] * (1 - w);
+        }
+      }
+      out.set(job.id, buf);
+    } catch (err) {
+      console.warn(`[audio] loop ${job.id} could not be pre-rendered — it stays live-synthesised:`, err);
+    }
+  }
+  return out;
+}
+
+/**
+ * How discontinuous a loop is at its wrap point: the jump from the last sample to the first, relative to the
+ * typical sample-to-sample step. ~1 = seamless; a click is tens or hundreds.
+ */
+export function loopSeam(buf: AudioBuffer): number {
+  const d = buf.getChannelData(0);
+  const n = d.length;
+  if (n < 16) return 0;
+  let sum = 0;
+  for (let i = 1; i < n; i++) sum += Math.abs(d[i] - d[i - 1]);
+  const typical = sum / (n - 1);
+  return typical > 0 ? Math.abs(d[0] - d[n - 1]) / typical : 0;
+}

@@ -248,7 +248,13 @@ export const HUMANOID_SOCKETS = [
  * Locomotion: the stride follows the distance the root really moved (feet do not slide on starts, stops, turns or
  * against walls), planted feet stay put in world space, and a figure turned on the spot takes turn steps. Report
  * the INTENDED planar speed to setLocomotion; displacement beyond it (knockback, dodges, platforms) is treated as
- * being carried.
+ * being carried. A figure whose root has never been moved (previews, turntables) walks in place from the reported
+ * speed instead; the first real displacement switches it to measured travel for good.
+ *
+ * Cost: each figure has three levels of detail on one skeleton (switched by camera distance) and casts its
+ * shadow from the cheapest; geometry is shared per archetype (and per structural seed bucket for rank-and-file,
+ * who otherwise differ by per-instance height and tint) and freed by `releaseUnusedHumanoids()` from
+ * '@/chars/humanoid' — call it on zone unload; `warmHumanoids(archetypes, seeds)` pre-builds squad variants.
  */
 export type HumanoidLoadout = { melee?: boolean; ranged?: boolean; shield?: boolean; prop?: 'case' | 'rifle' | 'none'; hideSheathed?: boolean };
 
@@ -268,6 +274,12 @@ export interface HumanoidVisual extends CharacterVisual {
    * Blends in/out smoothly; null releases the hand. Reach is clamped to the arm's length.
    */
   setHandTarget(hand: 'L' | 'R', target: Vec3Like | null, weight?: number): void;
+  /**
+   * Speech: 0 = mouth closed, 1 = talking at full voice. The jaw flaps procedurally while the amount is above 0
+   * (hold ~0.7 for the length of a line, or feed the voice envelope); blinks are automatic. A hidden driver
+   * still animates its `jaw` / `lids` bones for whatever body is retargeted from it.
+   */
+  setSpeaking(amount: number): void;
   /**
    * Call after moving the figure discontinuously (spawn, checkpoint reload, cinematic cut) so cloth and
    * motion smoothing restart from rest instead of whipping. Jumps over 3 m are also detected automatically.

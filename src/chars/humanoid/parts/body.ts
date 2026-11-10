@@ -143,11 +143,13 @@ export function buildBody(b: MeshBuilder, rig: RigView, look: BodyLook): void {
 
   // ---- neck ----------------------------------------------------------------------------------------------
   b.surf({ ...skin, zone: ZONE.head }).skin(chainY(rig.i('head'), rig.i('neck'), rig.i('chest'), rig.y('head') + 0.01, rig.y('neck'), 0.03, 0.03));
+  // (finer builds get a slimmer neck: it must read narrower than the jaw above it)
+  const nx = k * (1 - 0.15 * rig.prop.fem), nz = k * (1 - 0.1 * rig.prop.fem);
   loft(b, [
-    { y: 1.485, rx: 0.062 * k, rz: 0.06 * k, cz: 0.012 },
-    { y: 1.55, rx: 0.052 * k, rz: 0.054 * k, cz: 0.012 },
-    { y: 1.61, rx: 0.05 * k, rz: 0.055 * k, cz: 0.006 },
-    { y: 1.655, rx: 0.052 * k, rz: 0.058 * k, cz: 0.004 },
+    { y: 1.485, rx: 0.062 * nx, rz: 0.06 * nz, cz: 0.012 },
+    { y: 1.55, rx: 0.052 * nx, rz: 0.054 * nz, cz: 0.012 },
+    { y: 1.61, rx: 0.05 * nx, rz: 0.055 * nz, cz: 0.006 },
+    { y: 1.655, rx: 0.052 * nx, rz: 0.058 * nz, cz: 0.004 },
   ], { seg: 12, smooth: 2 });
 
   for (const side of [-1, 1]) {

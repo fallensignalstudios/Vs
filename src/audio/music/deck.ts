@@ -105,7 +105,7 @@ export class Deck {
       return g;
     };
     const tonal = out(mixer.music);
-    const drums = out(mixer.musicDirect);
+    const drums = out(mixer.musicDrums);
     const wet = out(mixer.scoreSend);
     const room = out(mixer.scoreRoom);
     this.outs = [tonal, drums, wet, room];

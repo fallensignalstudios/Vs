@@ -4,7 +4,8 @@
  * drives from the smoothed intensity so combat layers cross-fade in and out.
  *
  * Routing: sustained/tonal layers go to the deck's `tonal` bus (tilt EQ + gentle levelling in the mixer);
- * everything struck — percussion, ostinati, stabs, the cadence — goes to `drums`, which nothing compresses.
+ * everything struck — percussion, ostinati, stabs, the cadence — goes to `drums`, which nothing compresses
+ * (the mixer only brightens it and rounds off coincident strokes).
  */
 import { lerp } from '@/core/mathx';
 import { Kit, setQ } from '../synth/kit';
@@ -216,7 +217,7 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
           if (v <= 0) return;
           gate.gain.setTargetAtTime(v, t, 0.005);
           gate.gain.setTargetAtTime(0.04, t + 0.035, env.stepDur * 0.6);
-          strike(env.samples, rnd, 'bow', bite, t, v * 0.22);
+          strike(env.samples, rnd, 'bow', bite, t, v * 0.14);
         },
         dispose: (at) => ks.stopAll(at),
       };
@@ -337,13 +338,16 @@ export function makeLayer(def: Layer, env: DeckEnv, out: DeckOut, start: number)
       return {
         def, level,
         // while gameplay is supplying the beat, the score's own grid stays out of its way: one clock only
-        pulse: (t, irregular) => cadenceHit(k, t, irregular ? 0.75 : 1, irregular ? 1 : 0),
+        pulse: (t, irregular) => {
+          if (irregular) cadenceHit(k, t, 0.75, 1);
+          else strike(env.samples, rnd, 'cadence', k, t, 1);
+        },
         step: (step, t) => {
           const v = pat[step % pat.length];
           if (v <= 0 || t - env.externalCadenceAt < EXTERNAL_CADENCE_HOLD) return;
           const irr = Number.isFinite(env.irregular) ? env.irregular : 0;
           if (irr <= 0.001) {
-            cadenceHit(k, t, v, 0);
+            strike(env.samples, rnd, 'cadence', k, t, v);
             return;
           }
           // severed: beats drop out, arrive late, and no two are alike

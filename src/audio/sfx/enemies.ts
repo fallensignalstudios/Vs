@@ -19,7 +19,7 @@ function bolt(k: Parameters<typeof crack>[0], at: number, g: number): void {
 }
 
 export const DRONE_SFX: RecipeTable = {
-  droneHum: sfx(-20, { loop: true, max: 6, prio: 0, send: 0.2, vary: 70, ref: 5 }, (k) => {
+  droneHum: sfx(-20, { loop: true, max: 6, prio: 0, send: 0.2, vary: 70, ref: 5, bake: 1 }, (k) => {
     const e = { a: 0.3, h: Infinity, d: 0.5 };
     k.osc('triangle', 196, { ...e, g: 0.6 });
     k.osc('sine', 294.4, { ...e, g: 0.4 }); // a slightly wide fifth: slow, clean beating
@@ -77,7 +77,7 @@ export const ENFORCER_SFX: RecipeTable = {
     struck(k, 'bar', k.rr(880, 1040), 0.12, 0.3); // the rim rings where the blow landed
     zap(k, 0.18, 0.7, 0.005, 96);
   }),
-  shieldBreak: sfx(-5.5, { gap: 0.3, max: 2, prio: 3, send: 0.55, ref: 8 }, (k) => {
+  shieldBreak: sfx(-5.5, { gap: 0.3, max: 2, prio: 3, send: 0.55, ref: 8, bake: 2 }, (k) => {
     crack(k, 1, 0, 900, 0.03);
     thump(k, 110, 34, 0.5, 1);
     struck(k, 'plate', 172, 0.9, 0.5, { tilt: 0.7 });

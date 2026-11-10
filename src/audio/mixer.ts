@@ -7,7 +7,8 @@
  *   near ─► small room ─┐                      ├─► worldFader ─► muffle (LP) ─► worldGate ─┐
  *   room ─► small/hall/vast blend ─► tone ─────┘                                          │
  *   tonal score ─► music ─► tilt EQ ─► levelling ─┐                                       │
- *   drums/stabs/stingers/recordings ─► musicDirect ┤                                      │
+ *   score percussion ─► musicDrums ─► tilt ─► soft clip ┤                                 │
+ *   stingers / recorded tracks ─► musicDirect ─────┤                                      │
  *   scoreSend ─► stage reverb ─────────────────────┼─► musicFader ─► side ─► duck ─► gate ─┼─► sum ─► master
  *   scoreRoom ─► early-reflection drum room ───────┘                                      │    ─► 20 Hz guard
  *   ui voices ─► ui (+ uiSend ─► halo) ─► uiFader ─────────────────────────────────────────┤    ─► glue ─► limiter
@@ -85,7 +86,12 @@ export class Mixer {
   readonly amb: GainNode;
   /** tonal score — pads, strings, swells, bells — through the tilt EQ and gentle levelling */
   readonly music: GainNode;
-  /** score percussion, stabs, stingers and recorded tracks: nothing between here and the music fader */
+  /**
+   * score percussion, ostinati and stabs: never compressed (the hits keep their fronts), brightened a little
+   * and rounded off by a soft clipper where strokes pile up on a downbeat
+   */
+  readonly musicDrums: GainNode;
+  /** stingers and recorded tracks: nothing between here and the music fader */
   readonly musicDirect: GainNode;
   /** dialogue clips: follow the SFX slider, never muffled or gated */
   readonly voice: GainNode;
@@ -279,6 +285,7 @@ export class Mixer {
 
     // --- score ---
     this.music = g();
+    this.musicDrums = g();
     this.musicDirect = g();
     const musicPre = g();
     const musicFader = g();
@@ -288,12 +295,12 @@ export class Mixer {
     // "mastering" tilt for the synthesised ensemble: ease the bottom, lift presence
     const lowShelf = ac.createBiquadFilter();
     lowShelf.type = 'lowshelf';
-    lowShelf.frequency.value = 160;
-    lowShelf.gain.value = -3.5;
+    lowShelf.frequency.value = 180;
+    lowShelf.gain.value = -5;
     const presence = ac.createBiquadFilter();
     presence.type = 'highshelf';
     presence.frequency.value = 2200;
-    presence.gain.value = 5;
+    presence.gain.value = 6.5;
     this.musicComp = comp(DYNAMICS.music);
     const musicTrim = g(dB(-DYNAMICS.music.makeupDb));
     this.music.connect(lowShelf);
@@ -301,6 +308,22 @@ export class Mixer {
     this.musicComp.connect(musicTrim);
     primed(presence, this.musicComp, musicTrim, musicPre);
     this.musicDirect.connect(musicPre);
+    // drum bus: sticks and metal forward, the boom held back a little, then the shoulder
+    const drumLow = ac.createBiquadFilter();
+    drumLow.type = 'lowshelf';
+    drumLow.frequency.value = 110;
+    drumLow.gain.value = -2;
+    const drumAir = ac.createBiquadFilter();
+    drumAir.type = 'highshelf';
+    drumAir.frequency.value = 2600;
+    drumAir.gain.value = 5;
+    const drumClip = ac.createWaveShaper();
+    drumClip.curve = res.curves.drum;
+    drumClip.oversample = '2x';
+    this.musicDrums.connect(drumLow);
+    drumLow.connect(drumAir);
+    drumAir.connect(drumClip);
+    drumClip.connect(musicPre);
 
     this.scoreSend = g();
     const stage = conv(res.rooms.stage);

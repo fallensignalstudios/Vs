@@ -5,11 +5,14 @@
  *   ?sheet=<action>&n=6&who=...    contact sheet: one figure posed at N times through an action
  *   ?env=dark                      dim stage for emissive / rim work;  ?travel=1 moves the figure for real
  * Globals for tools/shot.cjs: __fig (current figure), __figs, __play(a, opts), __loco(speed, yawDeg, flags),
- * __spawn(who, x, z, yawDeg, opts), __clear(), __sheet(who, action, n), __turn(deg), __stats().
+ * __spawn(who, x, z, yawDeg, opts), __clear(), __sheet(who, action, n), __turn(deg), __stats(),
+ * __ramp(who, state, amounts) one figure per amount of a shader state, __lod(level) force a level of detail on
+ * every figure (−1 = automatic), __lods(who) the three levels side by side, __run(i, seconds, hz) advance one
+ * figure at an arbitrary frame rate.
  */
 import * as THREE from 'three';
 import { createHarness } from '../harness';
-import { createHumanoid } from '@/chars/humanoid';
+import { createHumanoid, humanoidCacheStats } from '@/chars/humanoid';
 import { listActions, listArchetypes } from '@/chars/humanoid/debug';
 import type { HumanoidArchetype, HumanoidVisual } from '@/core/api';
 
@@ -77,7 +80,60 @@ W.__travel = (on: boolean, i = 0) => { if (figs[i]) figs[i].travel = on; };
 W.__gamecam = (i = 0) => { follow = i; placeGameCam(); };
 W.__turn = (deg: number, i = 0) => { if (figs[i]) figs[i].fig.root.rotation.y = (deg * Math.PI) / 180; };
 W.__actions = (who: string) => listActions(who as HumanoidArchetype);
-W.__stats = () => ({ calls: h.renderer.info.render.calls, tris: h.renderer.info.render.triangles, figs: figs.map((e) => [e.fig.archetype, e.fig.triangles]) });
+W.__stats = () => ({
+  calls: h.renderer.info.render.calls, tris: h.renderer.info.render.triangles, geometries: h.renderer.info.memory.geometries,
+  cache: humanoidCacheStats(), figs: figs.map((e) => [e.fig.archetype, e.fig.triangles]),
+});
+/** force a level of detail on every figure (−1 = back to automatic switching by camera distance) */
+W.__lod = (level: number) => {
+  for (const e of figs) {
+    const lod = e.fig.root.getObjectByName('lod') as THREE.LOD | undefined;
+    if (!lod) continue;
+    lod.autoUpdate = level < 0;
+    if (level >= 0) lod.levels.forEach((l, i) => (l.object.visible = i === Math.min(level, lod.levels.length - 1)));
+  }
+  h.render();
+};
+/** the levels of detail of one archetype side by side, each forced on */
+W.__lods = (who: string, spacing = 1.6, yawDeg = 150) => {
+  clear();
+  const out: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const f = spawn(who, (i - 1) * spacing, 0, yawDeg);
+    for (let k = 0; k < 30; k++) f.update(1 / 60);
+    const lod = f.root.getObjectByName('lod') as THREE.LOD | undefined;
+    if (!lod) continue;
+    lod.autoUpdate = false;
+    const n = Math.min(i, lod.levels.length - 1);
+    lod.levels.forEach((l, j) => (l.object.visible = j === n));
+    out.push(((lod.levels[n].object as THREE.Mesh).geometry.index?.count ?? 0) / 3);
+  }
+  h.render();
+  return out;
+};
+/** one figure per amount of a shader state */
+W.__ramp = (who: string, state: string, amounts: number[], spacing = 1.4, yawDeg = 160, action?: string) => {
+  clear();
+  amounts.forEach((a, i) => {
+    const f = spawn(who, (i - (amounts.length - 1) / 2) * spacing, 0, yawDeg, { seed: i });
+    if (action) f.play(action);
+    for (let k = 0; k < 40; k++) f.update(1 / 60);
+    (W.__state as (n: string, v: number, c: number | undefined, i: number) => void)(state, a, undefined, i);
+    f.update(1 / 60);
+  });
+  h.render();
+};
+/** advance figure i for `seconds` at `hz` (optionally travelling), then render */
+W.__run = (i: number, seconds: number, hz = 60) => {
+  const e = figs[i]; if (!e) return;
+  const dt = 1 / hz;
+  for (let k = 0, n = Math.round(seconds * hz); k < n; k++) {
+    if (e.travel && e.speed > 0) { const a = e.fig.root.rotation.y + e.yaw; e.fig.root.position.x += -Math.sin(a) * e.speed * dt; e.fig.root.position.z += -Math.cos(a) * e.speed * dt; }
+    e.fig.update(dt);
+  }
+  if (follow >= 0) placeGameCam();
+  h.render();
+};
 /** contact sheet: n copies posed at evenly spaced times through an action */
 W.__sheet = (who: string, action: string, n = 6, spacing = 1.5, yawDeg = 0, opts: Record<string, unknown> = {}) => {
   clear();
