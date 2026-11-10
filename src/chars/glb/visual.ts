@@ -76,8 +76,6 @@ interface Body {
   height: number;
 }
 
-export interface GlbVisualOpts extends CharacterCreateOpts { }
-
 export class GlbHumanoidVisual implements HumanoidVisual {
   readonly archetype: HumanoidArchetype;
   readonly root: THREE.Object3D;
@@ -97,7 +95,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   private exposed: { part: string; amount: number } | null = null;
   private disposed = false;
 
-  constructor(game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: GlbVisualOpts = {}) {
+  constructor(game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
     this.archetype = archetype;
     this.seed = Number.isFinite(opts.seed) ? Math.floor(opts.seed as number) : 0;
     this.variant = Number.isFinite(opts.variant) ? Math.floor(opts.variant as number) : 0;

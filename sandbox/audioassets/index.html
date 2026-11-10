@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURELION — recorded score + voice-over sandbox</title>
+<style>
+  :root { --bg:#07090d; --panel:#0e1218; --line:#1e2632; --ink:#d9d2c0; --dim:#8a8f99; --gold:#c9a45c; --amber:#ffa033; --blue:#a8d8ff; --violet:#7a3cff; --bad:#ff5a4d; --ok:#7fd49a; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font:12px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:baseline; gap:16px; padding:10px 14px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  header h1 { font-size:13px; letter-spacing:.22em; font-weight:600; margin:0; color:var(--gold); white-space:nowrap; }
+  header .stat { color:var(--dim); font-variant-numeric: tabular-nums; }
+  header .stat b { color:var(--ink); font-weight:600; }
+  main { padding:10px 14px 60px; }
+  section { margin:0 0 12px; background:var(--panel); border:1px solid var(--line); border-radius:3px; padding:8px 10px; }
+  section > h2 { font-size:10px; letter-spacing:.2em; text-transform:uppercase; color:var(--dim); margin:0 0 6px; font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+  .row + .row { margin-top:6px; }
+  .group { display:flex; flex-wrap:wrap; gap:4px; align-items:center; padding:4px 6px; border:1px solid #171d27; border-radius:3px; }
+  .group > span { color:var(--dim); font-size:10px; letter-spacing:.12em; text-transform:uppercase; margin-right:4px; min-width:108px; }
+  .group.gen > span { color:#6d7480; }
+  button { background:#131922; color:var(--ink); border:1px solid #2a3442; border-radius:2px; padding:3px 8px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--gold); }
+  button.on { background:#2a2110; border-color:var(--gold); color:#ffe2a8; }
+  label { color:var(--dim); display:inline-flex; gap:6px; align-items:center; margin-right:12px; }
+  input[type=range] { width:150px; accent-color: var(--gold); }
+  output { color:var(--ink); min-width:30px; display:inline-block; font-variant-numeric: tabular-nums; }
+  table { border-collapse:collapse; width:100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align:right; padding:2px 7px; border-bottom:1px solid #141a23; white-space:nowrap; }
+  th { color:var(--dim); font-weight:500; font-size:10px; letter-spacing:.08em; }
+  td:first-child, th:first-child { text-align:left; }
+  td.id { color:#f0e6cf; text-align:left; }
+  td.l { text-align:left; color:var(--dim); }
+  td.flags { color:var(--bad); text-align:left; }
+  tr.flag td.id { color:var(--bad); }
+  canvas.sg { display:block; image-rendering:pixelated; border:1px solid #141a23; }
+  .tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+  .tile { position:relative; }
+  .tile canvas { width:100%; height:auto; }
+  .tile .cap { font-size:10px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile .cap b { color:#f0e6cf; font-weight:500; }
+  #summary { color:var(--dim); margin-bottom:8px; }
+  #summary b { color:var(--ink); font-weight:600; }
+  .bad { color:var(--bad); } .ok { color:var(--ok); }
+  pre { margin:0; color:var(--dim); white-space:pre-wrap; font:11px/1.45 ui-monospace, Menlo, monospace; }
+  pre b { color:var(--ink); font-weight:500; }
+</style>
+</head>
+<body>
+<header><h1>AURELION · RECORDED SCORE + VOICE-OVER</h1><span class="stat" id="stat">locked — press any control</span></header>
+<main id="app"></main>
+<script type="module" src="./main.ts"></script>
+</body>
+</html>

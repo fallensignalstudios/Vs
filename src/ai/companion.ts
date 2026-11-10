@@ -36,6 +36,8 @@ export class CompanionImpl implements Companion, ActorController {
   readonly kit: CompanionKit;
   private readonly nav: NavFollower;
   private order: Order | null = null;
+  /** arrived at a moveTo() destination: stays there until follow() / a mode change / another order */
+  private parked = false;
   private leader: Actor | null = null;
   private followPlayer = true;
   private offRight: number;
@@ -99,6 +101,8 @@ export class CompanionImpl implements Companion, ActorController {
       warnOnce(`mode:${String(m)}`, `companion mode "${String(m)}" is unknown — using 'follow'`);
       m = 'follow';
     }
+    // setting a mode (even the current one) releases a body parked by moveTo()
+    this.parked = false;
     if (m === this._mode) return;
     this._mode = m;
     this.order = null;
@@ -129,14 +133,17 @@ export class CompanionImpl implements Companion, ActorController {
       stop: Math.max(0.15, fin(opts?.stopDistance, 0.35)),
     };
     this.arrived = false;
+    this.parked = false;
     this.nav.reset();
   }
 
   follow(leader: Actor | null, offset?: { right: number; back: number }): void {
     this.order = null;
+    this.parked = false;
     this.release();
     this.leader = live(leader) ? leader : null;
-    this.followPlayer = false;
+    // following the protagonist means whoever the protagonist is (it changes at a handoff)
+    this.followPlayer = this.leader !== null && this.leader === playerActor(this.core.game);
     if (offset && Number.isFinite(offset.right + offset.back)) {
       this.offRight = offset.right;
       this.offBack = offset.back;
@@ -149,6 +156,7 @@ export class CompanionImpl implements Companion, ActorController {
     this.release();
     this._mode = 'hold';
     this.order = null;
+    this.parked = false;
     this.holdPos.set(pos.x, pos.y, pos.z);
     this.holdYaw = typeof yaw === 'number' && Number.isFinite(yaw) ? yaw : null;
     this.arrived = false;
@@ -295,6 +303,7 @@ export class CompanionImpl implements Companion, ActorController {
       const o = this.order;
       if (this.nav.moveTo(a, o.pos, o.run ? AI.companion.run : AI.companion.walk, dt, { stop: o.stop })) {
         this.arrived = true;
+        this.parked = true;
         this.holdPos.copy(a.pos);
         this.holdYaw = o.yaw;
         this.order = null;
@@ -310,7 +319,9 @@ export class CompanionImpl implements Companion, ActorController {
     } else this.cancelAttack();
     if (this.drawn && now - this.lastFightAt > 1.5) this.holster();
 
-    if (this._mode === 'follow' || this._mode === 'combat') {
+    if (this.parked) {
+      this.stand(a, dt);
+    } else if (this._mode === 'follow' || this._mode === 'combat') {
       const leader = this.followPlayer ? playerActor(game) : this.leader;
       if (leader && leader !== a) this.followLeader(a, leader, dt, now);
       else this.stand(a, dt);
@@ -340,7 +351,7 @@ export class CompanionImpl implements Companion, ActorController {
     }
     this.nav.halt(a);
     if (this.faceTo) a.face(this.faceTo, 6 * dt);
-    else if (this.holdYaw !== null && this._mode !== 'follow') {
+    else if (this.holdYaw !== null && (this.parked || this._mode === 'hold' || this._mode === 'scripted')) {
       _goal.set(a.pos.x + forwardX(this.holdYaw), a.pos.y, a.pos.z + forwardZ(this.holdYaw));
       a.face(_goal, 5 * dt);
     }

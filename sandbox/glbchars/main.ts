@@ -15,8 +15,9 @@
  *   __poses(who, [actions], spacing, yawDeg, hold)         one figure per held pose
  *   __ramp(who, state, [amounts], spacing, yawDeg)         one figure per amount of a state effect
  *   __pair(who, action, t)        generated body and its procedural driver side by side
- *   __slide(who, speed, seconds)  measured planted-foot drift of the generated skeleton (metres)
- *   __info(i)                     what was measured from the mesh        __stats()
+ *   __footError(who, speed)       how far the generated ankles are from where the driver planted its feet (metres)
+ *   __slide(who, speed, seconds)  ankle travel while low to the ground (includes the natural roll onto the toe)
+ *   __info(i)                     what was measured from the mesh        __stats()        __redraw()
  */
 import * as THREE from 'three';
 import type { Archetype, CharacterVisual, Game, HumanoidArchetype, HumanoidVisual, LookName, QualityLevel } from '@/core/api';
