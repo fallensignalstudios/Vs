@@ -8,10 +8,21 @@
  * Trimmed lines (ext — trimmed) are not played. Every state change happens inside the routine (skip = fast-forward).
  */
 import * as THREE from 'three';
-import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
+import type { Actor, CamPose, CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { yawTo } from '@/core/mathx';
 import { atPost, feet, waitOr, walkTo } from '../shared';
 import { S, comm, hold } from './state';
+
+/** a pose in front of a body: `off` degrees off its facing (positive = toward its right), at head height */
+function frontPose(z: ZoneRuntime, who: Actor | null, at: string, off: number, distance: number, fov: number, h = 1.62): CamPose {
+  const p = who ? who.pos.clone() : z.m(at);
+  const facing = who ? who.yaw : z.myaw(at);
+  const b = -facing + THREE.MathUtils.degToRad(off);
+  return { pos: new THREE.Vector3(p.x + Math.sin(b) * distance, p.y + h, p.z - Math.cos(b) * distance), look: p.clone().setY(p.y + h - 0.03), fov };
+}
+function front(z: ZoneRuntime, c: CineCtx, who: Actor | null, at: string, off: number, distance: number, fov: number, h = 1.62): void {
+  c.cut(frontPose(z, who, at, off, distance, fov, h));
+}
 
 /** Lyric's upper arm on the side facing `from` (a hand rests there) */
 function armOf(lyric: Companion | null, from: () => THREE.Vector3): () => THREE.Vector3 | null {
@@ -71,7 +82,13 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     lyessa?.play('lowerWeapon');
     yield 1.1;
     for (const s of soldiers) s?.play('lowerWeapon');
-    yield 2.2;
+    yield 1.4;
+    // the two soldiers take up the junction while the scene goes on
+    for (const [s, at] of [[soldiers[0], 'soldier1Post'], [soldiers[1], 'soldier2Post']] as const) {
+      s?.stopAction();
+      walkTo(z, s, at);
+    }
+    yield 0.8;
 
     // (5) the east barrier: Tharne, supporting Lyric
     c.cut({ pos: P(12.6, 7.0, 1.6), look: P(19.8, 4.9, 1.35), fov: 38 });
@@ -97,17 +114,17 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     yield* say('Lyric', 'Still annoyingly alive.', lyric);
     c.twoShot(z.player.pos, feet(z, lyric ?? 'lyricStop'), { side: -1, distance: 1.55, fov: 32 });
     yield* say('Selene', 'How bad?', 'player');
-    c.shot(feet(z, lyric ?? 'lyricStop'), { yawDeg: 300, distance: 1.7, height: 1.62, lookHeight: 1.6, fov: 28 });
+    front(z, c, lyric?.actor ?? null, 'lyricStop', 45, 1.7, 28);
     yield* say('Lyric', 'It’s quieter.', lyric);
     c.twoShot(z.player.pos, feet(z, tharne ?? 'tharneStop'), { side: 1, distance: 1.6, fov: 32 });
     yield* say('Selene', 'And the corruption?', 'player');
-    c.shot(feet(z, tharne ?? 'tharneStop'), { yawDeg: 285, distance: 1.9, height: 1.62, lookHeight: 1.62, fov: 30 });
+    front(z, c, tharne?.actor ?? null, 'tharneStop', -35, 1.9, 30);
     yield* say('Tharne', 'It isn’t reversing.', tharne);
     z.story('lyricAliveNotCured');
     c.twoShot(z.player.pos, feet(z, lyric ?? 'lyricStop'), { side: -1, distance: 1.5, fov: 31 });
     yield* say('Selene', 'Do you still feel the Wound?', 'player');
-    c.shot(feet(z, lyric ?? 'lyricStop'), { yawDeg: 310, distance: 1.5, height: 1.6, lookHeight: 1.6, fov: 26 });
-    c.moveAsync({ pos: feet(z, lyric ?? 'lyricStop').add(new THREE.Vector3(-1.05, 1.6, -0.75)), look: feet(z, lyric ?? 'lyricStop').setY(1.6), fov: 24 }, 6, 'inOut');
+    front(z, c, lyric?.actor ?? null, 'lyricStop', 50, 1.55, 26);
+    c.moveAsync(frontPose(z, lyric?.actor ?? null, 'lyricStop', 50, 1.2, 24), 6, 'inOut');
     yield* say('Lyric', 'No.', lyric);
     yield 0.6;
     yield* say('Lyric', 'I feel remembered.', lyric);
@@ -118,7 +135,7 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     hold(z.player, 'R', null);
     hold(tharne, 'L', null);
     walkTo(z, tarrik, 'tarrikNear');
-    c.shot(feet(z, tarrik ?? 'meetTarrik'), { yawDeg: 200, distance: 2.4, height: 1.55, lookHeight: 1.45, fov: 32 });
+    front(z, c, tarrik?.actor ?? null, 'meetTarrik', 35, 2.4, 32, 1.5);
     if (!z.skipping) g.audio.play('ambCommBlip', { pos: feet(z, tarrik ?? 'meetTarrik') });
     comm(S.commT, tarrik?.actor ?? null, ['SOVEREIGN PRIORITY', 'RETURN TO CROWNWATCH']);
     yield* z.say('Caelus', 'SOVEREIGN PRIORITY · RETURN TO CROWNWATCH', { channel: 'system', offscreen: true }); // speaker label NEW
@@ -129,7 +146,7 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     // she turns from Lyric to him
     const tn = z.m('tarrikNear');
     g.player.teleport(z.player.pos, yawTo(z.player.pos.x, z.player.pos.z, tn.x, tn.z));
-    c.shot(z.player.pos, { yawDeg: 160, distance: 2.0, height: 1.5, lookHeight: 1.4, fov: 30 });
+    front(z, c, z.player, 'seleneLyric', -30, 2.0, 30, 1.48);
     if (!z.skipping) g.audio.play('ambCommBlip', { pos: z.player.pos });
     comm(S.commS, z.player, ['KEEPER VEYNE', 'REPORT TO MESTRIA']);
     yield* z.say('Reformation Command', 'KEEPER VEYNE · REPORT TO MESTRIA', { channel: 'system', offscreen: true });
@@ -148,15 +165,13 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     c.twoShot(z.player.pos, t(), { side: 1, distance: 1.6, fov: 31 });
     yield* say('Selene', 'Immediately.', 'player');
     // a slow push on him for the decision
-    const tf = t();
-    c.shot(tf, { yawDeg: 215, distance: 2.1, height: 1.62, lookHeight: 1.6, fov: 30 });
-    c.moveAsync({ pos: tf.clone().add(new THREE.Vector3(-1.05, 1.62, 1.35)), look: tf.clone().setY(1.6), fov: 26 }, 5, 'inOut');
+    front(z, c, tarrik?.actor ?? null, 'tarrikNear', 38, 2.1, 30);
+    c.moveAsync(frontPose(z, tarrik?.actor ?? null, 'tarrikNear', 30, 1.55, 26), 5, 'inOut');
     yield 0.5;
     yield* say('Tarrik', 'We should talk first.', tarrik);
     // she says it quietly and voluntarily
-    const sf = z.player.pos.clone();
-    c.shot(sf, { yawDeg: 140, distance: 1.9, height: 1.55, lookHeight: 1.52, fov: 28 });
-    c.moveAsync({ pos: sf.clone().add(new THREE.Vector3(1.0, 1.55, 1.25)), look: sf.clone().setY(1.52), fov: 25 }, 5, 'inOut');
+    front(z, c, z.player, 'seleneLyric', -38, 1.9, 28, 1.52);
+    c.moveAsync(frontPose(z, z.player, 'seleneLyric', -30, 1.45, 25, 1.52), 5, 'inOut');
     yield 1.0;
     yield* say('Selene', 'Yes.', 'player');
     yield 1.6;
@@ -166,6 +181,10 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     yield waitOr(z, () => z.skipping || atPost(z, lyessa, 'lyessaTalk'), 3);
     lyessa?.teleport(z.m('lyessaTalk'), z.myaw('lyessaTalk'));
     lyessa?.holdAt(z.m('lyessaTalk'), z.myaw('lyessaTalk'));
+    const lt = z.m('lyessaTalk');
+    const tn2 = z.m('tarrikNear');
+    tarrik?.holdAt(tn2, yawTo(tn2.x, tn2.z, lt.x, lt.z));
+    if (tarrik) tarrik.actor.yaw = yawTo(tn2.x, tn2.z, lt.x, lt.z);
     const l = () => feet(z, lyessa ?? 'lyessaTalk');
     c.twoShot(l(), t(), { side: 1, distance: 1.9, fov: 32 });
     yield* say('Lyessa', 'Cross wants the terminal.', lyessa);
@@ -173,33 +192,32 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     c.twoShot(t(), l(), { side: -1, distance: 1.9, fov: 32 });
     yield* say('Tarrik', 'Keep them out.', tarrik);
     yield* say('Tarrik', 'I need to understand what we just saw before Crownwatch tells me what it means.', tarrik);
-    c.shot(l(), { yawDeg: 120, distance: 1.9, height: 1.62, lookHeight: 1.6, fov: 29 });
+    front(z, c, lyessa?.actor ?? null, 'lyessaTalk', 30, 1.9, 29);
     yield* say('Lyessa', 'Only the terminal?', lyessa);
     // he could make this easier, but he does not
-    c.shot(t(), { yawDeg: 250, distance: 2.0, height: 1.62, lookHeight: 1.6, fov: 29 });
+    front(z, c, tarrik?.actor ?? null, 'tarrikNear', -30, 2.0, 29);
     yield* say('Tarrik', 'No.', tarrik);
     yield 0.5;
-    c.shot(l(), { yawDeg: 110, distance: 1.6, height: 1.62, lookHeight: 1.62, fov: 26 });
+    front(z, c, lyessa?.actor ?? null, 'lyessaTalk', 25, 1.6, 26);
     yield 0.4;
     yield* say('Lyessa', 'Fine.', lyessa);
     c.twoShot(t(), l(), { side: -1, distance: 1.8, fov: 31 });
     yield* say('Tarrik', 'If Crownwatch gives you a direct order to let them through?', tarrik);
     c.twoShot(l(), t(), { side: 1, distance: 1.8, fov: 31 });
     yield* say('Lyessa', 'You told me to decide what I do.', lyessa);
-    c.shot(t(), { yawDeg: 250, distance: 1.9, height: 1.62, lookHeight: 1.6, fov: 28 });
+    front(z, c, tarrik?.actor ?? null, 'tarrikNear', -30, 1.9, 28);
     yield* say('Tarrik', 'Yes.', tarrik);
-    c.shot(l(), { yawDeg: 110, distance: 1.7, height: 1.62, lookHeight: 1.62, fov: 26 });
+    front(z, c, lyessa?.actor ?? null, 'lyessaTalk', 25, 1.7, 26);
     yield* say('Lyessa', 'I’m deciding.', lyessa);
-    yield 1.4;
+    // she turns back to hold the junction
+    walkTo(z, lyessa, 'lyessaPost');
+    yield 1.6;
 
     // end state — identical watched or skipped: Lyessa holds the junction with the two soldiers; Tharne and Lyric
     // rest by the bench; Tarrik goes with Selene
     for (const [s, at] of [[soldiers[0], 'soldier1Post'], [soldiers[1], 'soldier2Post']] as const) {
-      s?.stopAction();
-      walkTo(z, s, at);
-      if (z.skipping) s?.teleport(z.m(at), z.myaw(at));
+      if (z.skipping || atPost(z, s, at)) s?.teleport(z.m(at), z.myaw(at));
     }
-    walkTo(z, lyessa, 'lyessaPost');
     if (z.skipping) lyessa?.teleport(z.m('lyessaPost'), z.myaw('lyessaPost'));
     lyessa?.holdAt(z.m('lyessaPost'), z.myaw('lyessaPost'));
     restAtBench(z, tharne, lyric);

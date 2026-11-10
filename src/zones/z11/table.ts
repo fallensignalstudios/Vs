@@ -294,7 +294,7 @@ function projection(z: ZoneRuntime, c: CineCtx, lines: string[]): void {
   p.update(0, true);
   p.setLines(lines);
   p.show(1, 0.45);
-  frame(z, c, 'otsS', 8);
+  frame(z, c, 'two', 9);
   if (!z.skipping) z.game.audio.play('ambConsoleTick', { pos: z.m('tableCentre') });
 }
 

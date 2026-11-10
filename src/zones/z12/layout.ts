@@ -37,12 +37,12 @@ export function buildSpace(b: ZoneBuilder): Z12Space {
   game.sky.setHeading(0);
   b.setEnv({
     sky: 'hangar', look: LOOKS.hangar, ambience: 'hangar', music: 'departure',
-    key: { dirFrom: [20, 24, 34], color: 0xfff1dc, intensity: 1.6, shadow: true },
+    key: { dirFrom: [20, 24, 34], color: 0xfff1dc, intensity: 1.35, shadow: true },
   });
   const sp: Z12Space = { dom: null, ref: null, entry: null };
 
   // ---- shell: floor, three walls, the open edge ------------------------------------------------------------------
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'grid', reflective: true });
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, mat: 'blackStoneFloor', inlay: 'grid', reflective: true });
   b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'panelled', doors: [{ at: 4.5, width: 3, height: 3.5 }, { at: W / 2, width: 4, height: 4 }, { at: W - 4.5, width: 3, height: 3.5 }] });
   b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'ribbed' });
   b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'ribbed' });
@@ -135,14 +135,15 @@ function berth(b: ZoneBuilder, kind: 'dominionShuttle' | 'reformationTransport',
   // the people who board stand at the ramp foot, two abreast
   so(b, `${tag}RampBottom`, `${tag}RampA`, -0.8);
   so(b, `${tag}RampBottom`, `${tag}RampB`, 0.8);
+  so(b, `${tag}RampBottom`, `${tag}RampC`, 0, 1.6); // the bearer, a step behind her people
   if (tag === 'dom') b.whitePoint({ x: x, n: n - 3.2, h: 5.4, intensity: 1.5 });
   return ship;
 }
 
-function so(b: ZoneBuilder, from: string, name: string, dx: number): void {
+function so(b: ZoneBuilder, from: string, name: string, dx: number, back = 0): void {
   if (!b.hasMarker(from)) return;
   const m = b.getMarker(from);
-  b.marker(name, m.pos.x + dx, -m.pos.z - 0.6, 0, FACE.north);
+  b.marker(name, m.pos.x + dx, -m.pos.z - 0.6 - back, 0, FACE.north);
 }
 
 /** far field: the ring receding both ways, both fleets holding at a wary distance */

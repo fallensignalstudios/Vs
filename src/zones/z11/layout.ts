@@ -85,7 +85,7 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'conduit', doors: [{ at: CORRIDOR_N - n0, width: 3, height: 3.5 }] });
   b.ceiling({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, h, style: 'flat' });
   // two ribs carry the landing's ceiling (the lift shaft rises behind the south one)
-  b.ribRow({ x: cx, n: 2.4, span: x1 - x0 - 1.2, height: h - 0.2, count: 2, spacing: 5.2, lit: true });
+  b.ribRow({ x: cx, n: 2.4, span: x1 - x0 - 1.2, height: h - 0.2, count: 2, spacing: 5.2 });
 
   // the lift: a gold-lit cab behind a King-era door
   const ln = LIFT.n0;
@@ -124,7 +124,7 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   b.prop('refConsole', { x: 18.7, n: 1.6, yawDeg: 270 });
   b.prop('medKit', { x: 9.4, n: 9.2, yawDeg: 10 });
   b.prop('ancientBench', { x: 14.6, n: 9.1, yawDeg: 180 });
-  b.point({ x: cx, n: 5.4, h: 4.6, color: IVORY, intensity: 26, distance: 17 });
+  b.point({ x: cx, n: 5.4, h: 4.6, color: IVORY, intensity: 15, distance: 16 });
 }
 
 function buildPassage(b: ZoneBuilder): void {
@@ -145,7 +145,7 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'ribbed' });
   b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'ribbed', doors: [{ at: EXIT_N - n0, width: 3, height: 3.5 }] });
   // the glass in three spans so the centre pane is clear of mullions: the Wound hangs in it, seen from the table
-  const cw = 2.2;
+  const cw = 1.85;
   b.wall({ from: [x0, n1], to: [cx - cw, n1], height: h, style: 'glass' });
   b.wall({ from: [cx - cw, n1], to: [cx + cw, n1], height: h, style: 'glass' });
   b.wall({ from: [cx + cw, n1], to: [x1, n1], height: h, style: 'glass' });
@@ -204,7 +204,7 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.whitePoint({ x: x1 - 0.8, n: EXIT_N, h: 5.2, intensity: 1.6 });
 
   // light: warm inside, the cold stays outside
-  b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffd6a6, shadow: true });
+  b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffd6a6, shadow: false });
   // the remnants' spill through the glass: red from the north-west (Tarrik's side), cold from the north-east (Selene's)
   b.point({ x: 4.5, n: n1 + 2.5, h: 5.2, color: 0xff6040, intensity: 40, distance: 22 });
   b.point({ x: 19.5, n: n1 + 2.5, h: 5.2, color: 0xc4d6ff, intensity: 30, distance: 22 });
@@ -255,7 +255,7 @@ function buildMarkers(b: ZoneBuilder): void {
 /** the far field: the broken system below the gallery, dust in the light */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
-  const vista = game.sky.scenic.terminalVista({ radius: 2600, drop: 260, density: 0.8, seed: 1101, clearWound: false });
+  const vista = game.sky.scenic.terminalVista({ radius: 2600, drop: 320, density: 0.8, seed: 1101, clearWound: false });
   vista.position.copy(b.P(GAL.x0 + 12, GAL.n1 + 2, 0));
   b.add(vista);
   game.vfx.ambient('dust', b.P(12, 24, 3), { x: 22, y: 6, z: 14 }, 0.3);

@@ -236,8 +236,11 @@ function buildMarkers(b: ZoneBuilder): void {
 /** the circular atrium beyond the far doorway (Z05's shell, glimpsed), haze and motes */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
+  // the doorway opens high on the atrium's rim: the shell sits entirely below the bend's floor (scenic pieces
+  // have no collision, and its tiers would otherwise stand inside this room), so the view from the threshold
+  // falls away into the great circular well
   const shell = game.sky.scenic.atriumShell({ radius: 130, height: 150, shaftRadius: 70, tiers: 4, seed: 5 });
-  shell.position.copy(b.P(EXIT_X, D + 118, -24));
+  shell.position.copy(b.P(EXIT_X, D + 118, -158));
   b.add(shell);
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 3), { x: W, y: 6, z: D }, 0.5);
   game.vfx.ambient('goldMotes', b.P(EXIT_X, D - 3, 3), { x: 7, y: 5, z: 7 }, 0.3);
@@ -366,9 +369,9 @@ function* cut(z: ZoneRuntime): Routine {
     }
     // behind him at the threshold: the atrium beyond, the light wall holding
     const t = z.m('cutTarrik');
-    // his right profile on the left third; the threshold's light and the atrium beyond it
-    c.cut({ pos: t.clone().add(new THREE.Vector3(2.6, 1.6, -0.3)), look: t.clone().add(new THREE.Vector3(-0.7, 1.75, -3.2)), fov: 48 });
-    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(2.3, 1.64, -0.6)), look: t.clone().add(new THREE.Vector3(-0.6, 1.85, -3.4)), fov: 44 }, 4.5, 'inOut');
+    // from behind and above his left shoulder: the lead small against the threshold's light
+    c.cut({ pos: t.clone().add(new THREE.Vector3(-1.3, 2.5, 3.9)), look: t.clone().add(new THREE.Vector3(0.3, 1.5, -3)), fov: 50 });
+    c.moveAsync({ pos: t.clone().add(new THREE.Vector3(-1.1, 2.3, 3.3)), look: t.clone().add(new THREE.Vector3(0.3, 1.6, -3)), fov: 46 }, 4.5, 'inOut');
     yield 1.2;
     // Neon Veil brightens faintly as they near it
     const chest = z.player.visual?.socket('chest');
@@ -386,9 +389,9 @@ function* cut(z: ZoneRuntime): Routine {
     yield 2.2;
     // through the threshold, out over the void and up: the perspective leaves him
     c.cut({ pos: t.clone().add(new THREE.Vector3(0, 1.75, 0.9)), look: z.P(EXIT_X, D + 60, 4), fov: 50 });
-    c.moveAsync({ pos: z.P(EXIT_X, D + 2.5, 2.1), look: z.P(EXIT_X + 4, D + 80, 6), fov: 52 }, 2.4, 'in');
+    c.moveAsync({ pos: z.P(EXIT_X, D + 2.5, 2.1), look: z.P(EXIT_X + 4, D + 80, -20), fov: 52 }, 2.4, 'in');
     yield 2.3;
-    c.moveAsync({ pos: z.P(EXIT_X + 14, D + 70, 32), look: z.P(EXIT_X + 50, D + 230, -10), fov: 56 }, 8, 'out');
+    c.moveAsync({ pos: z.P(EXIT_X + 14, D + 70, 30), look: z.P(EXIT_X + 40, D + 210, -90), fov: 58 }, 8, 'out');
     yield 2.6;
     game.ui.card('ELSEWHERE — THE REFORMATION APPROACH', { style: 'context', seconds: 5.5 }); // NEW (zone-note text)
     yield 2.2;

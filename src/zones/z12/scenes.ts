@@ -277,10 +277,10 @@ export function* releaseScene(z: ZoneRuntime): Routine {
     humanoid(z.player)?.lookAt(null);
     humanoid(selene?.actor)?.lookAt(null);
     yield 0.6;
-    walkTo(z, selene, 'refRampB');
+    walkTo(z, selene, 'refRampC');
     if (selene) {
       selene.mode = 'hold';
-      if (z.skipping) selene.holdAt(z.m('refRampB'), z.myaw('refRampB'));
+      if (z.skipping) selene.holdAt(z.m('refRampC'), z.myaw('refRampC'));
     }
     c.cut({ pos: z.P(FAREWELL.x + 0.5, 2.2, 1.7), look: z.P(FAREWELL.x + 1, FAREWELL.n + 3, 1.5), fov: 44 });
     yield 2.0;
@@ -338,12 +338,13 @@ export function* departureScene(z: ZoneRuntime): Routine {
     c.moveAsync({ pos: z.P(21, 9, 1.75), look: z.P(21, 400, 72), fov: 45 }, 12, 'inOut');
     if (!z.skipping) ui.fade(0, 2.4);
     yield 2.6;
-    if (!z.skipping) ui.card('The Wound stays closed.\nFor now.', { style: 'context' });
+    if (!z.skipping) ui.card('The Wound stays closed.\nFor now.', { style: 'context', seconds: 8.4 });
     yield 6.5;
     // end state
     S.t = FLIGHT_END;
     for (const f of S.flights) f.ship.visible = false;
     S.alert?.show(0, 0.5);
+    // CP9 and the completion screen; the scene never hands the camera back (the card fades out with the screen)
+    yield* z.completeMission();
   }, { blendOut: 0 });
-  ui.card(null);
 }

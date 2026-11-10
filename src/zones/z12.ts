@@ -73,6 +73,8 @@ function* departure(z: ZoneRuntime): Routine {
   z.objective('Walk to the shuttle', 'domRampBottom'); // NEW
   yield z.untilNear('domRampBottom', 2.4);
   z.objective(null);
+  // the scene ends with `z.completeMission()` (CP9: containment closed, Meridian complete, release withheld, the
+  // recorded local priority, the exchange and the pact are all in the saved state by now)
   yield* departureScene(z);
   yield* z.completeMission();
 }

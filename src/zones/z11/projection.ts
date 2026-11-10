@@ -24,6 +24,8 @@ export interface TextPanelOpts {
   frame?: boolean;
   /** CSS font family (default the HUD's condensed face) */
   family?: string;
+  /** most lines the panel will ever show (fixes its size; default 3) */
+  maxRows?: number;
 }
 
 export interface TextPanel {
@@ -64,17 +66,23 @@ export function textPanel(o: TextPanelOpts): TextPanel {
   let rate = 2;
   let flick = 0;
 
-  const draw = (lines: string[]): void => {
-    const rows = Math.max(1, lines.length);
-    const lineH = Math.round(px * 1.42);
-    const pad = Math.round(px * 0.7);
-    const h = rows * lineH + pad * 2;
-    mesh.scale.set(o.width, o.width * (h / CANVAS_W), 1);
-    if (!canvas || !tex) return;
+  // the canvas keeps one size for the panel's life (a GPU texture cannot change size once uploaded): room for
+  // `maxRows` lines, the block centred vertically; the quad keeps the canvas aspect
+  const maxRows = Math.max(1, o.maxRows ?? 3);
+  const lineH = Math.round(px * 1.42);
+  const pad = Math.round(px * 0.7);
+  const h = maxRows * lineH + pad * 2;
+  mesh.scale.set(o.width, o.width * (h / CANVAS_W), 1);
+  if (canvas) {
     canvas.width = CANVAS_W;
     canvas.height = h;
+  }
+  const draw = (lines: string[]): void => {
+    if (!canvas || !tex) return;
     const g = canvas.getContext('2d');
     if (!g) return;
+    const rows = Math.min(maxRows, Math.max(1, lines.length));
+    const top = Math.round((h - rows * lineH) / 2);
     g.clearRect(0, 0, CANVAS_W, h);
     g.fillStyle = '#ffffff';
     g.textAlign = 'center';
@@ -87,14 +95,16 @@ export function textPanel(o: TextPanelOpts): TextPanel {
       size = Math.floor(size * (CANVAS_W - pad * 2) / widest);
       g.font = `600 ${size}px ${family}`;
     }
-    lines.forEach((l, i) => g.fillText(l, CANVAS_W / 2, pad + lineH * (i + 0.5)));
+    lines.slice(0, rows).forEach((l, i) => g.fillText(l, CANVAS_W / 2, top + lineH * (i + 0.5)));
     if (o.frame !== false) {
       g.globalAlpha = 0.45;
       g.lineWidth = 3;
       g.strokeStyle = '#ffffff';
       const t = Math.round(px * 0.5);
       const inset = 6;
-      for (const [x, y, dx, dy] of [[inset, inset, 1, 1], [CANVAS_W - inset, inset, -1, 1], [inset, h - inset, 1, -1], [CANVAS_W - inset, h - inset, -1, -1]] as const) {
+      const y0 = Math.max(inset, top - pad + inset);
+      const y1 = Math.min(h - inset, top + rows * lineH + pad - inset);
+      for (const [x, y, dx, dy] of [[inset, y0, 1, 1], [CANVAS_W - inset, y0, -1, 1], [inset, y1, 1, -1], [CANVAS_W - inset, y1, -1, -1]] as const) {
         g.beginPath();
         g.moveTo(x + dx * t, y);
         g.lineTo(x, y);
@@ -103,7 +113,7 @@ export function textPanel(o: TextPanelOpts): TextPanel {
       }
       // faint scan lines: it is light in the air, not a screen
       g.globalAlpha = 0.07;
-      for (let y = 0; y < h; y += 6) g.fillRect(0, y, CANVAS_W, 2);
+      for (let y = y0; y < y1; y += 6) g.fillRect(0, y, CANVAS_W, 2);
       g.globalAlpha = 1;
     }
     tex.needsUpdate = true;

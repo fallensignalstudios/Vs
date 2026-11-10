@@ -70,7 +70,7 @@ export function buildObjects(b: ZoneBuilder, sp: Z12Space): void {
     o.visible = false;
     b.keep(b.add(o));
   }
-  S.alert = textPanel({ lines: ['CEASEFIRE VIOLATION RISK: ELEVATED'], width: 3.4, color: 0xff7a4a, intensity: 2.1, px: 60 });
+  S.alert = textPanel({ lines: ['CEASEFIRE VIOLATION RISK: ELEVATED'], width: 3.4, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1 });
   S.alert.object.position.copy(b.P(21, 17.5, 5.2));
   b.keep(b.add(S.alert.object));
 }
@@ -115,7 +115,7 @@ const tmpB = new THREE.Vector3();
 export function updateZ12(z: ZoneRuntime, dt: number): void {
   for (const c of S.carried) {
     const v = c.actor.visual;
-    c.obj.visible = !!v && c.actor.alive;
+    c.obj.visible = !!v && c.actor.alive && v.root.visible;
     if (v) v.socket(c.socket).getWorldPosition(c.obj.position);
   }
   S.alert?.update(dt, z.skipping);

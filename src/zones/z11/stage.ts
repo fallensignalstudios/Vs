@@ -93,7 +93,7 @@ export function setup(z: ZoneRuntime, shot: Shot): { a: CamPose; b: CamPose } {
   const P = (x: number, n: number, h: number): THREE.Vector3 => z.P(x, n, h);
   switch (shot) {
     case 'two': {
-      const a = { pos: mid.clone().add(v(0, 0.12, 3.2)), look: mid.clone().add(v(0, 0.95, -6)), fov: 44 };
+      const a = { pos: mid.clone().add(v(0, 0.08, 2.75)), look: mid.clone().add(v(0, 0.95, -6)), fov: 43 };
       return { a, b: { ...a, pos: a.pos.clone().add(v(0, -0.03, -0.35)), fov: 42 } };
     }
     case 'wide': {
@@ -109,12 +109,12 @@ export function setup(z: ZoneRuntime, shot: Shot): { a: CamPose; b: CamPose } {
       // the camera south of the line, low, angled so the subject's own remnant hangs above and behind them
       const subj = shot === 'T' ? t : s;
       const bearing = THREE.MathUtils.degToRad(shot === 'T' ? 132 : 228);
-      const d = 2.55;
-      const pos = subj.clone().add(v(Math.sin(bearing) * d, -0.24, -Math.cos(bearing) * d));
-      const look = subj.clone().add(v(0, 0.36, 0));
-      const a = { pos, look, fov: 34 };
+      const d = 2.2;
+      const pos = subj.clone().add(v(Math.sin(bearing) * d, -0.1, -Math.cos(bearing) * d));
+      const look = subj.clone().add(v(0, 0.16, 0));
+      const a = { pos, look, fov: 33 };
       const in2 = pos.clone().lerp(subj, 0.07);
-      return { a, b: { pos: in2, look, fov: 33 } };
+      return { a, b: { pos: in2, look, fov: 32 } };
     }
     case 'otsS':
     case 'otsT': {
@@ -123,7 +123,7 @@ export function setup(z: ZoneRuntime, shot: Shot): { a: CamPose; b: CamPose } {
       const subj = shot === 'otsS' ? s : t;
       const away = over.clone().sub(subj).setY(0).normalize();
       const south = v(0, 0, 1);
-      const pos = over.clone().addScaledVector(away, 0.85).addScaledVector(south, 0.42).setY(1.42);
+      const pos = over.clone().addScaledVector(away, 1.2).addScaledVector(south, 0.5).setY(1.47);
       const look = subj.clone().add(v(0, 0.02, 0));
       const a = { pos, look, fov: 31 };
       return { a, b: { pos: pos.clone().addScaledVector(away, -0.1), look, fov: 30 } };
@@ -133,7 +133,7 @@ export function setup(z: ZoneRuntime, shot: Shot): { a: CamPose; b: CamPose } {
       return { a, b: { pos: a.pos.clone().add(v(0, -0.06, -0.12)), look: a.look, fov: 36 } };
     }
     case 'wound': {
-      const a = { pos: t.clone().add(v(-0.75, -0.22, 1.7)), look: P(13.2, 32, 3.6), fov: 50 };
+      const a = { pos: t.clone().add(v(-0.75, -0.22, 1.7)), look: P(11.0, 32, 3.7), fov: 50 };
       return { a, b: { pos: a.pos.clone().add(v(0.05, 0, -0.2)), look: a.look, fov: 48 } };
     }
   }

@@ -99,13 +99,13 @@ function* reunion(z: ZoneRuntime): Routine {
   z.titleCard();
   yield 0.6;
   yield* reunionScene(z);
-  z.objective('Take the side passage', 'passageIn'); // NEW
+  z.objective('Take the side passage', 'galleryIn'); // NEW
   // the bystander speaks as the group passes (whichever side of the passage mouth the player takes)
   const by = z.m('bystander');
   yield () => Math.hypot(z.player.pos.x - by.x, z.player.pos.z - by.z) < 3.6 || -z.player.pos.z > LAND.n1 - 0.5;
   const [who, text] = callbackLine(z);
   yield* z.say(who, text, { actor: z.cast('bystander') });
-  yield z.untilInRect(6, GAL.n0 + 0.4, 4, 2.4);
+  yield () => -z.player.pos.z > GAL.n0 - 0.6;
 }
 
 /** `conversation` → CP8: he goes ahead and chooses a chair; she joins him; the seated scene */
@@ -128,6 +128,7 @@ function* conversation(z: ZoneRuntime): Routine {
 function* linger(z: ZoneRuntime): Routine {
   const g = z.game;
   g.player.setMovementLocked(true);
+  z.objective('Leave the gallery', 'exitDoor'); // NEW
   if (!z.state.optional.O4) {
     z.optionalMarker('O4', SEAT_S, 'O4 · Stay at the table'); // NEW
     const stay = z.interact({ id: 'z11-o4', at: SEAT_S, prompt: 'Stay at the table', radius: 1.6 }); // NEW

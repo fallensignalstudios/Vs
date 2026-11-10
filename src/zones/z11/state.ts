@@ -46,12 +46,16 @@ export interface Z11 {
   seated: boolean;
 }
 
+/** which body each forearm message rides on */
+const commOwner = new Map<TextPanel, Actor>();
+
 export let S: Z11 = blank();
 function blank(): Z11 {
   return { sp: null, seal: null, recorder: null, wafer: null, proj: null, alert: null, commT: null, commS: null, holds: [], seated: false };
 }
 export function resetZ11(): void {
   for (const p of [S.proj, S.alert, S.commT, S.commS]) p?.dispose();
+  commOwner.clear();
   S = blank();
 }
 
@@ -96,10 +100,10 @@ export function buildObjects(b: ZoneBuilder, sp: Z11Space): void {
   S.wafer = { object: waf, place: { kind: 'hidden' } };
 
   // projections
-  S.proj = textPanel({ lines: [' '], width: 1.15, color: 0xcfe6ff, intensity: 1.9, px: 58 });
-  S.alert = textPanel({ lines: [' '], width: 2.6, color: 0xff7a4a, intensity: 2.1, px: 60 });
-  S.commT = textPanel({ lines: [' '], width: 0.46, color: AMBER, intensity: 2.0, px: 70 });
-  S.commS = textPanel({ lines: [' '], width: 0.46, color: 0xcfe6ff, intensity: 2.0, px: 70 });
+  S.proj = textPanel({ lines: [' '], width: 0.95, color: 0xcfe6ff, intensity: 1.9, px: 52, maxRows: 3 });
+  S.alert = textPanel({ lines: [' '], width: 2.6, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1 });
+  S.commT = textPanel({ lines: [' '], width: 0.5, color: AMBER, intensity: 2.0, px: 70, maxRows: 2 });
+  S.commS = textPanel({ lines: [' '], width: 0.5, color: 0xcfe6ff, intensity: 2.0, px: 70, maxRows: 2 });
   for (const p of [S.proj, S.alert, S.commT, S.commS]) b.keep(b.add(p.object));
 }
 
@@ -162,7 +166,6 @@ export function comm(panel: TextPanel | null, who: Actor | null, lines: string[]
   panel.show(1, 0.25);
   commOwner.set(panel, who);
 }
-const commOwner = new Map<TextPanel, Actor>();
 
 // =====================================================================================================================
 // Per-frame (ZoneDef.update)
@@ -224,6 +227,7 @@ function place(item: Item, dt: number, snap: boolean): void {
 
 /** the panel positions that do not follow a body */
 export function placePanels(z: ZoneRuntime): void {
-  S.proj?.object.position.copy(z.m('tableCentre')).setY(1.42);
+  // between the two of them, a little above their heads: in the profile two-shot it hangs in front of the Wound
+  S.proj?.object.position.copy(z.m('seat0').lerp(z.m('seat3'), 0.5)).setY(1.72);
   S.alert?.object.position.copy(z.P(12, 29.6, 3.1));
 }
