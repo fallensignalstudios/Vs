@@ -12,6 +12,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import type { Game } from '@/core/api';
 import { analyzeHumanoid, type RigInfo } from './analyze';
 import type { Manifest, ManifestEntry } from './config';
+import { parseLodFile } from './lod';
 
 export interface ModelTemplate {
   name: string;
@@ -26,6 +27,13 @@ export interface ModelTemplate {
   /** one material per mesh in traversal order (shared by all instances; clone before patching) */
   materials: THREE.MeshStandardMaterial[];
   triangles: number;
+  /**
+   * Coarser geometries of the main mesh (level 1 first; empty when the model has no baked levels). They share
+   * the main mesh's vertex attributes — see lod.ts.
+   */
+  lods: THREE.BufferGeometry[];
+  /** index (in `materials` / instance `meshes` order) of the mesh the levels belong to: the largest one */
+  lodMesh: number;
 }
 
 export interface ModelInstance {
@@ -100,7 +108,8 @@ export class ModelLibrary {
           if (!entry || typeof entry.file !== 'string') { if (manifest) warnOnce(`model "${name}" is not in the manifest`); this.failed.add(name); return undefined; }
           return this.gltf().loadAsync(this.base + entry.file).then((gltf) => {
             const tpl = this.prepare(name, entry, gltf.scene);
-            if (tpl) this.templates.set(name, tpl); else this.failed.add(name);
+            if (!tpl) { this.failed.add(name); return undefined; }
+            return this.loadLods(tpl).then(() => { this.templates.set(name, tpl); });
           });
         })
         .catch((err: unknown) => { warnOnce(`model "${name}" failed to load (${String((err as Error)?.message ?? err)})`); this.failed.add(name); })
@@ -108,6 +117,28 @@ export class ModelLibrary {
       this.pending.set(name, p);
     }
     return p;
+  }
+
+  /** Baked levels of detail (manifest `lod.file`). Optional: a missing or mismatched file only costs the LODs. */
+  private loadLods(tpl: ModelTemplate): Promise<void> {
+    const file = tpl.entry.lod?.file;
+    const target = this.mainMesh(tpl);
+    if (typeof file !== 'string' || !target) return Promise.resolve();
+    return fetch(this.base + file)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status))))
+      .then((buf) => {
+        const lods = parseLodFile(buf, target.geometry);
+        if (lods) tpl.lods = lods;
+        else warnOnce(`levels of detail "${file}" do not match "${tpl.name}" — full geometry only`);
+      })
+      .catch((err: unknown) => { warnOnce(`levels of detail "${file}" unavailable (${String((err as Error)?.message ?? err)})`); });
+  }
+
+  /** the template's mesh that carries the levels of detail (largest by triangles), in instance-mesh order */
+  private mainMesh(tpl: ModelTemplate): THREE.Mesh | null {
+    let i = 0, found: THREE.Mesh | null = null;
+    tpl.root.traverse((o) => { const m = o as THREE.Mesh; if (!m.isMesh) return; if (i++ === tpl.lodMesh) found = m; });
+    return found;
   }
 
   private gltf(): GLTFLoader {
@@ -122,7 +153,7 @@ export class ModelLibrary {
     let anisotropy = 4;
     try { const a = this.game?.render?.quality?.anisotropy; if (typeof a === 'number' && a >= 1) anisotropy = a; } catch { /* stub render system */ }
     const materials: THREE.MeshStandardMaterial[] = [];
-    let skinned: THREE.SkinnedMesh | null = null, most = -1, triangles = 0;
+    let skinned: THREE.SkinnedMesh | null = null, most = -1, triangles = 0, biggest = -1, lodMesh = 0;
     scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
@@ -132,6 +163,7 @@ export class ModelLibrary {
       const g = m.geometry;
       const tris = (g.index ? g.index.count : g.getAttribute('position').count) / 3;
       triangles += tris;
+      if (tris > biggest) { biggest = tris; lodMesh = materials.length - 1; }
       if ((m as THREE.SkinnedMesh).isSkinnedMesh && tris > most) { most = tris; skinned = m as THREE.SkinnedMesh; }
     });
     if (!materials.length) { warnOnce(`model "${name}" has no meshes`); return null; }
@@ -141,7 +173,7 @@ export class ModelLibrary {
 
     if (entry.kind !== 'humanoid') {
       scene.updateMatrixWorld(true);
-      return { name, entry, root, mesh: null, rig: null, box: new THREE.Box3().setFromObject(scene), materials, triangles: Math.round(triangles) };
+      return { name, entry, root, mesh: null, rig: null, box: new THREE.Box3().setFromObject(scene), materials, triangles: Math.round(triangles), lods: [], lodMesh };
     }
     const body = skinned as THREE.SkinnedMesh | null;
     if (!body) { warnOnce(`humanoid model "${name}" has no skinned mesh`); return null; }
@@ -164,7 +196,7 @@ export class ModelLibrary {
     const r = (rig.height * 1.75) * Math.cbrt(Math.abs(inv.determinant()));
     body.boundingSphere = new THREE.Sphere(c, r);
     body.boundingBox = new THREE.Box3(c.clone().subScalar(r), c.clone().addScalar(r));
-    return { name, entry, root, mesh: body, rig, box: new THREE.Box3(new THREE.Vector3(-rig.height, 0, -rig.height), new THREE.Vector3(rig.height, rig.height, rig.height)), materials, triangles: Math.round(triangles) };
+    return { name, entry, root, mesh: body, rig, box: new THREE.Box3(new THREE.Vector3(-rig.height, 0, -rig.height), new THREE.Vector3(rig.height, rig.height, rig.height)), materials, triangles: Math.round(triangles), lods: [], lodMesh };
   }
 
   /** A new instance: own node hierarchy and skeleton, shared geometry / textures / materials. */

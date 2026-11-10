@@ -140,7 +140,8 @@ function buildApron(b: ZoneBuilder): void {
   // (a half rib's foot is its local west end: turned to face west, the foot stands south of the wall and the
   // apex hangs over the middle of the walkway)
   for (const x of [29.5, 35.5, 41.5]) {
-    b.rib({ x, n: HALL_N0 + 6.5, h: LOW, span: 17, height: 30, depth: 1.8, yawDeg: FACE.west, style: 'half', lit: true, noCollider: true });
+    b.rib({ x, n: HALL_N0 + 5.2, h: LOW, span: 14, height: 15, depth: 1.5, yawDeg: FACE.west, style: 'half', lit: true, noCollider: true });
+    b.column({ x: x - 3, n: HALL_N0 - 0.9, h: LOW, r: 0.95, height: 24, style: 'round', lit: true });
   }
   b.column({ x: x0 + 1.6, n: HALL_N0 + 0.6, h: LOW, r: 0.55, height: 12, style: 'pylon', mat: 'blackStone', lit: true });
 }

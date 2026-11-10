@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { BeamHandle, CineCtx, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { atPost, waitOr, walkTo } from '../shared';
-import { C, DAIS_H, S, terminal } from './state';
+import { C, DAIS_H, S, show, snapProps, terminal } from './state';
 
 const RADIO: SayOpts = { offscreen: true, channel: 'radio' };
 
@@ -104,7 +104,8 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     }
     yield 2.2;
     terminal(z, ['MERIDIAN CONTINUITY: 4 / 5', 'TERMINAL WITNESS: SEALED', 'BEARER CONTINUITY A: VERIFIED', 'BEARER CONTINUITY B: VERIFIED', 'CONTINUITY RELATION: CONTRARY']);
-    yield 2.4;
+    yield 2.6;
+    ui.statusBoard(null);
 
     c.twoShot(s(), t, { side: 1, distance: 2.4, fov: 38 });
     yield* z.say('Selene', 'The terminal doesn’t require identical authority. It requires independent authority.', { actor: selene });
@@ -114,10 +115,11 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     beams.length = 0;
 
     terminal(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION'], true);
-    c.cut({ pos: z.P(C.x - 0.4, C.n - 10.4, 1.6), look: z.P(C.x, C.n - 3.5, 1.4), fov: 40 });
+    c.cut({ pos: z.P(C.x - 0.4, C.n - 12.4, 1.2), look: z.P(C.x, C.n, 3.6), fov: 48 });
     yield 2.6;
     terminal(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION', 'MERIDIAN COMPLETION WILL ENABLE TERMINAL AUTHORITY']);
     yield 2.8;
+    ui.statusBoard(null);
     // “It is the fastest agreement they have reached.”
     c.cut({ pos: t.clone().lerp(s(), 0.5).add(new THREE.Vector3(0, 1.5, 3.6)), look: t.clone().lerp(s(), 0.5).setY(t.y + 1.4), fov: 42 });
     yield* z.say('Tarrik + Selene', 'No.', { actor: z.player }); // speaker label NEW (the script's TARRIK + SELENE, together)
@@ -129,10 +131,10 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     yield* z.say('Selene', 'Wait.', { actor: selene });
 
     // fact one: four active references are unbalanced
-    terminal(z, [['REMOTE ANCHOR LOAD: ASYMMETRIC', 'warn'], ['BOUNDARY DEGRADATION: ACTIVE', 'warn'], ['CONTAINMENT STRESS: RISING', 'warn']], true);
     if (S.diag) S.diag.params.progress = 0;
-    c.cut({ pos: z.P(C.x + 1.6, C.n - 6.3, 1.75), look: z.P(C.x, C.n - 3.5, 1.15), fov: 38 });
-    yield 2.2;
+    const holo = S.diag ? S.diag.object.position.clone() : z.P(C.x + 4.4, C.n - 7.1, 1.25);
+    c.cut({ pos: holo.clone().add(new THREE.Vector3(-1.6, 0.6, 2.6)), look: holo, fov: 40 });
+    yield* show(z, [['REMOTE ANCHOR LOAD: ASYMMETRIC', 'warn'], ['BOUNDARY DEGRADATION: ACTIVE', 'warn'], ['CONTAINMENT STRESS: RISING', 'warn']], 3.0);
     yield* z.say('Selene', 'The system was never meant to remain at four.', { actor: selene });
     c.twoShot(s(), t, { side: 1, distance: 2.8, fov: 34 });
     yield* z.say('Selene', 'The boundary is trying to balance four active references against one closed terminal authority.', { actor: selene });
@@ -143,10 +145,9 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     yield* z.say('Selene', 'Yes.', { actor: selene });
 
     // fact two: doing nothing threatens containment — the forecast is a readout, never a clock to race
-    terminal(z, [['BOUNDARY PRESSURE: 138%', 'warn'], ['FORECAST TO CRITICAL FAILURE: 02:11:43', 'warn']], true);
     if (S.forecast) S.forecast.params.visible = 1;
-    c.cut({ pos: z.P(C.x - 4.0, C.n - 10.6, 1.9), look: z.P(C.x - 4.4, C.n - 7.4, 1.8), fov: 40 });
-    yield 3.2;
+    c.cut({ pos: z.P(C.x - 5.6, C.n - 11.6, 1.9), look: z.P(C.x - 4.6, C.n - 7.2, 2.1), fov: 42 });
+    yield* show(z, [['BOUNDARY PRESSURE: 138%', 'warn'], ['FORECAST TO CRITICAL FAILURE: 02:11:43', 'warn']], 3.6);
     c.shot(s(), { yawDeg: 180, distance: 2.4, height: 1.55, lookHeight: 1.5, fov: 34 });
     yield* z.say('Selene', 'If we do nothing, the boundary fails.', { actor: selene });
     // fact three, in his words: completing it unlocks the door; leaving it lets the wall fall
@@ -189,7 +190,11 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
 
     // the decision — they end “almost shoulder to shoulder, neither having noticed when it happened”
     t = place(z, 'tarrikShoulder', z.P(C.x, C.n, 1.4));
-    if (selene) selene.face(z.P(C.x, C.n, 1.4));
+    if (selene) {
+      selene.stopAction();
+      selene.teleport(z.m('seleneShoulder'), z.myaw('seleneShoulder'));
+      selene.face(z.P(C.x, C.n, 1.4));
+    }
     c.cut({ pos: z.P(C.x + 0.5, C.n - 10.6, 1.7), look: t.clone().lerp(s(), 0.5).setY(t.y + 1.45), fov: 34 });
     yield* z.say('Tarrik', 'I’ve heard this argument before.', { actor: z.player });
     yield* z.say('Tarrik', 'That there is no other choice.', { actor: z.player });
@@ -214,5 +219,6 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
       selene.face(null);
       selene.teleport(z.m('seleneConsole'), z.myaw('seleneConsole'));
     }
+    snapProps(z);
   });
 }

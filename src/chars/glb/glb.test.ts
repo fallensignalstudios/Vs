@@ -259,7 +259,7 @@ describe('GlbHumanoidVisual on a stand-in library', () => {
     const sk = makeSkeleton();
     const tpl: ModelTemplate = {
       name: 'fake', entry: { file: 'fake.glb', kind: 'humanoid', height: 1.8 }, root: sk.root, mesh: sk.mesh, rig: makeRigInfo(sk.bones),
-      box: new THREE.Box3(), materials: [sk.mesh.material as THREE.MeshStandardMaterial], triangles: 1,
+      box: new THREE.Box3(), materials: [sk.mesh.material as THREE.MeshStandardMaterial], triangles: 1, lods: [], lodMesh: 0,
     };
     const lib = {
       version: 0, enabled: true,

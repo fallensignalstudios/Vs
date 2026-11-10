@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import type { CineCtx, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api/chars';
-import { C, DAIS_H, S, terminal } from './state';
+import { C, DAIS_H, S, show, snapProps, terminal } from './state';
 import { palm } from './assent';
 
 /** the consequence board, built up row by row (exact strings) */
@@ -35,11 +35,11 @@ export function* consequenceScene(z: ZoneRuntime): Routine {
     yield* z.say('Selene', 'He stayed.', { actor: z.player });
 
     // the terminal interrupts. “Tarrik draws Velkorran. Selene extends Verity halfway before the next line resolves.”
-    terminal(z, [...BOARD_1], true);
     tvis?.setLoadout({ melee: true });
     tarrik?.play('raiseWeapon');
     game.player.playScripted('raiseWeapon', { faceTo: z.P(C.x, C.n, 1.6) });
-    c.cut({ pos: z.P(C.x, C.n - 10.4, 1.8), look: z.P(C.x, C.n - 2.4, 1.4), fov: 42 });
+    c.cut({ pos: z.P(C.x, C.n - 13.4, 1.0), look: z.P(C.x, C.n, 4.4), fov: 48 });
+    terminal(z, [...BOARD_1], true);
     yield 3.2;
     // “She lowers the weapon slightly.”
     terminal(z, [...BOARD_1, 'BOUNDARY STATE: CLOSED']);
@@ -48,14 +48,14 @@ export function* consequenceScene(z: ZoneRuntime): Routine {
       game.audio.play('boundaryClose');
       game.vfx.spawn('boundaryClose', z.P(C.x, C.n, DAIS_H + 6), { dir: { x: 0, y: 0, z: 1 }, scale: 1.4 });
     }
-    yield 1.6;
+    yield 2.0;
+    game.ui.statusBoard(null);
     game.player.playScripted('lowerWeapon', { faceTo: z.P(C.x, C.n, 1.6) });
     c.shot(s(), { yawDeg: 200, distance: 2.4, height: 1.6, lookHeight: 1.58, fov: 32 });
     yield* z.say('Selene', 'The authority lattice is open. Not the prison.', { actor: z.player });
-    terminal(z, [...BOARD_1, 'BOUNDARY STATE: CLOSED', ...BOARD_2]);
     z.story('releaseWithheld');
-    c.cut({ pos: z.P(C.x + 0.6, C.n - 10.0, 1.7), look: z.P(C.x, C.n - 2.4, 1.4), fov: 42 });
-    yield 3.0;
+    c.cut({ pos: z.P(C.x + 0.6, C.n - 13.0, 1.1), look: z.P(C.x, C.n, 4.2), fov: 48 });
+    yield* show(z, ['BOUNDARY STATE: CLOSED', ...BOARD_2], 4.0);
     c.twoShot(t(), s(), { side: -1, distance: 2.3, fov: 34 });
     yield* z.say('Tarrik', 'So we armed the lock.', { actor: tarrik });
     c.twoShot(s(), t(), { side: 1, distance: 2.3, fov: 34 });
@@ -69,15 +69,16 @@ export function* consequenceScene(z: ZoneRuntime): Routine {
     }
     if (S.rings) S.rings.params.energy = 1;
     c.cut({ pos: z.P(C.x + 7, C.n - 12, 3.4), look: z.P(C.x, C.n, 2), fov: 52 });
-    yield 1.8;
+    yield 2.4;
+    game.ui.statusBoard(null);
     c.shot(s(), { yawDeg: 210, distance: 2.0, height: 1.6, lookHeight: 1.6, fov: 30 });
     yield* z.say('Selene', 'No.', { actor: z.player });
     c.shot(t(), { yawDeg: 150, distance: 2.0, height: 1.65, lookHeight: 1.62, fov: 30 });
     yield* z.say('Tarrik', 'Stop synchronization.', { actor: tarrik });
     c.shot(s(), { yawDeg: 210, distance: 2.0, height: 1.6, lookHeight: 1.6, fov: 30 });
     yield* z.say('Selene', 'Interrupt Meridian synchronization.', { actor: z.player });
-    terminal(z, [['TERMINAL COMMAND ARCHITECTURE SYNCHRONIZING TO ACTIVE NODES', 'warn'], ['MERIDIAN SYNCHRONIZATION CANNOT BE INTERRUPTED', 'warn']]);
-    yield 1.8;
+    c.cut({ pos: z.P(C.x - 7, C.n - 12, 3.0), look: z.P(C.x, C.n, 2.4), fov: 52 });
+    yield* show(z, [['TERMINAL COMMAND ARCHITECTURE SYNCHRONIZING TO ACTIVE NODES', 'warn'], ['MERIDIAN SYNCHRONIZATION CANNOT BE INTERRUPTED', 'warn']], 2.8);
     c.shot(t(), { yawDeg: 150, distance: 2.2, height: 1.65, lookHeight: 1.5, fov: 32 });
     yield* z.say('Tarrik', 'Of course.', { actor: tarrik });
     // he strikes the interface with his palm
@@ -89,18 +90,17 @@ export function* consequenceScene(z: ZoneRuntime): Routine {
     if (isHumanoidVisual(tvis)) tvis.setHandTarget('R', null);
 
     // the queries arrive — on her display and, the same moment, on his interface
-    terminal(z, ['EXTERNAL CONTINUITY QUERY DETECTED', 'SOURCE: REFORMATION CENTRAL INFORMATION INTEGRITY', 'CROWNWATCH SOVEREIGN QUERY DETECTED'], true);
     z.story('grammarPropagated');
-    c.cut({ pos: z.P(C.x, C.n - 9.6, 1.6), look: z.P(C.x, C.n - 2, 1.5), fov: 40 });
-    yield 3.4;
+    c.cut({ pos: z.P(C.x, C.n - 13.6, 1.0), look: z.P(C.x, C.n, 4.4), fov: 48 });
+    yield* show(z, ['EXTERNAL CONTINUITY QUERY DETECTED', 'SOURCE: REFORMATION CENTRAL INFORMATION INTEGRITY', 'CROWNWATCH SOVEREIGN QUERY DETECTED'], 4.4);
     c.twoShot(t(), s(), { side: -1, distance: 2.2, fov: 34 });
     yield* z.say('Tarrik', 'We gave them the door.', { actor: tarrik });
     c.twoShot(s(), t(), { side: 1, distance: 2.2, fov: 34 });
     yield* z.say('Selene', 'No. We gave them the language to ask the door to open.', { actor: z.player });
     // “Tarrik reads it twice.”
-    terminal(z, ['TERMINAL RELEASE REQUIRES CONTRARY BEARER CONCURRENCE'], true);
+    c.cut({ pos: t().add(new THREE.Vector3(-0.6, 1.7, 2.2)), look: z.m('handT'), fov: 40 });
+    yield* show(z, ['TERMINAL RELEASE REQUIRES CONTRARY BEARER CONCURRENCE'], 3.4);
     c.shot(t(), { yawDeg: 165, distance: 2.0, height: 1.66, lookHeight: 1.64, fov: 30 });
-    yield 3.0;
     yield* z.say('Tarrik', 'They still need us.', { actor: tarrik });
     c.twoShot(s(), t(), { side: 1, distance: 2.2, fov: 34 });
     yield* z.say('Selene', 'Yes.', { actor: z.player });
@@ -132,5 +132,6 @@ export function* consequenceScene(z: ZoneRuntime): Routine {
       tarrik.stopAction();
       tarrik.mode = 'follow';
     }
+    snapProps(z);
   });
 }

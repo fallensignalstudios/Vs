@@ -18,12 +18,15 @@ import { ARCHETYPES } from '../humanoid/archetypes';
 import { getFigure, mountQuat, releaseFigure, retainFigure, type FigureDef, type ItemDef, type Mount } from '../humanoid/figure';
 import { GENERIC } from '../humanoid/clips/generic';
 import { createFigureMaterial, type FigureMaterial } from '../humanoid/material';
-import { ITEM_SLOTS, MASK_NONE, type GlbArchetype, type ItemSlot } from './config';
+import { bareHeadFor, ITEM_SLOTS, MASK_NONE, type GlbArchetype, type ItemSlot } from './config';
+import { mountBareHead, type BareHeadLook } from './head';
+import { LodSwitch } from './lod';
 import type { ModelInstance, ModelLibrary } from './library';
 import { createGlbMaterial, createSharedUniforms, type GlbMaterial, type SharedUniforms } from './material';
 import { generatedProp, proceduralProp, type PropRig } from './props';
 import { Retargeter } from './retarget';
 import { flashStrength } from '@/chars/flash';
+import { isStub } from '@/core/stub';
 import type { RigInfo } from './analyze';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -40,6 +43,9 @@ const LONG_GUN = 0.45;
 const SLING = mountQuat({ parent: 'chest', pos: [0, 0, 0], axes: { z: [0.42, 0.9, -0.05], x: [0, 0.06, 1] } }, new THREE.Quaternion());
 const warned = new Set<string>();
 function warnOnce(msg: string): void { if (!warned.has(msg)) { warned.add(msg); console.warn('[glb] ' + msg); } }
+function meshTriangles(m: THREE.Mesh, g: THREE.BufferGeometry = m.geometry): number {
+  return (g.index ? g.index.count : g.getAttribute('position')?.count ?? 0) / 3;
+}
 function hash01(n: number): number { const s = Math.sin(n * 91.345 + 17.13) * 43758.5453; return s - Math.floor(s); }
 const clamp01 = (v: number): number => (Number.isFinite(v) ? (v < 0 ? 0 : v > 1 ? 1 : v) : 0);
 const smooth = (e0: number, e1: number, x: number): number => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
@@ -75,6 +81,8 @@ interface Body {
   props: PropState[];
   extras: Array<{ dispose(): void }>;
   height: number;
+  /** distance levels of detail of the body and its generated props (null: the model has none) */
+  lod: LodSwitch | null;
 }
 
 export class GlbHumanoidVisual implements HumanoidVisual {
@@ -96,9 +104,12 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   private readonly pins: Array<{ pos: THREE.Vector3; w: number; target: number } | null> = [null, null];
   private exposed: { part: string; amount: number } | null = null;
   private disposed = false;
+  /** bare head grafted over the helmet (CharacterCreateOpts.bareHead / the archetype's own), or null */
+  private readonly headLook: BareHeadLook | null;
 
-  constructor(game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
+  constructor(private readonly game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
     this.archetype = archetype;
+    this.headLook = bareHeadFor(cfg, opts.bareHead);
     this.seed = Number.isFinite(opts.seed) ? Math.floor(opts.seed as number) : 0;
     this.variant = Number.isFinite(opts.variant) ? Math.floor(opts.variant as number) : 0;
     const jitter = cfg.vary ? 1 + (hash01(this.seed * 1.31 + 2.7) - 0.5) * 0.06 : 1;
@@ -130,7 +141,8 @@ export class GlbHumanoidVisual implements HumanoidVisual {
       const p = this.cfg.props[slot];
       if (p && !lib.has(p) && !lib.unavailable(p)) return false;
     }
-    return true;
+    const donor = this.headLook?.donor;
+    return !donor || lib.has(donor) || lib.unavailable(donor);
   }
 
   get height(): number { return this.body ? this.body.height : this.driver.height; }
@@ -138,9 +150,11 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   get triangles(): number {
     const b = this.body;
     if (!b) return this.driver.triangles;
-    let n = b.inst.template.triangles;
-    for (const p of b.props) n += p.rig.triangles;
-    return n;
+    // what is drawn now: the current level of detail of every mesh
+    let n = 0;
+    for (const m of b.inst.meshes) n += meshTriangles(m);
+    for (const p of b.props) n += p.rig.lod ? p.rig.triangles - meshTriangles(p.rig.lod.mesh, p.rig.lod.levels[0]) + meshTriangles(p.rig.lod.mesh) : p.rig.triangles;
+    return Math.round(n);
   }
   /** true once the generated body is what is being drawn */
   get generated(): boolean { return !!this.body; }
@@ -184,15 +198,56 @@ export class GlbHumanoidVisual implements HumanoidVisual {
       mesh.receiveShadow = true;
       materials.push(gm);
     });
+    const tpl = inst.template;
+    let bodyLods = tpl.lods;
+    const head = this.headLook ? this.mountHead(inst, this.headLook) : null;
+    if (head) { materials.push(head.material); inst.meshes.push(head.mesh); bodyLods = head.bodyLods; }
     const attach = new THREE.Group();
     attach.name = 'equipment';
-    const body: Body = { inst, retarget, materials, attach, sockets: {}, props: [], extras: [], height: (inst.template.entry.height ?? rig.height) * g };
+    const body: Body = { inst, retarget, materials, attach, sockets: {}, props: [], extras: [], height: (tpl.entry.height ?? rig.height) * g, lod: null };
     this.buildSockets(body);
     this.buildProps(body);
     this.buildExtras(body);
     this.root.add(inst.root, attach);
+    // levels of detail: one switch for the body (and its grafted head) and every generated prop
+    const lod = new LodSwitch({ height: () => this.height, mainCamera: () => this.mainCamera(), quality: () => this.qualityLevel() });
+    const main = inst.meshes[tpl.lodMesh];
+    if (main) lod.govern(main, bodyLods);
+    if (head) lod.govern(head.mesh, head.lods);
+    for (const p of body.props) if (p.rig.lod) lod.govern(p.rig.lod.mesh, p.rig.lod.levels.slice(1));
+    if (lod.governed) {
+      // first child: three.js asks it for a level before it reaches any mesh of this figure
+      this.root.add(lod);
+      this.root.children.splice(this.root.children.indexOf(lod), 1);
+      this.root.children.unshift(lod);
+      body.lod = lod;
+    }
     this.body = body;
     if (this.exposed) this.setExposed(this.exposed.part, this.exposed.amount);
+  }
+
+  /** graft the bare head; the donor model is loaded (ready() waited for it) or unavailable (helmet stays) */
+  private mountHead(inst: ModelInstance, look: BareHeadLook): ReturnType<typeof mountBareHead> {
+    const donor = this.lib.get(look.donor);
+    if (!donor || !inst.mesh) return null;
+    const head = mountBareHead(inst.mesh, inst.template, donor, look, this.shared, this.cfg.env);
+    if (!head) warnOnce(`${this.archetype}: no bare head could be grafted from "${look.donor}" — helmet kept`);
+    return head;
+  }
+
+  /** the camera whose view picks levels of detail (the game's main camera; null in a bare harness) */
+  private mainCamera(): THREE.Camera | null {
+    try {
+      const c = this.game?.camera?.camera as THREE.Camera | undefined;
+      return c && !isStub(c) && c.isCamera === true ? c : null;
+    } catch { return null; }
+  }
+
+  private qualityLevel(): string {
+    try {
+      const l = this.game?.render?.quality?.level;
+      return typeof l === 'string' ? l : 'high';
+    } catch { return 'high'; }
   }
 
   private buildSockets(body: Body): void {
@@ -609,6 +664,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
       }
       for (const e of b.extras) e.dispose();
       for (const m of b.materials) m.dispose();
+      b.lod?.release();
       b.inst.mesh?.skeleton.dispose();
       b.inst.root.removeFromParent();
       b.attach.removeFromParent();

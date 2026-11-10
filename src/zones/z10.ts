@@ -136,6 +136,7 @@ function* assentTarrik(z: ZoneRuntime): Routine {
 
 /** `assentSelene` — handoff; played as Selene: her palm, her sentence, his clause, her “Yes.”; then the press */
 function* assentSelene(z: ZoneRuntime): Routine {
+  z.game.ui.statusBoard(null);
   yield* z.handoff('selene', { partnerMode: 'scripted', seconds: 3 });
   // his palm stays on his interface while hers is placed
   palm(z, 'tarrik', true);

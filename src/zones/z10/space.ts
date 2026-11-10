@@ -190,7 +190,8 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('tarrikRing1', C.x - 10.5, C.n - 7.5, 0, 60);
   b.marker('tarrikRing2', C.x - 13, C.n + 1.5, 0, 110);
   b.marker('tarrikComm', C.x - 6.2, C.n - 9.8, 0, 70);
-  b.marker('tarrikShoulder', C.x + 0.1, C.n - 7.7, 0, 15);
+  b.marker('tarrikShoulder', C.x - 0.5, C.n - 7.7, 0, 10);
+  b.marker('seleneShoulder', C.x + 0.55, C.n - 7.5, 0, 350);
   // the interfaces: stand points in front of each, the palm on its slanted top (from the prop sockets)
   for (const [key, st] of [['T', S.padT], ['S', S.padS]] as const) {
     const prop = st.prop;

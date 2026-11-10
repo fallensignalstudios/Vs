@@ -20,7 +20,7 @@
  */
 import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { setDoor, standardExit } from './shared';
+import { setDoor, standardExit, walkTo } from './shared';
 import { blankRelics, disposeRelics, ensureRelics, overlookScene, recognitionScene, updateRelics, type Relics } from './z09/scenes';
 import { OVERLOOK, buildFlow, buildScenic, buildSpace, updateFlow, type FlowLines, type Z09Space } from './z09/space';
 
@@ -145,8 +145,8 @@ function* recognition(z: ZoneRuntime): Routine {
     S.space.threshold.params.recognized = 1;
     S.space.threshold.snap();
   }
-  const selene = z.cast('selene');
-  if (selene) selene.mode = 'follow';
+  // she has gone through first; she keeps going and the lead follows her
+  walkTo(z, z.cast('selene'), 'seleneBeyond');
   yield* standardExit(z, S.space?.door ?? null, 'Z10', { at: 'exit', objective: 'Follow Selene', radius: 1.8 }); // NEW
 }
 

@@ -208,6 +208,7 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   const vv = game.chars.create('kingWitness', { seed: 2, scale: 0.94 });
   if (isHumanoidVisual(kv)) king.visual = kv;
   if (isHumanoidVisual(vv)) vesryn.visual = vv;
+  kv.setGlow(1.4);
   vv.setGlow(0.3);
   vv.setRim(0.25, 0xd8d0c0);
   for (const v of [kv, vv]) group.add(v.root);

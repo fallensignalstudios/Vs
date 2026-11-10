@@ -42,6 +42,11 @@ export interface OwnUniforms {
   uExposed: { value: THREE.Vector2 };
   /** energy-blade clip along rest Z: enabled, root, forward (−Z) length, rear (+Z) length — metres */
   uBlade: { value: THREE.Vector4 };
+  /**
+   * hair recolour (a grafted bare head, see head.ts): dark, unsaturated texels take this linear colour, keeping
+   * their own shading; w = amount (0 = off)
+   */
+  uHair: { value: THREE.Vector4 };
 }
 
 export interface GlbMaterial {
@@ -106,6 +111,7 @@ uniform vec4 uParams;
 uniform vec3 uTint;
 uniform vec2 uExposed;
 uniform vec4 uBlade;
+uniform vec4 uHair;
 ${NOISE}
 ${HIT_FLASH_GLSL}
 vec3 gHash3( vec3 p ) {
@@ -140,6 +146,7 @@ float ggVein;
 float ggEdge;
 float ggBlade;
 float ggBladeBody;
+float ggHair;
 `;
 
 /** after <color_fragment>: painted-light mask, albedo cap, dissolve, frost and corruption tint */
@@ -157,6 +164,12 @@ const FRAG_COLOR = /* glsl */ `
   float cap = uParams.y;
   float capped = lum > cap ? ( cap + ( lum - cap ) * 0.22 ) / lum : 1.0;
   diffuseColor.rgb *= mix( uTint * capped, vec3( 1.0 ), lamp );
+  ggHair = 0.0;
+  if ( uHair.w > 0.0 ) {
+    // hair, brows and beard: the darkest texels of a face texture take another colour (and lose their wet gloss)
+    ggHair = smoothstep( 0.34, 0.17, mx ) * uHair.w;
+    diffuseColor.rgb = mix( diffuseColor.rgb, uHair.rgb * ( 0.45 + lum * 14.0 ), ggHair );
+  }
   #ifdef DOUBLE_SIDED
   // the inside of skirts, tassets and hems: a shell has no lining, so it reads dark
   if ( ! gl_FrontFacing ) diffuseColor.rgb *= uParams.z;
@@ -223,6 +236,8 @@ const FRAG_COLOR = /* glsl */ `
 
 /** after <metalnessmap_fragment> */
 const FRAG_PBR = /* glsl */ `
+roughnessFactor = mix( roughnessFactor, max( roughnessFactor, 0.62 ), ggHair );
+metalnessFactor *= 1.0 - ggHair;
 roughnessFactor = mix( roughnessFactor, 0.14 + ggCell * 0.3, ggFrost * 0.85 );
 metalnessFactor = mix( metalnessFactor, 0.0, ggFrost * 0.8 );
 roughnessFactor = mix( roughnessFactor, 0.4, ggCorr * 0.6 );
@@ -310,6 +325,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
     uTint: { value: new THREE.Color(1, 1, 1) },
     uExposed: { value: new THREE.Vector2(0, 0) },
     uBlade: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uHair: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
   const unit = Math.cbrt(Math.abs(own.uRest.value.determinant()));
   own.uRestUnit.value = unit > 1e-9 ? 1 / unit : 1;
@@ -328,7 +344,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE);
   };
-  material.customProgramCacheKey = () => 'aurelion-glb-4';
+  material.customProgramCacheKey = () => 'aurelion-glb-6';
 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {

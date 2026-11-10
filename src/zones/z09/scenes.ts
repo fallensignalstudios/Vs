@@ -230,7 +230,8 @@ export function* recognitionScene(z: ZoneRuntime, h: RecognitionHooks): Routine 
 
     // “Neon Veil rises from Tarrik’s armor. Caerion II lifts from Selene’s. Before either relic touches the door, it opens.”
     const mid = t.clone().lerp(s, 0.5);
-    c.cut({ pos: mid.clone().add(new THREE.Vector3(0.2, 1.3, 2.3)), look: mid.clone().setY(mid.y + 1.6), fov: 44 });
+    // from the side (the door's side): both chests and the space between them
+    c.cut({ pos: mid.clone().add(new THREE.Vector3(2.7, 1.3, 0.2)), look: mid.clone().setY(mid.y + 1.55), fov: 44 });
     h.relics.target = 1;
     if (!z.skipping) game.audio.play('meridianAlign', { pos: mid, volume: 0.55 });
     yield 2.4;

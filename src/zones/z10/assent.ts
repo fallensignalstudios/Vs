@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import type { CineCtx, Companion, Interactable, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api/chars';
-import { C, DAIS_H, S, setLights, setRise, terminal } from './state';
+import { C, DAIS_H, S, setLights, setRise, show, snapProps, terminal } from './state';
 
 /** pin a body's right palm onto its interface (`hand` marker) and hold the assent pose */
 export function palm(z: ZoneRuntime, who: 'tarrik' | 'selene', on: boolean): void {
@@ -54,7 +54,7 @@ export function* protocolScene(z: ZoneRuntime): Routine {
     toPad(z, 'tarrik');
     toPad(z, 'selene');
     terminal(z, ['MERIDIAN COMPLETION PROTOCOL', 'INDEPENDENT ASSENT REQUIRED'], true);
-    // “Two interfaces rise from the floor, one before each of them.”
+    // “Two interfaces rise from the floor, one before each of them.” (wide: the board sits over the empty middle)
     c.cut({ pos: z.P(C.x, C.n - 9.6, 1.1), look: z.P(C.x, C.n - 1.4, 1.2), fov: 44 });
     c.moveAsync({ pos: z.P(C.x, C.n - 8.4, 1.25), look: z.P(C.x, C.n - 1.4, 1.4), fov: 42 }, 5, 'inOut');
     setRise(1);
@@ -64,7 +64,8 @@ export function* protocolScene(z: ZoneRuntime): Routine {
       game.vfx.spawn('dustPuff', z.m('padT'));
       game.vfx.spawn('dustPuff', z.m('padS'));
     }
-    yield 3.2;
+    yield 3.4;
+    game.ui.statusBoard(null);
     for (const p of [S.padT.prop, S.padS.prop]) if (p) p.params.active = 0.35;
     const t = feet(z, 'tarrik');
     const s = feet(z, 'selene');
@@ -87,6 +88,7 @@ export function* protocolScene(z: ZoneRuntime): Routine {
     // end state
     setRise(1, true);
     ui(z);
+    snapProps(z);
   });
 }
 
@@ -123,12 +125,12 @@ export function* tarrikPalmScene(z: ZoneRuntime): Routine {
       game.vfx.spawn('assentTarrik', z.m('padT'));
       game.audio.play('assentToneTarrik', { pos: hand });
     }
-    terminal(z, ['BEARER A: ASSENT PENDING'], true);
-    yield 2.0;
+    yield* show(z, ['BEARER A: ASSENT PENDING'], 2.4);
     c.shot(z.player.pos, { yawDeg: 160, distance: 2.3, height: 1.65, lookHeight: 1.6, fov: 32 });
     yield* z.say('Tarrik', 'My name is Tarrik Walcur. If this decision is wrong, that belongs in the record.', { actor: z.player });
     z.story('assentTarrik');
     yield 0.6;
+    snapProps(z);
   });
 }
 
@@ -147,8 +149,7 @@ export function* selenePalmScene(z: ZoneRuntime): Routine {
       game.vfx.spawn('assentSelene', z.m('padS'));
       game.audio.play('assentToneSelene', { pos: hand });
     }
-    terminal(z, ['BEARER A: ASSENT PENDING', 'BEARER B: ASSENT PENDING'], true);
-    yield 2.0;
+    yield* show(z, ['BEARER A: ASSENT PENDING', 'BEARER B: ASSENT PENDING'], 2.6);
     const s = feet(z, 'selene');
     const t = feet(z, 'tarrik');
     c.shot(s, { yawDeg: 200, distance: 2.3, height: 1.6, lookHeight: 1.58, fov: 32 });
@@ -221,7 +222,6 @@ export function* meridianScene(z: ZoneRuntime): Routine {
     }
     render.setLook(game.render.looks.core, z.skipping ? 0 : 2.6);
     yield 2.4;
-    terminal(z, ['MERIDIAN CONTINUITY: 5 / 5', 'SOVEREIGN MERIDIAN: COMPLETE'], true);
     z.story('meridianComplete');
     game.audio.play('meridianComplete');
     if (S.crownmark) S.crownmark.params.glow = 1;
@@ -229,7 +229,8 @@ export function* meridianScene(z: ZoneRuntime): Routine {
       S.diag.params.visible = 1;
       S.diag.params.progress = 1;
     }
-    yield 2.2;
+    c.cut({ pos: z.P(C.x, C.n - 14.5, 0.9), look: z.P(C.x, C.n, 5.2), fov: 50 });
+    yield* show(z, ['MERIDIAN CONTINUITY: 5 / 5', 'SOVEREIGN MERIDIAN: COMPLETE'], 3.0);
     // for less than a second each senses the other — a shared sharp breath, both hands pulled back. No line, ever.
     c.cut({ pos: t.clone().lerp(s, 0.5).add(new THREE.Vector3(0, 1.5, 4.2)), look: t.clone().lerp(s, 0.5).setY(t.y + 1.2), fov: 40 });
     yield 0.5;
@@ -241,21 +242,24 @@ export function* meridianScene(z: ZoneRuntime): Routine {
     // “The Wound contracts violently, drawing the violet pressure back from its surface.”
     game.sky.setWoundActivity(0.05);
     if (!z.skipping) game.camera.shake(0.35, 1.2);
+    c.cut({ pos: z.P(C.x - 3, C.n - 15, 1.2), look: z.P(C.x, C.n, 6), fov: 52 });
     terminal(z, [['BOUNDARY PRESSURE: FALLING', 'warn']], true);
     for (const v of ['132%', '119%', '103%', '87%']) {
       yield 0.8;
       terminal(z, [['BOUNDARY PRESSURE: FALLING', 'warn'], [`BOUNDARY PRESSURE: ${v}`, 'neutral']]); // NEW (the book's count)
     }
-    yield 0.8;
+    yield 1.0;
+    game.ui.statusBoard(null);
     c.twoShot(t, s, { side: -1, distance: 2.4, fov: 34 });
     yield* z.say('Tarrik', 'It worked.', { actor: tarrik });
     c.twoShot(s, t, { side: 1, distance: 2.4, fov: 34 });
     yield* z.say('Selene', 'For that part.', { actor: z.player });
-    terminal(z, ['WITNESS V: AUTHENTICATED'], true);
-    yield 2.0;
+    c.cut({ pos: z.P(C.x, C.n - 12, 1.6), look: z.P(C.x, C.n, 2.2), fov: 40 });
+    yield* show(z, ['WITNESS V: AUTHENTICATED'], 2.4);
     // end state — identical watched or skipped
     setLights(5);
     if (S.rings) S.rings.params.align = 1;
     render.setLook(game.render.looks.core, 0);
+    snapProps(z);
   });
 }

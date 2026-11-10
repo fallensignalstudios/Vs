@@ -100,6 +100,12 @@ export function setLights(n: number): void {
   S.lightsOn = Math.max(0, Math.min(5, n));
 }
 
+/** after a skipped scene: every hero prop jumps to its targets (watched or skipped end identically) */
+export function snapProps(z: ZoneRuntime): void {
+  if (!z.skipping) return;
+  for (const p of [S.crownmark, S.rings, S.padT.prop, S.padS.prop, S.diag, S.forecast]) p?.snap();
+}
+
 /** ZoneDef.update for the shared pieces */
 export function updateShared(z: ZoneRuntime, dt: number): void {
   if (S.rise !== S.riseTarget) {
@@ -134,4 +140,14 @@ export function terminal(z: ZoneRuntime, lines: ReadonlyArray<string | readonly 
   const ui = z.game.ui;
   if (fresh) ui.statusBoard(null);
   ui.statusBoard(lines.map((l) => (typeof l === 'string' ? row(l) : row(l[0], l[1]))));
+}
+
+/**
+ * Show terminal strings for `seconds`, then clear the board (a scene routine: the hold collapses on a skip). The
+ * board sits mid-screen, so terminal text is held over establishing shots and gone before the faces.
+ */
+export function* show(z: ZoneRuntime, lines: ReadonlyArray<string | readonly [string, 'ok' | 'warn' | 'neutral']>, seconds: number): Generator<number, void, unknown> {
+  terminal(z, lines, true);
+  yield seconds;
+  z.game.ui.statusBoard(null);
 }

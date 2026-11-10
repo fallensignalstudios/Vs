@@ -28,6 +28,8 @@ export interface PropRig {
   generated: boolean;
   materials: GlbMaterial[];
   triangles: number;
+  /** the generated mesh under level-of-detail control: its full geometry first, then the coarser levels */
+  lod: { mesh: THREE.Mesh; levels: THREE.BufferGeometry[] } | null;
   dispose(): void;
 }
 
@@ -53,7 +55,7 @@ export function proceduralProp(slot: ItemSlot, item: ItemDef, driverScale: numbe
   const t = s.weaponTip;
   return {
     slot, holder, sockets, tip: t && !item.blades ? new THREE.Vector3(t[0], t[1], t[2]).multiplyScalar(driverScale) : null,
-    blade: null, bladeLength: 0, length: 0, generated: false, materials: [], triangles: 0, dispose() { holder.removeFromParent(); },
+    blade: null, bladeLength: 0, length: 0, generated: false, materials: [], triangles: 0, lod: null, dispose() { holder.removeFromParent(); },
   };
 }
 
@@ -143,8 +145,10 @@ export function generatedProp(lib: ModelLibrary, name: string, slot: ItemSlot, s
   } else if (slot === 'shield') {
     sockets.shield = socket(holder, 'shield', 0, fix.position.y, fix.position.z - size.z * k);
   }
+  const main = inst.meshes[tpl.lodMesh];
   return {
     slot, holder, sockets, tip, blade: clip.blade, bladeLength, length: rawLen * k, generated: true, materials, triangles: tpl.triangles,
+    lod: main && tpl.lods.length ? { mesh: main, levels: [main.geometry, ...tpl.lods] } : null,
     dispose() { holder.removeFromParent(); for (const m of materials) m.dispose(); },
   };
 }

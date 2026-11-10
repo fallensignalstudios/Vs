@@ -31,7 +31,7 @@ export function createGlbCharacters(game: Game | null): GlbCharacters {
       const cfg = GLB_ARCHETYPES[archetype];
       if (!cfg || opts?.driverOnly || !library.enabled || library.unavailable(cfg.model)) return null;
       // body or props may be only partly loaded (archetypes share bodies but not props): ask for whatever is missing
-      const missing = modelsFor(archetype).filter((n) => !library.has(n) && !library.unavailable(n));
+      const missing = modelsFor(archetype, opts?.bareHead).filter((n) => !library.has(n) && !library.unavailable(n));
       if (missing.length) void library.preload(missing);
       try {
         return new GlbHumanoidVisual(game, archetype, cfg, library, opts);
@@ -48,6 +48,8 @@ export function createGlbCharacters(game: Game | null): GlbCharacters {
   };
 }
 
-export { GLB_ARCHETYPES, modelsFor } from './config';
+export { BARE_HEAD_OFFICER, BARE_HEAD_VARO, GLB_ARCHETYPES, bareHeadFor, modelsFor } from './config';
 export { ModelLibrary } from './library';
 export { GlbHumanoidVisual } from './visual';
+export { LOD_SCREEN, characterLodEnabled, setCharacterLodEnabled } from './lod';
+export type { BareHeadLook } from './head';

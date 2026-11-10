@@ -5,7 +5,7 @@
  */
 import type { Archetype, CharacterCreateOpts, CharacterFactory, CharacterVisual, CreatureArchetype, DeviceArchetype, Game, HumanoidArchetype } from '@/core/api';
 import { createHumanoid } from './humanoid';
-import { createCreature } from './creatures';
+import { createCreature, preloadCreatureSkins } from './creatures';
 import { createGlbCharacters } from './glb';
 
 const CREATURES: ReadonlySet<string> = new Set([
@@ -34,7 +34,10 @@ export function createCharacterFactory(game: Game | null): CharacterFactory {
       }
     },
     preload(archetypes: Archetype[]): Promise<void> {
-      return glb.preload(Array.isArray(archetypes) ? archetypes : []);
+      const list = Array.isArray(archetypes) ? archetypes : [];
+      // creatures with a generated skin (the elite) load it here too, so it is worn from the first frame
+      const creatures = list.filter((a) => isCreatureArchetype(a));
+      return Promise.all([glb.preload(list), creatures.length ? preloadCreatureSkins(creatures, game) : Promise.resolve()]).then(() => undefined);
     },
   };
 }

@@ -179,6 +179,14 @@ export interface CharacterCreateOpts {
   driverOnly?: boolean;
   /** with `driverOnly`: procedural parts to keep as the only drawn geometry (e.g. the cape, a weapon fallback) */
   keep?: Array<'cloth' | 'melee' | 'ranged' | 'shield' | 'case'>;
+  /**
+   * Generated helmeted soldiers (`dominionSoldier`, `cross`, `reformationSoldier`, …): draw the figure without its
+   * helmet, with a bare head (a generated civilian head, re-tinted to an older, greying officer) — for a named
+   * soldier whose face must be seen. `malik` is always bare-headed (his own look). Ignored by archetypes that
+   * already show their face and by procedural figures. The head's model is fetched with the body; until both are
+   * loaded the procedural figure stands in, as for any generated body.
+   */
+  bareHead?: boolean;
 }
 
 export interface CharacterFactory {
