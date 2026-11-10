@@ -4,9 +4,11 @@
  * A deterministic 2.5D world of walkable surfaces + solid colliders:
  *   world.ts      registries, spatial hash broadphase, ground / standing / overlap / cover / trigger queries
  *   move.ts       grounded character movement (sliding, step-up, ramps, fall protection, no tunnelling)
+ *   stand.ts      un-stick search (nearestStandable, recovery of actors in an invalid state)
  *   ray.ts        raycast, line of sight / fire, swept sphere
- *   nav.ts        multi-level nav grid, incremental rebuild, wide-agent clearance; A* in navsearch.ts,
- *                 string-pulling in navsmooth.ts
+ *   nav.ts        multi-level nav grid, incremental rebuild; A* in navsearch.ts, string-pulling in
+ *                 navsmooth.ts, per-agent (radius / height) fit caches in navfit.ts
+ *   validate.ts   authoring checks (void strips between modules, walk-through solids, …)
  *   debug.ts      three.js debug drawing (the only three.js dependency; everything else is plain math)
  *   fixtures.ts   Z04 / Z08 / Z05 blockouts used by the tests and the sandbox
  */
@@ -14,12 +16,15 @@ import type {
   ColliderDesc, ColliderHandle, Game, GroundHit, MoveOpts, MoveResult, NavGrid, PhysicsWorld, RayHit,
   SurfaceDesc, SurfaceHandle, TriggerHandle, TriggerShape, Vec3Like,
 } from '@/core/api';
+import type { PhysicsIssue } from '@/core/api/physics';
 import { RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
 import { createPhysicsDebug } from './debug';
 import { moveCharacter } from './move';
 import { NavGridImpl } from './nav';
 import { raycast, segmentClear, sweepSphere } from './ray';
-import { PhysicsCore } from './world';
+import { findStand } from './stand';
+import { validate } from './validate';
+import { DEF_HEIGHT, PhysicsCore, edgeMarginFor } from './world';
 
 class PhysicsWorldImpl implements PhysicsWorld {
   private readonly core = new PhysicsCore();
@@ -36,24 +41,26 @@ class PhysicsWorldImpl implements PhysicsWorld {
     return this.core.addTrigger(shape, onEnter, onExit);
   }
 
-  groundAt(x: number, z: number, yRef: number, stepUp?: number): GroundHit | null {
-    return this.core.groundAt(x, z, yRef, stepUp);
+  groundAt(x: number, z: number, yRef: number, stepUp?: number, out?: GroundHit): GroundHit | null {
+    return this.core.groundAt(x, z, yRef, stepUp, out);
   }
 
-  canStand(x: number, y: number, z: number, radius: number, height?: number): boolean {
-    return this.core.canStand(x, y, z, radius, height);
+  canStand(x: number, y: number, z: number, radius: number, height?: number, edgeMargin?: number): boolean {
+    return this.core.canStand(x, y, z, radius, height, edgeMargin);
   }
 
   moveCharacter(from: Vec3Like, radius: number, dx: number, dz: number, opts?: MoveOpts): MoveResult {
     return moveCharacter(this.core, from, radius, dx, dz, opts);
   }
 
-  nearestStandable(x: number, y: number, z: number, radius: number, maxDist?: number): Vec3Like | null {
-    return this.core.nearestStandable(x, y, z, radius, maxDist);
+  nearestStandable(x: number, y: number, z: number, radius: number, maxDist = 4, height?: number): Vec3Like | null {
+    const r = radius > 0 ? radius : 0.05;
+    const h = height !== undefined && height > 0 ? height : DEF_HEIGHT;
+    return findStand(this.core, x, y, z, r, maxDist, h, edgeMarginFor(r), false);
   }
 
-  raycast(origin: Vec3Like, dir: Vec3Like, maxDist: number, mask?: number): RayHit | null {
-    return raycast(this.core, origin, dir, maxDist, mask);
+  raycast(origin: Vec3Like, dir: Vec3Like, maxDist: number, mask?: number, out?: RayHit): RayHit | null {
+    return raycast(this.core, origin, dir, maxDist, mask, out);
   }
 
   lineOfSight(a: Vec3Like, b: Vec3Like): boolean { return segmentClear(this.core, a, b, RAY_SIGHT); }
@@ -63,14 +70,16 @@ class PhysicsWorldImpl implements PhysicsWorld {
     return sweepSphere(this.core, from, to, radius, mask);
   }
 
-  queryColliders(x: number, z: number, radius: number, yMin: number, yMax: number): ColliderHandle[] {
-    return this.core.queryColliders(x, z, radius, yMin, yMax);
+  queryColliders(x: number, z: number, radius: number, yMin: number, yMax: number, out?: ColliderHandle[]): ColliderHandle[] {
+    return this.core.queryColliders(x, z, radius, yMin, yMax, out);
   }
 
-  coverNear(x: number, z: number, radius: number): ColliderHandle[] { return this.core.coverNear(x, z, radius); }
+  coverNear(x: number, z: number, radius: number, out?: ColliderHandle[]): ColliderHandle[] {
+    return this.core.coverNear(x, z, radius, out);
+  }
 
-  coverPoint(cover: ColliderHandle, threat: Vec3Like, radius = 0.4): Vec3Like | null {
-    return this.core.coverPoint(cover, threat, radius, this.hidden);
+  coverPoint(cover: ColliderHandle, threat: Vec3Like, radius = 0.4, height = DEF_HEIGHT): Vec3Like | null {
+    return this.core.coverPoint(cover, threat, radius, height, this.hidden);
   }
 
   private readonly hidden = (from: Vec3Like, to: Vec3Like): boolean => !segmentClear(this.core, from, to, RAY_SHOT);
@@ -78,6 +87,8 @@ class PhysicsWorldImpl implements PhysicsWorld {
   updateTriggers(point: Vec3Like | null): void { this.core.updateTriggers(point); }
 
   clear(): void { this.core.clear(); }
+
+  validate(): PhysicsIssue[] { return validate(this.core); }
 
   debugObject(): unknown {
     if (!this.debug) this.debug = createPhysicsDebug(this.core, this.navGrid);

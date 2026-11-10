@@ -41,14 +41,19 @@ const mask = (list: readonly ButtonAction[]): Uint8Array => {
   return m;
 };
 
+/** Actions that only mean something in menus / cinematics. They share keys with gameplay (Space, E, Esc, WASD). */
+export const UI_ACTIONS = ['skip', 'confirm', 'cancel', 'menuUp', 'menuDown', 'menuLeft', 'menuRight'] as const satisfies readonly ButtonAction[];
+const UI_MASK = mask(UI_ACTIONS);
+
 /**
  * Which actions are readable in each context.
- *  - game: everything (gameplay + skip/confirm/cancel/menu*, so a HUD-level prompt can never soft-lock)
+ *  - game: gameplay actions + pause. The UI actions read false unless a HUD prompt opts in (`allowInGame`),
+ *    so one Space press is never a dodge AND a confirm AND a skip.
  *  - menu: confirm / cancel / menu directions / pause — gameplay actions read false
  *  - cinematic: skip / pause only
  */
 export const CONTEXT_MASK: Record<InputContext, Uint8Array> = {
-  game: mask(ACTIONS),
+  game: mask(ACTIONS.filter((a) => UI_MASK[A[a]] === 0)),
   menu: mask(['confirm', 'cancel', 'menuUp', 'menuDown', 'menuLeft', 'menuRight', 'pause']),
   cinematic: mask(['skip', 'pause']),
 };
@@ -60,6 +65,8 @@ const MENU_DIRS = [A.menuUp, A.menuDown, A.menuLeft, A.menuRight] as const;
 /** seconds before a held menu direction starts repeating, then the repeat interval */
 export const MENU_REPEAT_DELAY = 0.42;
 export const MENU_REPEAT_INTERVAL = 0.13;
+/** longest an unseen gameplay edge is kept for the simulation while it is frozen (hit-stop is ≤ 0.25 s) */
+export const EDGE_CARRY = 0.3;
 
 /**
  * Per-action state. The owner fills `raw` (physical devices) and `virt` (programmatic input) for this frame
@@ -70,10 +77,16 @@ export class ActionStates {
   readonly raw = new Uint8Array(ACTION_COUNT);
   /** virtual (autoplay / test) state for the current frame — deliberate, so never release-blocked */
   readonly virt = new Uint8Array(ACTION_COUNT);
+  /** set by the owner when an action was released AND pressed again since the last latch; cleared by latch */
+  readonly retap = new Uint8Array(ACTION_COUNT);
   private readonly eff = new Uint8Array(ACTION_COUNT);
   private readonly press = new Uint8Array(ACTION_COUNT);
   private readonly release = new Uint8Array(ACTION_COUNT);
   private readonly consumed = new Uint8Array(ACTION_COUNT);
+  /** edges somebody has actually read this tick (an edge nobody saw may be carried through a hit-stop) */
+  private readonly seenPress = new Uint8Array(ACTION_COUNT);
+  private readonly seenRelease = new Uint8Array(ACTION_COUNT);
+  private readonly carried = new Float32Array(ACTION_COUNT);
   /** raw-down actions that must be released before they count again (set by context switches) */
   private readonly blocked = new Uint8Array(ACTION_COUNT);
   private readonly held = new Float32Array(ACTION_COUNT);
@@ -81,33 +94,51 @@ export class ActionStates {
   private readonly repeat = new Float32Array(MENU_DIRS.length);
   /** press-to-toggle latches for `engaged()` (accessibility: settings.holdToToggle) */
   private readonly latched = new Uint8Array(ACTION_COUNT);
-  private allow = CONTEXT_MASK.game;
+  /** the 'game' mask of this instance: CONTEXT_MASK.game plus whatever a HUD prompt opted in */
+  private readonly gameMask = Uint8Array.from(CONTEXT_MASK.game);
+  private allow: Uint8Array = this.gameMask;
   private ctx: InputContext = 'game';
 
   get context(): InputContext {
     return this.ctx;
   }
 
-  /** Latch edges for this tick from `raw`. `toggle` = settings.holdToToggle. */
-  latch(dt: number, toggle = false): void {
-    const { raw, virt, eff, press, release, consumed, blocked, held, lastHeld, allow, latched } = this;
+  /**
+   * Latch edges for this tick from `raw`. `toggle` = settings.holdToToggle. `carry` = the simulation did not
+   * step since the previous latch (hit-stop): gameplay edges that nobody read are then kept for this tick too,
+   * so a press made during the freeze still reaches combat when time resumes.
+   */
+  latch(dt: number, toggle = false, carry = false): void {
+    const { raw, virt, eff, press, release, consumed, blocked, held, lastHeld, allow, latched, retap } = this;
+    const { seenPress, seenRelease, carried } = this;
+    const keep = carry && this.ctx === 'game';
     for (let i = 0; i < ACTION_COUNT; i++) {
       if (!raw[i]) blocked[i] = 0;
       const was = eff[i];
       const now = allow[i] && ((raw[i] && !blocked[i]) || virt[i]) ? 1 : 0;
+      // Released and pressed again between two ticks (button mashing at low frame rates): still down, but it
+      // is a new press — report both edges and restart the hold timer.
+      const again = retap[i] === 1 && was === 1 && now === 1;
+      retap[i] = 0;
+      const fresh = (now && !was) || again;
+      const old = keep && carried[i] < EDGE_CARRY;
+      const keepPress = old && press[i] === 1 && consumed[i] === 0 && seenPress[i] === 0;
+      const keepRelease = old && release[i] === 1 && seenRelease[i] === 0;
+      carried[i] = keepPress || keepRelease ? carried[i] + dt : 0;
       eff[i] = now;
-      consumed[i] = 0;
-      press[i] = now && !was ? 1 : 0;
-      release[i] = !now && was ? 1 : 0;
+      consumed[i] = seenPress[i] = seenRelease[i] = 0;
+      press[i] = fresh || keepPress ? 1 : 0;
+      release[i] = (!now && was) || again || keepRelease ? 1 : 0;
       if (now) {
-        if (!was) held[i] = 0;
+        if (again) lastHeld[i] = held[i];
+        if (!was || again) held[i] = 0;
         held[i] += dt;
       } else if (was) {
         lastHeld[i] = held[i];
         held[i] = 0;
       }
       if (!toggle || !allow[i]) latched[i] = 0;
-      else if (press[i]) latched[i] ^= 1;
+      else if (fresh) latched[i] ^= 1;
     }
     // Key-repeat for menu navigation: a held direction pulses `pressed` again after a delay.
     for (let k = 0; k < MENU_DIRS.length; k++) {
@@ -133,11 +164,13 @@ export class ActionStates {
    */
   setContext(ctx: InputContext): void {
     if (ctx === this.ctx) return;
-    const allow = CONTEXT_MASK[ctx];
-    if (!allow) {
+    if (!CONTEXT_MASK[ctx]) {
       console.warn(`[input] unknown context "${String(ctx)}" — ignored`);
       return;
     }
+    // a HUD opt-in belongs to the prompt that asked for it: it never survives a context switch
+    this.gameMask.set(CONTEXT_MASK.game);
+    const allow = ctx === 'game' ? this.gameMask : CONTEXT_MASK[ctx];
     this.ctx = ctx;
     this.allow = allow;
     const { raw, virt, eff, press, release, blocked, held, lastHeld } = this;
@@ -172,6 +205,15 @@ export class ActionStates {
     return i >= 0 && this.release[i] === 1;
   }
 
+  /** a reader was shown the press / release edge of `i` this tick (it will not be carried) */
+  sawPress(i: number): void {
+    this.seenPress[i] = 1;
+  }
+
+  sawRelease(i: number): void {
+    this.seenRelease[i] = 1;
+  }
+
   heldTime(i: number): number {
     return i >= 0 ? this.held[i] : 0;
   }
@@ -194,4 +236,24 @@ export class ActionStates {
     if (i >= 0) this.latched[i] = 0;
   }
 
+  /** true if the action can currently be read in this context (drives preventDefault for its keys) */
+  allowed(i: number): boolean {
+    return i >= 0 && this.allow[i] === 1;
+  }
+
+  /**
+   * Opt UI actions into the 'game' context (`slots` are action indices; empty restores the default). A key that
+   * is already held when its action becomes readable must be released first, so the Space of a dodge can
+   * never confirm the prompt that just appeared.
+   */
+  allowInGame(slots: readonly number[]): void {
+    const { gameMask, raw, blocked } = this;
+    const base = CONTEXT_MASK.game;
+    for (let i = 0; i < ACTION_COUNT; i++) {
+      let on = base[i];
+      if (!on && UI_MASK[i]) for (let k = 0; k < slots.length; k++) if (slots[k] === i) on = 1;
+      if (on && !gameMask[i] && raw[i] && this.ctx === 'game') blocked[i] = 1;
+      gameMask[i] = on;
+    }
+  }
 }

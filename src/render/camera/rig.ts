@@ -4,12 +4,13 @@
  *   → blend (cinematic release, target hand-over glide) → feel (shake, kick, FOV punch, breathing) → camera.
  */
 import * as THREE from 'three';
-import type { CamPose, CameraFollowTarget, CameraRig, FollowFraming, Game, Vec3Like } from '@/core/api';
-import { EASE, clamp, wrapAngle } from '@/core/mathx';
+import { RAY_SHOT, RAY_SIGHT } from '@/core/api';
+import type { ButtonAction, CamPose, CameraFollowTarget, CameraRig, FollowFraming, Game, Vec3Like } from '@/core/api';
+import { DEG, EASE, clamp, smoothstep, wrapAngle } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import { CinematicImpl, type CinematicHost } from './cinematic';
 import { CameraFeel } from './feel';
-import { FOLLOW, FollowCamera, type FollowInput, type FollowWorld } from './follow';
+import { FOLLOW, FollowCamera, RECENTRE_ASSIST, RECENTRE_GENTLE, RECENTRE_OFF, type FollowInput, type FollowWorld } from './follow';
 import { Pose, isFiniteVec, quatLookAt } from './pose';
 
 const NEAR = 0.1;
@@ -17,6 +18,22 @@ const FAR = 6000;
 /** hand-over glide when the follow target changes to another body */
 const TARGET_GLIDE = 0.85;
 const DEFAULT_RELEASE = 0.6;
+/**
+ * What the camera collides with: everything opaque plus everything physical you can see through (glass,
+ * energy barriers). Invisible move-only blockers are skipped — nothing is visibly there to push the camera.
+ */
+const CAMERA_MASK = RAY_SIGHT | RAY_SHOT;
+/** FOV and composition are authored for 16:9; narrower windows keep that horizontal view (up to this vFOV) */
+const WIDE = 16 / 9;
+const MAX_VFOV = 100;
+const TAN_REF = Math.tan(FOLLOW.fov * DEG * 0.5);
+/** the followed figure fades between these distances from the camera to its body axis */
+const FADE_NEAR = 0.28;
+const FADE_FAR = 0.6;
+/** inputs that mean "the player is fighting": auto-recentre stays out of the way while (and just after) held */
+const COMBAT: readonly ButtonAction[] = ['attack', 'heavy', 'guard', 'dodge', 'aim', 'ability1', 'ability2'];
+/** phases in which Game runs the simulation: authored camera time follows the simulation clock there */
+const SIM_PHASES = new Set<string>(['playing', 'dead', 'complete']);
 
 const num = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
@@ -33,6 +50,12 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   private blendDur = 0;
   /** a release blend survives snapBehind; a hand-over glide does not */
   private blendIsRelease = false;
+  /** the blend path has not been checked against the world yet */
+  private blendUnchecked = false;
+  private fade = 1;
+  private lastSimNow = NaN;
+  private disposed = false;
+  private readonly offs: Array<() => void> = [];
 
   private readonly freePose = new Pose();
   private free = false;
@@ -46,7 +69,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
   private lastFov = -1;
   private lastAspect = -1;
 
-  private readonly followInput: FollowInput = { lookX: 0, lookY: 0, assisted: false };
+  private readonly followInput: FollowInput = { lookX: 0, lookY: 0, recentre: RECENTRE_OFF, absolute: false, busy: false, simDt: 0 };
   private readonly world: FollowWorld = { sweep: null, ground: null };
   private readonly sweepFn: NonNullable<FollowWorld['sweep']>;
   private readonly groundFn: NonNullable<FollowWorld['ground']>;
@@ -68,7 +91,7 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     // query instead of freezing the camera.
     this.sweepFn = (from, to, radius) => {
       try {
-        const k = this.game.physics.sweepSphere(from, to, radius) as unknown;
+        const k = this.game.physics.sweepSphere(from, to, radius, CAMERA_MASK) as unknown;
         return typeof k === 'number' && Number.isFinite(k) ? k : null;
       } catch (err) {
         this.warnWorld(err);
@@ -88,16 +111,21 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     };
 
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('resize', () => {
+      const onResize = (): void => {
         this.viewDirty = true;
-      });
+      };
+      window.addEventListener('resize', onResize);
+      this.offs.push(() => window.removeEventListener('resize', onResize));
     }
-    // A zone load is a hard cut: nothing from the previous space (shake, recoil, a blend) may carry over.
-    game.events.on('zone:loading', () => {
+    // A zone load is a hard cut: nothing from the previous space may carry over — shake, recoil, a blend, the
+    // lock-on closure (its actor is about to be freed), aim, a guided turn, or a framing authored for that space.
+    const off = game.events.on('zone:loading', () => {
       this.feel.reset();
       this.blendT = 1;
-      this.follow.snap();
+      this.follow.setFraming(null, 0);
+      this.follow.resetScene();
     });
+    if (typeof off === 'function') this.offs.push(off);
     const scene = game.scene as THREE.Scene | undefined;
     if (scene && (scene as { isScene?: boolean }).isScene === true) scene.add(this.camera);
     this.refreshViewport();
@@ -138,6 +166,10 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
 
   get targetDistance(): number {
     return this.follow.distance;
+  }
+
+  get playerFade(): number {
+    return this.fade;
   }
 
   /** combined shake trauma 0..1 (exactly 0 when no shake is running) */
@@ -218,6 +250,17 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     // blends from the shot as authored right now — correct even when it was cut earlier this same tick
     this.startBlend(Number.isFinite(seconds) ? seconds : DEFAULT_RELEASE, true);
     if (!this.follow.hasTarget) this.follow.out.copy(this.blendFrom); // nothing to return to: hold the shot
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const off of this.offs) off();
+    this.offs.length = 0;
+    this.follow.setTarget(null);
+    this.follow.setLockOn(null);
+    this.cine.exit();
+    this.camera.removeFromParent();
   }
 
   setFree(pose: CamPose | null): void {
@@ -330,9 +373,16 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     const input = game.input;
     const mode = this.mode;
     const reduce = game.settings.get('reduceShake') === true;
+    // The simulation's substeps are over: button edges are readable by frame-level code again.
+    if (typeof input.endSim === 'function') input.endSim();
+    // Two clocks. `d` is real time: shake, recoil and breathing never freeze. `sim` is simulated time (0 when
+    // paused, loading or in hit-stop, scaled in slow-motion): authored motion — cinematic moves, blends back
+    // to gameplay, guided turns — stays in step with the scripts, voice and animation that run on it.
+    const sim = this.simDelta(d);
+    const frozen = sim === 0 && this.isSuspended();
 
     // Shoulder swap is camera-owned unless someone consumed the press or set the side explicitly this tick.
-    if (mode === 'follow' && !this.shoulderSetExternally && input.pressed('swapShoulder') === true) {
+    if (mode === 'follow' && !this.shoulderSetExternally && this.takeSwap()) {
       this.follow.side = this.follow.side === 1 ? -1 : 1;
     }
     this.shoulderSetExternally = false;
@@ -342,25 +392,39 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     const takesLook = mode === 'follow';
     fi.lookX = takesLook ? num(input.look.x) : 0;
     fi.lookY = takesLook ? num(input.look.y) : 0;
-    fi.assisted = input.device === 'kbm' && input.pointerLocked !== true && input.virtual.active !== true;
+    // Auto-recentre by device: never with a captured mouse; gentle on a pad (and for bots); firmer when the
+    // only ways to look are a drag or the arrow keys.
+    const pad = input.device === 'gamepad';
+    const bot = input.virtual.active === true;
+    fi.recentre = bot || pad ? RECENTRE_GENTLE : input.pointerLocked === true ? RECENTRE_OFF : RECENTRE_ASSIST;
+    fi.absolute = !!input.moveWorld && !isStub(input.moveWorld);
+    fi.busy = false;
+    for (let i = 0; i < COMBAT.length; i++) if (input.down(COMBAT[i]) === true) fi.busy = true;
+    fi.simDt = sim;
     const physics = game.physics;
     const solid = !isStub(physics);
     this.world.sweep = solid ? this.sweepFn : null;
     this.world.ground = solid ? this.groundFn : null;
-    this.follow.update(d, fi, this.world);
+    // while the game is paused the follow camera holds still (dt 0), so nothing has drifted when play resumes
+    this.follow.update(frozen ? 0 : d, fi, this.world);
 
     if (this.free) {
       this.base.copy(this.freePose);
     } else if (this.cine.active) {
-      this.cine.update(d, reduce ? 0.3 : 1);
+      this.cine.update(sim, reduce ? 0.3 : 1);
       this.base.copy(this.cine.out);
     } else if (this.blendT < 1) {
-      this.blendT = this.blendDur > 0 ? Math.min(1, this.blendT + d / this.blendDur) : 1;
+      if (this.blendUnchecked) this.checkBlend();
+      this.blendT = this.blendDur > 0 ? Math.min(1, this.blendT + sim / this.blendDur) : 1;
       if (this.blendT >= 1) this.base.copy(this.follow.out);
-      else this.base.mix(this.blendFrom, this.follow.out, EASE.inOutCubic(this.blendT));
+      else {
+        this.base.mix(this.blendFrom, this.follow.out, EASE.inOutCubic(this.blendT));
+        this.keepBlendClear();
+      }
     } else {
       this.base.copy(this.follow.out);
     }
+    this.fade = this.figureFade();
 
     // Breathing: present when exploring, calmer when aiming, off in authored shots and the debug camera.
     const breathing = this.free || this.cine.active ? 0 : this.follow.aim ? 0.45 : 1;
@@ -383,6 +447,74 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     this.blendDur = Math.max(0, seconds);
     this.blendT = this.blendDur > 0 ? 0 : 1;
     this.blendIsRelease = isRelease && this.blendDur > 0;
+    this.blendUnchecked = this.blendT < 1;
+  }
+
+  /**
+   * A blend flies the camera in a straight line from the shot (or the previous hero) to the follow pose. If
+   * the world is in the way, that would be a trip through a wall: cut instead.
+   */
+  private checkBlend(): void {
+    this.blendUnchecked = false;
+    if (!this.world.sweep || !this.follow.hasTarget) return;
+    const k = this.world.sweep(this.blendFrom.pos, this.follow.out.pos, 0.2);
+    if (k !== null && k < 0.97) this.blendT = 1;
+  }
+
+  /** The follow pose moves during a blend; if the path closes mid-way, stop at the obstacle on the follow side. */
+  private keepBlendClear(): void {
+    if (!this.world.sweep) return;
+    const to = this.follow.out.pos;
+    const k = this.world.sweep(to, this.base.pos, 0.2);
+    if (k !== null && k < 1 && k > 1e-3) this.base.pos.lerpVectors(to, this.base.pos, k);
+  }
+
+  /** the swap press, claimed so the player controller cannot also act on it */
+  private takeSwap(): boolean {
+    const input = this.game.input;
+    if (typeof input.take === 'function') return input.take('swapShoulder') === true;
+    return input.pressed('swapShoulder') === true;
+  }
+
+  /** paused or loading: authored motion AND the follow camera stand still */
+  private isSuspended(): boolean {
+    const game = this.game;
+    if (game.paused === true) return true;
+    const mission = game.mission;
+    return !!mission && !isStub(mission) && mission.loading === true;
+  }
+
+  /**
+   * Simulated seconds since the last update. Where the host runs a simulation clock (Game.time.now during
+   * play) this is exactly how far it advanced, so hit-stop and slow-motion are honoured; elsewhere (title
+   * screen, sandboxes without a clock) it is real time, and it is 0 whenever the game is paused or loading.
+   */
+  private simDelta(d: number): number {
+    if (this.isSuspended()) return 0;
+    const game = this.game;
+    const time = game.time;
+    const now = time && !isStub(time) ? time.now : NaN;
+    if (typeof now !== 'number' || !Number.isFinite(now)) return d;
+    const prev = this.lastSimNow;
+    this.lastSimNow = now;
+    if (!SIM_PHASES.has(game.phase as string)) return d;
+    const step = now - prev;
+    // first frame, a rewound clock or a jump (checkpoint reload): fall back to real time for this frame
+    return step >= 0 && step <= d * 1.5 + 1e-4 ? step : d;
+  }
+
+  /**
+   * Opacity for the followed figure: 1 normally, falling to 0 as the camera closes on the body (squeezed into
+   * a corner) so the hero never fills the frame or crosses the near plane.
+   */
+  private figureFade(): number {
+    const t = this.follow.targetRef;
+    if (!t || this.free || !isFiniteVec(t.pos)) return 1;
+    const p = this.base.pos;
+    const top = this.follow.headPoint.y + 0.4 - t.pos.y;
+    const y = clamp(p.y - t.pos.y, 0, top > 0 ? top : 0);
+    const dist = Math.hypot(p.x - t.pos.x, p.y - (t.pos.y + y), p.z - t.pos.z);
+    return smoothstep(FADE_NEAR, FADE_FAR, dist);
   }
 
   /** Write base pose + feel offsets (scaled by `feelK`) to the THREE camera. */
@@ -400,13 +532,20 @@ export class CameraRigImpl implements CameraRig, CinematicHost {
     let fov = base.fov;
     if (feelK > 0) {
       if (feel.pitch !== 0 || feel.yaw !== 0 || feel.roll !== 0) {
-        cam.quaternion.multiply(this.tmpQ.setFromEuler(this.tmpE.set(feel.pitch, feel.yaw, feel.roll, 'YXZ')));
+        // Shake and breathing are scaled by the zoom so they cover the same share of the SCREEN at any FOV
+        // (a 1.3° shake reads a third larger through the 48° aim lens); recoil stays in true degrees.
+        const zoom = Math.tan(clamp(base.fov, 5, 140) * DEG * 0.5) / TAN_REF;
+        const pitch = (feel.pitch - feel.kickPitch) * zoom + feel.kickPitch;
+        const yaw = (feel.yaw - feel.kickYaw) * zoom + feel.kickYaw;
+        cam.quaternion.multiply(this.tmpQ.setFromEuler(this.tmpE.set(pitch, yaw, feel.roll * zoom, 'YXZ')));
       }
       if (feel.x !== 0 || feel.y !== 0) cam.position.add(this.tmpV2.set(feel.x, feel.y, 0).applyQuaternion(base.quat));
       fov += feel.fov;
     }
     fov = clamp(fov, 5, 140);
     const aspect = this.viewW / this.viewH;
+    // Narrow windows (4:3, portrait, a tall iframe): hold the 16:9 horizontal view instead of cropping it away.
+    if (aspect < WIDE - 1e-6) fov = Math.min(Math.max(fov, MAX_VFOV), 2 * Math.atan(Math.tan(fov * DEG * 0.5) * (WIDE / aspect)) / DEG);
     if (fov !== this.lastFov || aspect !== this.lastAspect) {
       cam.fov = fov;
       cam.aspect = aspect;

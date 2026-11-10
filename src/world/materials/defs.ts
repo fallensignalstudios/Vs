@@ -90,7 +90,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xf0c574, roughness: 0.22, metalness: 1 },
     family: 'polished',
-    tp: { scale: 1.5, normal: 0.8, roughAmp: 0.14, macro: { albedo: 0.06, rough: 0.05, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.05, rough: 0.12, albedo: 0.02 } },
+    tp: { scale: 1.5, normal: 0.8, roughAmp: 0.08, macro: { albedo: 0.05, rough: 0.04, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.04, rough: 0.04, albedo: 0.015 } },
   },
   goldDark: {
     base: 'standard',

@@ -30,7 +30,7 @@ export function hologramPatch(p: HologramParams = {}): SurfacePatch {
     },
     fragmentPars: /* glsl */ `
 uniform vec4 holoA; // x lines/m · y scroll m/s · z flicker · w edge boost
-uniform vec4 holoB; // x gain · y visibility 0…1
+uniform vec4 holoB; // x gain · y reveal 0…1
 `,
     surface: /* glsl */ `
 {
@@ -49,7 +49,7 @@ uniform vec4 holoB; // x gain · y visibility 0…1
 }
 `,
     params: {
-      visible: { uniform: 'holoB', comp: 'y' },
+      reveal: { uniform: 'holoB', comp: 'y' },
       gain: { uniform: 'holoB', comp: 'x' },
       flicker: { uniform: 'holoA', comp: 'z' },
     },

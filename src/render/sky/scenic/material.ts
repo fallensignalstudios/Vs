@@ -1,8 +1,13 @@
 /**
- * Far-field "megastructure" material: one cheap forward shader for everything kilometres away (terminal vista,
+ * Far-field "megastructure" material: one forward shader for everything kilometres away (terminal vista,
  * atrium shell, Crownmark arm, ribs, capital ships, the carrier). Fog-exempt — it carries its own distance haze
- * that dissolves into the exact sky colour behind it (shared `skyHaze`), lit by the sky preset's key (white
- * remnant side) and fill (red remnant side). Vertex `color` = albedo, `aGlow` = emissive multiplier.
+ * that dissolves into the exact sky colour behind it (shared `skyHaze`).
+ *
+ * Lighting is the sky preset's key (white remnant side) and fill (red remnant side) gated by a BAKED per-vertex
+ * sky visibility (`aLight.x`), so interiors are not lit through their own walls; enclosed surfaces are lit by a
+ * baked warm lamp term (`aLight.y`) from their own seams instead. Polished black stone stays near black and shows
+ * an analytic mirror image of the sky (remnants, haze, the Wound's absence). Vertical faces can carry procedural
+ * lit openings (`aLight.z`) — the tiny lights that sell the distance.
  */
 import * as THREE from 'three';
 import { GLSL_HAZE, GLSL_NOISE } from '../glsl';
@@ -18,12 +23,12 @@ export interface ScenicMaterialOpts {
   lowStart?: number;
   /** panel module in metres (x = along, y = up); 0 disables panelling */
   panel?: [number, number];
-  /** per-panel tone variation (default 0.34) and seam darkness (default 0.42) */
+  /** per-panel tone variation (default 0.2) and seam darkness (default 0.4) */
   panelTone?: number;
   panelSeam?: number;
-  /** 0..1 specular polish (black stone = high) */
+  /** 0..1 specular polish of the darkest surfaces (black stone = high); pale ceramic gets a third of it */
   gloss?: number;
-  /** 0..1 procedural scorch + glowing breaches (carrier, capital wrecks) */
+  /** 0..1 procedural scorch + torn, glowing breaches (carrier) */
   breach?: number;
   /** Crownmark-arm deck channels: [root half-width, length, z of the root]; enables the procedural gold inlay */
   arm?: [number, number, number];
@@ -31,25 +36,47 @@ export interface ScenicMaterialOpts {
   underLight?: [number, number, number];
   /** minimum haze-independent visibility of emissive parts (lights punch through haze) */
   glowReach?: number;
+  /** colour × intensity of the baked local lamp term (warm seam light inside enclosed spaces), linear RGB */
+  lamp?: [number, number, number];
+  /** ambient multiplier where the sky is hidden (0 = black interiors, 1 = no occlusion) */
+  shade?: number;
+  /** lit openings on flagged vertical faces: [module width, module height (m), brightness] */
+  windows?: [number, number, number];
+  /** how strongly the fleet battle's light rims the surface (the carrier's underside) */
+  battleRim?: number;
   name?: string;
 }
 
 const VERTEX = /* glsl */ `
 attribute float aGlow;
+attribute vec4 aLight;
+attribute vec2 aUv;
 varying vec3 vWorld;
 varying vec3 vLocal;
 varying vec3 vNormal;
 varying vec3 vLocalNormal;
 varying vec3 vColor;
 varying float vGlow;
+varying vec4 vLight;
+varying vec2 vUv;
+varying vec3 vViewLocal;
 void main() {
-  vec4 wp = modelMatrix * vec4(position, 1.0);
+  #ifdef USE_INSTANCING
+    mat4 mm = modelMatrix * instanceMatrix;
+  #else
+    mat4 mm = modelMatrix;
+  #endif
+  vec4 wp = mm * vec4(position, 1.0);
+  // view direction in the piece's local frame (rotation + uniform scale only, so the transpose is enough)
+  vViewLocal = transpose(mat3(mm)) * (cameraPosition - wp.xyz);
   vWorld = wp.xyz;
   vLocal = position;
   vLocalNormal = normal;
-  vNormal = normalize(mat3(modelMatrix) * normal);
+  vNormal = normalize(mat3(mm) * normal);
   vColor = color;
   vGlow = aGlow;
+  vLight = aLight;
+  vUv = aUv;
   gl_Position = projectionMatrix * viewMatrix * wp;
 }
 `;
@@ -62,6 +89,9 @@ varying vec3 vNormal;
 varying vec3 vLocalNormal;
 varying vec3 vColor;
 varying float vGlow;
+varying vec4 vLight;
+varying vec2 vUv;
+varying vec3 vViewLocal;
 uniform vec3 uKeyDir;
 uniform vec3 uKeyColor;
 uniform vec3 uFillDir;
@@ -78,7 +108,16 @@ uniform float uGloss;
 uniform float uBreach;
 uniform float uGlowReach;
 uniform vec3 uUnderLight;
+uniform vec3 uLamp;
+uniform float uShade;
+uniform vec3 uWindows;
 uniform vec4 uArm;
+uniform vec4 uBodies;
+uniform vec3 uBattleGlow;
+uniform vec3 uBattleDir;
+uniform float uBattleRim;
+uniform vec3 uFlashPos;
+uniform vec3 uFlashColor;
 uniform float uTime;
 ${GLSL_NOISE}
 ${GLSL_HAZE}
@@ -91,6 +130,19 @@ float gridLine(float x, float w) {
   return mix(l, 2.0 * w, clamp(fw * 1.8, 0.0, 1.0));
 }
 
+// The sky as a polished surface sees it — no noise, just the things that read in a reflection: the horizon glow,
+// the red remnant and its nebula, the white remnant's pinpoint, and the Wound, which returns nothing at all.
+vec3 skyLite(vec3 d) {
+  vec3 c = skyHaze(d) * (0.30 + 0.90 * exp(-max(d.y, 0.0) * 4.0));
+  float ar = acos(clamp(dot(d, uRedDir), -1.0, 1.0)) / max(uBodies.z, 1e-3);
+  c += vec3(1.7, 0.15, 0.045) * uBodies.w * (smoothstep(1.12, 0.9, ar) + 0.30 * exp(-max(ar - 1.0, 0.0) * 1.1));
+  float cw = max(dot(d, uWhiteDir), 0.0);
+  c += uKeyColor * (pow(cw, 3000.0) * 7.0 + pow(cw, 240.0) * 0.07);
+  float aw = acos(clamp(dot(d, uWoundDir), -1.0, 1.0)) / max(uBodies.x, 1e-3);
+  c *= 1.0 - uBodies.y * smoothstep(1.3, 0.92, aw);
+  return c;
+}
+
 void main() {
   vec3 n = normalize(vNormal);
   if (!gl_FrontFacing) n = -n;
@@ -101,23 +153,42 @@ void main() {
   vec3 albedo = vColor;
   vec3 emisCol = vColor;
   float glow = vGlow;
+  float skyVis = vLight.x;
+  float wall = 1.0 - smoothstep(0.35, 0.6, abs(vLocalNormal.y));
+  vec2 tilt = vec2(0.0);
 
-  // --- panelling in object space: pick the plane by the dominant local normal axis
-  if (uPanel.x > 0.0) {
-    vec3 an = abs(vLocalNormal);
-    vec2 pc = an.y > 0.6 ? vLocal.xz / uPanel.x : (an.x > an.z ? vec2(vLocal.z / uPanel.x, vLocal.y / uPanel.y) : vec2(vLocal.x / uPanel.x, vLocal.y / uPanel.y));
+  // --- panelling from the baked surface coordinates (metres)
+  if (uPanel.x > 0.0 && vLight.w > 0.01) {
+    vec2 pc = vUv / uPanel;
     float fw = max(fwidth(pc.x), fwidth(pc.y));
-    float fade = 1.0 - clamp(fw * 2.2, 0.0, 1.0);
+    float fade = (1.0 - clamp(fw * 2.2, 0.0, 1.0)) * vLight.w;
     vec2 cell = floor(pc);
-    float tone = hash21(cell + floor(dot(vLocalNormal, vec3(1.0, 3.0, 5.0))));
+    float tone = hash21(cell + floor(dot(vLocalNormal, vec3(1.0, 3.0, 5.0)) + 0.5));
     albedo *= 1.0 + (tone - 0.5) * uPanelLook.x * fade;
-    float seam = max(gridLine(pc.x, 0.035), gridLine(pc.y, 0.035));
-    albedo *= 1.0 - uPanelLook.y * seam * step(glow, 0.01);
+    float seam = max(gridLine(pc.x, 0.03), gridLine(pc.y, 0.03));
+    albedo *= 1.0 - uPanelLook.y * seam * step(glow, 0.01) * vLight.w;
+    tilt = (vec2(tone, hash21(cell + 31.7)) - 0.5) * fade;
+  }
+
+  // --- lit openings: tall narrow slits in a regular module, some dark; dissolve into an even glow when sub-pixel
+  vec3 windowGlow = vec3(0.0);
+  if (uWindows.z > 0.0 && vLight.z > 0.004 && wall > 0.0) {
+    vec2 wuv = vUv / uWindows.xy;
+    vec2 wc = floor(wuv), wf = fract(wuv);
+    float fw = max(fwidth(wuv.x), fwidth(wuv.y));
+    float h = hash21(wc + 7.3);
+    float on = step(h, vLight.z);
+    float sx = 1.0 - smoothstep(0.10, 0.10 + fw, abs(wf.x - 0.5));
+    float sy = smoothstep(0.16 - fw, 0.16, wf.y) * (1.0 - smoothstep(0.80, 0.80 + fw, wf.y));
+    float shape = mix(sx * sy * on, 0.13 * vLight.z, clamp(fw * 1.6 - 0.3, 0.0, 1.0));
+    float warm = hash21(wc + 91.0);
+    windowGlow = mix(vec3(1.0, 0.62, 0.26), vec3(1.0, 0.83, 0.55), warm) * shape * uWindows.z * (0.55 + 0.9 * h) * wall;
+    albedo *= 1.0 - 0.6 * sx * sy * wall * (1.0 - clamp(fw * 1.6, 0.0, 1.0));
   }
 
   // --- Crownmark arm: narrow angular gold channels inlaid in the deck (longitudinal lines + chevrons pointing
   //     at the tip), filtered so they dissolve into a faint sheen with distance instead of aliasing
-  if (uArm.w > 0.0 && vLocalNormal.y > 0.7 && glow < 0.01) {
+  if (uArm.w > 0.0 && vLocalNormal.y > 0.7 && glow < 0.01 && vLight.w > 0.5) {
     float t = clamp((uArm.z - vLocal.z) / uArm.y, 0.0, 1.0);
     float hw = max(uArm.x * (1.0 - t), 1.0);
     float u = abs(vLocal.x) / hw;
@@ -132,41 +203,67 @@ void main() {
     float ch = max(max(l1, l2) * min(1.0, lw / max(fu, lw)), chev * min(1.0, 0.007 / max(fc, 0.007)));
     ch *= step(u, 0.97) * uArm.w;
     albedo = mix(albedo, vec3(1.0, 0.72, 0.36), ch);
-    emisCol = vec3(1.0, 0.58, 0.20);
-    glow = ch * 1.7;
+    emisCol = mix(emisCol, vec3(1.0, 0.58, 0.20), step(0.001, ch));
+    glow = ch * 1.5;
   }
 
-  // --- battle damage: scorched plating around elongated gashes that glow from within (slow ember pulse)
+  // --- battle damage: long tears along the hull with charred lips; the cavity behind glows from embers deep
+  //     inside (parallax against the view), not from the surface
   vec3 breachGlow = vec3(0.0);
   if (uBreach > 0.0) {
-    float b = fbm3(vLocal * vec3(0.034, 0.034, 0.013) + 3.7);
-    float edge = 0.80 - 0.12 * uBreach;
-    float scorch = smoothstep(edge - 0.15, edge, b);
-    float heat = smoothstep(edge, edge + 0.11, b);
-    float torn = vnoise(vLocal * 0.22 + 9.0);
-    float gash = smoothstep(0.25, 0.75, heat + (torn - 0.5) * 0.5);
-    float pulse = 0.75 + 0.25 * sin(uTime * 1.3 + b * 31.0) * sin(uTime * 0.7 + torn * 9.0);
-    breachGlow = mix(vec3(0.55, 0.05, 0.01), vec3(1.0, 0.42, 0.10), heat * heat) * (gash * (0.25 + 2.6 * heat * heat) * pulse);
-    albedo *= (1.0 - 0.88 * scorch) * (1.0 - 0.9 * gash);
+    vec3 bp = vLocal * vec3(0.030, 0.045, 0.0085);
+    float warp = vnoise(vLocal * 0.012 + 5.0);
+    float b = fbm3(bp + warp * 0.9 + 3.7);
+    float edge = 0.79 - 0.10 * uBreach;
+    float rag = (vnoise(vLocal * vec3(0.35, 0.35, 0.10) + 9.0) - 0.5) * 0.07;
+    float hole = smoothstep(edge + 0.035, edge + 0.05, b + rag);
+    float lip = smoothstep(edge - 0.02, edge + 0.035, b + rag) * (1.0 - hole);
+    float scorch = smoothstep(edge - 0.19, edge + 0.01, b);
+    // look INTO the hole: sample ember structure a few metres behind the plating along the view ray
+    vec3 vl = normalize(vViewLocal);
+    vec3 inside = vLocal - vl * (9.0 / max(dot(vl, normalize(vLocalNormal)), 0.25));
+    float decks = smoothstep(0.42, 0.5, abs(fract(inside.y / 7.0) - 0.5)) ;
+    float ember = fbm3(inside * vec3(0.10, 0.10, 0.035) + 17.0);
+    float pulse = 0.8 + 0.2 * sin(uTime * 0.9 + ember * 23.0);
+    vec3 fire = mix(vec3(0.45, 0.035, 0.008), vec3(1.25, 0.46, 0.10), smoothstep(0.45, 0.85, ember)) * smoothstep(0.30, 0.75, ember) * pulse;
+    breachGlow = hole * fire * (1.0 - 0.75 * decks) * 2.6 + lip * vec3(0.9, 0.16, 0.03) * 0.5 * smoothstep(0.5, 0.9, ember);
+    albedo *= (1.0 - 0.86 * scorch) * (1.0 - hole);
     glow *= 1.0 - scorch;
+    windowGlow *= 1.0 - scorch;
+    skyVis *= 1.0 - hole;
   }
 
-  // --- lighting: key (white remnant side), fill (red remnant side), sky ambient, a touch of polish
+  // --- lighting: key + fill where the sky reaches, hemisphere ambient, baked warm lamp light where it does not
   float ndk = max(dot(n, uKeyDir), 0.0);
   float ndf = max(dot(n, uFillDir), 0.0);
   float hemi = 0.5 + 0.5 * n.y;
-  vec3 ambient = (uHaze * 3.0 + vec3(0.16, 0.17, 0.21)) * uAmbient * mix(0.55, 1.0, hemi);
-  vec3 lit = albedo * (uKeyColor * ndk + uFillColor * ndf + ambient + uUnderLight * max(-n.y, 0.0));
+  vec3 ambient = (uHaze * 3.0 + vec3(0.16, 0.17, 0.21)) * uAmbient * mix(0.55, 1.0, hemi) * mix(uShade, 1.0, skyVis);
+  float lum = dot(albedo, vec3(0.3, 0.55, 0.15));
+  // mirror-polished black stone: almost no diffuse response, the reflection carries it
+  float polish = uGloss * mix(1.0, 0.33, smoothstep(0.02, 0.22, lum));
+  vec3 direct = (uKeyColor * ndk + uFillColor * ndf) * skyVis;
+  vec3 lamp = uLamp * vLight.y;
+  vec3 lit = albedo * (direct * (1.0 - 0.55 * polish) + ambient + lamp + uUnderLight * max(-n.y, 0.0));
+  // the fleet battle rims surfaces that face it (wrapped so the whole underside of a hull catches it)
+  float rim = clamp((dot(n, uBattleDir) + 0.6) / 1.6, 0.0, 1.0);
+  lit += albedo * uBattleGlow * (uBattleRim * rim * rim * 6.0);
+
+  // transient point light (the carrier's contact flash)
+  if (uFlashColor.r + uFlashColor.g + uFlashColor.b > 0.0) {
+    vec3 fl = uFlashPos - vWorld;
+    float fd2 = dot(fl, fl);
+    lit += albedo * uFlashColor * ((max(dot(n, fl) * inversesqrt(fd2 + 1.0), 0.0) * 0.75 + 0.25) / (1.0 + fd2 / 6400.0));
+  }
+
   vec3 hv = normalize(uKeyDir + v);
-  float spec = pow(max(dot(n, hv), 0.0), mix(18.0, 90.0, uGloss)) * uGloss;
-  float fres = pow(1.0 - max(dot(n, v), 0.0), 4.0);
-  lit += uKeyColor * spec * 0.35 * step(0.0, dot(n, uKeyDir));
-  // polished stone mirrors the sky: haze colour at grazing angles plus a soft image of each remnant
-  vec3 rf = reflect(-v, n);
-  vec3 env = skyHaze(rf) * (0.25 + 1.4 * fres);
-  env += uHazeRed * 4.0 * pow(max(dot(rf, uRedDir), 0.0), 10.0);
-  env += uKeyColor * (0.06 * pow(max(dot(rf, uWhiteDir), 0.0), 24.0) + 0.9 * pow(max(dot(rf, uWhiteDir), 0.0), 600.0));
-  lit += env * uGloss * (0.35 + 0.65 * fres);
+  float spec = pow(max(dot(n, hv), 0.0), mix(24.0, 220.0, polish)) * (0.25 + 1.6 * polish);
+  lit += uKeyColor * spec * 0.4 * skyVis * step(0.0, dot(n, uKeyDir));
+  // reflection: each slab tilts a hair differently, which is what makes a polished floor read as laid stone
+  vec3 nr = normalize(n + vec3(tilt.x, 0.0, tilt.y) * 0.035 * polish);
+  float fres = 0.07 + 0.93 * pow(1.0 - max(dot(nr, v), 0.0), 5.0);
+  vec3 rf = reflect(-v, nr);
+  rf.y = abs(rf.y) * step(0.5, n.y) + rf.y * (1.0 - step(0.5, n.y)); // a floor cannot reflect what is below it
+  lit += skyLite(rf) * fres * polish * mix(0.25, 1.0, skyVis) + lamp * fres * polish * 0.6;
 
   // --- haze: exponential with distance, thicker below the piece origin (the abyss)
   float low = uLowHaze * clamp((uLowStart - vLocal.y) / uLowDepth, 0.0, 1.0);
@@ -176,7 +273,7 @@ void main() {
   vec3 hz = skyHaze(-v);
   vec3 col = mix(lit, hz, f);
   // emissive parts survive haze far longer than surfaces (tiny lights sell the distance)
-  vec3 emis = emisCol * glow + breachGlow;
+  vec3 emis = emisCol * glow + windowGlow + breachGlow;
   col += emis * max(1.0 - f, uGlowReach) * (1.0 - 0.75 * low * low);
 
   gl_FragColor = vec4(col, 1.0);
@@ -194,17 +291,23 @@ export function createScenicMaterial(shared: SharedUniforms, opts: ScenicMateria
       uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
       uKeyDir: shared.uKeyDir, uKeyColor: shared.uKeyColor, uFillDir: shared.uFillDir, uFillColor: shared.uFillColor,
       uAmbient: shared.uAmbient, uHazeDensity: shared.uHazeDensity,
+      uBodies: shared.uBodies, uBattleGlow: shared.uBattleGlow, uBattleDir: shared.uBattleDir,
+      uFlashPos: shared.uFlashPos, uFlashColor: shared.uFlashColor,
       uHazeScale: { value: opts.haze ?? 1 },
       uLowHaze: { value: opts.lowHaze ?? 0 },
       uLowDepth: { value: opts.lowDepth ?? 400 },
       uLowStart: { value: opts.lowStart ?? 0 },
       uPanel: { value: new THREE.Vector2(opts.panel?.[0] ?? 0, opts.panel?.[1] ?? 1) },
-      uPanelLook: { value: new THREE.Vector2(opts.panelTone ?? 0.34, opts.panelSeam ?? 0.42) },
+      uPanelLook: { value: new THREE.Vector2(opts.panelTone ?? 0.2, opts.panelSeam ?? 0.4) },
       uGloss: { value: opts.gloss ?? 0.3 },
       uBreach: { value: opts.breach ?? 0 },
       uGlowReach: { value: opts.glowReach ?? 0.3 },
       uArm: { value: new THREE.Vector4(opts.arm?.[0] ?? 0, opts.arm?.[1] ?? 1, opts.arm?.[2] ?? 0, opts.arm ? 1 : 0) },
       uUnderLight: { value: new THREE.Vector3(...(opts.underLight ?? [0, 0, 0])) },
+      uLamp: { value: new THREE.Vector3(...(opts.lamp ?? [0, 0, 0])) },
+      uShade: { value: opts.shade ?? 1 },
+      uWindows: { value: new THREE.Vector3(...(opts.windows ?? [1, 1, 0])) },
+      uBattleRim: { value: opts.battleRim ?? 0 },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,

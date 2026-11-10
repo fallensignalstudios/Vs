@@ -246,23 +246,27 @@ if (view === 'lineup') {
   label('floor', 3.0, -0.08, -0.8);
   h.setCam([0.6, 2.7, -11.8], [0.4, 2.2, 0], 40);
 } else if (view === 'states') {
-  const states = ['base', 'flash', 'frozen', 'corrupt', 'dissolve', 'telegraph', 'rim'];
-  const span = who === 'elite' ? 4.6 : 2.4;
+  const all = ['base', 'flash', 'frozen', 'corrupt', 'dissolve', 'telegraph', 'rim'];
+  const states = (q.get('states')?.split(',') ?? all).filter((s) => all.includes(s));
+  const isDrone = who === 'secDrone' || who === 'contamDrone';
+  const span = who === 'elite' ? 4.6 : who === 'weaver' ? 3.0 : isDrone ? 1.7 : 2.6;
   states.forEach((s, i) => {
-    const x = (i - (states.length - 1) / 2) * span;
-    const v = spawn(who, x, 0, { yaw: 0.4 });
+    const x = -(i - (states.length - 1) / 2) * span;
+    const v = spawn(who, x, 0, { yaw: 0.5 });
     v.update(0.3);
     if (s === 'flash') v.flash(0xffffff, 10);
     if (s === 'frozen') v.setFrozen(1);
     if (s === 'corrupt') v.setCorruption(1);
-    if (s === 'dissolve') v.setDissolve(0.5);
+    if (s === 'dissolve') v.setDissolve(0.45);
     if (s === 'telegraph') v.setTelegraph(1, 0xff3b2a);
     if (s === 'rim') v.setRim(1, 0xa8d8ff);
     v.update(1 / 60);
-    label(s, x, -0.08, 0);
+    frozenClock.add(v);
+    label(s, x, isDrone ? 1.1 : -0.08, 0);
   });
-  const [pos, look] = camFor(who);
-  h.setCam([0, look[1] + 0.6, pos[2] * (states.length * span) / 4.4], [0, look[1], 0], 34);
+  const [, look] = camFor(who);
+  const dist = Math.max(states.length * span * 0.92, 4);
+  h.setCam([0, look[1] + dist * 0.08, -dist], [0, look[1] * (isDrone ? 0.9 : 1), 0], 36);
 } else {
   const v = spawn(who, 0, 0, { yaw: Number(q.get('yaw') ?? 0) });
   if (action) {

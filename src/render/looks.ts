@@ -109,15 +109,16 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     envIntensity: 1.0,
   }),
 
-  // Z06 — breach rescue: dark, gritty, drained; shadows lean violet, highlights stay warm so people read.
+  // Z06 — breach rescue: dark, gritty, drained of colour; cold steel shadows, warm highlights so people read.
+  // (No violet in the grade: violet belongs to real corruption sources and to setCorruption.)
   breach: look({
     exposure: 0.9,
     bloom: { intensity: 0.86, threshold: 0.98, radius: 0.74 },
-    fog: { color: 0x150f20, density: 0.024 },
-    grade: { tint: 0xf2ecff, saturation: 0.85, contrast: 1.18, lift: -0.006, shadowsTint: 0xb9a6ff, highlightsTint: 0xffdfc0 },
+    fog: { color: 0x0e1016, density: 0.024 },
+    grade: { tint: 0xf0f2fa, saturation: 0.8, contrast: 1.18, lift: -0.006, shadowsTint: 0xa4b6e6, highlightsTint: 0xffdfc0 },
     vignette: 0.58, grain: 0.5, chromaticAberration: 0.4,
     ao: { intensity: 3.4, radius: 1.2 },
-    ambient: { sky: 0x554e72, ground: 0x18111a, intensity: 0.38 },
+    ambient: { sky: 0x4e5568, ground: 0x14110f, intensity: 0.38 },
     envIntensity: 0.85,
   }),
 
@@ -138,7 +139,7 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     exposure: 1.1,
     bloom: { intensity: 0.95, threshold: 1.0, radius: 0.76 },
     fog: { color: 0x3a322a, density: 0.008 },
-    grade: { tint: 0xfff2dc, saturation: 1.08, contrast: 1.12, lift: 0, shadowsTint: 0xc8c4f0, highlightsTint: 0xffe0a8 },
+    grade: { tint: 0xfff2dc, saturation: 1.08, contrast: 1.12, lift: 0, shadowsTint: 0xc2ccf0, highlightsTint: 0xffe0a8 },
     vignette: 0.4, grain: 0.3, chromaticAberration: 0.24,
     ao: { intensity: 3.0, radius: 1.5 },
     ambient: { sky: 0xb6aa94, ground: 0x2e251c, intensity: 0.62 },

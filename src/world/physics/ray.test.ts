@@ -113,7 +113,10 @@ describe('raycast vs walkable surfaces (RAY_GROUND)', () => {
     expect(floor.collider).toBeNull();
     expect(floor.surface?.desc.tag).toBe('floor');
     expect(floor.normal).toEqual({ x: 0, y: 1, z: 0 });
-    expect(w.raycast(planPos(5, 5, 1.6), v(0, -1, 0), 10)).toBeNull(); // floors are opt-in
+    // floors are physical: sight and shot rays meet them too; a movement-only ray does not
+    expect(w.raycast(planPos(5, 5, 1.6), v(0, -1, 0), 10)!.ground).toBe(true);
+    expect(w.raycast(planPos(5, 5, 1.6), v(0, -1, 0), 10, RAY_SHOT)!.distance).toBeCloseTo(1.6, 9);
+    expect(w.raycast(planPos(5, 5, 1.6), v(0, -1, 0), 10, RAY_MOVE)).toBeNull();
 
     // south ramp: 0 at n = 11 → 3 at n = 23; at n = 17 the surface is at 1.5
     const ramp = w.raycast(planPos(54, 17, 5), v(0, -1, 0), 10, RAY_GROUND)!;
@@ -232,7 +235,13 @@ describe('sweepSphere', () => {
     expect(w.sweepSphere(v(0, 1, -8), v(10, 1, -8), 0.25)).toBe(1); // clear lane
     expect(w.sweepSphere(v(0, 1, -6.2), v(10, 1, -6.2), 0.25)).toBeLessThan(1); // radius clips the corner
     expect(w.sweepSphere(v(0, 1, -6.3), v(10, 1, -6.3), 0.25)).toBe(1);
-    expect(w.sweepSphere(v(3.9, 1, -5), v(0, 1, -5), 0.25)).toBe(0); // starts overlapping
+    // starts overlapping: only motion that goes deeper in is stopped
+    expect(w.sweepSphere(v(3.9, 1, -5), v(6, 1, -5), 0.25)).toBe(0);
+    expect(w.sweepSphere(v(3.9, 1, -5), v(0, 1, -5), 0.25)).toBe(1); // backing out
+    expect(w.sweepSphere(v(3.9, 1, -5), v(3.9, 1, -2), 0.25)).toBe(1); // sliding along the face
+    expect(w.sweepSphere(v(3.9, 1, -5), v(3.9, 3, -5), 0.25)).toBe(1);
+    expect(w.sweepSphere(v(14.2, 1.2, -15), v(10, 1.2, -15), 0.25)).toBe(1); // same for cylinders
+    expect(w.sweepSphere(v(14.2, 1.2, -15), v(15, 1.2, -15), 0.25)).toBe(0);
     expect(w.sweepSphere(v(1, 1, -1), v(1, 1, -1), 0.25)).toBe(1); // zero length
     expect(w.sweepSphere(v(10, 1.2, -15), v(16, 1.2, -15), 0.25)).toBeCloseTo((5 - 0.7 - 0.25 - 0.01) / 6, 6);
     // over the top of the box with clearance, and too low
@@ -288,7 +297,9 @@ describe('ray broadphase', () => {
       const len = Math.hypot(dir.x, dir.y, dir.z);
       const mask = i % 3 === 0 ? RAY_SIGHT | RAY_GROUND : i % 3 === 1 ? RAY_SHOT : RAY_MOVE;
       const ray = w.raycast(from, dir, len, mask);
-      const frac = w.sweepSphere(from, to, 1e-9, mask);
+      // a sweep meets floors only with RAY_GROUND; a ray masked for sight / shots always does
+      const frac = w.sweepSphere(from, to, 1e-9, mask === RAY_MOVE ? mask : mask | RAY_GROUND);
+      if (ray && ray.distance === 0) continue; // a ray born inside a solid hits it; a sweep may still leave it
       if (ray) {
         hits++;
         const expected = Math.max(0, ray.distance - 0.01) / len;

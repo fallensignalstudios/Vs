@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { along, arcPath, batter, blob, box, prism, shard, sphere, T, torus, tube, type Pt2, type Pt3 } from '../core/geo';
 import { P, tint } from '../core/palette';
-import { addPlate, bladeOutline, facing, kite, limbPlates, slab, type LimbPlate } from '../core/plates';
+import { addPlate, facing, kite, limbPlates, slab, type LimbPlate } from '../core/plates';
 import { RigBuilder, type Paint, type RigTemplate } from '../core/rig';
 
 export const ELITE_GROUPS = { eye: 1, core: 2, joint: 3, nodes: 4, stump: 5 } as const;

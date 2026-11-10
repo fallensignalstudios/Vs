@@ -39,9 +39,11 @@ float fbNoise(vec3 p) {
   return mix(a, b, f.z);
 }
 
-// 0 on the frame border (and in the rounded-off corners), 1 at the centre: a superellipse hugging the frame
+// 0 on the frame border, 1 once a point is half a frame-height away from every border. Measured in pixels
+// (aspect-corrected) so the band is equally wide on all four sides; a superellipse rounds the corners.
 float fbInward(vec2 uv) {
-  vec2 q = abs(uv - 0.5) * 2.0;
+  vec2 d = (0.5 - abs(uv - 0.5)) * vec2(aspect, 1.0) * 2.0;
+  vec2 q = clamp(1.0 - d, 0.0, 1.0);
   vec2 q2 = q * q;
   vec2 q6 = q2 * q2 * q2;
   return max(0.0, 1.0 - pow(q6.x + q6.y, 1.0 / 6.0));
@@ -65,7 +67,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     vec2 p = vUv - 0.5;
     float inward = fbInward(vUv);
     float rim = 1.0 - smoothstep(0.0, 0.5, inward);
-    // concentrated on the border: about half strength 5 % of the way in, gone by 15 %
+    // concentrated on the border: half strength ~5 % of the frame height in, gone by ~15 %
     float rim2 = rim * rim;
     float edge = rim2 * rim2 * rim;
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -92,7 +94,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
       vec2 dir = vec2(cos(ang), sin(ang));
       // ragged front: how far the corruption has crept in at this angle
       float front = fbNoise(vec3(dir * 2.6, fbClock * 0.06));
-      float reach = fbCorruption * (0.12 + 0.3 * front);
+      float reach = fbCorruption * (0.16 + 0.4 * front);
       float depth = clamp(inward / max(reach, 0.001), 0.0, 1.5);
       float mask = 1.0 - smoothstep(0.45, 1.0, depth);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ACTIONS, CONTEXT_MASK, MENU_REPEAT_DELAY, MENU_REPEAT_INTERVAL } from './actions';
+import { ACTIONS, CONTEXT_MASK, MENU_REPEAT_DELAY, MENU_REPEAT_INTERVAL, UI_ACTIONS } from './actions';
 import { glyphFor, padStyleFromId } from './bindings';
 import { DT, rig } from './testkit';
 
@@ -64,8 +64,21 @@ describe('edge latching', () => {
     expect(r.input.pressed('interact')).toBe(true);
     r.input.consume('interact');
     expect(r.input.pressed('interact')).toBe(false);
-    expect(r.input.pressed('confirm')).toBe(true); // other actions on the same key are independent
     expect(r.input.down('interact')).toBe(true);
+    // other actions on the same key are independent
+    const m = rig();
+    m.input.setContext('menu');
+    m.keyDown('Enter');
+    m.tick();
+    m.input.consume('confirm');
+    expect(m.input.pressed('confirm')).toBe(false);
+    expect(m.input.pressed('skip')).toBe(false);
+    m.input.setContext('cinematic');
+    m.keyUp('Enter');
+    m.tick();
+    m.keyDown('Enter');
+    m.tick();
+    expect(m.input.pressed('skip')).toBe(true);
   });
 
   it('never throws on unknown actions', () => {
@@ -100,7 +113,10 @@ describe('default bindings', () => {
     }
     const buttons: Array<[number, (typeof ACTIONS)[number]]> = [[0, 'attack'], [1, 'lockOn'], [2, 'aim'], [3, 'guard']];
     for (const [button, action] of buttons) {
-      const r = rig({ lock: 'none' });
+      const r = rig(); // pointer lock granted: the first click captures, the second acts
+      r.mouseDown(0);
+      r.mouseUp(0);
+      r.tick();
       r.mouseDown(button);
       r.tick();
       expect(r.input.pressed(action), `mouse ${button} → ${action}`).toBe(true);
@@ -199,7 +215,9 @@ describe('contexts', () => {
     const allowed = (ctx: 'menu' | 'cinematic') => ACTIONS.filter((_, i) => CONTEXT_MASK[ctx][i] === 1);
     expect(allowed('menu').sort()).toEqual(['cancel', 'confirm', 'menuDown', 'menuLeft', 'menuRight', 'menuUp', 'pause'].sort());
     expect(allowed('cinematic').sort()).toEqual(['pause', 'skip']);
-    expect(CONTEXT_MASK.game.every((v) => v === 1)).toBe(true);
+    const game = ACTIONS.filter((_, i) => CONTEXT_MASK.game[i] === 1);
+    expect(game).toEqual(ACTIONS.filter((a) => !UI_ACTIONS.includes(a as never)));
+    expect(game).toContain('pause');
   });
 
   it('a key never acts in two contexts: the switching press is swallowed and must be released', () => {

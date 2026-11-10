@@ -66,7 +66,6 @@ export class Elite extends CreatureBase implements EliteVisual {
   private fractureBlend = 0;
   private regen = 0;
   private gait = 0;
-  private jointOpen = 0;
   private stumpHeat = 0;
   private readonly legs: Leg[];
   private readonly arms: ArmIk[];
@@ -85,8 +84,8 @@ export class Elite extends CreatureBase implements EliteVisual {
   private readonly hips: THREE.Bone; private readonly spine: THREE.Bone; private readonly chest: THREE.Bone;
   private readonly neck: THREE.Bone; private readonly head: THREE.Bone; private readonly jaw: THREE.Bone;
   private readonly ribR: THREE.Bone; private readonly ribL: THREE.Bone;
-  private readonly shR: THREE.Bone; private readonly armR: THREE.Bone; private readonly foreR: THREE.Bone; private readonly handR: THREE.Bone;
-  private readonly shL: THREE.Bone; private readonly armL: THREE.Bone; private readonly foreL: THREE.Bone; private readonly handL: THREE.Bone;
+  private readonly shR: THREE.Bone; private readonly armR: THREE.Bone; private readonly foreR: THREE.Bone;
+  private readonly shL: THREE.Bone; private readonly armL: THREE.Bone; private readonly foreL: THREE.Bone;
   private readonly clawR: THREE.Bone[]; private readonly clawL: THREE.Bone[];
   private readonly petals: THREE.Bone[]; private readonly jointCore: THREE.Bone;
 
@@ -102,8 +101,8 @@ export class Elite extends CreatureBase implements EliteVisual {
     this.hips = r.b('hips'); this.spine = r.b('spine'); this.chest = r.b('chest');
     this.neck = r.b('neck'); this.head = r.b('head'); this.jaw = r.b('jaw');
     this.ribR = r.b('ribR'); this.ribL = r.b('ribL');
-    this.shR = r.b('shR'); this.armR = r.b('armR'); this.foreR = r.b('foreR'); this.handR = r.b('handR');
-    this.shL = r.b('shL'); this.armL = r.b('armL'); this.foreL = r.b('foreL'); this.handL = r.b('handL');
+    this.shR = r.b('shR'); this.armR = r.b('armR'); this.foreR = r.b('foreR');
+    this.shL = r.b('shL'); this.armL = r.b('armL'); this.foreL = r.b('foreL');
     this.clawR = [0, 1, 2].map((i) => r.b('clawR' + i));
     this.clawL = [0, 1, 2].map((i) => r.b('clawL' + i));
     this.petals = [0, 1, 2, 3].map((i) => r.b('petal' + i));
@@ -236,7 +235,6 @@ export class Elite extends CreatureBase implements EliteVisual {
     this.fractureBlend = damp(this.fractureBlend, this.isFractured ? 1 : 0, 3, dt);
     const fr = this.fractureBlend;
     const open = this.isFractured ? 0 : Math.max(this.exposure('joint'), exposeAnim);
-    this.jointOpen = open;
     const droop = Math.max(open, fr) * alive;
     if (droop > 0) {
       rot(this.armR, -0.12 * droop, 0, -0.1 * droop);
@@ -257,6 +255,11 @@ export class Elite extends CreatureBase implements EliteVisual {
       this.coreGlow += regen * (1.0 + 1.4 * (0.5 + 0.5 * Math.sin(t * 2.6)));
       this.flare += regen * 0.45;
     }
+
+    // exposed core (post-Resonance finish): the ribcage is pulled open around it
+    const coreOpen = this.exposure('core') * alive;
+    rot(this.ribR, 0, -0.5 * coreOpen, 0);
+    rot(this.ribL, 0, 0.5 * coreOpen, 0);
 
     // ---- IK: legs first (hips are final), then any arm contacts
     this.root.updateWorldMatrix(true, false);
@@ -336,7 +339,7 @@ export class Elite extends CreatureBase implements EliteVisual {
     const deathW = this.weight('death');
     const on = 1 - smoothstep(0.3, 0.75, deathW) * (this.dead ? 1 : 0);
     this.groupGlow('eye', (0.8 + beat * 0.8 + noise1(t * 3.1) * 0.15) * on);
-    this.groupGlow('core', Math.max(0, 0.75 + beat * 0.7 + this.coreGlow) * on);
+    this.groupGlow('core', Math.max(0, 0.75 + beat * 0.7 + this.coreGlow + coreOpen * 1.6) * on);
     this.groupGlow('joint', this.isFractured ? 0 : (0.0 + open * (1.05 + beat * 0.5 + Math.sin(t * 5.2) * 0.08)) * on);
     this.groupGlow('stump', this.isFractured ? this.stumpHeat * (6.5 + Math.sin(t * 9) * 1.2) : 0);
     this.groupGlow('nodes', (0.6 + beat * 1.3) * on);

@@ -51,7 +51,7 @@ function colliderColor(c: ColliderRec): THREE.Color {
   if (!c.on) return COL.disabled;
   if (c.desc.cover === 'low') return COL.coverLow;
   if (c.desc.cover === 'high') return COL.coverHigh;
-  const m = maskOf(c.desc);
+  const m = c.mask;
   if (!(m & RAY_MOVE)) return COL.ghost;
   if (!(m & RAY_SIGHT)) return COL.seeThrough;
   return COL.solid;

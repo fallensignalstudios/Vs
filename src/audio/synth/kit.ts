@@ -346,7 +346,17 @@ export class Kit {
     const post = this.ac.createGain();
     post.gain.value = 1 / Math.sqrt(Math.max(drive, 0.25));
     pre.connect(ws);
-    ws.connect(post);
+    if (curve === 'asym') {
+      // an asymmetric transfer adds a DC term that follows the envelope (a thump on every note): block it
+      const dc = this.ac.createBiquadFilter();
+      dc.type = 'highpass';
+      dc.frequency.value = 24;
+      setQ(dc, 0.707);
+      ws.connect(dc);
+      dc.connect(post);
+    } else {
+      ws.connect(post);
+    }
     post.connect(to ?? this.out);
     return pre;
   }

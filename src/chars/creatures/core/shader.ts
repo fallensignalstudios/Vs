@@ -112,7 +112,7 @@ float cGroup = uGroup[int(vPart.x + 0.5)];
 float cDn = cNoise(cP * 5.5 + vPart.y * 3.0) * 0.72 + cN2 * 0.28;
 float cCut = uDissolve * 1.12 - 0.06;
 if (uDissolve > 0.0005 && cDn < cCut) discard;
-float cDEdge = uDissolve > 0.0005 ? smoothstep(cCut + 0.1, cCut, cDn) : 0.0;
+float cDEdge = uDissolve > 0.0005 ? smoothstep(cCut + 0.045, cCut, cDn) : 0.0;
 
 // grime + bevel wear
 diffuseColor.rgb *= 0.74 + 0.38 * cN1 * (0.55 + 0.45 * cN2);
@@ -190,7 +190,7 @@ const FRAG_EMISSIVE = /* glsl */ `
   vec3 cE = cBase * cEmi * uGlow * cGroup * cMottle * (1.0 - cFrost * 0.75);
   cE += cCorrEmi * (1.0 - cFrost);
   cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.3 + cCrack * 0.1);
-  cE += uDissolveColor * cDEdge * 5.0;
+  cE += uDissolveColor * cDEdge * 3.0;
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
   cE += uTelegraph.rgb * uTelegraph.a * cTp * (cFres * 0.75 + clamp(cEmi, 0.0, 1.0) * 2.2 + 0.012);
   cE += uRim.rgb * uRim.a * cFres * 1.4;

@@ -33,9 +33,9 @@ interface PulseDef {
  */
 export const PULSES: Readonly<Record<ScreenPulse, PulseDef>> = {
   // damage: the edges sink into a dark blood red — weight, not neon
-  hit: { glow: [0.035, 0, 0], wash: [0.004, 0, 0], tint: [1.5, 0.1, 0.07], tintAmount: 0.62, darken: 0.4, chroma: 1.4, frost: 0, attack: 0.03, decay: 0.55 },
+  hit: { glow: [0.035, 0, 0], wash: [0.004, 0, 0], tint: [0.85, 0.045, 0.035], tintAmount: 0.72, darken: 0.45, chroma: 1.4, frost: 0, attack: 0.03, decay: 0.55 },
   // sustain: a soft warm-green breath
-  heal: { glow: [0.021, 0.059, 0.032], wash: [0.002, 0.006, 0.003], tint: [0.8, 1.25, 0.9], tintAmount: 0.12, darken: 0, chroma: 0, frost: 0, attack: 0.14, decay: 0.9 },
+  heal: { glow: [0.02, 0.05, 0.03], wash: [0.002, 0.005, 0.003], tint: [0.85, 1.2, 0.95], tintAmount: 0.12, darken: 0, chroma: 0, frost: 0, attack: 0.14, decay: 0.9 },
   // Eclipse pressure spike (the sustained state is setCorruption)
   corruption: { glow: [0.025, 0.006, 0.098], wash: [0, 0, 0], tint: [0.7, 0.4, 1.5], tintAmount: 0.35, darken: 0.35, chroma: 1.2, frost: 0, attack: 0.08, decay: 0.8 },
   // Selene's Frost: still, pale, crystalline

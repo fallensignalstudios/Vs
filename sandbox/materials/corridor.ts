@@ -66,7 +66,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   for (const z of [-12, -7.2, -2.4, 2.4]) {
     add(box(0.5, 8, 0.9), 'whiteGold', [-9.85, 4, z]);
     add(box(0.06, 6.4, 0.34), 'goldDark', [-9.6, 3.6, z]);
-    add(box(0.04, 6.2, 0.07), 'goldChannel', [-9.57, 3.6, z], undefined, false);
+    add(box(0.04, 6.2, 0.035), 'goldChannel', [-9.57, 3.6, z], undefined, false);
     add(box(0.52, 0.16, 0.94), 'goldTrim', [-9.85, 0.5, z]);
     add(box(0.52, 0.1, 0.94), 'goldTrim', [-9.85, 6.9, z]);
     const pl = new THREE.PointLight(0xffc56b, 1.4, 6, 1.8); pl.position.set(-8.9, 2.4, z); root.add(pl);
@@ -83,7 +83,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   add(box(3.0, 3.7, 0.1), 'whiteGold', [-5.5, 1.85, -15.82]);
   add(box(0.05, 3.7, 0.06), 'goldChannel', [-5.5, 1.85, -15.76], undefined, false);
   add(box(0.3, 0.3, 0.1), 'whiteLight', [-5.5, 5.2, -15.9], undefined, false);
-  const wp = new THREE.PointLight(0xfff0d2, 9, 16, 1.8); wp.position.set(-5.5, 5.2, -14.6); root.add(wp);
+  const wp = new THREE.PointLight(0xfff0d2, 5, 16, 1.8); wp.position.set(-5.5, 5.2, -14.6); root.add(wp);
   // floor inlay
   strip('goldTrim', [-3.2, 0.004, -16], [-3.2, 0.004, 8], 0.07, 0.01);
   strip('goldTrim', [-7.8, 0.004, -16], [-7.8, 0.004, 8], 0.07, 0.01);
@@ -119,8 +119,8 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
     add(box(1.1, 8, 1.1), 'blackStone', [0, 4, z]);
     add(box(1.16, 0.12, 1.16), 'goldTrim', [0, 0.4, z]);
     add(box(1.16, 0.08, 1.16), 'goldTrim', [0, 5.6, z]);
-    add(box(0.04, 5, 0.04), 'goldChannel', [0.565, 3, z], undefined, false);
-    add(box(0.04, 5, 0.04), 'goldChannel', [-0.565, 3, z], undefined, false);
+    add(box(0.04, 5, 0.028), 'goldChannel', [0.565, 3, z], undefined, false);
+    add(box(0.04, 5, 0.028), 'goldChannel', [-0.565, 3, z], undefined, false);
   }
 
   // ---------------------------------------------------------------- right bay: black stone + channels
@@ -132,7 +132,7 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   const corruptFloor = floorR.material as THREE.MeshStandardMaterial;
   add(box(0.6, 8, 8), corruptWall, [10.3, 4, -3]);
   add(box(0.6, 8, 7), wallMat, [10.3, 4, 4.5]);
-  const chan = (pts: V3[]): void => { for (let i = 0; i < pts.length - 1; i++) strip('goldChannel', pts[i], pts[i + 1], 0.05, 0.03); };
+  const chan = (pts: V3[]): void => { for (let i = 0; i < pts.length - 1; i++) strip('goldChannel', pts[i], pts[i + 1], 0.028, 0.03); };
   chan([[9.98, 1.1, -16], [9.98, 1.1, -12], [9.98, 2.3, -10.8], [9.98, 2.3, -7.6], [9.98, 4.6, -5.3], [9.98, 4.6, 8]]);
   chan([[9.98, 0.35, -16], [9.98, 0.35, 8]]);
   chan([[9.98, 6.2, -16], [9.98, 6.2, -9], [9.98, 7.4, -7.8]]);
@@ -142,9 +142,9 @@ export function buildCorridor(h: Harness, mats: MaterialLibrary): Record<string,
   chan([[2.2, 0.006, 1.5], [8.6, 0.006, 1.5]]);
   for (const z of [-12.5, -6.5, -0.5, 5]) { const pl = new THREE.PointLight(0xffc56b, 1.6, 6, 1.8); pl.position.set(9.0, 1.6, z); root.add(pl); }
   // end wall: tall slit of white light
-  add(box(0.14, 7, 0.1), 'whiteLight', [5.5, 3.6, -15.95], undefined, false);
+  add(box(0.08, 7, 0.1), 'whiteLight', [5.5, 3.6, -15.95], undefined, false);
   add(box(1.3, 7.6, 0.16), 'goldDark', [5.5, 3.8, -16.0]);
-  const slit = new THREE.PointLight(0xfff0d2, 9, 18, 1.7); slit.position.set(5.5, 3.2, -14.4); root.add(slit);
+  const slit = new THREE.PointLight(0xfff0d2, 6, 18, 1.7); slit.position.set(5.5, 3.2, -14.4); root.add(slit);
 
   // Dominion gear: barricade + lamp + banner
   const bx = 4.2, bz = 3.2;

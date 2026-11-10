@@ -29,6 +29,21 @@ export interface SharedUniforms {
   uViewport: { value: THREE.Vector2 };
   /** NDC depth of the far plane for the active renderer: 1, or 0 with a reversed depth buffer */
   uFarZ: { value: number };
+  /** (Wound angular radius, Wound visibility, red remnant angular radius, red remnant visibility) */
+  uBodies: { value: THREE.Vector4 };
+  /** linear HDR colour of the live fleet-battle light and the direction it comes from */
+  uBattleGlow: { value: THREE.Color };
+  uBattleDir: { value: THREE.Vector3 };
+  /**
+   * Dome shading detail for the pass being drawn: 0 = low, 1 = medium, 2 = high / ultra. Follows
+   * `game.render.quality.level`, and drops to 0 for small secondary targets (reflections, PMREM faces).
+   */
+  uDetail: { value: number };
+  /** the main view's tier (not read by shaders; `viewportTracker` copies it into uDetail per pass) */
+  uDetailMain: { value: number };
+  /** a transient world-space point light (the carrier's contact flash) that lights every scenic surface near it */
+  uFlashPos: { value: THREE.Vector3 };
+  uFlashColor: { value: THREE.Color };
 }
 
 export function createSharedUniforms(): SharedUniforms {
@@ -50,6 +65,13 @@ export function createSharedUniforms(): SharedUniforms {
     uHazeFall: { value: 9 },
     uViewport: { value: new THREE.Vector2(1280, 720) },
     uFarZ: { value: 1 },
+    uBodies: { value: new THREE.Vector4(0.1, 0, 0.07, 0) },
+    uBattleGlow: { value: new THREE.Color(0, 0, 0) },
+    uBattleDir: { value: new THREE.Vector3(0, 1, 0) },
+    uDetail: { value: 2 },
+    uDetailMain: { value: 2 },
+    uFlashPos: { value: new THREE.Vector3() },
+    uFlashColor: { value: new THREE.Color(0, 0, 0) },
   };
 }
 
@@ -69,6 +91,8 @@ export function applySharedState(u: SharedUniforms, s: SkyState): void {
   u.uHazeDensity.value = s.scenicHaze;
   u.uHazeAmt.value = s.hazeAmt;
   u.uHazeFall.value = s.hazeFall;
+  u.uBodies.value.set(Math.max(s.woundRadius, 1e-3), s.woundVis, Math.max(s.redRadius, 1e-3), s.redVis);
+  u.uBattleDir.value.copy(s.battleDir);
 }
 
 const _size = new THREE.Vector2();
@@ -81,9 +105,14 @@ const _size = new THREE.Vector2();
 export function viewportTracker(u: SharedUniforms): THREE.Object3D['onBeforeRender'] {
   return (renderer) => {
     const rt = renderer.getRenderTarget();
+    renderer.getDrawingBufferSize(_size);
     if (rt) u.uViewport.value.set(rt.width, rt.height);
-    else u.uViewport.value.copy(renderer.getDrawingBufferSize(_size));
+    else u.uViewport.value.copy(_size);
     u.uFarZ.value = renderer.capabilities.reversedDepthBuffer ? 0 : 1;
+    // reflection, transmission and PMREM targets are much smaller than the frame: nobody can see the fine
+    // debris or the lensing arcs there, so those passes shade the cheapest tier
+    const secondary = !!rt && rt.width * rt.height < _size.x * _size.y * 0.3;
+    u.uDetail.value = secondary ? 0 : u.uDetailMain.value;
   };
 }
 

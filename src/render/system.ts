@@ -63,6 +63,8 @@ export class RenderSystemImpl implements RenderSystem {
   private envDirty = true;
   private envOpts: EnvRefreshOpts = {};
   private initialised = false;
+  private postBroken = false;
+  private reflectionsBroken = false;
   private readonly size = new THREE.Vector2();
   private readonly tmpSky = new THREE.Color();
   private readonly tmpGround = new THREE.Color();
@@ -161,7 +163,7 @@ export class RenderSystemImpl implements RenderSystem {
     const prev = renderer.getRenderTarget();
     try {
       // Programs are keyed by output colour space: compile for the buffer the scene really renders into.
-      if (this.post) renderer.setRenderTarget(this.post.sceneBuffer);
+      if (this.post && !this.postBroken) renderer.setRenderTarget(this.post.sceneBuffer);
       const ready = renderer.compileAsync(this.scene, camera);
       renderer.setRenderTarget(prev);
       await ready;
@@ -302,7 +304,7 @@ export class RenderSystemImpl implements RenderSystem {
     this.hemi.groundColor.setRGB(a[L.ambientGround], a[L.ambientGround + 1], a[L.ambientGround + 2]);
     this.hemi.intensity = Math.max(0, a[L.ambientIntensity]);
     this.scene.environmentIntensity = Math.max(0, a[L.envIntensity]);
-    if (this.post) this.post.applyLook(a);
+    if (this.post && !this.postBroken) this.post.applyLook(a);
     else this.renderer.toneMappingExposure = Math.max(0, a[L.exposure]);
   }
 
@@ -388,7 +390,7 @@ export class RenderSystemImpl implements RenderSystem {
 
     if (this.blender.update(step)) this.applyLook();
     this.feedback.update(step);
-    const post = this.post;
+    const post = this.postBroken ? null : this.post;
     if (post) {
       post.setCamera(camera);
       post.applyFeedback(this.feedback.out, this.blender.current[L.chromaticAberration]);
@@ -396,32 +398,59 @@ export class RenderSystemImpl implements RenderSystem {
     if (this.envDirty) this.bakeEnvironment();
 
     renderer.info.reset();
-    const reflecting = this.quality.reflections
-      ? this.reflections.render(renderer, this.scene, camera, step)
-      : (this.reflections.suspend(), false);
+    const reflecting = this.renderReflections(camera, step);
 
     // Shadow maps are view independent: refresh them once, in the first scene render of the frame.
     const shadow = renderer.shadowMap;
     shadow.autoUpdate = false;
     shadow.needsUpdate = true;
-    if (post) {
-      post.render(step);
-    } else {
-      renderer.setRenderTarget(null);
-      renderer.clear(true, true, true);
-      renderer.render(this.scene, camera);
+    try {
+      if (post) post.render(step);
+      else this.renderDirect(camera);
+    } catch (err) {
+      if (!post) throw err;
+      // A broken post chain must not black out a 50-minute mission: drop to direct rendering for good.
+      console.error('[render] post-processing failed — falling back to direct rendering', err);
+      this.postBroken = true;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = Math.max(0, this.blender.current[L.exposure]);
+      this.renderDirect(camera);
+    } finally {
+      shadow.autoUpdate = true;
     }
-    shadow.autoUpdate = true;
 
     const info = renderer.info.render;
     const s = this.stats;
     s.drawCalls = info.calls;
     s.triangles = info.triangles;
-    s.sceneDrawCalls = post ? post.sceneCalls : info.calls;
-    s.sceneTriangles = post ? post.sceneTriangles : info.triangles;
+    s.sceneDrawCalls = post && !this.postBroken ? post.sceneCalls : info.calls;
+    s.sceneTriangles = post && !this.postBroken ? post.sceneTriangles : info.triangles;
     s.reflectionActive = reflecting;
 
     this.adapt(frameMs);
+  }
+
+  private renderDirect(camera: THREE.Camera): void {
+    const renderer = this.renderer;
+    renderer.setRenderTarget(null);
+    renderer.clear(true, true, true);
+    renderer.render(this.scene, camera);
+  }
+
+  /** Mirror pass for the active floor plane; a failure disables planar reflections for the session. */
+  private renderReflections(camera: THREE.Camera, step: number): boolean {
+    if (!this.quality.reflections || this.reflectionsBroken) {
+      this.reflections.suspend();
+      return false;
+    }
+    try {
+      return this.reflections.render(this.renderer, this.scene, camera, step);
+    } catch (err) {
+      console.error('[render] planar reflections failed — using environment reflections only', err);
+      this.reflectionsBroken = true;
+      this.reflections.release();
+      return false;
+    }
   }
 
   /**

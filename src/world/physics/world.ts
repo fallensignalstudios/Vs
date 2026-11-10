@@ -43,8 +43,8 @@ for (let i = 0; i < LEDGE_RING; i++) {
 }
 
 /**
- * Default ledge margin for a body radius: 0.25 m or 60 % of the radius, whichever is larger, never more than
- * the radius itself (0.25 m for a 0.4 m human, 0.72 m for the 1.2 m elite).
+ * Default ledge margin for a body radius: 0.25 m or half the radius, whichever is larger, never more than
+ * the radius itself (0.25 m for every human-sized body up to 0.5 m, 0.6 m for the 1.2 m elite).
  */
 export function edgeMarginFor(radius: number): number {
   if (!(radius > 0)) return 0;
@@ -255,13 +255,14 @@ export class PhysicsCore implements RecOwner {
   }
 
   /**
-   * Ground for a point that is on no surface but inside a crack: a surface edge within half the tolerance
-   * whose far side — walking straight out across the crack — is floor again within GAP_TOL of that edge.
-   * A crack is therefore either closed over its whole width or left alone, never narrowed to a sliver.
+   * Ground for a point inside a crack: a surface edge within half the tolerance whose far side — walking
+   * straight out across the crack — is floor again within GAP_TOL of that edge. A crack is therefore either
+   * closed over its whole width or left alone, never narrowed to a sliver. `below` is the height exactY()
+   * just found here (a lower level under the crack, or NaN); only a crack above it is of interest.
    */
-  private crackY(x: number, z: number, limit: number, stepUp: number): number {
-    let best = NaN;
-    let bestS: SurfaceRec | null = null;
+  private crackY(x: number, z: number, limit: number, stepUp: number, below: number): number {
+    let best = below;
+    let bestS = this.lastSurface;
     const list = this.surfaceHash.cellAt(x, z);
     const big = this.surfaceHash.big;
     const n0 = list ? list.length : 0;
@@ -271,7 +272,7 @@ export class PhysicsCore implements RecOwner {
       const a = s.outside(x, z);
       if (a <= 0 || a > GAP_TOL * 0.5) continue;
       const h = s.heightNear(x, z);
-      if (h > limit || (bestS !== null && h <= best)) continue;
+      if (h > limit || h <= best) continue;
       const nx = SURF_OUT.x, nz = SURF_OUT.z;
       const reach = GAP_TOL - a;
       for (let t = GAP_STEP; ; t += GAP_STEP) {
@@ -292,7 +293,10 @@ export class PhysicsCore implements RecOwner {
   groundY(x: number, z: number, yRef: number, stepUp: number): number {
     const limit = yRef + stepUp + 1e-6;
     const g = this.exactY(x, z, limit);
-    return g === g ? g : this.crackY(x, z, limit, stepUp);
+    // ground at the reference level is the common case; otherwise (nothing here, or only a level further
+    // down) the point may be in a crack of the level it was asked about
+    if (g === g && yRef - g <= stepUp + 1e-6) return g;
+    return this.crackY(x, z, limit, stepUp, g);
   }
 
   /**

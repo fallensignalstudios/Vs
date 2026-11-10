@@ -126,9 +126,9 @@ export const kingWitness: ArchetypeDef = {
   proportions: () => ({ height: 2.08, shoulder: 0.186, hip: 0.094, bulk: 0.94, fem: 0.3 }),
   build(ctx) {
     const { b, rig, draft } = ctx;
-    const light: Surf = { color: 0xe6dcc4, rough: 0.5, metal: 0.1, part: PART.robe };
+    const light: Surf = { color: 0xcfc5ad, rough: 0.5, metal: 0.1, part: PART.robe };
     const gold: Surf = { color: 0xc9a45c, rough: 0.35, metal: 0.8, part: PART.robe };
-    const core: Surf = { color: 0xfff0cf, rough: 0.4, part: PART.glow, emissive: 0xffe2a8, glow: 3.4 };
+    const core: Surf = { color: 0xfff0cf, rough: 0.4, part: PART.glow, emissive: 0xffe2a8, glow: 2.4 };
     buildBody(b, rig, { suit: light, skin: light, glove: light, boot: light });
     // featureless head: a calm ovoid, no face
     const hp = rig.p('head');
@@ -165,8 +165,8 @@ export const kingWitness: ArchetypeDef = {
     draft.loadout = { melee: false, ranged: false, shield: false, prop: 'none' };
     draft.moveset = WITNESS_MOVES;
     draft.ghost = true;
-    draft.luminous = 0.55;
-    draft.rim = { color: 0xffe2a8, amount: 0.6 };
+    draft.luminous = 0.26;
+    draft.rim = { color: 0xffe2a8, amount: 0.45 };
     draft.breath = 0.4;
   },
 };

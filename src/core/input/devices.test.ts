@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Game, GameEvents } from '@/core/api';
 import { Emitter } from '@/core/events';
 import { SettingsStoreImpl } from '@/core/settings';
-import { PAD_YAW_RATE, RELOAD_HOLD, shapeStick } from './gamepad';
+import { PAD_YAW_RATE, shapeStick } from './gamepad';
 import { createInputSystem } from './index';
 import { KEY_YAW_RATE, MOUSE_RAD_PER_PX } from './system';
 import { DT, makePad, rig } from './testkit';
@@ -62,7 +62,6 @@ describe('move and look', () => {
     r.mouseDown(2);
     r.mouseMove(40, 10);
     r.tick();
-    expect(r.input.down('aim')).toBe(true);
     expect(r.input.look.x).toBeCloseTo(-40 * MOUSE_RAD_PER_PX, 8);
     expect(r.input.look.y).toBeCloseTo(-10 * MOUSE_RAD_PER_PX, 8);
     r.mouseUp(2);
@@ -93,7 +92,7 @@ describe('move and look', () => {
     const r = rig({ lock: 'none' });
     r.keyDown('KeyW');
     r.keyDown('KeyQ');
-    r.mouseDown(2);
+    r.aimHold();
     r.tick();
     expect(r.input.down('guard')).toBe(true);
     expect(r.input.down('aim')).toBe(true);
@@ -245,6 +244,7 @@ describe('gamepad', () => {
     const r = rig({ settings: { gamepadSensitivity: 2 } });
     const pad = makePad();
     r.pads[0] = pad;
+    r.tick(); // sticks are trusted once they have been seen at rest
     pad.axes[2] = 0.56; // half deflection → 0.25 after the squared curve
     r.tick();
     expect(r.input.look.x).toBeCloseTo(-0.25 * PAD_YAW_RATE * 2 * DT, 6);
@@ -271,10 +271,11 @@ describe('gamepad', () => {
     expect(r.input.pressed('attack')).toBe(true);
   });
 
-  it('latches sprint on L3 until the stick relaxes; holding X reloads', () => {
+  it('latches sprint on L3 until the stick relaxes; X swings, or reloads while aiming', () => {
     const r = rig();
     const pad = makePad();
     r.pads[0] = pad;
+    r.tick();
     pad.axes[1] = -1;
     pad.buttons[10].pressed = true;
     r.tick();
@@ -285,12 +286,20 @@ describe('gamepad', () => {
     r.tick();
     expect(r.input.down('sprint')).toBe(false);
 
-    pad.buttons[2].pressed = true;
+    pad.buttons[2].pressed = true; // X with the weapon lowered: a swing, however long it is held
     r.tick();
     expect(r.input.pressed('attack')).toBe(true);
+    r.tick(60);
     expect(r.input.down('reload')).toBe(false);
-    r.tick(Math.ceil(RELOAD_HOLD / DT));
-    expect(r.input.down('reload')).toBe(true);
+    pad.buttons[2].pressed = false;
+    r.tick();
+    pad.buttons[6].value = 1; // aiming: RT is the trigger, X reloads and never swings first
+    r.tick();
+    pad.buttons[2].pressed = true;
+    r.tick();
+    expect(r.input.pressed('reload')).toBe(true);
+    expect(r.input.down('attack')).toBe(false);
+    expect(r.input.glyph('reload')).toBe('D↓');
   });
 
   it('left stick and d-pad drive menu directions', () => {
@@ -298,6 +307,7 @@ describe('gamepad', () => {
     const pad = makePad();
     r.pads[0] = pad;
     r.input.setContext('menu');
+    r.tick();
     pad.axes[1] = 0.9;
     r.tick();
     expect(r.input.pressed('menuDown')).toBe(true);

@@ -5,8 +5,9 @@
 import type { ButtonAction, Game, InputContext, InputSystem } from '@/core/api';
 import { clamp } from '@/core/mathx';
 import { A, ACTION_COUNT, ActionStates, actionIndex } from './actions';
-import { KEY_BINDINGS, LOOK_KEYS, MOUSE_BINDINGS, MOVE_KEYS, glyphFor, type InputDevice } from './bindings';
+import { Keymap, LOOK_KEYS, MOUSE_BINDINGS, MOVE_KEYS, glyphFor, type InputDevice, type LayoutMap } from './bindings';
 import { GamepadReader, type PadLike } from './gamepad';
+import { PointerLock, type LockCanvas, type LockDoc } from './lock';
 import { VirtualInputImpl } from './virtual';
 
 /** radians of look per pixel of mouse travel at sensitivity 1 */
@@ -17,32 +18,39 @@ export const KEY_PITCH_RATE = 1.4;
 const KEY_LOOK_RAMP = 0.16;
 /** a single mouse event larger than this is a browser warp glitch, not a hand */
 const MOUSE_SPIKE = 600;
-/** consecutive pointer-lock denials before canvas clicks stop retrying (sandboxed iframes) */
-const MAX_LOCK_STRIKES = 3;
-const LOCK_RETRY_COOLDOWN = 1.5;
-/** a request that neither resolves nor errors (old engines) stops blocking new ones after this long */
-const LOCK_PENDING_TIMEOUT = 1.5;
+/**
+ * Without pointer lock the right button both looks (drag) and aims (hold). A press that travels this many
+ * pixels within AIM_HOLD seconds is a look drag and never aims; one that stays put becomes 'aim'.
+ */
+export const DRAG_PIXELS = 6;
+export const AIM_HOLD = 0.15;
+const RMB = 2;
+const RMB_IDLE = 0;
+const RMB_PENDING = 1;
+const RMB_LOOK = 2;
+const RMB_AIM = 3;
+const BINDINGS_KEY = 'aurelion.bindings.v1';
 
 type Listener = (e: Event) => void;
 interface Listenable {
   addEventListener(type: string, fn: Listener, opts?: unknown): void;
   removeEventListener(type: string, fn: Listener, opts?: unknown): void;
 }
-interface CanvasLike extends Listenable {
-  requestPointerLock?: (opts?: { unadjustedMovement?: boolean }) => unknown;
-}
-interface DocLike extends Listenable {
-  readonly pointerLockElement?: unknown;
+interface CanvasLike extends Listenable, LockCanvas {}
+interface DocLike extends Listenable, LockDoc {
   readonly hidden?: boolean;
-  exitPointerLock?: () => void;
 }
 
-/** Everything the input system needs from the browser. Any member may be null (headless). */
+/** Everything the input system needs from the browser. Any member may be null / absent (headless). */
 export interface InputEnv {
   win: Listenable | null;
   doc: DocLike | null;
   canvas: CanvasLike | null;
   getGamepads: () => ArrayLike<PadLike | null> | null;
+  /** navigator.keyboard.getLayoutMap, where the browser has it (glyphs for non-QWERTY layouts) */
+  getLayoutMap?: (() => Promise<LayoutMap>) | null;
+  /** where key rebinds persist (localStorage); access is guarded */
+  storage?: { getItem(key: string): string | null; setItem(key: string, value: string): void } | null;
 }
 
 interface KeyEv {
@@ -85,36 +93,49 @@ export class InputSystemImpl implements InputSystem {
 
   private readonly states = new ActionStates();
   private readonly pad: GamepadReader;
+  private readonly lock: PointerLock;
+  private readonly keymap = new Keymap();
+  private layout: LayoutMap | null = null;
   private readonly keys = new Set<string>();
   private readonly mouseHeld = new Uint8Array(MOUSE_BINDINGS.length);
+  /** thumb buttons whose press landed on the canvas: their release must not navigate the browser */
+  private readonly navHeld = new Uint8Array(8);
   /** number of physical keys/buttons currently holding each action */
   private readonly count = new Uint8Array(ACTION_COUNT);
   /** went down since the last tick (so a tap shorter than a frame still registers) */
   private readonly tap = new Uint8Array(ACTION_COUNT);
+  /** fully released since the last tick (so release + re-press inside one frame is still a new press) */
+  private readonly upSince = new Uint8Array(ACTION_COUNT);
   private readonly listeners: Array<[Listenable, string, Listener, unknown]> = [];
+  private readonly deviceListeners: Array<(device: InputDevice) => void> = [];
+  private readonly allowScratch: number[] = [];
 
   private _device: InputDevice = 'kbm';
+  private notifiedDevice: InputDevice = 'kbm';
   private accX = 0;
   private accY = 0;
   private mouseTravel = 0;
   private skipMouse = 0;
   private keyLook = 0;
-  private locked = false;
-  private lockPending = false;
-  private lockPendingLeft = 0;
-  private lockDenied = false;
-  private lockStrikes = 0;
-  private lockCooldown = 0;
+  private rmb = RMB_IDLE;
+  private rmbTime = 0;
+  private rmbTravel = 0;
   private padProbe = 0;
   private worldActive = false;
   private toggleHolds = false;
+  /** sim-substep edge gating: see `edgesLive` */
+  private latchNow = NaN;
+  private simNow = NaN;
+  private afterSim = true;
 
   constructor(private readonly game: Game, private readonly env: InputEnv) {
     this.pad = new GamepadReader(env.getGamepads);
-    if (env.canvas && typeof env.canvas.requestPointerLock !== 'function') {
-      this.lockDenied = true;
-      this.lockStrikes = MAX_LOCK_STRIKES;
-    }
+    this.lock = new PointerLock(env.canvas, env.doc, () => {
+      this.skipMouse = 1; // first delta after capture is often a warp
+      this.accX = this.accY = 0;
+    });
+    this.loadBindings();
+    this.readLayout();
     this.bind();
   }
 
@@ -131,11 +152,11 @@ export class InputSystemImpl implements InputSystem {
   }
 
   get pointerLocked(): boolean {
-    return this.locked;
+    return this.lock.locked;
   }
 
   get lookMode(): 'locked' | 'drag' | 'stick' {
-    return this._device === 'gamepad' ? 'stick' : this.locked ? 'locked' : 'drag';
+    return this._device === 'gamepad' ? 'stick' : this.lock.locked ? 'locked' : 'drag';
   }
 
   get gamepadConnected(): boolean {
@@ -151,11 +172,24 @@ export class InputSystemImpl implements InputSystem {
   }
 
   pressed(a: ButtonAction): boolean {
-    return this.states.pressed(actionIndex(a));
+    const i = actionIndex(a);
+    if (!this.states.pressed(i) || !this.edgesLive()) return false;
+    this.states.sawPress(i);
+    return true;
   }
 
   released(a: ButtonAction): boolean {
-    return this.states.released(actionIndex(a));
+    const i = actionIndex(a);
+    if (!this.states.released(i) || !this.edgesLive()) return false;
+    this.states.sawRelease(i);
+    return true;
+  }
+
+  take(a: ButtonAction): boolean {
+    const i = actionIndex(a);
+    if (!this.states.pressed(i) || !this.edgesLive()) return false;
+    this.states.consume(i);
+    return true;
   }
 
   heldTime(a: ButtonAction): number {
@@ -179,52 +213,90 @@ export class InputSystemImpl implements InputSystem {
   }
 
   glyph(a: ButtonAction): string {
-    return glyphFor(a, this._device, this.pad.style);
+    return glyphFor(a, this._device, this.pad.style, this.keymap, this.layout);
   }
 
   glyphFor(a: ButtonAction, device: InputDevice): string {
-    return glyphFor(a, device === 'gamepad' ? 'gamepad' : 'kbm', this.pad.style);
+    return glyphFor(a, device === 'gamepad' ? 'gamepad' : 'kbm', this.pad.style, this.keymap, this.layout);
+  }
+
+  onDeviceChange(fn: (device: InputDevice) => void): () => void {
+    if (typeof fn !== 'function') return () => {};
+    this.deviceListeners.push(fn);
+    return () => {
+      const i = this.deviceListeners.indexOf(fn);
+      if (i >= 0) this.deviceListeners.splice(i, 1);
+    };
+  }
+
+  rebind(a: ButtonAction, code: string): boolean {
+    if (actionIndex(a) < 0) return false;
+    this.releaseAll(); // counts are per key: never carry a held key across a map change
+    const ok = this.keymap.rebind(a, code);
+    if (ok) this.saveBindings();
+    return ok;
+  }
+
+  bindingOf(a: ButtonAction): string | null {
+    return this.keymap.keyOf(a);
+  }
+
+  resetBindings(): void {
+    this.releaseAll();
+    this.keymap.reset();
+    this.saveBindings();
+  }
+
+  allowInGame(actions: readonly ButtonAction[] | null): void {
+    const slots = this.allowScratch;
+    slots.length = 0;
+    if (Array.isArray(actions)) {
+      for (const a of actions) {
+        const i = actionIndex(a);
+        if (i >= 0) slots.push(i);
+      }
+    }
+    this.mergePhysical();
+    this.states.allowInGame(slots);
   }
 
   setContext(ctx: InputContext): void {
-    if (ctx === this.states.context) return;
+    const prev = this.states.context;
+    if (ctx === prev) return;
     // Fold in events that arrived since the last tick so they cannot leak into the new context.
     this.mergePhysical();
     this.tap.fill(0);
+    this.upSince.fill(0);
+    this.states.retap.fill(0);
     this.states.setContext(ctx);
-    if (this.states.context !== 'game') {
+    const now = this.states.context;
+    if (now === prev) return; // unknown context: ignored
+    if (now !== 'game') {
       this.move.x = this.move.y = 0;
       this.look.x = this.look.y = 0;
       this.worldActive = false;
       this.accX = this.accY = 0;
     }
+    // The input system owns the lock: menus get the cursor back without every caller having to remember
+    // exitPointerLock(), and play takes it again on return. Cinematics keep it (no cursor over a shot).
+    if (now === 'menu') this.lock.suspend();
+    else if (now === 'game') this.lock.restore();
   }
 
   requestPointerLock(): void {
-    const { canvas, doc } = this.env;
-    if (!canvas || !doc || typeof canvas.requestPointerLock !== 'function') {
-      this.lockDenied = true;
-      return;
-    }
-    if (this.locked || this.lockPending) return;
-    this.lockPending = true;
-    this.lockPendingLeft = LOCK_PENDING_TIMEOUT;
-    this.tryLock(true);
+    this.lock.request();
   }
 
   exitPointerLock(): void {
-    const doc = this.env.doc;
-    this.lockPending = false;
-    if (!doc || !this.locked || typeof doc.exitPointerLock !== 'function') return;
-    try {
-      doc.exitPointerLock();
-    } catch {
-      /* nothing to release */
-    }
+    this.lock.exit();
   }
 
   rumble(strong: number, weak: number, ms: number): void {
     if (this._device === 'gamepad') this.pad.rumble(num(strong, 0), num(weak, 0), num(ms, 0));
+  }
+
+  endSim(): void {
+    this.afterSim = true;
   }
 
   update(dt: number): void {
@@ -242,16 +314,23 @@ export class InputSystemImpl implements InputSystem {
     }
     if (this.mouseTravel > 4) this._device = 'kbm';
     this.mouseTravel = 0;
-    if (this.lockCooldown > 0) this.lockCooldown -= d;
-    if (this.lockPending && (this.lockPendingLeft -= d) <= 0) this.lockPending = false;
+    if (this._device === 'gamepad' && !pad.connected) this._device = 'kbm'; // unplugged
+    this.lock.update(d);
+    this.resolveDrag(d);
 
     // Buttons.
     this.mergePhysical();
     this.tap.fill(0);
+    this.upSince.fill(0);
     const virt = this.states.virt;
     for (let i = 0; i < ACTION_COUNT; i++) virt[i] = v.holds[i] | v.presses[i];
     this.toggleHolds = this.game.settings.get('holdToToggle') === true;
-    this.states.latch(d, this.toggleHolds);
+    // No sim step since the previous latch (hit-stop): unread gameplay edges stay up for the frozen frames.
+    const clock = this.simClock();
+    this.states.latch(d, this.toggleHolds, clock === this.latchNow);
+    this.latchNow = clock;
+    this.simNow = NaN;
+    this.afterSim = false;
 
     // Move (camera-relative; y = forward).
     let mx = 0;
@@ -311,23 +390,86 @@ export class InputSystemImpl implements InputSystem {
     this.look.y = ly;
 
     v.endFrame(d);
+    if (this._device !== this.notifiedDevice) this.notifyDevice();
   }
 
-  /** Remove every DOM listener (hot reload / tests). */
   dispose(): void {
     for (const [target, type, fn, opts] of this.listeners) target.removeEventListener(type, fn, opts);
     this.listeners.length = 0;
+    this.deviceListeners.length = 0;
+    this.releaseAll();
   }
 
   // -------------------------------------------------------------------------------------------
   // internals
   // -------------------------------------------------------------------------------------------
 
+  /** `game.time.now` when the host has a simulation clock, else NaN */
+  private simClock(): number {
+    const now = (this.game as { time?: { now?: unknown } }).time?.now;
+    return typeof now === 'number' ? now : NaN;
+  }
+
+  /**
+   * Edges are latched once per FRAME, but the simulation may run several substeps in that frame (below
+   * 45 fps). Each press / release is shown to one substep only — the first one that asks — so sim code never
+   * sees the same press twice; frame-level readers (before the sim, or after `endSim()`) always see it.
+   */
+  private edgesLive(): boolean {
+    if (this.afterSim) return true;
+    const now = this.simClock();
+    if (now !== now || now === this.latchNow) return true;
+    if (this.simNow !== this.simNow) this.simNow = now;
+    return now === this.simNow;
+  }
+
+  private notifyDevice(): void {
+    const device = (this.notifiedDevice = this._device);
+    for (const fn of this.deviceListeners) {
+      try {
+        fn(device);
+      } catch (err) {
+        console.warn('[input] device listener threw', err);
+      }
+    }
+  }
+
   private mergePhysical(): void {
     const raw = this.states.raw;
     const { count, tap } = this;
     const padDown = this.pad.down;
     for (let i = 0; i < ACTION_COUNT; i++) raw[i] = count[i] > 0 || tap[i] || padDown[i] ? 1 : 0;
+  }
+
+  /** a physical key / button for these actions went down */
+  private press(bound: readonly ButtonAction[]): void {
+    for (let i = 0; i < bound.length; i++) {
+      const a = A[bound[i]];
+      this.count[a]++;
+      this.tap[a] = 1;
+      if (this.upSince[a]) this.states.retap[a] = 1;
+    }
+  }
+
+  private unpress(bound: readonly ButtonAction[]): void {
+    for (let i = 0; i < bound.length; i++) {
+      const a = A[bound[i]];
+      if (this.count[a] > 0 && --this.count[a] === 0) this.upSince[a] = 1;
+    }
+  }
+
+  /** Decide what a right-button press without pointer lock means: look drag, or aim. */
+  private resolveDrag(dt: number): void {
+    if (this.rmb !== RMB_PENDING) return;
+    if (this.rmbTravel >= DRAG_PIXELS) {
+      this.rmb = RMB_LOOK;
+      return;
+    }
+    this.rmbTime += dt;
+    if (this.rmbTime >= AIM_HOLD) {
+      this.rmb = RMB_AIM;
+      this.press(MOUSE_BINDINGS[RMB]);
+    }
   }
 
   private on(target: Listenable | null, type: string, fn: Listener, opts?: unknown): void {
@@ -352,8 +494,8 @@ export class InputSystemImpl implements InputSystem {
       if (!doc || doc.hidden !== false) this.releaseAll();
     });
     this.on(doc, 'mousemove', (e) => this.onMouseMove(mouse(e)));
-    this.on(doc, 'pointerlockchange', () => this.onLockChange());
-    this.on(doc, 'pointerlockerror', () => this.onLockDenied());
+    this.on(doc, 'pointerlockchange', () => this.lock.onChange());
+    this.on(doc, 'pointerlockerror', () => this.lock.onDenied());
     this.on(canvas, 'mousedown', (e) => this.onMouseDown(mouse(e)));
     this.on(canvas, 'contextmenu', (e) => e.preventDefault());
     this.on(canvas, 'auxclick', (e) => e.preventDefault());
@@ -362,135 +504,144 @@ export class InputSystemImpl implements InputSystem {
   private onKeyDown(e: KeyEv): void {
     if (isTextTarget(e.target)) return;
     const code = e.code;
-    const bound = KEY_BINDINGS[code];
+    const bound = this.keymap.get(code);
     if (!bound) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return; // browser / OS shortcut, not ours
     this._device = 'kbm';
+    const ctx = this.states.context;
     // In menus a focused button/link keeps its native Enter/Space activation and that is the ONLY activation
     // (no `confirm` as well). During play the game owns those keys even if a stale UI element holds focus.
-    if (this.states.context === 'menu' && isActivatable(e.target) && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
-    e.preventDefault();
-    if (e.repeat || this.keys.has(code)) return;
+    if (ctx === 'menu' && isActivatable(e.target) && (code === 'Enter' || code === 'NumpadEnter' || code === 'Space')) return;
+    // The game owns its keys during play. Elsewhere only keys that act in that context are taken from the
+    // browser, and never Tab — DOM menus need focus traversal.
+    if (ctx === 'game' || (code !== 'Tab' && this.acts(bound))) e.preventDefault();
+    // (An auto-repeat for a key we are not tracking means its first press was swallowed — typically by a
+    //  modifier held at the time — so it counts as the press.)
+    if (this.keys.has(code)) return;
     this.keys.add(code);
-    for (let i = 0; i < bound.length; i++) {
-      const a = A[bound[i]];
-      this.count[a]++;
-      this.tap[a] = 1;
-    }
+    this.press(bound);
+  }
+
+  private acts(bound: readonly ButtonAction[]): boolean {
+    for (let i = 0; i < bound.length; i++) if (this.states.allowed(A[bound[i]])) return true;
+    return false;
   }
 
   private onKeyUp(e: KeyEv): void {
     const code = e.code;
     if (!this.keys.delete(code)) return;
-    const bound = KEY_BINDINGS[code];
-    if (!bound) return;
-    for (let i = 0; i < bound.length; i++) {
-      const a = A[bound[i]];
-      if (this.count[a] > 0) this.count[a]--;
-    }
+    const bound = this.keymap.get(code);
+    if (bound) this.unpress(bound);
   }
 
   private onMouseDown(e: MouseEv): void {
     const b = e.button;
     if (b >= 1) e.preventDefault(); // middle-click autoscroll, thumb-button history navigation
+    if (b >= 3 && b < this.navHeld.length) this.navHeld[b] = 1;
     this._device = 'kbm';
-    if (this.states.context === 'game' && !this.locked && this.canAutoLock()) {
-      const firstAttempt = !this.lockDenied;
-      this.requestPointerLock();
+    const lock = this.lock;
+    if (this.states.context === 'game' && !lock.locked && lock.canAutoLock) {
+      const firstAttempt = !lock.denied;
+      lock.request();
       if (b === 0 && firstAttempt) return; // the click that captures the mouse is not an attack
     }
     const bound = MOUSE_BINDINGS[b];
     if (!bound || this.mouseHeld[b]) return;
     this.mouseHeld[b] = 1;
-    for (let i = 0; i < bound.length; i++) {
-      const a = A[bound[i]];
-      this.count[a]++;
-      this.tap[a] = 1;
+    if (b === RMB && !lock.locked) {
+      // no pointer lock: this press may be a look drag — `resolveDrag` decides
+      this.rmb = RMB_PENDING;
+      this.rmbTime = this.rmbTravel = 0;
+      return;
     }
+    if (b === RMB) this.rmb = RMB_AIM;
+    this.press(bound);
   }
 
   private onMouseUp(e: MouseEv): void {
     const b = e.button;
-    if (b >= 3 && this.locked) e.preventDefault();
+    if (b >= 3 && (this.lock.locked || this.navHeld[b] === 1)) e.preventDefault(); // Mouse4/5: no browser Back
+    if (b >= 3 && b < this.navHeld.length) this.navHeld[b] = 0;
     const bound = MOUSE_BINDINGS[b];
     if (!bound || !this.mouseHeld[b]) return;
     this.mouseHeld[b] = 0;
-    for (let i = 0; i < bound.length; i++) {
-      const a = A[bound[i]];
-      if (this.count[a] > 0) this.count[a]--;
+    if (b === RMB) {
+      const state = this.rmb;
+      this.rmb = RMB_IDLE;
+      if (state === RMB_LOOK) return;
+      if (state === RMB_PENDING) {
+        // a click without a drag: still an aim tap (press-to-toggle aim relies on it)
+        for (let i = 0; i < bound.length; i++) this.tap[A[bound[i]]] = 1;
+        return;
+      }
     }
+    this.unpress(bound);
   }
 
   private onMouseMove(e: MouseEv): void {
     const mx = num(e.movementX, 0);
     const my = num(e.movementY, 0);
     if (mx === 0 && my === 0) return;
-    this.mouseTravel += Math.abs(mx) + Math.abs(my);
-    if (this.locked) {
+    const travel = Math.abs(mx) + Math.abs(my);
+    this.mouseTravel += travel;
+    if (this.lock.locked) {
       if (this.skipMouse > 0) {
-        this.skipMouse--; // first delta after capture is often a warp
+        this.skipMouse--;
         return;
       }
       if (Math.abs(mx) > MOUSE_SPIKE || Math.abs(my) > MOUSE_SPIKE) return;
       this.accX += mx;
       this.accY += my;
-    } else if (this.mouseHeld[2]) {
+    } else if (this.mouseHeld[RMB]) {
       // Drag-look fallback: hold RMB and move.
+      this.rmbTravel += travel;
       this.accX += mx;
       this.accY += my;
     }
   }
 
-  private canAutoLock(): boolean {
-    if (this.lockPending) return false;
-    if (!this.lockDenied) return true;
-    return this.lockStrikes < MAX_LOCK_STRIKES && this.lockCooldown <= 0;
-  }
-
-  private tryLock(raw: boolean): void {
-    const canvas = this.env.canvas;
-    if (!canvas || typeof canvas.requestPointerLock !== 'function') return;
-    try {
-      const p = raw ? canvas.requestPointerLock({ unadjustedMovement: true }) : canvas.requestPointerLock();
-      if (p && typeof (p as Promise<unknown>).then === 'function') {
-        (p as Promise<unknown>).then(undefined, (err: unknown) => {
-          // Raw mouse input is optional: retry once without it before treating this as a denial.
-          if (raw && (err as { name?: string } | null)?.name === 'NotSupportedError' && this.lockPending) this.tryLock(false);
-          else this.onLockDenied();
-        });
-      }
-    } catch {
-      this.onLockDenied();
-    }
-  }
-
-  private onLockChange(): void {
-    const { doc, canvas } = this.env;
-    const now = !!doc && !!canvas && doc.pointerLockElement === canvas;
-    if (now && !this.locked) {
-      this.lockDenied = false;
-      this.lockStrikes = 0;
-      this.skipMouse = 1;
-      this.accX = this.accY = 0;
-    }
-    if (now) this.lockPending = false;
-    this.locked = now;
-  }
-
-  private onLockDenied(): void {
-    if (!this.lockPending) return; // promise rejection + pointerlockerror both report the same denial
-    this.lockPending = false;
-    this.lockDenied = true;
-    this.lockStrikes++;
-    this.lockCooldown = LOCK_RETRY_COOLDOWN;
-  }
-
   private releaseAll(): void {
     this.keys.clear();
     this.mouseHeld.fill(0);
+    this.navHeld.fill(0);
     this.count.fill(0);
     this.tap.fill(0);
+    this.upSince.fill(0);
+    this.states.retap.fill(0);
+    this.rmb = RMB_IDLE;
     this.accX = this.accY = 0;
     this.keyLook = 0;
+  }
+
+  private readLayout(): void {
+    const get = this.env.getLayoutMap;
+    if (typeof get !== 'function') return;
+    try {
+      const p = get();
+      if (p && typeof p.then === 'function') {
+        p.then((map) => {
+          if (map && typeof map.get === 'function') this.layout = map;
+        }, () => {});
+      }
+    } catch {
+      /* layout unknown: glyphs fall back to the US labels */
+    }
+  }
+
+  private loadBindings(): void {
+    try {
+      const raw = this.env.storage?.getItem(BINDINGS_KEY);
+      if (raw) this.keymap.load(JSON.parse(raw));
+    } catch {
+      /* storage unavailable or corrupt: defaults */
+    }
+  }
+
+  private saveBindings(): void {
+    try {
+      this.env.storage?.setItem(BINDINGS_KEY, JSON.stringify(this.keymap.overrides()));
+    } catch {
+      /* storage unavailable: the rebind lasts for this session */
+    }
   }
 }

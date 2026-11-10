@@ -247,8 +247,10 @@ class MaterialLibraryImpl implements MaterialLibrary {
     for (const k in o) {
       const v = o[k];
       if (k === 'objectSpace' || v === undefined) continue;
+      // a named shader parameter wins over a same-named material property when the value is a number
+      if (typeof v === 'number' && setPatchParam(mat, k, v)) continue;
       if (k in mat) values[k] = v;
-      else if (typeof v !== 'number' || !setPatchParam(mat, k, v)) warnOnce(`clone("${id}"): unknown override "${k}" ignored`);
+      else warnOnce(`clone("${id}"): unknown override "${k}" ignored`);
     }
     mat.setValues(values as THREE.MaterialParameters);
     return mat as unknown as T;

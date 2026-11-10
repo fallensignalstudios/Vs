@@ -1,175 +1,136 @@
 /**
  * The damaged carrier (Z05): a ≈ 460 m slab-hulled ship on an authored pass above the atrium ceiling. Progress is
- * fully driven by the zone script (`setProgress`), so a cinematic skip lands in exactly the same state. It clips
- * the scenic tower at progress 0.8 (sparks, debris, the tower tip shears off) and relights its ventral
- * maneuvering jets as `setStabilized` rises. Three draw calls: hull, light cards, the spark pool.
+ * fully driven by the zone script (`setProgress`), so a cinematic skip lands in exactly the same state.
+ *
+ * THE CLIP. The pass is staged so that the ventral bow ram — the lowest point of the hull — FIRST touches the
+ * scenic tower's needle at progress 0.8: nothing intersects the tower before that, the ram shears the needle
+ * off at its collar, and the rest of the hull rides clear above the stump. Contact = a flash that lights the
+ * hull and tower, a burst of velocity-stretched sparks, tumbling masonry, a dust column that lingers, and a
+ * scrape of sparks for as long as the ram is over the stump. The sheared needle and the debris fall on the
+ * sim clock (`dt`), so they keep falling if the script holds progress; a skip / load past the clip lands with
+ * the needle simply gone.
+ *
+ * Draw calls: hull, light cards, spark pool, debris chunks (the last two only around the clip).
  */
 import * as THREE from 'three';
 import type { CarrierActor, Vec3Like } from '@/core/api';
-import { clamp01, mulberry32 } from '@/core/mathx';
-import { CLIP_TOWER, clipTips } from './scenic/clipTower';
-import { GeoBuilder, type P3 } from './scenic/geo';
-import { LightCards, type LightCardMesh } from './scenic/lights';
+import { DEG, clamp01, mulberry32, smoothstep } from '@/core/mathx';
+import { BOW_Z, HULL_HALF_BEAM, HULL_LENGTH, RAM_BOTTOM, buildCarrierHull, buildCarrierLights, type HullBox } from './carrierHull';
+import { CLIP_TOWER, type ClipTipSlot } from './scenic/clipTower';
+import { KING } from './scenic/arch';
+import { GeoBuilder } from './scenic/geo';
+import { LightCards } from './scenic/lights';
 import { createScenicMaterial } from './scenic/material';
 import type { SharedUniforms } from './shared';
 
-const HULL_LENGTH = 464;
-const SPARKS = 150;
-/** nominal duration of the full pass, used only to time the sheared tower tip's fall against progress */
-const PASS_SECONDS = 80;
+const CLIP = CLIP_TOWER.progress;
+/** the stabilised ram clears the collar by this much (the unstabilised bow hangs ≈ 16 m lower and still clears) */
+const RAM_CLEAR = 22;
+/** nose-down pitch of the unstabilised hull, radians */
+const LOOSE_PITCH = 0.06;
+/** progress span during which the ram is still over the stump (sparks scrape) */
+const SCRAPE_SPAN = 0.022;
+const N_FLASH = 6, N_DUST = 60, N_SPARK = 340;
+const POOL = N_FLASH + N_DUST + N_SPARK;
+const N_CHUNKS = 18;
+const GRAVITY = 9.8;
 
-/** Carrier centre along the pass, atrium-local. Six knots = five equal progress spans; knot 4 is the clip. */
+/** Travel direction of the pass (atrium-local): mostly east, a little north. */
+const COURSE = 25.5 * DEG;
+const DIR = new THREE.Vector3(Math.cos(COURSE), 0, -Math.sin(COURSE));
+const SIDE = new THREE.Vector3(Math.sin(COURSE), 0, Math.cos(COURSE));
+/** hull centre at the instant of first contact: the bow ram's face is at the tower's needle */
+const AT_CLIP = new THREE.Vector3(CLIP_TOWER.x, CLIP_TOWER.cut + RAM_CLEAR - RAM_BOTTOM, CLIP_TOWER.z).addScaledVector(DIR, BOW_Z - 3);
+const knot = (along: number, side: number, y: number): THREE.Vector3 =>
+  new THREE.Vector3().copy(AT_CLIP).addScaledVector(DIR, along).addScaledVector(SIDE, side).setY(y);
+/**
+ * Carrier centre along the pass. Six knots = five equal progress spans; knot 4 (progress 0.8) is first contact.
+ * Knots 3 and 5 are collinear with it and level, so the hull meets the tower flying straight and level, at the
+ * lowest point of the whole pass.
+ */
 const PATH = new THREE.CatmullRomCurve3([
-  new THREE.Vector3(-1250, 700, 640),
-  new THREE.Vector3(-800, 600, 440),
-  new THREE.Vector3(-380, 520, 240),
-  new THREE.Vector3(0, 474, 50),
-  new THREE.Vector3(CLIP_TOWER.x - 14, CLIP_TOWER.cut + 46, CLIP_TOWER.z + 8),
-  new THREE.Vector3(770, 548, -330),
+  knot(-2080, 220, 720), knot(-1560, 110, 636), knot(-1040, 40, 558), knot(-520, 0, AT_CLIP.y + 22), AT_CLIP.clone(), knot(760, 0, AT_CLIP.y + 22),
 ], false, 'catmullrom', 0.5);
 
-const SLAB = [[0, -1], [0.72, -1], [1, -0.35], [1, 0.25], [0.78, 0.8], [0.3, 1]] as const;
-
-function slab(z: number, w: number, h: number, y: number): P3[] {
-  const pts: P3[] = [];
-  for (const [x, v] of SLAB) pts.push([x * w, y + v * h, z]);
-  for (let i = SLAB.length - 1; i >= 0; i--) if (SLAB[i][0] > 1e-6) pts.push([-SLAB[i][0] * w, y + SLAB[i][1] * h, z]);
-  return pts;
-}
-
-function zPrism(b: GeoBuilder, cx: number, cy: number, z0: number, z1: number, r0: number, r1: number, sides: number): void {
-  b.push().translate(cx, cy, z0).rotateX(Math.PI / 2).prism(0, 0, 0, z1 - z0, r0, r1, sides).pop();
-}
-
-const JETS: Array<[number, number, number]> = [[-56, -40, -168], [56, -40, -168], [-60, -44, 150], [60, -44, 150], [-34, -44, -20], [34, -44, -20]];
-const BREACHES: Array<[number, number, number]> = [[-52, 6, -150], [60, -12, 20], [-30, -38, 96], [20, 38, -60]];
-
-function buildHull(rand: () => number): THREE.BufferGeometry {
-  const b = new GeoBuilder();
-  const HULL = 0x4a5059, DARK = 0x16181c, PALE = 0x8d8f8a, WARM = 0xffd9a0;
-  b.paint(HULL, 0, 0.8).loft([slab(230, 58, 34, 0), slab(150, 66, 40, 0), slab(0, 66, 40, 0), slab(-120, 60, 36, -1), slab(-190, 44, 28, -3), slab(-232, 22, 16, -6)]);
-  // forked bow (launch slot between two prongs) and heavy aft fins break the slab outline from below
-  for (const sx of [-1, 1]) {
-    b.paint(HULL, 0, 0.75).box(sx * 15, -6, -252, 13, 20, 52, { top: [0.7, 0.8], shift: [0, -6] });
-    b.paint(HULL, 0, 0.7).loft([
-      [[sx * 62, -16, 215], [sx * 62, -4, 215], [sx * 62, -4, 105], [sx * 62, -16, 105]],
-      [[sx * 128, -12, 228], [sx * 128, -6, 228], [sx * 128, -6, 176], [sx * 128, -12, 176]],
-    ]);
-    b.paint(DARK).box(sx * 129, -9, 202, 3, 14, 60, { top: [1, 0.8] });
-  }
-  // flight deck trench + deck-edge kerbs
-  b.paint(DARK).box(0, 40.6, 0, 40, 1.4, 300);
-  b.paint(PALE, 0, 0.5).box(21, 41.2, 0, 1.4, 2.2, 300).box(-21, 41.2, 0, 1.4, 2.2, 300);
-  // island (starboard aft) with masts
-  b.paint(HULL, 0, 0.95).box(44, 60, 112, 22, 44, 62, { top: [0.8, 0.86] });
-  b.paint(HULL, 0, 1.1).box(45, 92, 118, 14, 24, 34, { top: [0.7, 0.8] });
-  b.paint(DARK).box(45, 98, 100.6, 12, 4, 1);
-  b.paint(PALE, 0, 0.6).prism(45, 104, 122, 150, 1.6, 0.4, 5).prism(40, 104, 134, 132, 1.0, 0.3, 5);
-  // flank hangar blocks; bay doors glow dimly, some are dead
-  for (const sx of [-1, 1]) {
-    for (let i = 0; i < 6; i++) {
-      const z = -118 + i * 50;
-      b.paint(HULL, 0, 0.7).box(sx * 68, -6, z, 8, 22, 38, { top: [0.8, 0.9] });
-      if (rand() < 0.62) b.paint(WARM, 1.6 + rand() * 1.4).box(sx * 72.2, -7, z, 0.5, 7, 22);
-    }
-    // keel rails + maneuvering pods
-    b.paint(DARK).box(sx * 22, -44, 10, 7, 9, 330);
-    b.paint(HULL, 0, 0.6).box(sx * 58, -40, -168, 16, 12, 30).box(sx * 60, -43, 150, 18, 12, 34);
-  }
-  // ventral ribs, centre hangar slot, docking arms
-  for (let z = -150; z <= 170; z += 40) b.paint(HULL, 0, 0.55).box(0, -42, z, 46, 5, 6);
-  b.paint(WARM, 1.1).box(7, -40.4, 30, 1.6, 0.6, 110).box(-7, -40.4, 30, 1.6, 0.6, 110);
-  b.paint(DARK).box(0, -40.2, 30, 12, 0.4, 112);
-  b.paint(DARK).box(0, -52, -96, 10, 22, 14, { top: 0.5 }).box(0, -52, 120, 10, 22, 14, { top: 0.5 });
-  // engine block; nozzles are cold apart from what the light cards add
-  b.paint(HULL, 0, 0.6).box(0, 0, 244, 104, 58, 36, { top: [0.9, 1] });
-  for (const [x, y] of [[-34, 10], [0, 14], [34, 10], [-18, -16], [18, -16]] as const) {
-    zPrism(b.paint(DARK), x, y, 258, 284, 14, 17, 8);
-    zPrism(b.paint(0x2a1408, 0.5), x, y, 282, 285, 13, 13, 8);
-  }
-  // torn plating around the bow bite and the starboard gash
-  for (const [cx, cy, cz, n] of [[-50, 8, -160, 14], [62, -10, 24, 9]] as const) {
-    for (let i = 0; i < n; i++) {
-      b.push().translate(cx + (rand() - 0.5) * 26, cy + (rand() - 0.5) * 34, cz + (rand() - 0.5) * 60)
-        .rotateY(rand() * 6.28).rotateX((rand() - 0.5) * 1.6).rotateZ((rand() - 0.5) * 1.6);
-      b.paint(DARK).box(0, 0, 0, 5 + rand() * 16, 0.8, 4 + rand() * 12, { top: [0.5 + rand() * 0.5, 0.4 + rand() * 0.6] });
-      b.pop();
-    }
-  }
-  return b.build();
-}
-
-function buildLights(rand: () => number, shared: SharedUniforms): LightCardMesh {
-  const c = new LightCards();
-  const WHITE = 0xdfe8ff, RED = 0xff3020, JET = 0xbfe4ff, EMBER = 0xff7a2a;
-  // group 0 — sparse running lights (several dead)
-  for (let i = 0; i < 9; i++) for (const sx of [-1, 1]) if (rand() < 0.6) c.point(sx * 66, 30, -200 + i * 50, 3.2, WHITE, 3.5);
-  c.point(45, 151, 122, 4, RED, 6).point(0, -64, -96, 3.5, RED, 5).point(0, -64, 120, 3.5, RED, 5).point(0, -8, -234, 3, WHITE, 4);
-  // group 1 — ventral maneuvering jets: core + downward plume (relit by setStabilized)
-  for (const [x, y, z] of JETS) {
-    c.point(x, y - 6, z, 14, JET, 5.5, 1);
-    for (let i = 0; i < 7; i++) c.point(x, y - 12 - i * 8, z, 17 - i * 1.4, JET, 1.9 * Math.pow(0.72, i), 1);
-  }
-  // group 2 — failing main engines
-  for (const [x, y] of [[-34, 10], [34, 10], [18, -16]] as const) c.point(x, y, 288, 30, 0xffb060, 3.2, 2);
-  // group 3 — venting embers and gas streaming aft from the breaches
-  for (const [bx, by, bz] of BREACHES) {
-    for (let i = 0; i < 22; i++) {
-      c.point(bx + (rand() - 0.5) * 16, by + (rand() - 0.5) * 12, bz + (rand() - 0.5) * 24, 1.6 + rand() * 2.2, EMBER, 2.5 + rand() * 3, 3)
-        .loop((rand() - 0.5) * 9, -3 - rand() * 7, 20 + rand() * 26, 3 + rand() * 4, rand());
-    }
-    for (let i = 0; i < 5; i++) {
-      c.point(bx, by, bz, 20 + rand() * 22, 0x9aa6c0, 0.16 + rand() * 0.12, 3).loop((rand() - 0.5) * 5, -2 - rand() * 3, 14 + rand() * 10, 6 + rand() * 4, rand());
-    }
-    c.point(bx, by, bz, 34, 0xff5a1e, 1.5, 3);
-  }
-  return c.build(shared, { name: 'sky:carrierLights', minPx: 1.6 });
-}
-
 export interface Carrier extends CarrierActor {
-  /** world-space spark pool; parented next to `object` by the sky root */
-  readonly sparks: THREE.Object3D;
+  /** world-space effects (sparks, debris); parented next to `object` by the sky root */
+  readonly effects: THREE.Object3D;
+  /** conservative local-space boxes covering the hull (staging tests) */
+  readonly hullProxy: readonly HullBox[];
   /** `keyDir` = unit vector toward the sky's key light (keeps `shadow` current) */
-  update(dt: number, keyDir: THREE.Vector3): void;
+  update(dt: number, keyDir: THREE.Vector3, reduceFlash: boolean): void;
+  /** hide, rewind to progress 0 / stabilised 0, restore the tower tip, clear effects */
+  reset(): void;
   dispose(): void;
 }
 
-export function createCarrier(shared: SharedUniforms, seed = 7283): Carrier {
+let warnedAnchor = false;
+
+export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTipSlot): Carrier {
   const rand = mulberry32(seed ^ 0xca22);
   const object = new THREE.Group();
   object.name = 'sky:carrier';
   object.visible = false;
-  const hullGeo = buildHull(rand);
-  const hullMat = createScenicMaterial(shared, { name: 'SkyCarrierHull', panel: [26, 13], gloss: 0.35, breach: 0.85, haze: 0.75, glowReach: 0.5, underLight: [0.30, 0.27, 0.22] });
-  const hull = new THREE.Mesh(hullGeo, hullMat);
+  const built = buildCarrierHull(rand);
+  const hullMat = createScenicMaterial(shared, {
+    name: 'SkyCarrierHull', panel: [22, 11], panelTone: 0.3, panelSeam: 0.5, gloss: 0.3, breach: 0.85, haze: 0.75, glowReach: 0.5,
+    underLight: [0.46, 0.40, 0.31], battleRim: 1,
+  });
+  const hull = new THREE.Mesh(built.geometry, hullMat);
   hull.name = 'sky:carrierHull';
-  const lights = buildLights(rand, shared);
+  const lights = buildCarrierLights(rand, shared);
   object.add(hull, lights);
 
-  // spark pool lives in world space (it must not follow the hull after the impact)
+  // ---- world-space effects: they must not follow the hull after the impact
+  const effects = new THREE.Group();
+  effects.name = 'sky:carrierFx';
   const pool = new LightCards();
-  for (let i = 0; i < SPARKS; i++) pool.point(0, 0, 0, 1, 0xffffff, 0);
-  const sparks = pool.build(shared, { name: 'sky:carrierSparks', dynamic: true, minPx: 1.5 });
+  for (let i = 0; i < POOL; i++) pool.point(0, 0, 0, 1, 0xffffff, 0);
+  const sparks = pool.build(shared, { name: 'sky:carrierSparks', dynamic: true, minPx: 1.5, haze: 0.75 });
   sparks.frustumCulled = false;
   sparks.visible = false;
+  const chunkGeo = new GeoBuilder().paint(KING.whiteGold, 0, 0.62).bevelBox(0, 0, 0, 1, 1, 1, 0.14).build();
+  const chunkMat = createScenicMaterial(shared, { name: 'SkyCarrierDebris', gloss: 0.3, haze: 0.75 });
+  const chunks = new THREE.InstancedMesh(chunkGeo, chunkMat, N_CHUNKS);
+  chunks.name = 'sky:carrierDebris';
+  chunks.frustumCulled = false;
+  chunks.visible = false;
+  effects.add(sparks, chunks);
 
   const anchor = new THREE.Vector3();
   let anchorYaw = 0;
-  let progress = 0, stabilized = 0, clock = 0, sparksUntil = 0, shadow = 0;
+  let progress = 0, stabilized = 0, clock = 0, shadow = 0;
   const position = new THREE.Vector3();
   const forward = new THREE.Vector3(0, 0, -1);
   const clipPoint = new THREE.Vector3();
-  const clipDirLocal = PATH.getTangent(CLIP_TOWER.progress).normalize();
+  const footprint = { center: new THREE.Vector3(), axis: new THREE.Vector3(1, 0, 0), halfLength: 0, halfWidth: 0 };
 
-  const _p = new THREE.Vector3(), _t = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3();
+  // ---- clip state: 0 = needle intact, 1 = sheared and falling (sim clock), 2 = long gone
+  let tipState: 0 | 1 | 2 = 0;
+  let clipAge = -1; // seconds since a PLAYED clip; < 0 = no live effects
+  let scrapeMark = 0, sparkCursor = 0, dustCursor = 0, dustDue = 0, soft = false;
+  const tipPos = new THREE.Vector3(), tipVel = new THREE.Vector3(), tipRot = new THREE.Vector3(), tipSpin = new THREE.Vector3();
+  const cPos = new Float32Array(N_CHUNKS * 3), cVel = new Float32Array(N_CHUNKS * 3), cRot = new Float32Array(N_CHUNKS * 3);
+  const cSpin = new Float32Array(N_CHUNKS * 3), cSize = new Float32Array(N_CHUNKS * 3);
+  const fxRand = mulberry32(seed ^ 0x51a9);
+
+  const _p = new THREE.Vector3(), _a = new THREE.Vector3(), _t = new THREE.Vector3();
+  const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _s = new THREE.Vector3();
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qa = new THREE.Quaternion(), _e = new THREE.Euler();
+  const _c = new THREE.Color();
   const UP = new THREE.Vector3(0, 1, 0);
 
   const toWorld = (v: THREE.Vector3): THREE.Vector3 => v.applyAxisAngle(UP, anchorYaw).add(anchor);
+  /** unit path tangent without allocating (Curve.getTangent creates two vectors per call) */
+  const tangentAt = (t: number, out: THREE.Vector3): THREE.Vector3 => {
+    PATH.getPoint(Math.max(0, t - 1e-3), _a);
+    PATH.getPoint(Math.min(1, t + 1e-3), out);
+    return out.sub(_a).normalize();
+  };
 
   const applyPose = (): void => {
     PATH.getPoint(progress, _p);
-    PATH.getTangent(progress, _t).normalize();
+    tangentAt(progress, _t);
     const loose = 1 - stabilized;
     _z.copy(_t).negate();
     _x.crossVectors(UP, _z).normalize();
@@ -177,7 +138,7 @@ export function createCarrier(shared: SharedUniforms, seed = 7283): Carrier {
     _m.makeBasis(_x, _y, _z);
     _q.setFromRotationMatrix(_m);
     // unstabilised: nose-down, listing, wandering; steadies as the jets come back
-    _e.set(-0.15 * loose, loose * 0.05 * Math.sin(clock * 0.37 + progress * 5), loose * (0.17 * Math.sin(progress * 9 + 1) + 0.045 * Math.sin(clock * 0.6)), 'YXZ');
+    _e.set(-LOOSE_PITCH * loose, loose * 0.03 * Math.sin(clock * 0.37 + progress * 5), loose * (0.15 * Math.sin(progress * 9 + 1) + 0.04 * Math.sin(clock * 0.6)), 'YXZ');
     _q.multiply(_qa.setFromEuler(_e));
     _qa.setFromAxisAngle(UP, anchorYaw);
     object.quaternion.copy(_qa).multiply(_q);
@@ -186,107 +147,255 @@ export function createCarrier(shared: SharedUniforms, seed = 7283): Carrier {
     forward.copy(_t).applyAxisAngle(UP, anchorYaw);
     clipPoint.set(CLIP_TOWER.x, CLIP_TOWER.cut, CLIP_TOWER.z);
     toWorld(clipPoint);
-    // the sheared tower tip is a pure function of progress (reversible, skip-safe)
-    const s = Math.max(0, progress - CLIP_TOWER.progress) * PASS_SECONDS;
-    const tips = clipTips();
-    for (let i = 0; i < tips.length; i++) {
-      const tip = tips[i];
-      const home = tip.userData.home as THREE.Vector3 | undefined;
-      if (!home) continue;
-      tip.position.copy(home).addScaledVector(clipDirLocal, 34 * s);
-      tip.position.y -= 4.9 * s * s;
-      tip.rotation.set(0.5 * s, 0.2 * s, -0.7 * s);
-      tip.visible = s < 9;
+  };
+
+  /** keep the registered needle (the most recent shell's) in step with the clip state */
+  const syncTip = (): void => {
+    const tip = tips.tip;
+    if (!tip) return;
+    if (tipState === 0) {
+      tip.visible = true;
+      tip.position.set(tips.home.x, tips.home.y, tips.home.z);
+      tip.rotation.set(0, 0, 0);
+    } else if (tipState === 1) {
+      tip.visible = true;
+      tip.position.copy(tipPos);
+      tip.rotation.set(tipRot.x, tipRot.y, tipRot.z);
+    } else {
+      tip.visible = false;
     }
   };
 
-  const burst = (): void => {
-    const { pos, size, color, motion, phase } = sparks.cards.attrs;
-    const r = mulberry32(seed ^ 0x51a9);
-    const c = new THREE.Color();
-    for (let i = 0; i < SPARKS; i++) {
-      const kind = i < 4 ? 2 : i < 24 ? 1 : 0; // contact flashes, dust puffs, sparks
-      const spread = kind === 0 ? 1 : 0.35;
-      _p.set((r() - 0.5) * 14, (r() - 0.5) * 8, (r() - 0.5) * 14).add(clipPoint);
-      _t.copy(forward).multiplyScalar(kind === 0 ? 24 + r() * 60 : 10 + r() * 16);
-      _t.x += (r() - 0.5) * 60 * spread; _t.y += (r() - 0.2) * 44 * spread; _t.z += (r() - 0.5) * 60 * spread;
-      const life = kind === 2 ? 0.5 + r() * 0.3 : kind === 1 ? 4 + r() * 3 : 1.4 + r() * 2.6;
-      const s = kind === 2 ? 50 + r() * 30 : kind === 1 ? 24 + r() * 26 : 2 + r() * 3.2;
-      if (kind === 2) c.setRGB(1, 0.78, 0.5).multiplyScalar(11);
-      else if (kind === 1) c.setRGB(0.5, 0.48, 0.46).multiplyScalar(0.45);
-      else c.setRGB(1, 0.5 + r() * 0.35, 0.14).multiplyScalar(8 + r() * 9);
-      pos.setXYZ(i, _p.x, _p.y, _p.z);
-      size.setXYZW(i, s, s, 0, 0);
-      color.setXYZ(i, c.r, c.g, c.b);
-      motion.setXYZW(i, kind === 2 ? 0 : _t.x, kind === 2 ? 0 : _t.y, kind === 2 ? 0 : _t.z, -life);
-      phase.setXY(i, clock + (kind === 0 ? r() * 0.5 : 0), kind === 0 ? 1 : kind === 1 ? 0.06 : 0);
-    }
-    for (const a of [pos, size, color, motion, phase]) a.needsUpdate = true;
-    sparks.visible = object.visible;
-    sparksUntil = clock + 8;
+  const clearEffects = (): void => {
+    clipAge = -1;
+    sparks.visible = false;
+    chunks.visible = false;
+    shared.uFlashColor.value.setRGB(0, 0, 0);
   };
 
-  // 0..1: how much of the light arriving along `towardLight` at the atrium centre the hull blocks
-  const occlusionAlong = (towardLight: THREE.Vector3): number => {
-    _p.copy(position).sub(anchor);
-    const along = _p.dot(towardLight);
-    if (along <= 0) return 0;
-    _t.copy(towardLight).multiplyScalar(along).sub(_p); // hull centre → closest point of the light ray
-    const lon = Math.abs(_t.dot(forward));
-    _x.copy(_t).addScaledVector(forward, -_t.dot(forward));
-    return clamp01(clamp01(1.25 - lon / (HULL_LENGTH * 0.5)) * clamp01(1.5 - _x.length() / 80) * 1.6);
+  const { pos, size, color, motion, phase, fx } = sparks.cards.attrs;
+  /** (re)start one pooled card; kind 0 = glow, 2 = velocity streak */
+  const emit = (slot: number, kind: number, at: THREE.Vector3, vel: THREE.Vector3, life: number, w: number, h: number, c: THREE.Color, gravity: number, drag: number, grow: number, attack: number, delay: number): void => {
+    pos.setXYZ(slot, at.x, at.y, at.z);
+    size.setXYZW(slot, w, h, 0, kind);
+    color.setXYZ(slot, c.r, c.g, c.b);
+    motion.setXYZW(slot, vel.x, vel.y, vel.z, -life);
+    phase.setXY(slot, clock + delay, gravity);
+    fx.setXYZ(slot, grow, drag, attack);
+  };
+  const flush = (): void => {
+    pos.needsUpdate = size.needsUpdate = color.needsUpdate = motion.needsUpdate = phase.needsUpdate = fx.needsUpdate = true;
+  };
+  const spark = (r: () => number, speed: number, spread: number): void => {
+    const slot = N_FLASH + N_DUST + (sparkCursor++ % N_SPARK);
+    _p.set((r() - 0.5) * 10, r() * 16, (r() - 0.5) * 10).add(clipPoint);
+    _t.copy(forward).multiplyScalar(speed * (0.35 + r() * 0.9));
+    _t.x += (r() - 0.5) * spread; _t.y += (r() - 0.35) * spread * 0.8; _t.z += (r() - 0.5) * spread;
+    _c.setRGB(1, 0.46 + r() * 0.36, 0.12 + r() * 0.1).multiplyScalar((soft ? 3 : 9) + r() * (soft ? 2 : 9));
+    emit(slot, 2, _p, _t, 1.6 + r() * 3.2, 1.3 + r() * 1.5, 1.3, _c, 1, 0.35, 0, 0, r() * 0.12);
+  };
+  const dust = (r: () => number, delay: number): void => {
+    const slot = N_FLASH + (dustCursor++ % N_DUST);
+    _p.set((r() - 0.5) * 20, (r() - 0.3) * 26, (r() - 0.5) * 20).add(clipPoint);
+    _t.copy(forward).multiplyScalar(6 + r() * 22);
+    _t.x += (r() - 0.5) * 14; _t.y += (r() - 0.6) * 10; _t.z += (r() - 0.5) * 14;
+    _c.setRGB(0.62, 0.58, 0.52).multiplyScalar(0.20 + r() * 0.16);
+    emit(slot, 0, _p, _t, 10 + r() * 7, 22 + r() * 22, 22 + r() * 22, _c, 0.06, 0.45, 2.6, 0.5, delay);
+  };
+
+  /** the played clip: needle sheared, flash, sparks, masonry, dust */
+  const startClip = (): void => {
+    tipState = 1;
+    clipAge = 0;
+    scrapeMark = progress;
+    dustDue = 0.15;
+    tangentAt(CLIP, _s); // shell-local travel direction (the tip lives in the shell's frame)
+    tipPos.set(tips.home.x, tips.home.y, tips.home.z);
+    tipVel.copy(_s).multiplyScalar(17).add(_a.set(SIDE.x * 5, 3.5, SIDE.z * 5));
+    tipRot.set(0, 0, 0);
+    // topple forward, away from the hull: rotate about the horizontal axis square to the travel direction
+    tipSpin.set(-_s.z * 0.42, 0.12, _s.x * 0.42);
+    const r = fxRand;
+    for (let i = 0; i < N_FLASH; i++) {
+      _p.set((r() - 0.5) * 12, 8 + r() * 14, (r() - 0.5) * 12).add(clipPoint);
+      _c.setRGB(1, 0.80, 0.52).multiplyScalar(soft ? 2.4 : 10);
+      const s = (i === 0 ? 84 : 36 + r() * 30) * (soft ? 0.8 : 1);
+      emit(i, 0, _p, _t.set(0, 0, 0), soft ? 1.6 : 0.55 + r() * 0.3, s, s, _c, 0, 0, 0.4, soft ? 0.25 : 0, 0);
+    }
+    for (let i = 0; i < 26; i++) dust(r, r() * 0.4);
+    for (let i = 0; i < 230; i++) spark(r, 62, 58);
+    for (let i = 0; i < N_CHUNKS; i++) {
+      const o = i * 3;
+      cPos[o] = clipPoint.x + (r() - 0.5) * 12; cPos[o + 1] = clipPoint.y + r() * 20; cPos[o + 2] = clipPoint.z + (r() - 0.5) * 12;
+      const sp = 10 + r() * 26;
+      cVel[o] = forward.x * sp + (r() - 0.5) * 22; cVel[o + 1] = (r() - 0.25) * 20; cVel[o + 2] = forward.z * sp + (r() - 0.5) * 22;
+      cRot[o] = r() * 6; cRot[o + 1] = r() * 6; cRot[o + 2] = r() * 6;
+      cSpin[o] = (r() - 0.5) * 3; cSpin[o + 1] = (r() - 0.5) * 3; cSpin[o + 2] = (r() - 0.5) * 3;
+      const s = 2.2 + r() * r() * 9;
+      cSize[o] = s * (0.6 + r() * 0.8); cSize[o + 1] = s * (0.5 + r() * 1.2); cSize[o + 2] = s * (0.6 + r() * 0.8);
+    }
+    flush();
+    sparks.visible = true;
+    chunks.visible = true;
+    api.onClip?.(clipPoint);
+  };
+
+  const stepEffects = (dt: number): void => {
+    if (tipState === 1) {
+      tipVel.y -= GRAVITY * dt;
+      tipPos.addScaledVector(tipVel, dt);
+      tipRot.addScaledVector(tipSpin, dt);
+      if (tipPos.y < tips.home.y - 640) tipState = 2;
+    }
+    if (clipAge < 0) return;
+    clipAge += dt;
+    // flash light on the hull and the tower
+    const env = soft
+      ? smoothstep(0, 0.25, clipAge) * Math.exp(-Math.max(clipAge - 0.25, 0) / 0.9) * 2.2
+      : Math.exp(-clipAge / 0.32) * 13 + Math.exp(-clipAge / 1.6) * 1.4;
+    shared.uFlashColor.value.setRGB(1, 0.72, 0.42).multiplyScalar(env);
+    shared.uFlashPos.value.copy(clipPoint).y += 14;
+    let wrote = false;
+    // scrape: sparks for as long as the ram is still dragging over the stump and the hull is moving
+    if (progress !== scrapeMark && progress < CLIP + SCRAPE_SPAN && progress >= CLIP) {
+      scrapeMark = progress;
+      for (let i = 0; i < 7; i++) spark(fxRand, 44, 26);
+      wrote = true;
+    }
+    // the dust column keeps feeding for a few seconds
+    if (clipAge < 5 && clipAge >= dustDue) {
+      dustDue = clipAge + 0.16;
+      dust(fxRand, 0);
+      wrote = true;
+    }
+    if (wrote) flush();
+    // tumbling masonry
+    let alive = false;
+    for (let i = 0; i < N_CHUNKS; i++) {
+      const o = i * 3;
+      cVel[o + 1] -= GRAVITY * dt;
+      cPos[o] += cVel[o] * dt; cPos[o + 1] += cVel[o + 1] * dt; cPos[o + 2] += cVel[o + 2] * dt;
+      cRot[o] += cSpin[o] * dt; cRot[o + 1] += cSpin[o + 1] * dt; cRot[o + 2] += cSpin[o + 2] * dt;
+      const gone = cPos[o + 1] < clipPoint.y - 600;
+      alive = alive || !gone;
+      _e.set(cRot[o], cRot[o + 1], cRot[o + 2], 'XYZ');
+      _m.makeRotationFromEuler(_e);
+      _m.scale(_s.set(gone ? 0 : cSize[o], gone ? 0 : cSize[o + 1], gone ? 0 : cSize[o + 2]));
+      _m.setPosition(cPos[o], cPos[o + 1], cPos[o + 2]);
+      chunks.setMatrixAt(i, _m);
+    }
+    chunks.instanceMatrix.needsUpdate = true;
+    chunks.visible = alive && object.visible;
+    if (clipAge > 24) clearEffects();
+  };
+
+  /** hull footprint on the atrium floor along the key light, and how much of it covers the atrium centre */
+  const updateShadow = (keyDir: THREE.Vector3): void => {
+    const ky = Math.max(keyDir.y, 0.05);
+    const hgt = position.y - anchor.y;
+    footprint.center.copy(position).addScaledVector(keyDir, -hgt / ky);
+    footprint.center.y = anchor.y;
+    _z.set(0, 0, -1).applyQuaternion(object.quaternion);
+    _z.addScaledVector(keyDir, -_z.y / ky);
+    _z.y = 0;
+    const fl = _z.length();
+    footprint.halfLength = (HULL_LENGTH / 2) * fl;
+    if (fl > 1e-6) footprint.axis.copy(_z).multiplyScalar(1 / fl);
+    _x.set(1, 0, 0).applyQuaternion(object.quaternion);
+    _x.addScaledVector(keyDir, -_x.y / ky);
+    _x.y = 0;
+    // width measured square to the projected axis
+    const across = Math.abs(_x.x * footprint.axis.z - _x.z * footprint.axis.x);
+    footprint.halfWidth = HULL_HALF_BEAM * across;
+    _p.copy(anchor).sub(footprint.center);
+    const u = Math.abs(_p.x * footprint.axis.x + _p.z * footprint.axis.z) / Math.max(footprint.halfLength, 1);
+    const v = Math.abs(_p.x * footprint.axis.z - _p.z * footprint.axis.x) / Math.max(footprint.halfWidth, 1);
+    const s = hgt > 0 ? (1 - smoothstep(0.8, 1.2, u)) * (1 - smoothstep(0.8, 1.6, v)) : 0;
+    shadow = Number.isFinite(s) ? clamp01(s) : 0;
   };
 
   const api: Carrier = {
     object,
-    sparks,
+    effects,
     position,
     forward,
     clipPoint,
+    hullProxy: built.proxy,
     length: HULL_LENGTH,
+    clipProgress: CLIP,
+    shadowFootprint: footprint,
+    onClip: null,
     get visible() { return object.visible; },
     set visible(v: boolean) {
       object.visible = !!v;
-      if (!v) sparks.visible = false;
+      if (!v) clearEffects();
     },
     get progress() { return progress; },
     get stabilized() { return stabilized; },
     get shadow() { return shadow; },
     setProgress(t: number) {
+      const prev = progress;
       const next = Number.isFinite(t) ? clamp01(t) : progress;
-      const crossed = progress < CLIP_TOWER.progress && next >= CLIP_TOWER.progress && next - progress < 0.25;
       progress = next;
       applyPose();
-      if (crossed && object.visible) burst();
+      if (prev < CLIP && next >= CLIP) {
+        // a played crossing shears the needle now; a skip / load past it lands with the needle already gone
+        if (object.visible && next - prev <= 0.05) startClip();
+        else { tipState = 2; clearEffects(); }
+      } else if (next < CLIP && prev >= CLIP) {
+        tipState = 0;
+        clearEffects();
+      }
+      syncTip();
     },
     setStabilized(n: number) {
       stabilized = Number.isFinite(n) ? clamp01(n) : stabilized;
       applyPose();
     },
     setAnchor(origin: Vec3Like, yaw = 0) {
-      anchor.set(origin.x, origin.y, origin.z);
-      anchorYaw = Number.isFinite(yaw) ? yaw : 0;
+      const ok = !!origin && Number.isFinite(origin.x) && Number.isFinite(origin.y) && Number.isFinite(origin.z);
+      if (!ok) {
+        if (!warnedAnchor) { warnedAnchor = true; console.warn('[sky] carrier.setAnchor: origin must have finite x, y, z — keeping the previous anchor'); }
+      } else {
+        anchor.set(origin.x, origin.y, origin.z);
+      }
+      if (Number.isFinite(yaw)) anchorYaw = yaw;
       applyPose();
     },
-    update(dt: number, keyDir: THREE.Vector3) {
+    update(dt: number, keyDir: THREE.Vector3, reduceFlash: boolean) {
       clock += dt;
-      if (!object.visible) { shadow = 0; return; }
-      const g = lights.cards.uniforms.uGroupGain.value;
-      // jets: off → sputter → steady as stabilisation rises
-      const sputter = stabilized < 0.98 ? 0.75 + 0.25 * Math.sin(clock * 23) * Math.sin(clock * 7.3) : 1;
-      g.y = Math.pow(stabilized, 1.4) * sputter;
-      g.z = (0.22 + 0.18 * Math.sin(clock * 5.1) * Math.sin(clock * 1.7)) * (1 - 0.5 * stabilized) + 0.5 * stabilized;
-      g.w = 1 - 0.55 * stabilized;
+      soft = reduceFlash;
       sparks.cards.uniforms.uClock.value = clock;
-      if (sparks.visible && clock > sparksUntil) sparks.visible = false;
+      stepEffects(dt);
+      syncTip();
+      if (!object.visible) { shadow = 0; footprint.halfLength = 0; footprint.halfWidth = 0; return; }
+      const g = lights.cards.uniforms.uGroupGain.value;
+      // jets: off → sputter → steady as stabilisation rises (a smooth ramp when flashes are reduced)
+      const sputter = !soft && stabilized < 0.98 ? 0.75 + 0.25 * Math.sin(clock * 23) * Math.sin(clock * 7.3) : 1;
+      g.y = Math.pow(stabilized, 1.4) * sputter;
+      const flick = soft ? 0.08 * Math.sin(clock * 3.1) : 0.18 * Math.sin(clock * 5.1) * Math.sin(clock * 1.7);
+      g.z = (0.22 + flick) * (1 - 0.5 * stabilized) + 0.5 * stabilized;
+      g.w = 1 - 0.55 * stabilized;
       if (stabilized < 1) applyPose();
-      shadow = occlusionAlong(keyDir);
+      updateShadow(keyDir);
+    },
+    reset() {
+      object.visible = false;
+      progress = 0;
+      stabilized = 0;
+      tipState = 0;
+      shadow = 0;
+      clearEffects();
+      applyPose();
+      syncTip();
     },
     dispose() {
-      hullGeo.dispose(); hullMat.dispose();
+      built.geometry.dispose(); hullMat.dispose();
       lights.geometry.dispose(); lights.material.dispose();
       sparks.geometry.dispose(); sparks.material.dispose();
-      object.removeFromParent(); sparks.removeFromParent();
+      chunkGeo.dispose(); chunkMat.dispose(); chunks.dispose();
+      shared.uFlashColor.value.setRGB(0, 0, 0);
+      object.removeFromParent(); effects.removeFromParent();
     },
   };
   applyPose();

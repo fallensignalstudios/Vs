@@ -22,6 +22,8 @@ export class GridSearch {
   private pos = new Int32Array(0);
   private size = 0;
   private id = 0;
+  /** nodes taken off the open list by the last run (a machine-independent measure of search effort) */
+  expanded = 0;
 
   /** Make room for `slots` graph nodes (keeps arrays when already large enough). */
   resize(slots: number): void {
@@ -70,15 +72,17 @@ export class GridSearch {
   }
 
   /**
-   * Shortest path start → goal over `nbr` (8 links per slot, -1 = none). Fills `out` with the slot sequence
-   * (start first) and returns true, or returns false when the goal is unreachable. With `clr`, only nodes
-   * whose clearance is ≥ minClr are entered (wide agents).
+   * Cheapest path start → goal over `nbr` (8 links per slot, -1 = none). Fills `out` with the slot sequence
+   * (start first) and returns true, or returns false when the goal is unreachable. `pass` (optional) vetoes
+   * nodes the current agent does not fit on; `cost` (optional) is a per-node multiplier ≥ 1 on the step
+   * into that node, so paths prefer open ground without ever being refused tight ground.
    */
   run(
     start: number, goal: number, nbr: Int32Array, cols: number, cell: number, out: number[],
-    clr: Float32Array | null = null, minClr = 0,
+    pass: ((slot: number) => boolean) | null = null, cost: Uint8Array | null = null,
   ): boolean {
     out.length = 0;
+    this.expanded = 0;
     if (start < 0 || goal < 0 || start >= this.g.length || goal >= this.g.length) return false;
     if (start === goal) { out.push(start); return true; }
     if (++this.id >= 0xfffffff0) { this.mark.fill(0); this.closed.fill(0); this.id = 1; }
@@ -104,13 +108,16 @@ export class GridSearch {
         return true;
       }
       closed[cur] = id;
+      this.expanded++;
       const base = cur * 8;
       const gc = g[cur];
       for (let d = 0; d < 8; d++) {
         const nb = nbr[base + d];
         if (nb < 0 || closed[nb] === id) continue;
-        if (clr !== null && clr[nb] < minClr) continue;
-        const ng = gc + (d < 4 ? cell : diagCost);
+        if (pass !== null && !pass(nb)) continue;
+        let step = d < 4 ? cell : diagCost;
+        if (cost !== null && cost[nb] !== 0) step *= 1 + cost[nb] * 0.25;
+        const ng = gc + step;
         if (mark[nb] === id) {
           if (ng >= g[nb]) continue;
           f[nb] += ng - g[nb];

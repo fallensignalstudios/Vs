@@ -130,7 +130,7 @@ export function createHud(input: InputSystem, rig: CameraRig, instant = false): 
       if (text !== lastLegend) legend.innerHTML = lastLegend = text;
 
       note.textContent = input.context !== 'game' ? '' : input.lookMode === 'drag'
-        ? `No pointer lock — hold ${input.glyph('aim')} and move the mouse, or use the arrow keys, to look · click to capture`
+        ? `No pointer lock — drag with ${input.glyph('aim')} to look · hold it still to aim · arrow keys turn · click to capture`
         : '';
 
       reticle.style.opacity = rig.aiming && rig.mode === 'follow' ? '1' : '0';

@@ -78,20 +78,25 @@ describe('nav grid build', () => {
     expect(w.nav.isWalkable(NaN, 0, 0)).toBe(false);
   });
 
-  it('rebuilds a 70 × 48 m zone within budget', () => {
+  it('a full build visits every cell once; later builds only what changed (timings: physics.bench.ts)', () => {
     const w = world();
-    buildZ08(w);
-    const times: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      w.nav.rebuild({ cell: i % 2 === 0 ? 0.5 : 0.5000001 }); // alternate the option to force full rebuilds
-      const t0 = performance.now();
-      w.nav.rebuild({ cell: i % 2 === 0 ? 0.5000001 : 0.5 });
-      times.push(performance.now() - t0);
-    }
-    times.sort((a, b) => a - b);
-    console.info(`[nav] Z08 full rebuild: best ${times[0].toFixed(2)} ms, median ${times[3].toFixed(2)} ms, nodes ${w.nav.nodeCount}`);
-    expect(times[0]).toBeLessThan(40);
+    const f = buildZ08(w);
+    w.nav.rebuild();
     expect(w.nav.nodeCount).toBeGreaterThan(11000);
+    expect(w.nav.stats).toMatchObject({ builds: 1, lastBuildFull: true });
+    // 70 × 48 m plus the two door stubs and the wall thickness, at 0.5 m
+    expect(w.nav.stats.lastBuildCells).toBeGreaterThan(140 * 96);
+    expect(w.nav.stats.lastBuildCells).toBeLessThan(150 * 125);
+    w.nav.rebuild(); // nothing changed: not even counted as a build
+    expect(w.nav.stats.builds).toBe(1);
+    f.doorW.enabled = false; // a 5 m door: the cells within an agent radius of it
+    w.nav.rebuild();
+    expect(w.nav.stats).toMatchObject({ builds: 2, lastBuildFull: false });
+    expect(w.nav.stats.lastBuildCells).toBeLessThan(120);
+    for (const b of f.courtBarriers) b.enabled = true; // four barriers at once: still incremental
+    w.nav.rebuild();
+    expect(w.nav.stats.lastBuildFull).toBe(false);
+    expect(w.nav.stats.lastBuildCells).toBeLessThan(500);
   });
 
   it('honours cell size and agent radius options', () => {
@@ -195,16 +200,15 @@ describe('nav paths — Z04', () => {
     expect(w.nav.findPath(f.marks.floorMid, f.marks.exitOutside)).toBeNull();
     expect(w.nav.walkable(f.marks.exitInside, f.marks.exitOutside)).toBe(false);
 
+    const total = w.nav.stats.lastBuildCells;
+    expect(w.nav.stats.lastBuildFull).toBe(true);
     f.door.enabled = false;
     expect(w.nav.stale).toBe(true);
-    expect(w.nav.findPath(f.marks.floorMid, f.marks.exitOutside)).toBeNull(); // not rebuilt yet
-    const t0 = performance.now();
-    w.nav.rebuild();
-    const ms = performance.now() - t0;
-    console.info(`[nav] Z04 incremental door rebuild: ${ms.toFixed(3)} ms`);
-    expect(ms).toBeLessThan(10);
-    expect(w.nav.stale).toBe(false);
+    // no explicit rebuild: the next query refreshes the grid itself, touching only the cells around the door
     const open = w.nav.findPath(f.marks.floorMid, f.marks.exitOutside)!;
+    expect(w.nav.stale).toBe(false);
+    expect(w.nav.stats.lastBuildFull).toBe(false);
+    expect(w.nav.stats.lastBuildCells).toBeLessThan(total / 50);
     expect(open).not.toBeNull();
     expect(w.nav.walkable(f.marks.exitInside, f.marks.exitOutside)).toBe(true);
     expect(follow(w, open).reached).toBe(true);
@@ -329,7 +333,7 @@ describe('nav paths — Z08', () => {
     expect(a[3].length).toBeGreaterThan(15); // directly underneath is a long way round
   });
 
-  it('typical queries are fast', () => {
+  it('typical queries expand a small part of the grid', () => {
     const w = world();
     buildZ08(w);
     w.nav.rebuild();
@@ -339,17 +343,18 @@ describe('nav paths — Z08', () => {
       const p = w.nav.randomPoint(planPos(35, 24), 40, Math.floor(rng() * 1e9));
       if (p) pts.push(p);
     }
-    for (let i = 0; i + 1 < 60; i += 2) w.nav.findPath(pts[i], pts[i + 1]); // warm-up
-    let found = 0, total = 0;
-    const t0 = performance.now();
+    // effort is asserted as nodes expanded, which does not depend on the machine (timings: physics.bench.ts)
+    let found = 0, total = 0, expanded = 0, worst = 0;
     for (let i = 0; i + 1 < pts.length; i += 2) {
       const p = w.nav.findPath(pts[i], pts[i + 1]);
       if (p) { found++; total += p.length; }
+      expanded += w.nav.stats.lastSearchExpanded;
+      worst = Math.max(worst, w.nav.stats.lastSearchExpanded);
     }
-    const ms = (performance.now() - t0) / (pts.length / 2);
-    console.info(`[nav] Z08 findPath: ${ms.toFixed(3)} ms avg over ${pts.length / 2} random pairs (mean length ${(total / found).toFixed(1)} m)`);
     expect(found).toBe(pts.length / 2);
-    expect(ms).toBeLessThan(1.5);
+    expect(total / found).toBeGreaterThan(20); // these are real cross-zone routes
+    expect(expanded / found).toBeLessThan(1200); // of ~12,000 nodes
+    expect(worst).toBeLessThan(6000);
   });
 });
 

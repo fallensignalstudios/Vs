@@ -159,7 +159,7 @@ export class CommandEmitter extends DeviceBase implements CommandEmitterVisual {
       } else if (s.name === 'generic') rot(this.hub, impact(s.t, 0, 0.15, 20) * 0.05 * s.w, 0, 0);
     }
     const fl = this.flickerLight();
-    this.groupGlow('core', (0.75 + this.sync * 2.6 + Math.sin(t * 3.4) * 0.12) * pw * fl);
+    this.groupGlow('core', (0.75 + this.sync * 2.6 + Math.sin(t * 3.4) * 0.12 + this.exposure('core') * 1.5) * pw * fl);
     this.groupGlow('prong', (0.6 + this.sync * 3 + (this.targets[0] || this.targets[1] ? 0.5 : 0)) * pw * fl);
     this.groupGlow('lights', pw * fl * (0.6 + 0.4 * Math.max(0, Math.sin(t * 2.2))));
   }

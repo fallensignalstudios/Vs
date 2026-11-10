@@ -214,8 +214,8 @@ function simulate(dt: number): void {
   mannequin.root.position.copy(player.pos);
   mannequin.root.rotation.y = player.yaw;
   mannequin.animate(dt, dodgeLeft > 0 ? 9 : speed, aiming);
-  // fade the figure out when the spring arm is squeezed against it
-  mannequin.setOpacity(rig.mode === 'follow' ? (rig.targetDistance - 0.45) / 0.45 : 1);
+  // the rig says how solid the figure should be (it fades when the camera is wedged against it)
+  mannequin.setOpacity(rig.playerFade);
 }
 
 /** Establishing shot → eased push-in with roll and FOV change → slow drift → blend back to gameplay. */
@@ -282,13 +282,18 @@ const api = {
   hud(v: boolean): void {
     hud.setVisible(v);
   },
-  /** advance input + sim + camera without rendering (stress tests) */
-  __tick: tick,
+  /** one whole frame without rendering (stress tests): clock, scripts, input → sim → camera */
+  __tick(dt: number): void {
+    const d = dt > 0 && Number.isFinite(dt) ? dt : 0;
+    (game.time as { now: number }).now += d;
+    game.scripts.update(d);
+    tick(dt);
+  },
   state() {
     const c = rig.camera;
     const r = (n: number) => Math.round(n * 1000) / 1000;
     return {
-      mode: rig.mode, yaw: r(rig.yaw / DEG), pitch: r(rig.pitch / DEG), fov: r(c.fov), dist: r(rig.targetDistance),
+      mode: rig.mode, yaw: r(rig.yaw / DEG), pitch: r(rig.pitch / DEG), fov: r(c.fov), dist: r(rig.targetDistance), fade: r(rig.playerFade),
       cam: [r(c.position.x), r(c.position.y), r(c.position.z)], player: [r(player.pos.x), r(player.pos.y), r(player.pos.z)],
       context: input.context, device: input.device, lookMode: input.lookMode, physics: physicsLabel,
     };

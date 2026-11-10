@@ -1,13 +1,17 @@
 /**
- * Third-person over-the-shoulder follow camera: orbit, aim framing, soft lock-on, spring-arm collision,
- * position lag, sprint FOV and gentle auto-recentre. Pure logic — world queries come in through FollowWorld.
+ * Third-person over-the-shoulder follow camera: orbit, aim framing, soft lock-on, position lag, blink whip,
+ * sprint FOV and (device-dependent) auto-recentre. Collision lives in `arm.ts`. Pure logic — world queries come
+ * in through FollowWorld.
  *
  * Conventions: yaw 0 looks toward −Z (same as actors); positive pitch looks UP.
  */
 import * as THREE from 'three';
 import type { CameraFollowTarget, FollowFraming, Vec3Like } from '@/core/api';
-import { DEG, angleDelta, clamp, clamp01, damp, dampAngle, smoothstep, wrapAngle } from '@/core/mathx';
+import { DEG, angleDelta, clamp, damp, dampAngle, smoothstep, wrapAngle } from '@/core/mathx';
+import { ARM, SpringArm, type ArmRequest, type FollowWorld } from './arm';
 import { Damped, Pose, isFiniteVec, quatFromYawPitch, viewDir } from './pose';
+
+export type { FollowWorld } from './arm';
 
 /** Follow-camera tuning (BRIEF §5 numbers). */
 export const FOLLOW = {
@@ -15,70 +19,97 @@ export const FOLLOW = {
   /** fallback pivot height when the target does not supply one */
   height: 1.55,
   shoulder: 0.55,
+  /**
+   * Composition: the arm is toed out so the camera sits this much further to the shoulder side at full
+   * distance. The hero lands between the centre and the left third instead of covering the screen centre —
+   * without moving the collision anchor away from the shoulder.
+   */
+  lookOffset: 0.36,
   fov: 62,
   aimDistance: 1.6,
-  aimShoulder: 0.72,
+  aimShoulder: 0.88,
   aimFov: 48,
-  /** extra pivot height while aiming so the reticle clears the shoulder */
-  aimRise: 0.12,
-  /** extra height when the arm is squeezed short, to look over the shoulder rather than into a back */
-  squeezeRise: 0.38,
+  /** extra pivot height while aiming so the head sits below the reticle line */
+  aimRise: 0.32,
+  /** look-over rise when a wall is right behind the hero (see arm.ts), exploring / aiming */
+  overRise: 0.6,
+  overRiseAim: 0.4,
+  /** the squeezed view opens up by this many degrees so the room still reads with the camera this close */
+  nearFov: 7,
+  /** when the camera is this close behind the hero the shoulder offset has shrunk to `nearShoulder` of itself */
+  nearMin: 0.5,
+  nearMax: 1.3,
+  nearShoulder: 0.28,
+  /** squeezed view: tilt down just enough to keep the helmet this far inside the frame (fraction of half-FOV) */
+  keepHead: 0.74,
+  tiltMax: 13 * DEG,
+  /** centre of the head above the pivot (the pivot is shoulder / eye height) */
+  headUp: 0.22,
   sprintFov: 4,
   pitchMin: -55 * DEG,
   pitchMax: 70 * DEG,
   /** resting pitch used by snapBehind and auto-recentre */
   pitchRest: -9 * DEG,
-  /** collision probe radius */
-  probe: 0.25,
-  /** the camera never sits lower than this above the feet / the floor under it */
-  floorClearance: 0.32,
-  minDistance: 0.3,
+  probe: ARM.probe,
+  floorClearance: ARM.floorClearance,
+  minDistance: ARM.minDistance,
   lockDistance: 0.45,
+  whiskerAngle: ARM.whiskerAngle,
+  whiskerPull: ARM.whiskerPull,
   /**
-   * Anticipation whiskers: two thinner probes fanned to either side of the arm. When one finds an obstacle
-   * the arm eases most of the way in (`whiskerPull`) before the obstacle reaches the arm itself, so ribs,
-   * corners and cover produce a short settle instead of a full-length pop.
-   */
-  whiskerAngle: 0.38,
-  whiskerPull: 0.65,
-  /**
-   * Looking up: the camera body stops sinking behind the player once the view passes `orbitKnee` and
-   * settles toward `orbitMax`, while the view keeps tilting. The figure slides to the bottom of the frame
-   * instead of filling it from below, leaving the architecture overhead unobstructed.
+   * Looking up: the camera body stops sinking behind the player once the view passes `orbitKnee` and settles
+   * toward `orbitMax`, while the view keeps tilting — the figure slides to the bottom of the frame instead of
+   * filling it from below. Past `orbitFollow` the body follows the view again (and the arm shortens against
+   * the floor) so the helmet stays in the bottom of the frame all the way to the 70° clamp.
    */
   orbitKnee: 8 * DEG,
   orbitMax: 21 * DEG,
+  orbitFollow: 38 * DEG,
 } as const;
 
 /** Elevation of the camera arm for a given view pitch (identical when level or looking down). */
 export function orbitPitchFor(pitch: number): number {
   if (pitch <= FOLLOW.orbitKnee) return pitch;
   const span = FOLLOW.orbitMax - FOLLOW.orbitKnee;
-  return FOLLOW.orbitKnee + span * (1 - Math.exp(-(pitch - FOLLOW.orbitKnee) / span));
+  let orbit = FOLLOW.orbitKnee + span * (1 - Math.exp(-(pitch - FOLLOW.orbitKnee) / span));
+  const x = pitch - FOLLOW.orbitFollow;
+  if (x > 0) orbit += (x * x) / (x + 5 * DEG);
+  return orbit;
 }
 
-/** World queries the follow camera needs; every member is optional (stub physics = no collision). */
-export interface FollowWorld {
-  /** allowed fraction 0..1 of the sphere sweep from→to, or null when unavailable */
-  sweep: ((from: Vec3Like, to: Vec3Like, radius: number) => number | null) | null;
-  /** floor height under (x,z) at or below yRef, or null */
-  ground: ((x: number, z: number, yRef: number) => number | null) | null;
-}
+/** Auto-recentre policy, chosen by the rig from the active device. */
+export const RECENTRE_OFF = 0;
+/** gamepad / bots: late, slow, forward motion only */
+export const RECENTRE_GENTLE = 1;
+/** keyboard without pointer lock: sooner and a little firmer, because turning the camera is laborious */
+export const RECENTRE_ASSIST = 2;
 
 export interface FollowInput {
   /** look delta this frame (radians): x = yaw, y = pitch (up positive) */
   lookX: number;
   lookY: number;
-  /** true when the player can only look by dragging / keys: recentre sooner and more firmly */
-  assisted: boolean;
+  /** RECENTRE_OFF (pointer-locked mouse) | RECENTRE_GENTLE | RECENTRE_ASSIST */
+  recentre: number;
+  /** the move intent is an absolute world direction (bots), not camera-relative: following it cannot spiral */
+  absolute: boolean;
+  /** a combat input is held: leave the camera where the player put it */
+  busy: boolean;
+  /** simulated seconds this frame (0 during hit-stop, scaled in slow-motion): speed estimate, guided turns */
+  simDt: number;
 }
-
-/** soft minimum: tends to min(a,b) but with a rounded corner */
-const softMin = (a: number, b: number): number => (a * b) / Math.pow(Math.pow(a, 6) + Math.pow(b, 6), 1 / 6);
 
 const NUDGE_YAW = 0.6;
 const NUDGE_PITCH = 0.35;
-const TELEPORT = 5;
+/** a jump longer than this is a teleport: cut */
+const TELEPORT = 25;
+/** a one-frame jump longer than this (and faster than BLINK_SPEED) is a blink: whip to it instead of cutting */
+const BLINK = 1.5;
+const BLINK_SPEED = 30;
+/** recentre: yaw rate caps (rad/s) and how far off the view axis the heading may be before it is ignored */
+const RECENTRE_CAP = [0, 18 * DEG, 25 * DEG] as const;
+const RECENTRE_GAIN = [0, 0.85, 2.0] as const;
+const RECENTRE_DELAY = [0, 2.4, 0.9] as const;
+const RECENTRE_CALM = [0, 4, 1.5] as const;
 
 export class FollowCamera {
   /** view yaw / pitch in radians (public orbit angles) */
@@ -96,6 +127,7 @@ export class FollowCamera {
   private lockWarned = false;
   private fresh = true;
 
+  private readonly arm = new SpringArm();
   private readonly px = new Damped();
   private readonly py = new Damped();
   private readonly pz = new Damped();
@@ -103,17 +135,18 @@ export class FollowCamera {
   private velX = 0;
   private velZ = 0;
   private speed = 0;
+  private readonly whipFrom = new THREE.Vector3();
+  private whipT = 1;
+  private whipDur = 0;
 
   private readonly aimBlend = new Damped(0);
   private readonly sideBlend = new Damped(1);
   private readonly lockBlend = new Damped(0);
+  private readonly tilt = new Damped(0);
   private sprintBlend = 0;
-  /** smoothed arm length (≤ the swept limit) */
-  private armSmooth: number = FOLLOW.distance;
-  private sideLimit = 1;
-  private squeeze = 0;
-  private lift = 0;
+  private near = 0;
   private idle = 0;
+  private calm = 10;
   private nudgeYaw = 0;
   private nudgePitch = 0;
   private nudgeIdle = 0;
@@ -133,10 +166,11 @@ export class FollowCamera {
   private bearingPitch = 0;
 
   private readonly pivot = new THREE.Vector3();
-  private readonly anchor = new THREE.Vector3();
-  private readonly cam = new THREE.Vector3();
+  private readonly head = new THREE.Vector3();
   private readonly dir = new THREE.Vector3();
-  private readonly raw = new THREE.Vector3();
+  private readonly req: ArmRequest = {
+    pivot: this.pivot, head: this.head, floorY: 0, yaw: 0, dir: this.dir, dist: FOLLOW.distance, shoulder: FOLLOW.shoulder, lift: 0, overRise: 0,
+  };
 
   constructor() {
     this.out.pos.set(0, 1.9, 4);
@@ -150,6 +184,16 @@ export class FollowCamera {
 
   get targetRef(): CameraFollowTarget | null {
     return this.target;
+  }
+
+  /** the hero's head this frame (pivot before lag) — what the figure fade is measured against */
+  get headPoint(): THREE.Vector3 {
+    return this.head;
+  }
+
+  /** downward view tilt (radians) currently added by the squeezed look-over pose */
+  get viewTilt(): number {
+    return this.tilt.value;
   }
 
   setTarget(t: CameraFollowTarget | null): void {
@@ -175,6 +219,15 @@ export class FollowCamera {
 
   /** Re-seat every smoother on the current target (teleports, snapBehind). */
   snap(): void {
+    this.fresh = true;
+  }
+
+  /** Drop everything that belongs to the space being left (zone load): lock, aim, guided turn, smoothing. */
+  resetScene(): void {
+    this.lockFn = null;
+    this.aim = false;
+    this.guideLeft = 0;
+    this.nudgeYaw = this.nudgePitch = 0;
     this.fresh = true;
   }
 
@@ -212,26 +265,35 @@ export class FollowCamera {
     if (!t || !isFiniteVec(t.pos)) return;
     const h = this.heightOf(t);
     const tp = t.pos;
+    const arm = this.arm;
+    const simDt = input.simDt > 0 ? input.simDt : 0;
 
-    // --- target motion, teleport detection -------------------------------------------------------
-    if (!this.fresh && this.last.distanceToSquared(tp) > TELEPORT * TELEPORT) this.fresh = true;
+    // --- target motion: teleport cut, blink whip, speed --------------------------------------------
+    const moved = this.fresh ? 0 : this.last.distanceTo(tp);
+    if (moved > TELEPORT) this.fresh = true;
     if (this.fresh) {
       this.px.snap(tp.x);
       this.py.snap(tp.y);
       this.pz.snap(tp.z);
       this.velX = this.velZ = this.speed = 0;
-      this.sideLimit = 1;
-      this.squeeze = 0;
-      this.lift = 0;
+      this.whipT = 1;
+      this.near = 0;
+      this.tilt.snap(0);
+      arm.reset();
       this.aimBlend.snap(this.aim ? 1 : 0);
       this.sideBlend.snap(this.side);
       this.lockBlend.snap(this.lockFn ? 1 : 0);
       this.snapFraming();
-    } else if (dt > 0) {
-      const ivx = (tp.x - this.last.x) / dt;
-      const ivz = (tp.z - this.last.z) / dt;
-      this.velX = damp(this.velX, ivx, 10, dt);
-      this.velZ = damp(this.velZ, ivz, 10, dt);
+    } else if (moved > BLINK && moved > BLINK_SPEED * dt) {
+      // A blink-strike or a knock-through: travel there in a short whip instead of jump-cutting. Aim, shoulder
+      // and lock blends are left alone — it is still the same shot.
+      this.whipFrom.set(this.px.value, this.py.value, this.pz.value);
+      this.whipT = 0;
+      this.whipDur = clamp(0.11 + moved * 0.012, 0.14, 0.22);
+    } else if (simDt > 1e-5) {
+      // speed in world units per SIMULATED second, so slow-motion and hit-stop do not read as standing still
+      this.velX = damp(this.velX, (tp.x - this.last.x) / simDt, 10, dt);
+      this.velZ = damp(this.velZ, (tp.z - this.last.z) / simDt, 10, dt);
       this.speed = Math.hypot(this.velX, this.velZ);
     }
     this.last.copy(tp);
@@ -243,6 +305,7 @@ export class FollowCamera {
     const ly = input.lookY * lookScale;
     const looking = Math.abs(lx) + Math.abs(ly) > 1e-6;
     this.idle = looking ? 0 : this.idle + dt;
+    this.calm = input.busy ? 0 : this.calm + dt;
 
     const lockPoint = this.aim ? null : this.readLock();
     const lockK = this.lockBlend.step(lockPoint ? 1 : 0, 0.16, dt);
@@ -255,132 +318,123 @@ export class FollowCamera {
     const baseShoulder = this.fShoulder.step(f?.shoulder ?? FOLLOW.shoulder, ft, dt);
     const baseFov = this.fFov.step(f?.fov ?? FOLLOW.fov, ft, dt);
     const heightOffset = this.fHeight.step(f?.heightOffset ?? 0, ft, dt);
-    let dist = baseDist + (FOLLOW.aimDistance - baseDist) * aimK + FOLLOW.lockDistance * lockK * (1 - aimK);
-    const shoulder = (baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK) * sideK;
+    const dist = baseDist + (FOLLOW.aimDistance - baseDist) * aimK + FOLLOW.lockDistance * lockK * (1 - aimK);
+    // Close behind the hero (squeezed by a wall) the lateral offset shrinks, or the hero would leave the frame.
+    const nearScale = 1 - (1 - FOLLOW.nearShoulder) * this.near;
+    const lateral = (baseShoulder + (FOLLOW.aimShoulder - baseShoulder) * aimK) * nearScale;
+    const toe = FOLLOW.lookOffset * Math.min(1.5, baseShoulder / FOLLOW.shoulder) * (1 - aimK) * nearScale;
+    const shoulder = lateral * sideK;
 
     // --- smoothed pivot (critically damped lag; vertical is softer to swallow steps) --------------
-    let sx = this.px.step(tp.x, 0.07, dt);
-    const sy = this.py.step(tp.y, 0.16, dt);
-    let sz = this.pz.step(tp.z, 0.07, dt);
-    const lagX = sx - tp.x;
-    const lagZ = sz - tp.z;
-    const lag = Math.hypot(lagX, lagZ);
-    if (lag > 1) {
-      sx = tp.x + (lagX / lag) * 1;
-      sz = tp.z + (lagZ / lag) * 1;
-      this.px.value = sx;
-      this.pz.value = sz;
+    let sx: number;
+    let sy: number;
+    let sz: number;
+    if (this.whipT < 1) {
+      if (dt > 0) this.whipT = Math.min(1, this.whipT + dt / this.whipDur);
+      const e = this.whipT * this.whipT * (3 - 2 * this.whipT);
+      const from = this.whipFrom;
+      sx = from.x + (tp.x - from.x) * e;
+      sy = from.y + (tp.y - from.y) * e;
+      sz = from.z + (tp.z - from.z) * e;
+      this.px.snap(sx);
+      this.py.snap(sy);
+      this.pz.snap(sz);
+    } else {
+      sx = this.px.step(tp.x, 0.07, dt);
+      sy = this.py.step(tp.y, 0.16, dt);
+      sz = this.pz.step(tp.z, 0.07, dt);
+      const lagX = sx - tp.x;
+      const lagZ = sz - tp.z;
+      const lag = Math.hypot(lagX, lagZ);
+      if (lag > 1) {
+        sx = tp.x + (lagX / lag) * 1;
+        sz = tp.z + (lagZ / lag) * 1;
+        this.px.value = sx;
+        this.pz.value = sz;
+      }
     }
-    const pivotY = sy + h + heightOffset + FOLLOW.aimRise * aimK;
-    const pivot = this.pivot.set(sx, pivotY, sz);
-    if (world.sweep && lag > 0.05) {
+    const head = this.head.set(tp.x, tp.y + h, tp.z);
+    const pivot = this.pivot.set(sx, sy + h, sz);
+    if (world.sweep && (Math.abs(sx - tp.x) > 0.05 || Math.abs(sz - tp.z) > 0.05)) {
       // The lagged pivot may cut a corner the player went around: keep it reachable from the real one.
-      const k = world.sweep(this.raw.set(tp.x, tp.y + h, tp.z), pivot, FOLLOW.probe);
-      if (k !== null && k < 1) {
-        pivot.lerpVectors(this.raw, pivot, k);
-        this.px.value = pivot.x;
-        this.pz.value = pivot.z;
+      const k = world.sweep(head, pivot, FOLLOW.probe);
+      if (k !== null && k < 1 && k > 1e-3) {
+        pivot.lerpVectors(head, pivot, k);
+        if (this.whipT >= 1) {
+          this.px.value = pivot.x;
+          this.pz.value = pivot.z;
+        }
       }
     }
 
     // --- orbit angles ----------------------------------------------------------------------------
     if (looking || lockPoint || this.aim) this.guideLeft = 0; // the player (or a lock) always outranks a guide
+    // Scripted turns slow down while the arm is brushing geometry: a fast swing past a pillar is what pops.
+    const ease = 1 - 0.55 * arm.crowded;
     if (lockPoint) {
-      this.updateLock(dt, lockPoint, lx, ly, looking, dist, shoulder, sideK);
+      this.updateLock(dt, lockPoint, lx, ly, looking, dist, Math.abs(lateral) + toe, sideK, ease);
     } else {
       this.yaw += lx;
       this.pitch += ly;
       this.nudgeYaw = this.nudgePitch = 0;
       if (this.guideLeft > 0) {
-        this.guideLeft -= dt;
+        this.guideLeft -= simDt;
         this.bearingTo(this.guide, t);
-        this.yaw = dampAngle(this.yaw, this.bearingYaw, this.guideRate, dt);
-        this.pitch = damp(this.pitch, this.bearingPitch, this.guideRate, dt);
+        this.yaw = dampAngle(this.yaw, this.bearingYaw, this.guideRate * ease, simDt);
+        this.pitch = damp(this.pitch, this.bearingPitch, this.guideRate * ease, simDt);
         this.idle = 0; // do not let auto-recentre undo the framing straight away
         if (Math.abs(angleDelta(this.yaw, this.bearingYaw)) < 0.01 && Math.abs(this.pitch - this.bearingPitch) < 0.01) this.guideLeft = 0;
       } else if (!this.aim) {
-        this.recentre(dt, input.assisted);
+        this.recentre(dt, input, ease);
       }
     }
     this.yaw = wrapAngle(this.yaw);
     this.pitch = clamp(this.pitch, FOLLOW.pitchMin, FOLLOW.pitchMax);
 
-    // --- ideal arm -------------------------------------------------------------------------------
+    // --- spring arm ------------------------------------------------------------------------------
     const yaw = this.yaw;
     const pitch = this.pitch;
-    // `dir` is the direction of the arm (camera sits at anchor − dir·arm); the view itself uses `pitch`.
-    const dir = viewDir(this.dir, yaw, orbitPitchFor(pitch));
-    // The arm still dips toward the floor when looking up: shorten it smoothly instead of colliding.
-    const room = Math.max(0.2, pivotY - (sy + FOLLOW.floorClearance));
-    if (dir.y > 0.02) dist = softMin(dist, room / dir.y);
-    dist = Math.max(FOLLOW.minDistance, dist);
+    // `dir` is the direction of the arm (camera sits at anchor − dir·arm); the view itself uses yaw / pitch.
+    const toeAngle = toe > 0 ? Math.asin(Math.min(0.5, toe / Math.max(dist, 0.5))) * sideK : 0;
+    viewDir(this.dir, yaw + toeAngle, orbitPitchFor(pitch));
+    const req = this.req;
+    req.floorY = sy;
+    req.yaw = yaw;
+    req.dist = dist;
+    req.shoulder = shoulder;
+    req.lift = heightOffset + FOLLOW.aimRise * aimK;
+    req.overRise = FOLLOW.overRise + (FOLLOW.overRiseAim - FOLLOW.overRise) * aimK;
+    arm.solve(dt, this.fresh, world, req);
+    const cam = arm.cam;
 
-    const rx = Math.cos(yaw);
-    const rz = -Math.sin(yaw);
-    const anchor = this.anchor;
-    const cam = this.cam;
-    // When the arm was squeezed last frame, the anchor rises so we look over the shoulder instead of into
-    // the back of a head. It is part of the swept anchor offset, so it can never push through a ceiling.
-    const rise = FOLLOW.squeezeRise * this.squeeze;
-    let arm = dist;
-    if (world.sweep) {
-      // 1) shoulder offset: slide the anchor sideways (and up) only as far as the world allows
-      let open = 1;
-      if (Math.abs(shoulder) > 0.01 || rise > 0.01) {
-        anchor.set(pivot.x + rx * shoulder, pivot.y + rise, pivot.z + rz * shoulder);
-        const k = world.sweep(pivot, anchor, FOLLOW.probe);
-        if (k !== null) open = clamp01(k);
-      }
-      this.sideLimit = open < this.sideLimit ? open : Math.min(open, this.sideLimit + (open - this.sideLimit) * (1 - Math.exp(-5 * dt)) + 0.2 * dt);
-      const s = shoulder * this.sideLimit;
-      anchor.set(pivot.x + rx * s, pivot.y + rise * this.sideLimit, pivot.z + rz * s);
-      // 2) spring arm: the swept limit applies instantly (never clip through cover)…
-      cam.set(anchor.x - dir.x * dist, anchor.y - dir.y * dist, anchor.z - dir.z * dist);
-      const k = world.sweep(anchor, cam, FOLLOW.probe);
-      // (no minimum here: against a wall the camera closes right up to the shoulder rather than poke through;
-      //  the player figure is expected to fade by `targetDistance`)
-      const hard = k !== null && k < 1 ? dist * clamp01(k) : dist;
-      // 3) …while anticipation whiskers ease the arm in ahead of obstacles about to cross it
-      let want = hard;
-      const cp = Math.sqrt(Math.max(0, 1 - dir.y * dir.y));
-      for (let side = -1; side <= 1; side += 2) {
-        const wy = yaw + side * FOLLOW.whiskerAngle;
-        cam.set(anchor.x + Math.sin(wy) * cp * dist, anchor.y - dir.y * dist, anchor.z + Math.cos(wy) * cp * dist);
-        const w = world.sweep(anchor, cam, FOLLOW.probe * 0.6);
-        if (w === null || w >= 1) continue;
-        const hit = dist * clamp01(w);
-        if (hit < hard) want = Math.min(want, hard + (hit - hard) * FOLLOW.whiskerPull);
-      }
-      // one smoothed length: quick to settle in, slow to ease back out, cut short by the hard limit
-      if (this.fresh || want < this.armSmooth) this.armSmooth = this.fresh ? want : damp(this.armSmooth, want, 7, dt);
-      else this.armSmooth = Math.min(want, this.armSmooth + clamp((want - this.armSmooth) * 3.2, 0.7, 5) * dt);
-      if (this.armSmooth > hard) this.armSmooth = hard;
-      arm = this.armSmooth;
-    } else {
-      this.sideLimit = 1;
-      this.armSmooth = dist;
-      anchor.set(pivot.x + rx * shoulder, pivot.y + rise, pivot.z + rz * shoulder);
-    }
-    this.squeeze = damp(this.squeeze, 1 - clamp01(arm / Math.max(dist, 1e-3)), 9, dt);
-    cam.set(anchor.x - dir.x * arm, anchor.y - dir.y * arm, anchor.z - dir.z * arm);
-
-    // --- floor under the camera (ramps, steps) -----------------------------------------------------
-    let need = 0;
-    if (world.ground) {
-      const g = world.ground(cam.x, cam.z, pivot.y);
-      if (g !== null) need = Math.max(0, g + FOLLOW.floorClearance - cam.y);
-    }
-    this.lift = need > this.lift ? need : damp(this.lift, need, 6, dt);
-    if (this.lift < 1e-4) this.lift = 0;
-    cam.y += this.lift;
+    const nearTarget = arm.length < arm.reach - 0.05 ? 1 - smoothstep(FOLLOW.nearMin, FOLLOW.nearMax, arm.backRoom) : 0;
+    this.near = this.fresh ? nearTarget : damp(this.near, nearTarget, nearTarget > this.near ? 10 : 3, dt);
 
     // --- output ----------------------------------------------------------------------------------
     const sprintTarget = smoothstep(5.9, 7.0, this.speed);
     this.sprintBlend = this.fresh ? sprintTarget : damp(this.sprintBlend, sprintTarget, 4, dt);
+    const fov = baseFov + (FOLLOW.aimFov - baseFov) * aimK + (FOLLOW.sprintFov * this.sprintBlend + FOLLOW.nearFov * this.near) * (1 - aimK);
+
+    // Squeezed against a wall the camera is close above the hero: tilt the view down just enough to keep the
+    // helmet in the bottom of the frame. Never while aiming (the reticle must not drift), and not when the
+    // hero could not be brought into frame anyway (looking up with a wall behind).
+    let tilt = 0;
+    if (this.near > 0.01 && aimK < 0.99) {
+      const hy = head.y + FOLLOW.headUp - cam.y;
+      const hd = Math.hypot(head.x - cam.x, head.z - cam.z);
+      const need = pitch - Math.atan2(hy, Math.max(hd, 1e-3)) - fov * DEG * 0.5 * FOLLOW.keepHead;
+      if (need > 0) {
+        tilt = need <= FOLLOW.tiltMax ? need : FOLLOW.tiltMax * (1 - smoothstep(FOLLOW.tiltMax, FOLLOW.tiltMax * 2.2, need));
+        tilt *= this.near * (1 - aimK);
+      }
+    }
+    if (this.fresh) this.tilt.snap(tilt);
+    else this.tilt.step(tilt, 0.16, dt);
+
     this.distance = cam.distanceTo(pivot);
     this.out.pos.copy(cam);
-    quatFromYawPitch(this.out.quat, yaw, pitch);
-    this.out.fov = baseFov + (FOLLOW.aimFov - baseFov) * aimK + FOLLOW.sprintFov * this.sprintBlend * (1 - aimK);
+    quatFromYawPitch(this.out.quat, yaw, Math.max(FOLLOW.pitchMin - FOLLOW.tiltMax, pitch - this.tilt.value));
+    this.out.fov = fov;
     this.fresh = false;
   }
 
@@ -415,7 +469,7 @@ export class FollowCamera {
    * Soft lock: ease the orbit so the lock point sits just off-centre on the open side of the frame while the
    * player stays on their shoulder side. Look input adds a bounded nudge that relaxes back.
    */
-  private updateLock(dt: number, p: Vec3Like, lx: number, ly: number, looking: boolean, dist: number, shoulder: number, sideK: number): void {
+  private updateLock(dt: number, p: Vec3Like, lx: number, ly: number, looking: boolean, dist: number, lateral: number, sideK: number, ease: number): void {
     const pivot = this.pivot;
     const dx = p.x - pivot.x;
     const dz = p.z - pivot.z;
@@ -433,27 +487,40 @@ export class FollowCamera {
     // Swing the orbit to the shoulder side so the target is not hidden behind the player's body:
     // solve for the view offset that puts the target ~5° toward the open side of screen centre.
     const alpha = 0.085;
-    const reach = (Math.abs(shoulder) + alpha * dist) / Math.max(hd, 0.6);
+    const reach = (lateral + alpha * dist) / Math.max(hd, 0.6);
     const swing = (alpha + Math.asin(Math.min(0.62, reach))) * sideK;
     const wantYaw = this.lockYaw + swing + this.nudgeYaw;
     const wantPitch = clamp(Math.atan2(p.y - pivot.y, hd + dist) * 0.9 - 0.1, -0.55, 0.5) + this.nudgePitch;
 
     // Close in, the bearing swings fast as the player circles: follow more loosely there.
-    const rate = 2.2 + 4.6 * smoothstep(1.2, 4, hd);
+    const rate = (2.2 + 4.6 * smoothstep(1.2, 4, hd)) * ease;
     this.yaw = dampAngle(this.yaw, wantYaw, rate, dt);
     this.pitch = damp(this.pitch, wantPitch, rate * 0.8, dt);
   }
 
-  /** Gentle recentre behind the direction of travel once the player has left the camera alone. */
-  private recentre(dt: number, assisted: boolean): void {
-    const delay = assisted ? 0.7 : 2.4;
-    if (this.idle <= delay || this.speed < 1) return;
+  /**
+   * Gentle recentre behind the direction of travel once the player has left the camera alone. Never with a
+   * pointer-locked mouse. The heading is camera-relative for a player (strafing moves it with the camera), so
+   * only motion that is mostly FORWARD pulls the view, and the yaw rate is capped: a held strafe or backpedal
+   * does nothing, a held diagonal is a slow arc — never a spin.
+   */
+  private recentre(dt: number, input: FollowInput, ease: number): void {
+    const mode = input.recentre === RECENTRE_ASSIST ? RECENTRE_ASSIST : input.recentre === RECENTRE_GENTLE ? RECENTRE_GENTLE : RECENTRE_OFF;
+    if (mode === RECENTRE_OFF) return;
+    const delay = RECENTRE_DELAY[mode];
+    if (this.idle <= delay || this.calm < RECENTRE_CALM[mode] || this.speed < 1) return;
     const heading = Math.atan2(-this.velX, -this.velZ);
     const diff = angleDelta(this.yaw, heading);
-    // Running toward the camera is a deliberate choice: never swing round on the player.
-    const moving = smoothstep(1, 4, this.speed) * (1 - smoothstep(2.0, 2.6, Math.abs(diff)));
+    const off = Math.abs(diff);
+    // A bot steering by world direction can be followed round almost any corner; running toward the camera is
+    // still a deliberate choice, so the view never swings round on the player.
+    const forward = input.absolute ? 1 - smoothstep(2.0, 2.6, off) : 1 - smoothstep(30 * DEG, 55 * DEG, off);
+    const moving = smoothstep(1, 4, this.speed) * forward;
     const w = smoothstep(delay, delay + 1.2, this.idle) * moving;
-    if (w > 0) this.yaw += diff * (1 - Math.exp(-(assisted ? 2.0 : 0.85) * w * dt));
+    if (w > 0) {
+      const cap = (input.absolute ? 60 * DEG : RECENTRE_CAP[mode]) * ease * dt;
+      this.yaw += clamp(diff * (1 - Math.exp(-RECENTRE_GAIN[mode] * w * dt)), -cap, cap);
+    }
     // Pitch drifts back to rest far more reluctantly — looking up at the architecture is the point.
     const wp = smoothstep(3, 5, this.idle) * moving;
     if (wp > 0) this.pitch = damp(this.pitch, FOLLOW.pitchRest, 0.35 * wp, dt);

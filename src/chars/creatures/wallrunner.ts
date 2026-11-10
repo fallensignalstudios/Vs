@@ -146,7 +146,7 @@ const ALIASES: Record<string, string> = {
 const LAUNCH = 0.45, LAND = 0.88;
 const DUTY = 0.55;
 const _t = new THREE.Vector3(), _pole = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _f = new THREE.Vector3(), _x = new THREE.Vector3();
-const _m = new THREE.Matrix4(), _qT = new THREE.Quaternion(), _qI = new THREE.Quaternion();
+const _m = new THREE.Matrix4(), _qI = new THREE.Quaternion();
 const _g: GaitOut = { along: 0, lift: 0, planted: 1 };
 
 interface Leg { limb: Limb2; rest: THREE.Vector3; off: THREE.Vector3; phase: number; side: number; front: boolean }

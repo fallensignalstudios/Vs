@@ -90,7 +90,7 @@ export type MatOverrides = Record<string, unknown> & {
  *  - `pattern`          strength of the fine pattern (data ticks / louvres / diode segments) — glow materials
  *  - `flicker`          0…1 slow flicker — `domAmberGlow`, `hologram`
  *  - `amount`           0…1 raised/lowered — `quarantineBarrier`
- *  - `visible`          0…1 — `hologram`
+ *  - `reveal`           0…1 fade of the display (use this, not `material.visible`) — `hologram`
  *  - `gain`             HDR brightness — `hologram`, `shieldEnergy`, `quarantineBarrier`
  *  - `integrity`        1 = intact → 0 = cells flicker out — `shieldEnergy`
  *  - `rim`              fresnel rim strength — `frostIce`, `glass`
@@ -98,12 +98,13 @@ export type MatOverrides = Record<string, unknown> & {
  *  - `sparkle`          glint intensity — `frostIce`, `frostRime`
  *  - `translucency`     back-light strength — `frostIce`, `frostRime`, `skin`
  *  - `corruption`       0…1, same value as the `corrupt()` handle — any corrupted material
+ *  - `corruptionGlow`   emissive intensity of the corruption veins (default 2.4) — any corrupted material
  */
 export type MatParam =
   | 'scale' | 'normalStrength' | 'maskGlow' | 'maskPulse'
   | 'pulse' | 'pulseSpeed' | 'pulseWavelength' | 'pattern' | 'flicker'
-  | 'amount' | 'visible' | 'gain' | 'integrity'
-  | 'rim' | 'iceOpacity' | 'iceCloud' | 'sparkle' | 'translucency' | 'corruption';
+  | 'amount' | 'reveal' | 'gain' | 'integrity'
+  | 'rim' | 'iceOpacity' | 'iceCloud' | 'sparkle' | 'translucency' | 'corruption' | 'corruptionGlow';
 
 /** The baked maps behind a textured material, for custom shaders that want the same surface. */
 export interface MatTextureSet {
@@ -123,7 +124,14 @@ export interface MaterialLibrary {
 
   /** Shared instance. DO NOT mutate — use clone() for per-object variations. */
   get(id: MatId): THREE.Material;
-  /** Independent copy (cheap: shares textures). Caller disposes. */
+  /**
+   * Independent copy (cheap: shares textures). Caller disposes.
+   * `overrides` takes ordinary three.js material properties plus the keys of {@link MatOverrides}
+   * (`objectSpace`, and the named shader parameters of {@link MatParam}); unknown keys warn once and are ignored.
+   * Pass the matching class as `T` for non-standard bases: `clone<THREE.MeshBasicMaterial>('hologram')`
+   * (`hologram`, `shieldEnergy`, `quarantineBarrier`, `woundBlack` are MeshBasicMaterial; `blackStone*`,
+   * `domOxblood`, `domCloth`, `refCloth`, `glass` are MeshPhysicalMaterial; everything else MeshStandardMaterial).
+   */
   clone<T extends THREE.Material = THREE.MeshStandardMaterial>(id: MatId, overrides?: Record<string, unknown>): T;
 
   /**
@@ -135,6 +143,10 @@ export interface MaterialLibrary {
   /**
    * Add an animated Eclipse corruption overlay to an existing standard material instance
    * (veins creep along surfaces; amount 0..1 can be animated via the returned handle).
+   * Works on any MeshStandard/PhysicalMaterial, including ones this library did not create (their own
+   * `onBeforeCompile` is kept). `scale` = metres per repeat of the vein network (default 1.8). Corrupt a
+   * `clone()`, not a shared instance — the overlay changes the instance for every mesh that uses it. Calling it
+   * again on the same instance returns the same handle. Violet only where a real source exists (BRIEF §4).
    */
   corrupt(material: THREE.MeshStandardMaterial, opts?: { amount?: number; scale?: number }): { amount: number };
 

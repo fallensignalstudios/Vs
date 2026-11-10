@@ -1,19 +1,21 @@
 /**
  * LightCards — instanced emissive points and strips for far-field pieces (one draw call per piece).
- * Each card is a camera-facing soft sprite, or a world-vertical strip when taller than wide. Size is clamped to a
- * minimum pixel footprint (energy-compensated) so kilometre-distant lights never shimmer, and their brightness
- * survives haze longer than surfaces do. Cards may carry a looping or one-shot linear motion (vent plumes,
- * sparks) evaluated in the vertex shader — nothing is simulated per frame on the CPU.
+ * Each card is a camera-facing soft sprite, a world-vertical strip when taller than wide, or a velocity-stretched
+ * streak (sparks). Size is clamped to a minimum pixel footprint (energy-compensated) so kilometre-distant lights
+ * never shimmer, and their brightness survives haze longer than surfaces do. Cards may carry a looping or
+ * one-shot ballistic motion (vent plumes, sparks, dust) evaluated in the vertex shader — nothing is simulated
+ * per frame on the CPU.
  */
 import * as THREE from 'three';
 import { SKY_ORDER, viewportTracker, type SharedUniforms } from '../shared';
 
 const VERTEX = /* glsl */ `
 attribute vec3 iPos;
-attribute vec4 iSize;   // width, height (m), group, softness (0 = point glow, 1 = flat strip)
+attribute vec4 iSize;   // width, height (m), group, kind (0 = point glow, 1 = flat strip, 2 = velocity streak)
 attribute vec3 iColor;
 attribute vec4 iMotion; // velocity (m/s), period (s): > 0 loops, < 0 one-shot, 0 static
 attribute vec2 iPhase;  // start time / loop phase, gravity scale
+attribute vec3 iFx;     // one-shots: size growth over life (× (1 + g·a)), air drag (1/s), attack time (s)
 uniform vec2 uViewport;
 uniform float uTime;
 uniform float uHazeDensity;
@@ -26,11 +28,13 @@ varying vec3 vCol;
 varying float vSoft;
 void main() {
   vQ = position.xy;
-  vSoft = iSize.w;
+  vSoft = min(iSize.w, 1.0);
   int group = int(iSize.z + 0.5);
   float gain = group == 0 ? uGroupGain.x : (group == 1 ? uGroupGain.y : (group == 2 ? uGroupGain.z : uGroupGain.w));
   vec3 p = iPos;
+  vec3 vel = iMotion.xyz;
   float life = 1.0;
+  float grow = 1.0;
   if (iMotion.w > 0.0) {
     float a = fract(uTime / iMotion.w + iPhase.x);
     p += iMotion.xyz * (a * iMotion.w);
@@ -39,19 +43,31 @@ void main() {
     float age = uClock - iPhase.x;
     float a = age / -iMotion.w;
     if (age < 0.0 || a >= 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vCol = vec3(0.0); return; }
-    p += iMotion.xyz * age + vec3(0.0, -4.9 * iPhase.y * age * age, 0.0);
-    life = (1.0 - a) * (1.0 - a);
+    float k = iFx.y;
+    float travel = k > 0.001 ? (1.0 - exp(-k * age)) / k : age;
+    p += iMotion.xyz * travel + vec3(0.0, -4.9 * iPhase.y * age * age, 0.0);
+    vel = iMotion.xyz * exp(-k * age) + vec3(0.0, -9.8 * iPhase.y * age, 0.0);
+    life = (1.0 - a) * (1.0 - a) * (iFx.z > 0.001 ? smoothstep(0.0, iFx.z, age) : 1.0);
+    grow = 1.0 + iFx.x * a;
   }
   vec4 vc = viewMatrix * modelMatrix * vec4(p, 1.0);
   float dist = max(-vc.z, 0.01);
   float mpp = 2.0 * dist / (projectionMatrix[1][1] * uViewport.y);
-  float scl = length(modelMatrix[0].xyz);
+  float scl = length(modelMatrix[0].xyz) * grow;
   float w = max(iSize.x * scl, uMinPx * mpp);
   float h = max(iSize.y * scl, uMinPx * mpp);
   float comp = clamp((iSize.x * iSize.y * scl * scl) / (w * h), 0.06, 1.0);
-  bool strip = iSize.y > iSize.x * 1.6;
+  bool strip = iSize.w > 0.5 && iSize.w < 1.5;
   vec3 up = strip ? normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz) : vec3(0.0, 1.0, 0.0);
   vec3 right = strip ? normalize(cross(up, vec3(0.0, 0.0, 1.0))) : vec3(1.0, 0.0, 0.0);
+  if (iSize.w > 1.5) {
+    // streak: lie along the on-screen velocity and stretch by the distance covered in a 1/20 s exposure
+    vec3 vv = (viewMatrix * modelMatrix * vec4(vel, 0.0)).xyz;
+    float sp = length(vv.xy);
+    up = sp > 1e-4 ? vec3(vv.xy / sp, 0.0) : vec3(0.0, 1.0, 0.0);
+    right = vec3(up.y, -up.x, 0.0);
+    h = max(h, sp * 0.05);
+  }
   vec3 pv = vc.xyz + right * position.x * w * 0.5 + up * position.y * h * 0.5;
   gl_Position = projectionMatrix * vec4(pv, 1.0);
   float haze = exp(-length(vc.xyz) * uHazeDensity * uHazeScale * 0.4);
@@ -85,6 +101,7 @@ export class LightCards {
   private readonly col: number[] = [];
   private readonly motion: number[] = [];
   private readonly phase: number[] = [];
+  private readonly fx: number[] = [];
 
   get count(): number { return this.pos.length / 3; }
 
@@ -105,6 +122,7 @@ export class LightCards {
     this.col.push(_c.r * intensity, _c.g * intensity, _c.b * intensity);
     this.motion.push(0, 0, 0, 0);
     this.phase.push(0, 0);
+    this.fx.push(0, 0, 0);
     return this;
   }
 
@@ -128,7 +146,7 @@ export class LightCards {
     };
     const attrs = {
       pos: mk('iPos', this.pos, 3), size: mk('iSize', this.size, 4), color: mk('iColor', this.col, 3),
-      motion: mk('iMotion', this.motion, 4), phase: mk('iPhase', this.phase, 2),
+      motion: mk('iMotion', this.motion, 4), phase: mk('iPhase', this.phase, 2), fx: mk('iFx', this.fx, 3),
     };
     geometry.instanceCount = this.count;
     // bounds: cover every card (static pieces are large; keep culling cheap and conservative)
@@ -166,7 +184,7 @@ export class LightCards {
 
 export interface LightCardMesh extends THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial> {
   cards: {
-    attrs: Record<'pos' | 'size' | 'color' | 'motion' | 'phase', THREE.InstancedBufferAttribute>;
+    attrs: Record<'pos' | 'size' | 'color' | 'motion' | 'phase' | 'fx', THREE.InstancedBufferAttribute>;
     uniforms: { uGroupGain: { value: THREE.Vector4 }; uClock: { value: number }; uHazeScale: { value: number }; uMinPx: { value: number } };
   };
 }

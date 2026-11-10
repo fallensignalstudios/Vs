@@ -155,7 +155,7 @@ export const STORY: Record<string, EffectDef> = {
     emitters: [
       // five currents: released on five spokes with a sideways push, the spring pulls them into inward spirals that all
       // arrive together (harmonic: a quarter period ≈ 1.0 s from any radius)
-      { p: sparks(C.gold, { life: [1.15, 1.3], size: [0.1, 0.085, 0.03], aspect: 5, stretch: 0.13, gravity: 0, bounce: 0, drag: 0.9, attract: 2.4, color: [[C.gold, 3], [C.goldLight, 4.5], [C.white, 6]], colorMid: 0.6, fadeIn: 0.12, fadeOut: 0.92 }), rate: 220, until: 0.85, shape: 'ring', radius: 6, spokes: 5, vel: 'tangent', speed: [1.6, 2.8], offset: [0, 0.12, 0] },
+      { p: sparks(C.gold, { life: [1.15, 1.3], size: [0.15, 0.13, 0.05], aspect: 5, stretch: 0.16, gravity: 0, bounce: 0, drag: 0.9, attract: 2.4, color: [[C.gold, 4], [C.goldLight, 5.5], [C.white, 7]], colorMid: 0.6, fadeIn: 0.1, fadeOut: 0.92 }), rate: 240, until: 0.85, shape: 'ring', radius: 6, spokes: 5, vel: 'tangent', speed: [1.6, 2.8], offset: [0, 0.12, 0] },
       // the meeting point brightens as they arrive
       { p: flashGlow(C.goldLight, 3, 2.4, 0.95, { color: [[C.gold, 0.4], [C.goldLight, 3], [C.white, 5]], colorMid: 0.6, fadeIn: 0.5, fadeOut: 0.97, size: [0.6, 1.6, 2.6], sizeMid: 0.6, floorFade: true }), burst: 1, at: 0.9, offset: [0, 0.5, 0] },
       { p: motes(C.goldLight, 3.5, { life: [1.1, 1.3], size: [0.06, 0.05, 0.02], drag: 0.9, attract: 2.4, fadeOut: 0.9 }), rate: 60, until: 0.85, shape: 'ring', radius: 6, vel: 'tangent', speed: [1.2, 3.2], offset: [0, 0.2, 0] },

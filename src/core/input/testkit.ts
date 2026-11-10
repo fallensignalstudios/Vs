@@ -13,12 +13,12 @@ export interface FakePad extends PadLike {
   rumbles: Array<Record<string, number>>;
 }
 
-export function makePad(id = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)'): FakePad {
+export function makePad(id = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)', mapping = 'standard'): FakePad {
   const rumbles: Array<Record<string, number>> = [];
   return {
     id,
     connected: true,
-    mapping: 'standard',
+    mapping,
     axes: [0, 0, 0, 0],
     buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
     rumbles,
@@ -31,7 +31,16 @@ export function makePad(id = 'Xbox Wireless Controller (STANDARD GAMEPAD Vendor:
   };
 }
 
-export function rig(opts: { lock?: 'grant' | 'reject' | 'none'; settings?: Partial<Settings> } = {}) {
+export interface RigOpts {
+  lock?: 'grant' | 'reject' | 'none';
+  settings?: Partial<Settings>;
+  /** printed characters by KeyboardEvent.code, as navigator.keyboard.getLayoutMap would report them */
+  layout?: Record<string, string>;
+  /** pre-existing localStorage content */
+  stored?: Record<string, string>;
+}
+
+export function rig(opts: RigOpts = {}) {
   const win = new EventTarget();
   const doc = Object.assign(new EventTarget(), { pointerLockElement: null as unknown, hidden: false, exitPointerLock: () => {} });
   const lock = opts.lock ?? 'grant';
@@ -53,11 +62,20 @@ export function rig(opts: { lock?: 'grant' | 'reject' | 'none'; settings?: Parti
     doc.dispatchEvent(new Event('pointerlockchange'));
   };
   const pads: Array<FakePad | null> = [null, null, null, null];
-  const env: InputEnv = { win, doc, canvas, getGamepads: () => pads };
+  const store = new Map<string, string>(Object.entries(opts.stored ?? {}));
+  const layout = opts.layout;
+  const env: InputEnv = {
+    win, doc, canvas,
+    getGamepads: () => pads,
+    getLayoutMap: layout ? () => Promise.resolve(new Map(Object.entries(layout))) : null,
+    storage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => void store.set(k, v) },
+  };
   const events = new Emitter<GameEvents>();
   const settings = new SettingsStoreImpl(events);
   for (const [k, v] of Object.entries(opts.settings ?? {})) settings.set(k as keyof Settings, v as never);
-  const game = { events, settings } as unknown as Game;
+  /** the simulation clock the real Game exposes; tests advance `time.now` to play sim substeps */
+  const time = { now: 0 };
+  const game = { events, settings, time } as unknown as Game;
   const input = new InputSystemImpl(game, env);
 
   const ev = (target: EventTarget, type: string, props: Record<string, unknown> = {}) => {
@@ -71,6 +89,9 @@ export function rig(opts: { lock?: 'grant' | 'reject' | 'none'; settings?: Parti
     settings,
     pads,
     doc,
+    time,
+    store,
+    canvas,
     get lockRequests() {
       return lockRequests;
     },
@@ -78,10 +99,19 @@ export function rig(opts: { lock?: 'grant' | 'reject' | 'none'; settings?: Parti
     keyUp: (code: string) => ev(win, 'keyup', { code }),
     mouseDown: (button: number) => ev(canvas, 'mousedown', { button }),
     mouseUp: (button: number) => ev(win, 'mouseup', { button }),
+    /** hold the right button still long enough to aim without pointer lock */
+    aimHold: () => {
+      ev(canvas, 'mousedown', { button: 2 });
+      for (let t = 0; t < 0.2; t += DT) input.update(DT);
+    },
     mouseMove: (movementX: number, movementY: number) => ev(doc, 'mousemove', { movementX, movementY }),
     blur: () => ev(win, 'blur'),
+    /** one frame with a running simulation: the sim clock advances after the latch (as in Game.tick) */
     tick: (n = 1, dt = DT) => {
-      for (let i = 0; i < n; i++) input.update(dt);
+      for (let i = 0; i < n; i++) {
+        input.update(dt);
+        time.now += dt;
+      }
     },
   };
 }

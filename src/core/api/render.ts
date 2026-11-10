@@ -12,11 +12,20 @@
  *   game.render.refreshEnvironment();                       // after the zone is built: local reflection probe
  *   await game.render.compile();                            // during loading, after the zone is in the scene
  *
- * IMAGE PIPELINE (HDR half-float, in order): scene → ambient occlusion → [depth of field] → chromatic
- * aberration → bloom → grade (exposure, tint, split-tone, saturation, contrast, lift, vignette) → screen
- * feedback → filmic tone map → SMAA → film grain + dither. Emissive convention: scene-linear luminance above
- * `Look.bloom.threshold` (≈ 1) blooms — emissive intensity 1.5 = soft glow, 3 = bright strip, 6+ = hot core.
- * `?nopost=1` renders the scene directly (tone-mapped, no effects) for fast headless shots.
+ * IMAGE PIPELINE (HDR half-float, in order): scene (4× MSAA at high / ultra) → ambient occlusion →
+ * [depth of field] → chromatic aberration → bloom → grade (exposure, saturation, contrast, tint, split-tone,
+ * lift, vignette) → screen feedback → ACES filmic tone map → SMAA → film grain + dither.
+ * `?nopost=1` renders the scene directly (tone-mapped, no effects) for fast headless shots; `?quality=high`
+ * forces the reference chain (software WebGL defaults to 'low': no AO, no SMAA, no planar reflections).
+ *
+ * AUTHORING CONVENTIONS
+ *  - Emissive: scene-linear luminance above `Look.bloom.threshold` (≈ 1) blooms — emissive intensity 1.5 = soft
+ *    glow, 3 = bright strip, 6+ = hot core. Lit surfaces stay below 1 unless a light is deliberately hot.
+ *  - Thin emissive geometry (channels, seams) should be at least ~4 cm wide: MSAA keeps it continuous at
+ *    high / ultra, but at low / medium anything under a pixel breaks into dots.
+ *  - Ambient occlusion multiplies the whole pixel. An emissive hero object that sits in a crease can opt out
+ *    with `mesh.userData.cannotReceiveAO = true` (costs one extra draw of that mesh).
+ *  - Things that should not show up in floor reflections / the reflection probe: see RENDER_LAYERS.
  */
 import type * as THREE from 'three';
 import type { Vec3Like } from './common';
@@ -80,19 +89,19 @@ export interface Look {
 /** Names of the tuned presets exported as `LOOKS` from '@/render/looks' (also on `RenderSystem.looks`). */
 export type LookName =
   | 'neutral'       // engine default (title, fallbacks)
-  | 'crash'         // Z00 broken landing: smoke-warm, amber emergency light, cool shadows
+  | 'crash'         // Z00 broken landing: smoke-warm, amber emergency light, teal shadows
   | 'pressureHall'  // Z01: clean ivory hall, cold security light against warm ancient strips
-  | 'survivorBend'  // Z02: subdued, low warm practicals, soft contrast
+  | 'survivorBend'  // Z02: muted, low-key, lifted blacks, warm practicals
   | 'frozen'        // Z03: cold cyan frozen atmosphere, thick pale haze
   | 'relay'         // Z04: bright silver daylight through the ribs, marble and distance haze
   | 'atrium'        // Z05: vast, high contrast, cool ambient under battle light
-  | 'breach'        // Z06: dark, violet-leaning shadows, gritty
-  | 'gallery'       // Z07: dim technical gallery, amber against blue
+  | 'breach'        // Z06: dark, gritty, drained; cold steel shadows (violet stays with real corruption)
+  | 'gallery'       // Z07: dim technical gallery, teal shadows, amber console highlights
   | 'crucible'      // Z08: luminous white-gold arena, wet dark floor, gold highlights
   | 'woundGallery'  // Z09: near-black, deep contrast, cold; the sky does the talking
   | 'core'          // Z10: mirror-black stone and gold, luminous rings
   | 'observation'   // Z11: quiet, warm interior against a cold exterior
-  | 'hangar'        // Z12: wide, hazy, neutral-cool
+  | 'hangar'        // Z12: wide, blue-grey haze, neutral-cool
   | 'witness';      // the historical sequence: desaturated gold-white memory
 
 export type ScreenPulse = 'hit' | 'heal' | 'corruption' | 'frost' | 'cinder' | 'flash' | 'gold';
@@ -167,13 +176,22 @@ export interface RenderSystem {
   /** The look being displayed or blended toward (a copy — safe to keep and pass back to setLook). */
   getLook(): Look;
 
-  /** Cinematic depth of field; null disables. focusDistance in metres from the camera, strength 0..1. */
+  /**
+   * Cinematic depth of field; null disables. focusDistance in metres from the camera, strength 0..1
+   * (1 = shallow portrait focus). Changes ease over ~0.2 s (a focus pull). Ignored where `quality.dof` is off.
+   */
   setDof(opts: { focusDistance: number; strength: number } | null): void;
 
-  /** Brief full-screen feedback (damage vignette, heal bloom…). Honours settings.reduceFlash. */
+  /**
+   * Brief full-screen feedback at the frame edges (damage vignette, heal breath, frost needles…); `strength`
+   * 0..2, default 1. Only 'flash' washes the whole frame. Honours settings.reduceFlash.
+   */
   pulse(kind: ScreenPulse, strength?: number): void;
 
-  /** 0..1 bounded local-threat feedback (violet edge distortion). Honours settings.reduceDistortion. */
+  /**
+   * 0..1 bounded local-threat feedback: the frame edges warp, drain and grow violet veins; the centre of the
+   * frame always stays clean. Eased in and out (set it every frame or once). Honours settings.reduceDistortion.
+   */
   setCorruption(amount: number): void;
 
   /**

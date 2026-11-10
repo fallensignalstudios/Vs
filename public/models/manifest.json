@@ -1,22 +1,355 @@
 {
-  "tarrik": {"file":"tarrik.glb","kind":"humanoid","height":1.92,"tris":58118,"rigged":true,"facing":"+Z","skeleton":"meshy24","notes":"Hero. No cape in mesh (procedural cloth). Hands rigid (no finger bones)."},
-  "selene": {"file":"selene.glb","kind":"humanoid","height":1.76,"tris":53760,"rigged":true,"facing":"+Z","skeleton":"meshy24","notes":"Hero (Reformation). Navy/slate fitted armour, steel plates, asymmetric guard on her LEFT shoulder, high ponytail baked into the mesh behind the head/upper back (skinned to head/spine; no hair bones). Light seams are painted in base colour only (no emissive map) - add emissive in-engine if glow is wanted. Bright steel plates bloom under strong lights; face is weaker than the body in extreme close-up. Hands rigid (no finger bones)."},
-  "lyessa": {"file":"lyessa.glb","kind":"humanoid","height":1.74,"tris":55096,"rigged":true,"facing":"+Z","skeleton":"meshy24","notes":"Hero (Dominion officer). Bronze/oxblood half-plate over black fatigues, belt pouches, oxblood coat tails front and back (skinned to hips/legs, no cloth bones). Small clasp at the collar. Amber seams painted in base colour only (no emissive map). Hands rigid (no finger bones)."},
-  "tharne": {"file":"tharne.glb","kind":"humanoid","height":1.8,"tris":52830,"rigged":true,"facing":"+Z","skeleton":"meshy24","notes":"Hero (Reformation technician). Navy field suit, steel chest/shoulder panels, equipment pack on the back (bbox depth 0.45 m), display unit on his LEFT forearm. The half-visor came out as an OPAQUE pale frame over the eyes (no transparency in the mesh). Bright steel panels bloom under strong lights. Hands rigid (no finger bones)."},
-  "lyric": {"file":"lyric.glb","kind":"humanoid","height":1.68,"tris":55822,"rigged":true,"facing":"+Z","skeleton":"meshy24","notes":"Hero (Reformation, slight build). Navy/slate field suit, slim steel chest plate, plate on her LEFT shoulder, knee guards, chest/hip harness straps (for the carried case). Hands rigid (no finger bones)."},
-  "velkorran": {"file":"velkorran.glb","kind":"prop","tris":7864,"bbox":[0.246,0.292,1],"longAxis":"z","handleAt":"max","targetLength":1.6,"front":"-z","up":"+y","grip":[0,0,0.34],"notes":"Greatsword. Raw units, origin at bbox centre. Blade tip at -z, pommel at +z. Grip centre z=+0.34 (grip spans z 0.28..0.40 = only ~0.19 m at target length, pommel 0.40..0.50, crossguard 0.15..0.27 and it is volumetric: +-0.146 in y, +-0.123 in x). Blade lies in the YZ plane: cutting edges +-y (width 0.106), thickness 0.052 in x (chunky: ~8 cm at target length; scale x ~0.6 to slim). Ember channel is painted along the -y edge on both faces, base colour only (no emissive map)."},
-  "verity": {"file":"verity.glb","kind":"prop","tris":8032,"bbox":[0.072,0.243,1],"longAxis":"z","handleAt":"center","targetLength":1.5,"up":"+y","grip":[0,0,0],"notes":"Double-bladed weapon. Raw units, origin at bbox centre = centre of the ring hilt. Ring hole axis is X (ring seen face-on from +-x), outer radius 0.122, ring spans z -0.10..+0.10; two opposed blades run from |z| 0.2 to 0.5 (tips at +-z). The hand grips the ring rim (e.g. at y=-0.11). Post-processed: ring band was a wide tube, so the file carries a root node scale x=0.42 (band is now 0.07 wide), and roughness was raised (+0.28) because the raw material was a mirror. Edge light is base colour only (no emissive map)."},
-  "cinderline": {"file":"cinderline.glb","kind":"prop","tris":7943,"bbox":[0.213,0.674,1],"longAxis":"z","handleAt":"max","targetLength":0.34,"front":"-z","up":"+y","grip":[0,-0.15,0.36],"muzzle":[0,0.175,-0.5],"notes":"Heavy pistol. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.175), grip hangs at the +z end (z 0.2..0.5, down to y=-0.337), sights on +y. Ember vents/sight are base colour only (no emissive map). Surfaces look slightly dented in extreme close-up after decimation to 8k."},
-  "axiom": {"file":"axiom.glb","kind":"prop","tris":8050,"bbox":[0.139,0.435,1],"longAxis":"z","handleAt":"max","targetLength":0.62,"front":"-z","up":"+y","grip":[0,-0.08,0.42],"muzzle":[0,0.075,-0.5],"notes":"Long-barrelled pistol-carbine, no stock. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.075), pistol grip at the +z end (z 0.33..0.5, down to y=-0.217), optic on +y at z~+0.2. Roughness raised (+0.14) from the raw glossy material. Blue accents are base colour only (no emissive map)."},
-  "rifle_dominion": {"file":"rifle_dominion.glb","kind":"prop","tris":8070,"bbox":[0.111,0.376,1],"longAxis":"z","handleAt":"max","targetLength":0.95,"front":"-z","up":"+y","grip":[0,-0.08,0.22],"foregrip":[0,-0.01,-0.2],"muzzle":[0,0.054,-0.5],"notes":"Battle rifle. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.054), fixed stock at +z (z 0.3..0.5), pistol grip z~+0.22, magazine z~+0.05, handguard (support hand) z~-0.2, optic on +y. Amber sight is base colour only (no emissive map)."},
-  "sealed_case": {"file":"sealed_case.glb","kind":"prop","tris":8061,"bbox":[0.496,0.581,1],"longAxis":"z","handleAt":"center","targetLength":0.6,"front":"+x","up":"+y","grip":[0,0.26,0],"notes":"Hard equipment case. Raw units, origin at bbox centre. Carry handle on top centre (y 0.17..0.29, z -0.2..+0.2), body top at y=+0.167, base at y=-0.29. Latches and the blue status strip are on BOTH long faces (+x and -x). Status strip is base colour only (no emissive map). Steel corners bloom under strong lights."},
-  "enforcer": {"file":"enforcer.glb","kind":"humanoid","height":2.1,"tris":53217,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[1.433,2.1,0.676],"notes":"Hero tier (Dominion heavy shock trooper). Very broad: 1.43 m across the pauldrons, hand bones at x=+-0.60 y=1.19. Closed helm with an amber eye slit, leaf-scroll filigree on pauldrons/cuirass (ornament, not a faction emblem). Amber seams are base colour only (no emissive map). Layered tassets are skinned to hips/legs (no cloth bones): hip flexion beyond ~25 deg stretches a patch between the centre tasset and the thigh that catches a hard specular glint - keep strides short and heavy. Hands rigid (no finger bones). File carries one 0.03 s rest-pose clip from the rigger (ignore)."},
-  "elite": {"file":"elite.glb","kind":"humanoid","height":3.6,"tris":53502,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[2.421,3.6,1.021],"weakPoint":[0.6,3,0.05],"weakPointRadius":0.35,"notes":"Hero tier (Eclipse elite, 3.6 m). Hulking biped built from scavenged bronze-red and navy plates, pale ivory arch fragments and bone struts over violet-black tissue; small sunken skull-like head (Head bone y=3.13), long heavy arms with clawed hands (hand bones x=+-1.06 y=1.98), clawed feet. Exposed violet tissue mass on ITS LEFT shoulder (+x side, around the LeftArm bone at 0.55,3.02,-0.12) = weakPoint. Ivory arch fragments stand up behind both shoulders (thin geometry, skinned to shoulders/spine). Violet veins and the shoulder mass are base colour only (no emissive map) - add emissive in-engine. Ivory parts are bright and bloom under strong lights. Fingers/claws rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore)."},
-  "linkbound": {"file":"linkbound.glb","kind":"humanoid","height":1.85,"tris":25288,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[1.03,1.85,0.402],"notes":"Standard tier (corrupted soldier). Mismatched broken armour: bronze-red plates on its RIGHT side (-x), navy-steel on its LEFT (+x), cracked closed helmet whose visor is a dark hollow, violet-black tissue with thin violet veins between plates and over the bare forearms/hands. Stands upright in bind pose (add the hunch in animation). Violet is base colour only (no emissive map); tissue reads mauve under bright light, dark violet in dark scenes. Hands rigid. One 0.03 s rest-pose clip (ignore)."},
-  "weaver": {"file":"weaver.glb","kind":"humanoid","height":2.3,"tris":23778,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[1.358,2.3,0.402],"notes":"Standard tier (tall gaunt alien). Smooth violet carapace, featureless elongated head with one vertical slit, very long thin arms (hand bones x=+-0.52 y=1.24, bind pose arms ~45 deg out), spine-like filaments along forearms/shoulders skinned to the arm bones (no extra bones), bare elongated feet. Reads mid-violet under bright light and violet-black in dark scenes; carapace is fairly glossy/metallic (mean metalness 0.35). Head slit and glow lines are base colour only (no emissive map). Long fingers rigid. One 0.03 s rest-pose clip (ignore)."},
-  "soldier_dominion": {"file":"soldier_dominion.glb","kind":"humanoid","height":1.82,"tris":22988,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[0.987,1.82,0.379],"notes":"Standard tier (Dominion infantry). Bronze/oxblood medium plate over black fatigues, closed helmet with a V-shaped amber visor slit and an oxblood crest stripe, utility belt with pouches, short hip plates. Amber seams are base colour only (no emissive map). Hands rigid. One 0.03 s rest-pose clip (ignore)."},
-  "soldier_reformation": {"file":"soldier_reformation.glb","kind":"humanoid","height":1.82,"tris":23354,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[1.022,1.819,0.43],"notes":"Standard tier (Reformation marine). Slate/brushed-steel modular plates over a dark navy suit, smooth full helmet with a horizontal blue-white visor band, chest rig with small modules, belt pouches, thigh plates. Post-processed: the raw material was a mirror (chrome in bright scenes, wet black in dark ones), so roughness was remapped (x0.62 +0.28) and metalness scaled x0.75. Blue-white lights are base colour only (no emissive map). Texture is soft in extreme close-up. Hands rigid. One 0.03 s rest-pose clip (ignore)."},
-  "survivor": {"file":"survivor.glb","kind":"humanoid","height":1.75,"tris":23622,"rigged":true,"facing":"+Z","skeleton":"meshy24","bbox":[0.936,1.75,0.35],"notes":"Standard tier (civilian). Dusty grey-tan work jacket (open, sleeves rolled) over a henley, cargo trousers, boots, bandage on HIS LEFT forearm (+x), soot on the face, dark tousled hair, short beard; no armour, no faction colours. Face is fine at gameplay distance, painted-looking in extreme close-up. Jacket hem is skinned to spine/hips (no cloth bones). Fingers rigid. One 0.03 s rest-pose clip (ignore)."},
-  "drone": {"file":"drone.glb","kind":"prop","tris":14824,"bbox":[0.851,0.657,1],"longAxis":"z","handleAt":"center","targetLength":1.1,"front":"+x","up":"+y","lens":[0.357,0,0],"muzzle":[0.425,-0.254,0],"notes":"Hovering security drone. Raw units, origin at bbox centre. Long axis z = span across the four swept vanes (1.0 raw -> 1.1 m); hull is ~0.66 raw in diameter. Front is +x: round camera-lens eye centred at x=+0.357 y=0, under-slung gun barrel tip at x=+0.425 y=-0.254, ribbed cooling vent on top-rear (-x, +y). Navy hull with brushed-steel belt; glossy. Blue-white running lights (lens ring, vane edges) are base colour only (no emissive map). No rotors/legs: hover it procedurally."},
-  "tower_shield": {"file":"tower_shield.glb","kind":"prop","tris":7972,"bbox":[0.528,0.993,0.105],"longAxis":"y","handleAt":"center","targetLength":1.5,"front":"+z","up":"+y","grip":[0,0,0],"notes":"Tall curved tower shield (0.80 x 1.50 x 0.16 m at target length). Raw units; origin = centre of the BACK chord plane (x,y centred, z=0), outer face bulges to z=+0.105 at the centre line, so mount the origin at the forearm/hand with +z away from the carrier. Oxblood panels in a bronze frame with black riveted bracing, amber emitter strip on all four rim edges (base colour only, no emissive map), no emblem. HAND-SALVAGED: image-to-3D returned a closed barrel, so the front half of its wall was cut out, flattened to a subtle curve and given a plain dark-bronze back shell (material shield_back, untextured, mirrors the front relief) plus 1.2 cm edge strips. No grip/straps modelled on the back. Rivets are shallow after flattening."}
+ "tarrik": {
+  "file": "tarrik.glb",
+  "kind": "humanoid",
+  "height": 1.9,
+  "tris": 52512,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "notes": "From the author's own art. Narrow front tabard only; cape/side drapes are procedural cloth. Sword removed (separate prop). Hands rigid."
+ },
+ "selene": {
+  "file": "selene.glb",
+  "kind": "humanoid",
+  "height": 1.68,
+  "tris": 55586,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "notes": "From the author's own art. Knee/shin plates are very bright in base colour: exclude from emissive mask and tame under bloom. Hands rigid."
+ },
+ "lyessa": {
+  "file": "lyessa.glb",
+  "kind": "humanoid",
+  "height": 1.74,
+  "tris": 55096,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "notes": "Hero (Dominion officer). Bronze/oxblood half-plate over black fatigues, belt pouches, oxblood coat tails front and back (skinned to hips/legs, no cloth bones). Small clasp at the collar. Amber seams painted in base colour only (no emissive map). Hands rigid (no finger bones)."
+ },
+ "tharne": {
+  "file": "tharne.glb",
+  "kind": "humanoid",
+  "height": 1.8,
+  "tris": 52830,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "notes": "Hero (Reformation technician). Navy field suit, steel chest/shoulder panels, equipment pack on the back (bbox depth 0.45 m), display unit on his LEFT forearm. The half-visor came out as an OPAQUE pale frame over the eyes (no transparency in the mesh). Bright steel panels bloom under strong lights. Hands rigid (no finger bones)."
+ },
+ "lyric": {
+  "file": "lyric.glb",
+  "kind": "humanoid",
+  "height": 1.68,
+  "tris": 55822,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "notes": "Hero (Reformation, slight build). Navy/slate field suit, slim steel chest plate, plate on her LEFT shoulder, knee guards, chest/hip harness straps (for the carried case). Hands rigid (no finger bones)."
+ },
+ "velkorran": {
+  "file": "velkorran.glb",
+  "kind": "prop",
+  "tris": 7864,
+  "bbox": [
+   0.246,
+   0.292,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "max",
+  "targetLength": 1.6,
+  "front": "-z",
+  "up": "+y",
+  "grip": [
+   0,
+   0,
+   0.34
+  ],
+  "notes": "Greatsword. Raw units, origin at bbox centre. Blade tip at -z, pommel at +z. Grip centre z=+0.34 (grip spans z 0.28..0.40 = only ~0.19 m at target length, pommel 0.40..0.50, crossguard 0.15..0.27 and it is volumetric: +-0.146 in y, +-0.123 in x). Blade lies in the YZ plane: cutting edges +-y (width 0.106), thickness 0.052 in x (chunky: ~8 cm at target length; scale x ~0.6 to slim). Ember channel is painted along the -y edge on both faces, base colour only (no emissive map)."
+ },
+ "verity": {
+  "file": "verity.glb",
+  "kind": "prop",
+  "tris": 8032,
+  "bbox": [
+   0.072,
+   0.243,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "center",
+  "targetLength": 1.5,
+  "up": "+y",
+  "grip": [
+   0,
+   0,
+   0
+  ],
+  "notes": "Double-bladed weapon. Raw units, origin at bbox centre = centre of the ring hilt. Ring hole axis is X (ring seen face-on from +-x), outer radius 0.122, ring spans z -0.10..+0.10; two opposed blades run from |z| 0.2 to 0.5 (tips at +-z). The hand grips the ring rim (e.g. at y=-0.11). Post-processed: ring band was a wide tube, so the file carries a root node scale x=0.42 (band is now 0.07 wide), and roughness was raised (+0.28) because the raw material was a mirror. Edge light is base colour only (no emissive map)."
+ },
+ "cinderline": {
+  "file": "cinderline.glb",
+  "kind": "prop",
+  "tris": 7943,
+  "bbox": [
+   0.213,
+   0.674,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "max",
+  "targetLength": 0.34,
+  "front": "-z",
+  "up": "+y",
+  "grip": [
+   0,
+   -0.15,
+   0.36
+  ],
+  "muzzle": [
+   0,
+   0.175,
+   -0.5
+  ],
+  "notes": "Heavy pistol. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.175), grip hangs at the +z end (z 0.2..0.5, down to y=-0.337), sights on +y. Ember vents/sight are base colour only (no emissive map). Surfaces look slightly dented in extreme close-up after decimation to 8k."
+ },
+ "axiom": {
+  "file": "axiom.glb",
+  "kind": "prop",
+  "tris": 8050,
+  "bbox": [
+   0.139,
+   0.435,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "max",
+  "targetLength": 0.62,
+  "front": "-z",
+  "up": "+y",
+  "grip": [
+   0,
+   -0.08,
+   0.42
+  ],
+  "muzzle": [
+   0,
+   0.075,
+   -0.5
+  ],
+  "notes": "Long-barrelled pistol-carbine, no stock. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.075), pistol grip at the +z end (z 0.33..0.5, down to y=-0.217), optic on +y at z~+0.2. Roughness raised (+0.14) from the raw glossy material. Blue accents are base colour only (no emissive map)."
+ },
+ "rifle_dominion": {
+  "file": "rifle_dominion.glb",
+  "kind": "prop",
+  "tris": 8070,
+  "bbox": [
+   0.111,
+   0.376,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "max",
+  "targetLength": 0.95,
+  "front": "-z",
+  "up": "+y",
+  "grip": [
+   0,
+   -0.08,
+   0.22
+  ],
+  "foregrip": [
+   0,
+   -0.01,
+   -0.2
+  ],
+  "muzzle": [
+   0,
+   0.054,
+   -0.5
+  ],
+  "notes": "Battle rifle. Raw units, origin at bbox centre. Muzzle at -z (bore centre y=+0.054), fixed stock at +z (z 0.3..0.5), pistol grip z~+0.22, magazine z~+0.05, handguard (support hand) z~-0.2, optic on +y. Amber sight is base colour only (no emissive map)."
+ },
+ "sealed_case": {
+  "file": "sealed_case.glb",
+  "kind": "prop",
+  "tris": 8061,
+  "bbox": [
+   0.496,
+   0.581,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "center",
+  "targetLength": 0.6,
+  "front": "+x",
+  "up": "+y",
+  "grip": [
+   0,
+   0.26,
+   0
+  ],
+  "notes": "Hard equipment case. Raw units, origin at bbox centre. Carry handle on top centre (y 0.17..0.29, z -0.2..+0.2), body top at y=+0.167, base at y=-0.29. Latches and the blue status strip are on BOTH long faces (+x and -x). Status strip is base colour only (no emissive map). Steel corners bloom under strong lights."
+ },
+ "enforcer": {
+  "file": "enforcer.glb",
+  "kind": "humanoid",
+  "height": 2.1,
+  "tris": 53217,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   1.433,
+   2.1,
+   0.676
+  ],
+  "notes": "Hero tier (Dominion heavy shock trooper). Very broad: 1.43 m across the pauldrons, hand bones at x=+-0.60 y=1.19. Closed helm with an amber eye slit, leaf-scroll filigree on pauldrons/cuirass (ornament, not a faction emblem). Amber seams are base colour only (no emissive map). Layered tassets are skinned to hips/legs (no cloth bones): hip flexion beyond ~25 deg stretches a patch between the centre tasset and the thigh that catches a hard specular glint - keep strides short and heavy. Hands rigid (no finger bones). File carries one 0.03 s rest-pose clip from the rigger (ignore)."
+ },
+ "elite": {
+  "file": "elite.glb",
+  "kind": "humanoid",
+  "height": 3.6,
+  "tris": 53502,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   2.421,
+   3.6,
+   1.021
+  ],
+  "weakPoint": [
+   0.6,
+   3,
+   0.05
+  ],
+  "weakPointRadius": 0.35,
+  "notes": "Hero tier (Eclipse elite, 3.6 m). Hulking biped built from scavenged bronze-red and navy plates, pale ivory arch fragments and bone struts over violet-black tissue; small sunken skull-like head (Head bone y=3.13), long heavy arms with clawed hands (hand bones x=+-1.06 y=1.98), clawed feet. Exposed violet tissue mass on ITS LEFT shoulder (+x side, around the LeftArm bone at 0.55,3.02,-0.12) = weakPoint. Ivory arch fragments stand up behind both shoulders (thin geometry, skinned to shoulders/spine). Violet veins and the shoulder mass are base colour only (no emissive map) - add emissive in-engine. Ivory parts are bright and bloom under strong lights. Fingers/claws rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore)."
+ },
+ "linkbound": {
+  "file": "linkbound.glb",
+  "kind": "humanoid",
+  "height": 1.85,
+  "tris": 25288,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   1.03,
+   1.85,
+   0.402
+  ],
+  "notes": "Standard tier (corrupted soldier). Mismatched broken armour: bronze-red plates on its RIGHT side (-x), navy-steel on its LEFT (+x), cracked closed helmet whose visor is a dark hollow, violet-black tissue with thin violet veins between plates and over the bare forearms/hands. Stands upright in bind pose (add the hunch in animation). Violet is base colour only (no emissive map); tissue reads mauve under bright light, dark violet in dark scenes. Hands rigid. One 0.03 s rest-pose clip (ignore)."
+ },
+ "weaver": {
+  "file": "weaver.glb",
+  "kind": "humanoid",
+  "height": 2.3,
+  "tris": 23778,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   1.358,
+   2.3,
+   0.402
+  ],
+  "notes": "Standard tier (tall gaunt alien). Smooth violet carapace, featureless elongated head with one vertical slit, very long thin arms (hand bones x=+-0.52 y=1.24, bind pose arms ~45 deg out), spine-like filaments along forearms/shoulders skinned to the arm bones (no extra bones), bare elongated feet. Reads mid-violet under bright light and violet-black in dark scenes; carapace is fairly glossy/metallic (mean metalness 0.35). Head slit and glow lines are base colour only (no emissive map). Long fingers rigid. One 0.03 s rest-pose clip (ignore)."
+ },
+ "soldier_dominion": {
+  "file": "soldier_dominion.glb",
+  "kind": "humanoid",
+  "height": 1.82,
+  "tris": 22988,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   0.987,
+   1.82,
+   0.379
+  ],
+  "notes": "Standard tier (Dominion infantry). Bronze/oxblood medium plate over black fatigues, closed helmet with a V-shaped amber visor slit and an oxblood crest stripe, utility belt with pouches, short hip plates. Amber seams are base colour only (no emissive map). Hands rigid. One 0.03 s rest-pose clip (ignore)."
+ },
+ "soldier_reformation": {
+  "file": "soldier_reformation.glb",
+  "kind": "humanoid",
+  "height": 1.82,
+  "tris": 23354,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   1.022,
+   1.819,
+   0.43
+  ],
+  "notes": "Standard tier (Reformation marine). Slate/brushed-steel modular plates over a dark navy suit, smooth full helmet with a horizontal blue-white visor band, chest rig with small modules, belt pouches, thigh plates. Post-processed: the raw material was a mirror (chrome in bright scenes, wet black in dark ones), so roughness was remapped (x0.62 +0.28) and metalness scaled x0.75. Blue-white lights are base colour only (no emissive map). Texture is soft in extreme close-up. Hands rigid. One 0.03 s rest-pose clip (ignore)."
+ },
+ "survivor": {
+  "file": "survivor.glb",
+  "kind": "humanoid",
+  "height": 1.75,
+  "tris": 23622,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   0.936,
+   1.75,
+   0.35
+  ],
+  "notes": "Standard tier (civilian). Dusty grey-tan work jacket (open, sleeves rolled) over a henley, cargo trousers, boots, bandage on HIS LEFT forearm (+x), soot on the face, dark tousled hair, short beard; no armour, no faction colours. Face is fine at gameplay distance, painted-looking in extreme close-up. Jacket hem is skinned to spine/hips (no cloth bones). Fingers rigid. One 0.03 s rest-pose clip (ignore)."
+ },
+ "drone": {
+  "file": "drone.glb",
+  "kind": "prop",
+  "tris": 14824,
+  "bbox": [
+   0.851,
+   0.657,
+   1
+  ],
+  "longAxis": "z",
+  "handleAt": "center",
+  "targetLength": 1.1,
+  "front": "+x",
+  "up": "+y",
+  "lens": [
+   0.357,
+   0,
+   0
+  ],
+  "muzzle": [
+   0.425,
+   -0.254,
+   0
+  ],
+  "notes": "Hovering security drone. Raw units, origin at bbox centre. Long axis z = span across the four swept vanes (1.0 raw -> 1.1 m); hull is ~0.66 raw in diameter. Front is +x: round camera-lens eye centred at x=+0.357 y=0, under-slung gun barrel tip at x=+0.425 y=-0.254, ribbed cooling vent on top-rear (-x, +y). Navy hull with brushed-steel belt; glossy. Blue-white running lights (lens ring, vane edges) are base colour only (no emissive map). No rotors/legs: hover it procedurally."
+ },
+ "tower_shield": {
+  "file": "tower_shield.glb",
+  "kind": "prop",
+  "tris": 7972,
+  "bbox": [
+   0.528,
+   0.993,
+   0.105
+  ],
+  "longAxis": "y",
+  "handleAt": "center",
+  "targetLength": 1.5,
+  "front": "+z",
+  "up": "+y",
+  "grip": [
+   0,
+   0,
+   0
+  ],
+  "notes": "Tall curved tower shield (0.80 x 1.50 x 0.16 m at target length). Raw units; origin = centre of the BACK chord plane (x,y centred, z=0), outer face bulges to z=+0.105 at the centre line, so mount the origin at the forearm/hand with +z away from the carrier. Oxblood panels in a bronze frame with black riveted bracing, amber emitter strip on all four rim edges (base colour only, no emissive map), no emblem. HAND-SALVAGED: image-to-3D returned a closed barrel, so the front half of its wall was cut out, flattened to a subtle curve and given a plain dark-bronze back shell (material shield_back, untextured, mirrors the front relief) plus 1.2 cm edge strips. No grip/straps modelled on the back. Rivets are shallow after flattening."
+ }
 }

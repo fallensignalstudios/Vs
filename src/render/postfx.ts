@@ -54,7 +54,6 @@ export class PostChain {
   private feedback: ScreenFeedbackEffect | null = null;
   private toneMap: ToneMapEffect | null = null;
   private finish: FinishEffect | null = null;
-  private smaa: SMAAEffect | null = null;
 
   private camera: THREE.Camera;
   private camNear = -1;
@@ -176,7 +175,6 @@ export class PostChain {
     effects.push(grade, feedback, toneMap);
 
     const useSmaa = q.level !== 'low';
-    this.smaa = null;
     if (!useSmaa) effects.push(finish);
     const mainPass = new EffectPass(camera, ...effects);
     composer.addPass(mainPass);
@@ -188,7 +186,6 @@ export class PostChain {
       });
       // dark scenes: catch low-contrast edges (the input is display-encoded, so 0.05 ≈ 13 code values)
       smaa.edgeDetectionMaterial.edgeDetectionThreshold = q.level === 'medium' ? 0.08 : 0.05;
-      this.smaa = smaa;
       last = new EffectPass(camera, smaa, finish);
       composer.addPass(last);
     }
@@ -218,7 +215,7 @@ export class PostChain {
     this.composer.setSize(width, height, false);
   }
 
-  /** Apply a packed look (see looks.ts) to every effect. `chromaExtra` = transient feedback aberration. */
+  /** Apply a packed look (see looks.ts) to every effect. */
   applyLook(a: Float32Array): void {
     const bloom = this.bloom;
     if (bloom) {
@@ -266,8 +263,9 @@ export class PostChain {
     if (!dof || !pass) return;
     const t = this.dofTarget;
     const k = dt > 0 ? 1 - Math.exp(-dt * 5) : 1;
+    // coming from "off" the focus starts where it was asked for; while active, changes are a focus pull
+    if (t) this.dofFocus = this.dofStrength > 0 ? this.dofFocus + (t.focusDistance - this.dofFocus) * k : t.focusDistance;
     this.dofStrength += ((t ? t.strength : 0) - this.dofStrength) * k;
-    if (t) this.dofFocus += (t.focusDistance - this.dofFocus) * k;
     if (!t && this.dofStrength < 0.01) this.dofStrength = 0;
     const s = this.dofStrength;
     pass.enabled = s > 0;

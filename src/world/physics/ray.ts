@@ -1,16 +1,21 @@
 /**
- * Ray and swept-sphere casting against solids (oriented boxes / vertical cylinders) and, optionally, the
- * walkable surface planes. Rays walk the spatial hash with a 2D DDA so long sight lines stay cheap; sweeps are
- * short and use one broadphase box query. Pure TypeScript math — no three.js.
+ * Ray and swept-sphere casting against solids (oriented boxes / vertical cylinders) and the walkable surface
+ * planes. Rays walk the spatial hash with a 2D DDA so long sight lines stay cheap; sweeps are short and use
+ * one broadphase box query. Pure TypeScript math — no three.js.
+ *
+ * Floors are physical: a ray masked RAY_SIGHT / RAY_SHOT also stops at every surface that blocks sight /
+ * shots (the default), so a deck or a bare ramp hides what is beneath it without needing a slab solid.
+ * RAY_GROUND adds every surface regardless of its flags. Sweeps only meet floors when RAY_GROUND is set.
  *
  * Swept spheres are tested as rays against shapes inflated by the sphere radius (boxes inflate to boxes, so
  * box edges/corners are conservative by at most (√2 − 1)·radius — a camera never clips, it may stop a few
- * centimetres early at a sharp corner).
+ * centimetres early at a sharp corner). A sweep that starts overlapping a shape is only stopped by it when
+ * the motion goes deeper in; moving out of it, or along it, is free.
  */
 import { RAY_GROUND, RAY_MOVE, RAY_SHOT, RAY_SIGHT } from '@/core/api/physics';
 import type { RayHit } from '@/core/api/physics';
 import type { Vec3Like } from '@/core/api/common';
-import { colliderContains, maskOf } from './shapes';
+import { colliderContains } from './shapes';
 import type { ColliderRec, SurfaceRec } from './shapes';
 import type { PhysicsCore } from './world';
 
@@ -19,6 +24,10 @@ const MAX_RAY = 4000;
 const MAX_WALK_CELLS = 2048;
 /** distance a sweep stops short of contact so the next sweep starts outside the shape */
 const SWEEP_SKIN = 0.01;
+/** a sight / fire line ignores a floor that one of its endpoints is resting on (within this, vertically) */
+const FLOOR_TOUCH = 0.05;
+/** a ray that starts this close beneath a floor does not hit its underside */
+const FLOOR_BACK = 0.02;
 
 /** Result of the last internal cast (module-level; casting never re-enters). */
 const HIT = {
@@ -69,7 +78,25 @@ function rayBox(c: ColliderRec, ox: number, oy: number, oz: number, dx: number, 
   } else if (loz <= -ez || loz >= ez) return -1;
 
   if (tIn > tOut || tOut <= 1e-9) return -1;
-  if (tIn < 0) { tnx = -dx; tny = -dy; tnz = -dz; return 0; }
+  if (tIn < 0) {
+    if (rad <= 0) { tnx = -dx; tny = -dy; tnz = -dz; return 0; }
+    // a sphere that starts overlapping: the nearest face is the way out — only motion into it is blocked
+    const fx = ex - Math.abs(lox), fy = ey - Math.abs(loy), fz = ez - Math.abs(loz);
+    if (fy <= fx && fy <= fz) {
+      const sgn = loy < 0 ? -1 : 1;
+      if (dy * sgn >= 0) return -1;
+      tnx = 0; tny = sgn; tnz = 0;
+    } else if (fx <= fz) {
+      const sgn = lox < 0 ? -1 : 1;
+      if (ldx * sgn >= 0) return -1;
+      tnx = sgn * c.cos; tny = 0; tnz = -sgn * c.sin;
+    } else {
+      const sgn = loz < 0 ? -1 : 1;
+      if (ldz * sgn >= 0) return -1;
+      tnx = sgn * c.sin; tny = 0; tnz = sgn * c.cos;
+    }
+    return 0;
+  }
   if (axis === 1) { tnx = 0; tny = sign; tnz = 0; }
   else if (axis === 0) { tnx = sign * c.cos; tny = 0; tnz = -sign * c.sin; }
   else { tnx = sign * c.sin; tny = 0; tnz = sign * c.cos; }
@@ -100,7 +127,21 @@ function rayCyl(c: ColliderRec, ox: number, oy: number, oz: number, dx: number, 
   const tIn = s0 > y0 ? s0 : y0;
   const tOut = s1 < y1 ? s1 : y1;
   if (tIn > tOut || tOut <= 1e-9) return -1;
-  if (tIn < 0) { tnx = -dx; tny = -dy; tnz = -dz; return 0; }
+  if (tIn < 0) {
+    if (rad <= 0) { tnx = -dx; tny = -dy; tnz = -dz; return 0; }
+    // overlapping start (see rayBox): leave through the nearer of the side and the caps
+    const d = Math.sqrt(px * px + pz * pz);
+    if (H - Math.abs(py) <= R - d) {
+      const sgn = py < 0 ? -1 : 1;
+      if (dy * sgn >= 0) return -1;
+      tnx = 0; tny = sgn; tnz = 0;
+    } else {
+      const ux = d > 1e-9 ? px / d : 1, uz = d > 1e-9 ? pz / d : 0;
+      if (dx * ux + dz * uz >= 0) return -1;
+      tnx = ux; tny = 0; tnz = uz;
+    }
+    return 0;
+  }
   if (s0 >= y0) {
     tnx = (px + dx * tIn) / R; tny = 0; tnz = (pz + dz * tIn) / R;
   } else { tnx = 0; tny = ys; tnz = 0; }
@@ -151,7 +192,7 @@ function testCollider(
   c: ColliderRec, mask: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
   rad: number, a: Vec3Like | null, b: Vec3Like | null,
 ): void {
-  if (!c.on || !(maskOf(c.desc) & mask)) return;
+  if (!c.on || !(c.mask & mask)) return;
   const t = c.isBox ? rayBox(c, ox, oy, oz, dx, dy, dz, rad) : rayCyl(c, ox, oy, oz, dx, dy, dz, rad);
   if (t < 0 || t >= HIT.t) return;
   if (a && (colliderContains(c, a.x, a.y, a.z) || (b !== null && colliderContains(c, b.x, b.y, b.z)))) return;
@@ -159,12 +200,27 @@ function testCollider(
   HIT.collider = c; HIT.surface = null;
 }
 
+/** Is `p` resting on the surface (over its footprint, within FLOOR_TOUCH of its height)? */
+function touches(s: SurfaceRec, p: Vec3Like): boolean {
+  const h = s.heightAt(p.x, p.z);
+  return h === h && Math.abs(p.y - h) <= FLOOR_TOUCH;
+}
+
 function testSurface(
-  s: SurfaceRec, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, rad: number,
+  s: SurfaceRec, mask: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number,
+  rad: number, a: Vec3Like | null, b: Vec3Like | null,
 ): void {
   if (!s.on) return;
+  if (!(mask & RAY_GROUND)) {
+    const bits = (s.desc.blocksSight !== false ? RAY_SIGHT : 0) | (s.desc.blocksShots !== false ? RAY_SHOT : 0);
+    if (!(bits & mask)) return;
+  }
   const t = raySurface(s, ox, oy, oz, dx, dy, dz, rad);
   if (t < 0 || t >= HIT.t) return;
+  if (rad <= 0) {
+    if (a) { if (touches(s, a) || (b !== null && touches(s, b))) return; }
+    else if (tny < 0 && t <= FLOOR_BACK) return;
+  }
   HIT.t = t; HIT.nx = tnx; HIT.ny = tny; HIT.nz = tnz;
   HIT.collider = null; HIT.surface = s;
 }
@@ -198,7 +254,8 @@ function cast(
   HIT.t = maxDist + 1e-9;
   HIT.collider = null; HIT.surface = null;
   const solids = (mask & SOLID_MASK) !== 0;
-  const ground = (mask & RAY_GROUND) !== 0;
+  // sweeps meet floors only on request; rays also meet every floor that blocks what they are masked for
+  const ground = (mask & (rad > 0 ? RAY_GROUND : RAY_GROUND | RAY_SIGHT | RAY_SHOT)) !== 0;
   const ch = w.colliderHash, sh = w.surfaceHash;
 
   if (rad > 0) {
@@ -211,7 +268,7 @@ function cast(
     }
     if (ground) {
       const n = sh.query(minX, minZ, maxX, maxZ, sweepS);
-      for (let i = 0; i < n; i++) testSurface(sweepS[i], ox, oy, oz, dx, dy, dz, rad);
+      for (let i = 0; i < n; i++) testSurface(sweepS[i], mask, ox, oy, oz, dx, dy, dz, rad, null, null);
     }
     return HIT.collider !== null || HIT.surface !== null;
   }
@@ -235,7 +292,7 @@ function cast(
   }
   if (ground) {
     const big = sh.big;
-    for (let i = 0; i < big.length; i++) testSurface(big[i], ox, oy, oz, dx, dy, dz, 0);
+    for (let i = 0; i < big.length; i++) testSurface(big[i], mask, ox, oy, oz, dx, dy, dz, 0, a, b);
     const stamp = sh.nextStamp();
     for (let k = 0; k < cells; k++) {
       if (walkT[k] > HIT.t) break;
@@ -245,7 +302,7 @@ function cast(
         const s = list[i];
         if (s.stamp === stamp) continue;
         s.stamp = stamp;
-        testSurface(s, ox, oy, oz, dx, dy, dz, 0);
+        testSurface(s, mask, ox, oy, oz, dx, dy, dz, 0, a, b);
       }
     }
   }
@@ -255,9 +312,13 @@ function cast(
 const finite3 = (v: Vec3Like | null | undefined): v is Vec3Like =>
   !!v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 
-/** Nearest hit along a ray. Default mask: anything physical (RAY_SIGHT | RAY_SHOT). */
+/**
+ * Nearest hit along a ray. Default mask: anything physical (RAY_SIGHT | RAY_SHOT). With `out`, that object
+ * (and its point / normal) is filled and returned instead of allocating a new hit.
+ */
 export function raycast(
   w: PhysicsCore, origin: Vec3Like, dir: Vec3Like, maxDist: number, mask: number = RAY_SIGHT | RAY_SHOT,
+  out?: RayHit,
 ): RayHit | null {
   if (!finite3(origin) || !finite3(dir) || !(maxDist > 0)) return null;
   const len = Math.hypot(dir.x, dir.y, dir.z);
@@ -266,19 +327,23 @@ export function raycast(
   const dist = Math.min(maxDist, MAX_RAY);
   if (!cast(w, origin.x, origin.y, origin.z, dx, dy, dz, dist, mask, 0, null, null)) return null;
   const t = HIT.t;
-  return {
-    point: { x: origin.x + dx * t, y: origin.y + dy * t, z: origin.z + dz * t },
-    normal: { x: HIT.nx, y: HIT.ny, z: HIT.nz },
-    distance: t,
-    collider: HIT.collider,
-    ground: HIT.surface !== null,
-    surface: HIT.surface,
+  const hit: RayHit = out ?? {
+    point: { x: 0, y: 0, z: 0 }, normal: { x: 0, y: 0, z: 0 }, distance: 0, collider: null, ground: false, surface: null,
   };
+  hit.point.x = origin.x + dx * t; hit.point.y = origin.y + dy * t; hit.point.z = origin.z + dz * t;
+  hit.normal.x = HIT.nx; hit.normal.y = HIT.ny; hit.normal.z = HIT.nz;
+  hit.distance = t;
+  hit.collider = HIT.collider;
+  hit.ground = HIT.surface !== null;
+  hit.surface = HIT.surface;
+  return hit;
 }
 
 /**
- * Is the segment a→b free of solids matching `mask`? Colliders that contain either endpoint are ignored, so a
- * sight line to (or from) a device is not blocked by the device's own collision volume.
+ * Is the segment a→b free of solids and floors matching `mask`? Colliders that contain either endpoint are
+ * ignored, so a sight line to (or from) a device is not blocked by the device's own collision volume; so is a
+ * floor that either endpoint rests on, so aiming at someone's feet or a spot on the ground is not blocked by
+ * that ground.
  */
 export function segmentClear(w: PhysicsCore, a: Vec3Like, b: Vec3Like, mask: number): boolean {
   if (!finite3(a) || !finite3(b)) return false;

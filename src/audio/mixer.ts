@@ -6,6 +6,7 @@
  *   reverb return ◄─ convolver ◄─ reverbIn ─────────────────┘        │
  *   music decks ─► music ─► tilt EQ ─► peak comp ─► musicDuck ───────┼─► sum ─► master ─► glue comp
  *   ui voices ─► ui ──────────────────────────────────────────────────┘        ─► limiter ─► ceiling ─► out
+ *                                                              (a 20 Hz subsonic guard sits after `master`)
  *
  * Reverb sends: every SFX voice has its own send into `sfxSend` (scaled by the room amount of the current
  * ambience); music, ambience and UI have fixed bus sends. The reverb return joins the world bus so the
@@ -47,7 +48,7 @@ export interface CompParams {
 
 /** Dynamics stages: the score's own peak control, then the master glue compressor into a fast limiter. */
 export const DYNAMICS: { music: CompParams; glue: CompParams; limiter: CompParams } = {
-  music: { threshold: -17, knee: 8, ratio: 4, attack: 0.003, release: 0.14, makeupDb: 6.1 },
+  music: { threshold: -20, knee: 6, ratio: 5, attack: 0.003, release: 0.14, makeupDb: 8.4 },
   glue: { threshold: -14, knee: 10, ratio: 2, attack: 0.018, release: 0.22, makeupDb: 2.7 },
   limiter: { threshold: -2.5, knee: 1, ratio: 20, attack: 0.001, release: 0.08, makeupDb: 1.3 },
 };
@@ -100,8 +101,14 @@ export class Mixer {
     ceiling.curve = res.curves.ceiling;
     // the master slider sits BEFORE the dynamics so turning it up can never push past the ceiling
     this.master = g();
+    // subsonic / DC guard: nothing below ~20 Hz reaches the dynamics or the speakers
+    const guard = ac.createBiquadFilter();
+    guard.type = 'highpass';
+    guard.frequency.value = 20;
+    setQ(guard, 0.707);
     this.sum.connect(this.master);
-    this.master.connect(glue);
+    this.master.connect(guard);
+    guard.connect(glue);
     glue.connect(glueTrim);
     glueTrim.connect(limiter);
     limiter.connect(limiterTrim);

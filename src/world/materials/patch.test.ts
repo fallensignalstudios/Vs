@@ -200,7 +200,9 @@ describe('material library', () => {
     const s = lib.clone('whiteGold', { scale: 2, color: 0xff0000 });
     expect((findUniform(s, 'tpA')?.value as THREE.Vector4).x).toBeCloseTo(0.5);
     expect(s.color.getHex()).toBe(0xff0000);
-    expect(lib.clone<THREE.MeshBasicMaterial>('hologram', { visible: 0.5 }).isMeshBasicMaterial).toBe(true);
+    const holo = lib.clone<THREE.MeshBasicMaterial>('hologram', { reveal: 0.5 });
+    expect(holo.isMeshBasicMaterial).toBe(true);
+    expect((findUniform(holo, 'holoB')?.value as THREE.Vector4).y).toBe(0.5);
   });
 
   it('emissive materials are cached per colour and intensity', () => {

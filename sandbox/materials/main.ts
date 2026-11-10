@@ -82,7 +82,7 @@ function buildGallery(): void {
     const c = new THREE.Mesh(rib, m); c.position.set(cx + 0.55, 0, cz - 0.75); c.rotation.y = Math.PI * 0.5;
     for (const o of [a, b, c]) { o.castShadow = !m.transparent; o.receiveShadow = true; h.scene.add(o); }
     const l = label(id, 1.5); l.position.set(cx, 0.012, cz + 1.25); h.scene.add(l);
-    if (m.transparent) {
+    if (m.transparent && m.blending !== THREE.AdditiveBlending && id !== 'quarantineBarrier') {
       // something bright behind the see-through materials so their transmission reads
       const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.5, 12), mats.emissive(mats.palette.goldLight, 4));
       glow.position.set(cx + 0.2, 0.75, cz - 0.6); h.scene.add(glow);

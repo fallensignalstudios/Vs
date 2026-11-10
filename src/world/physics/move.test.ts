@@ -5,6 +5,8 @@ import { createPhysicsWorld } from './index';
 import { buildZ04, buildZ05, buildZ08, fxBox, fxFloor, planPos } from './fixtures';
 
 const R = 0.4;
+/** default ledge margin of a human-sized body */
+const M = 0.25;
 const world = (): PhysicsWorld => createPhysicsWorld(null);
 
 interface Walk { pos: Vec3Like; blocked: number; last: MoveResult; maxDy: number; path: Vec3Like[] }
@@ -275,10 +277,11 @@ describe('moveCharacter — headroom (surfaces without solids beneath)', () => {
     const g = walk(w, planPos(2, 8.5), 1, 0.25, 5, 4);
     expect(g.pos.x).toBeGreaterThan(12);
     expect(g.path.every((p) => p.y === 0 && Math.hypot(p.x - 10, p.z + 10) >= 4 - 1e-3)).toBe(true);
-    // from on top you may step down (0.6 ≤ maxDrop)
+    // from on top you may step down (0.6 ≤ maxDrop); the floor's own east edge then holds the feet 0.25 m in
     const down = walk(w, { x: 10, y: 0.6, z: -10 }, 1, 0, 5, 2);
     expect(down.pos.y).toBe(0);
-    expect(down.pos.x).toBeCloseTo(20, 5);
+    expect(down.pos.x).toBeCloseTo(20 - M, 5);
+    expect(walk(w, { x: 10, y: 0.6, z: -10 }, 1, 0, 5, 2, 1 / 60, { edgeMargin: 0 }).pos.x).toBeCloseTo(20, 5);
   });
 });
 
@@ -287,16 +290,23 @@ describe('moveCharacter — fall protection', () => {
     const w = world();
     buildZ04(w, { rails: false });
     const stop = walk(w, planPos(50, 25, 3), -1, 0, 5, 3); // west edge at x = 44, no ramp at n = 25
-    expect(stop.pos.x).toBeGreaterThanOrEqual(44);
-    expect(stop.pos.x).toBeLessThan(44.02);
+    expect(stop.pos.x).toBeGreaterThanOrEqual(44 + M - 1e-9); // feet held a ledge margin back from the drop
+    expect(stop.pos.x).toBeLessThan(44 + M + 0.02);
     expect(stop.pos.y).toBe(3);
     expect(stop.last.blocked).toBe(true);
+    expect(stop.last.reason).toBe('edge');
+    expect(stop.last.grounded).toBe(true);
+    expect(stop.last.surface?.desc.tag).toBe('balcony');
     expect(stop.last.normal!.x).toBeCloseTo(1, 2);
     expect(Math.abs(stop.last.normal!.z)).toBeLessThan(0.05);
+    // the bare feet-point rule is still available
+    const bare = walk(w, planPos(50, 25, 3), -1, 0, 5, 3, 1 / 60, { edgeMargin: 0 });
+    expect(bare.pos.x).toBeGreaterThanOrEqual(44 - 1e-6);
+    expect(bare.pos.x).toBeLessThan(44.02);
 
     // push diagonally into the same edge: slides north along it, then down the west ramp (n 27..33)
     const slide = walk(w, planPos(46, 24, 3), -1, -0.5, 5, 1.2);
-    expect(slide.path.every((p) => p.x >= 44 - 1e-9 || p.y < 3)).toBe(true);
+    expect(slide.path.every((p) => p.x >= 44 + M - 1e-9 || p.y < 3)).toBe(true);
     const late = walk(w, slide.pos, -1, -0.5, 5, 3);
     expect(late.pos.y).toBeLessThan(2);
     expect(late.pos.x).toBeLessThan(40);
@@ -304,7 +314,7 @@ describe('moveCharacter — fall protection', () => {
 
     // south edge at n = 23 beside the ramp mouth
     const south = walk(w, planPos(47, 26, 3), 0, 1, 5, 2);
-    expect(-south.pos.z).toBeGreaterThanOrEqual(23);
+    expect(-south.pos.z).toBeCloseTo(23 + M, 3);
     expect(south.pos.y).toBe(3);
   });
 
@@ -313,14 +323,14 @@ describe('moveCharacter — fall protection', () => {
     const f = buildZ05(w);
     const rad = (p: Vec3Like): number => Math.hypot(p.x, p.z);
     const shaft = walk(w, f.marks.ringEast, -1, -0.05, 5, 4);
-    expect(rad(shaft.pos)).toBeGreaterThanOrEqual(9 - 1e-6);
+    expect(rad(shaft.pos)).toBeGreaterThanOrEqual(9 + M - 1e-6); // 0.15 m of a 0.8 m body over the void, not 0.4
     expect(shaft.last.blocked).toBe(true);
 
     // slide around the shaft rim: pushing west-north-west from the east side travels around the hole
     const around = walk(w, { x: 12, y: 0, z: -0.5 }, -1, -0.6, 5, 5);
     for (const p of around.path) {
-      const onBridge = Math.abs(p.x) <= 3 + 1e-6 && Math.abs(p.z) <= 9.5 + 1e-6;
-      expect(rad(p) >= 9 - 1e-6 || onBridge).toBe(true);
+      const onBridge = Math.abs(p.x) <= 3 - M + 1e-6 && Math.abs(p.z) <= 9.5 + 1e-6;
+      expect(rad(p) >= 9 + M - 0.01 || onBridge).toBe(true);
     }
     expect(around.pos.z).toBeLessThan(-6); // made real progress around the rim instead of sticking
     expect(around.pos.x).toBeLessThan(8);
@@ -329,38 +339,50 @@ describe('moveCharacter — fall protection', () => {
     const rim = walk(w, { x: 30, y: 0, z: 10 }, 0.5, 1, 6, 4);
     const hug = rim.path.filter((p) => p.z > 20);
     expect(hug.length).toBeGreaterThan(60);
-    for (const p of hug) { expect(rad(p)).toBeLessThanOrEqual(36 + 1e-6); expect(rad(p)).toBeGreaterThan(35.99); }
+    for (const p of hug) { expect(rad(p)).toBeLessThanOrEqual(36 - M + 1e-6); expect(rad(p)).toBeGreaterThan(36 - M - 0.01); }
     expect(rim.pos.z).toBeGreaterThan(22); // travelled ~15° round the rim
     for (let i = 1; i < hug.length; i++) expect(hug[i].z).toBeGreaterThan(hug[i - 1].z); // no stutter
     const rest = walk(w, { x: 30, y: 0, z: 10 }, 1, 0.3, 6, 12);
-    expect(rad(rest.pos)).toBeGreaterThan(35.99);
+    expect(rad(rest.pos)).toBeGreaterThan(36 - M - 0.01);
     expect(Math.atan2(rest.pos.z, rest.pos.x)).toBeCloseTo(Math.atan2(0.3, 1), 2); // where the push is purely radial
-    expect(rest.last.normal!.x).toBeCloseTo(-rest.pos.x / 36, 2);
-    expect(rest.last.normal!.z).toBeCloseTo(-rest.pos.z / 36, 2);
+    expect(rest.last.normal!.x).toBeCloseTo(-rest.pos.x / (36 - M), 2);
+    expect(rest.last.normal!.z).toBeCloseTo(-rest.pos.z / (36 - M), 2);
 
     const across = walk(w, f.marks.southRim, 0, -1, 5, 8.4);
     expect(across.pos.z).toBeCloseTo(-22, 1); // crossed the shaft on the bridge
     expect(across.blocked).toBe(0);
     const offSide = walk(w, { x: 0, y: 0, z: 0 }, 1, 0, 5, 2);
-    expect(offSide.pos.x).toBeLessThanOrEqual(3 + 1e-6);
-    expect(offSide.pos.x).toBeGreaterThan(2.97);
+    expect(offSide.pos.x).toBeLessThanOrEqual(3 - M + 1e-6);
+    expect(offSide.pos.x).toBeGreaterThan(3 - M - 0.01);
 
     const broken = walk(w, f.marks.ringEast, 1, 0, 6, 8);
-    expect(broken.pos.x).toBeLessThanOrEqual(48 + 1e-6);
-    expect(broken.pos.x).toBeGreaterThan(47.9);
+    expect(broken.pos.x).toBeLessThanOrEqual(48 - M + 1e-6);
+    expect(broken.pos.x).toBeGreaterThan(48 - M - 0.01);
     const approach = walk(w, f.marks.southRim, 0, 1, 6, 8);
-    expect(approach.pos.z).toBeLessThanOrEqual(56 + 1e-6);
-    expect(approach.pos.z).toBeGreaterThan(55.9);
+    expect(approach.pos.z).toBeLessThanOrEqual(56 - M + 1e-6);
+    expect(approach.pos.z).toBeGreaterThan(56 - M - 0.01);
+
+    // the elite keeps half its radius on the deck; with no margin the old feet-point rule applies
+    const elite = walk(w, f.marks.ringEast, -1, 0, 4, 4, 1 / 60, { height: 3.6 }, 1.2);
+    expect(rad(elite.pos)).toBeCloseTo(9 + 0.6, 2);
+    const feet = walk(w, f.marks.ringEast, -1, 0, 5, 4, 1 / 60, { edgeMargin: 0 });
+    expect(rad(feet.pos)).toBeGreaterThanOrEqual(9 - 1e-6);
+    expect(rad(feet.pos)).toBeLessThan(9.01);
   });
 
-  it('lets an actor that starts off every surface walk back onto one', () => {
+  it('with freeRoam, an actor that starts off every surface walks back onto one', () => {
     const w = world();
     fxFloor(w, 0, 0, 10, 10, 0);
-    const lost = walk(w, { x: -1.5, y: 0.2, z: -5 }, 1, 0, 4, 1);
+    const lost = walk(w, { x: -1.5, y: 0.2, z: -5 }, 1, 0, 4, 1, 1 / 60, { freeRoam: true });
     expect(lost.pos.x).toBeCloseTo(2.5, 5);
     expect(lost.pos.y).toBe(0);
+    expect(lost.last.grounded).toBe(true);
+    const first = w.moveCharacter({ x: -1.5, y: 0.2, z: -5 }, R, 0.05, 0, { freeRoam: true });
+    expect(first.grounded).toBe(false);
+    expect(first.surface).toBeNull();
+    expect(first.blocked).toBe(false);
     const stay = walk(w, lost.pos, -1, 0, 4, 2); // now grounded: the edge holds
-    expect(stay.pos.x).toBeGreaterThanOrEqual(0);
+    expect(stay.pos.x).toBeGreaterThanOrEqual(M - 1e-9);
   });
 });
 
