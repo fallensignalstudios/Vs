@@ -249,7 +249,12 @@ if (uFrozen > 0.001) {
   cCrys = abs(cNoise(cP * 24.0 + 2.0) * 2.0 - 1.0);
   cCrack = 1.0 - smoothstep(0.0, 0.09, cCrys);
   float cLum = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
+#ifdef CREATURE_SKIN
+  // a generated skin's frost is a pale rime over the body's own shapes, not a coat of blue glaze
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.38, 0.46) * (0.22 + 2.2 * cLum) + vec3(0.08, 0.1, 0.12) * cCrack, cFrost * 0.7);
+#else
   diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(cLum), vec3(0.4, 0.6, 0.74), 0.78) * (0.8 + 0.3 * cCrack), cFrost * 0.88);
+#endif
 }
 `;
 
@@ -259,7 +264,11 @@ roughnessFactor = clamp(max(roughnessFactor, uSkin.y) + cChar * 0.3, 0.045, 1.0)
 #else
 roughnessFactor = clamp(vSurf.x * (0.82 + 0.4 * cN2) + cWear * 0.1, 0.045, 1.0);
 #endif
+#ifdef CREATURE_SKIN
+roughnessFactor = mix(roughnessFactor, 0.62 + 0.3 * cCrys, cFrost);
+#else
 roughnessFactor = mix(roughnessFactor, 0.2 + 0.5 * cCrys, cFrost);
+#endif
 roughnessFactor = mix(roughnessFactor, 0.32, cGate * 0.6);
 `;
 
@@ -308,9 +317,11 @@ const FRAG_EMISSIVE = /* glsl */ `
   cE *= uGlow * (1.0 - cFrost * 0.75);
   // a wind-up flares the body's own violet light and eyes; the telegraph colour only rims it (below) — painted
   // tissue is not a lamp, and tinting it would flood the whole body with the warning colour
-  cE *= 1.0 + uTelegraph.a * (0.72 + 0.28 * sin(uTime * 17.0)) * 0.9;
+  // (an arrested body is not about to act: frost mutes the warning)
+  float cTelOn = 1.0 - clamp(uFrozen * 1.6, 0.0, 1.0);
+  cE *= 1.0 + uTelegraph.a * (0.72 + 0.28 * sin(uTime * 17.0)) * 0.9 * cTelOn;
   cLit = clamp(cEye, 0.0, 1.0);
-  float cTelRim = cFres * cFres * 1.1;
+  float cTelRim = cFres * cFres * 1.1 * cTelOn;
 #else
   float cHotMask = vPart.x > 0.5 ? uHot.a * clamp(cGroup - 1.0, 0.0, 1.0) : 0.0;
   vec3 cBase = mix(vColor.rgb, uHot.rgb, cHotMask);
@@ -323,7 +334,11 @@ const FRAG_EMISSIVE = /* glsl */ `
   float cTelRim = cFres * 0.75;
 #endif
   cE += cCorrEmi * (1.0 - cFrost);
+#ifdef CREATURE_SKIN
+  cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.3 + cCrack * 0.04);
+#else
   cE += vec3(0.5, 0.82, 1.0) * cFrost * (cFres * 0.3 + cCrack * 0.1);
+#endif
   cE += uDissolveColor * cDEdge * 3.0;
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
   cE += uTelegraph.rgb * uTelegraph.a * cTp * (cTelRim + cLit * 2.2 + 0.012);

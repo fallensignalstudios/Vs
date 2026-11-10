@@ -153,7 +153,11 @@ export function* rescueScene(z: ZoneRuntime): Routine {
   const marine = z.cast('marine');
   const stand = z.m('plateStand');
   const mp = z.m('marine');
+  const selene = z.cast('selene');
   yield* z.cinematic('z06-rescue', function* (c: CineCtx): Routine {
+    // Selene covers the far side of the plate (out of the frame)
+    selene?.teleport(z.m('seleneCover'), z.myaw('seleneCover'));
+    selene?.holdAt(z.m('seleneCover'), z.myaw('seleneCover'));
     // the plate held high on its rubble; under the edge, the marine sees whose armour it is
     if (S.plate) S.plate.params.lift = 1;
     game.player.teleport(stand, z.myaw('plateStand'));
@@ -195,6 +199,8 @@ export function* rescueScene(z: ZoneRuntime): Routine {
     z.story('marineRescued');
     z.setFlag('z06MarineFree', true);
   }, { blendOut: 0.4 });
+  // she goes back to fighting at his side (a mode assignment releases the held post)
+  if (selene) selene.mode = 'combat';
   if (marine && !atPost(z, marine, 'marineSafe', 1.2)) walkTo(z, marine, 'marineSafe', { run: true });
   z.fork(marineSettles(z, marine), 'marine');
 }
@@ -273,8 +279,9 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     // Selene kneels in front of her
     selene?.teleport(SK, z.myaw('gSelene'));
     selene?.play('kneel', { loop: true });
-    const onSelene = (): void => c.cut({ pos: z.P(14.3, 5.0, 1.2), look: z.P(13.5, 7.05, 1.12), fov: 34 });
-    const onLyricLow = (): void => c.cut({ pos: z.P(13.15, 4.9, 1.15), look: z.P(12.5, 7.0, 1.08), fov: 34 });
+    lyric?.face(SK);
+    const onSelene = (): void => c.cut({ pos: z.P(12.9, 5.2, 1.2), look: z.P(13.4, 7.65, 1.1), fov: 34 });
+    const onLyricLow = (): void => c.cut({ pos: z.P(14.1, 5.85, 1.15), look: z.P(12.5, 7.0, 1.08), fov: 34 });
     onSelene();
     yield* z.say('Selene', 'Look at me.', { actor: selene });
     // «Black patterns race down both arms, and she screams.»

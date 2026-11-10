@@ -58,8 +58,10 @@
  *
  * THE ELITE'S TWO BODIES
  *  - The elite's animator can wear the generated hero mesh (public/models/elite.glb) as a skin. Skins are
- *    optional: await preloadCreatureSkins(['elite'], game) (src/chars/creatures) during loading — its maps are
- *    fitted to game.render.quality.textureSize; an elite created before the file has arrived shows its
+ *    optional: await preloadCreatureSkins(['elite'], game) (src/chars/creatures) during loading — game.chars
+ *    .preload(cast) does this for every creature in a zone's cast — its maps are fitted to
+ *    game.render.quality.textureSize, and it draws baked levels of detail at distance (public/models/elite.lod.bin);
+ *    an elite created before the file has arrived shows its
  *    procedural body and swaps when it does; with no file (or setCreatureSkinsEnabled(false)) it stays
  *    procedural. The skinned elite is two draw calls: the generated body and its procedural tendril wreath.
  *    Actions, events, timings and sockets are identical on both bodies.

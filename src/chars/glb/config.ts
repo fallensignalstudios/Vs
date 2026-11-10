@@ -84,7 +84,7 @@ export interface GlbArchetype {
  */
 export const BARE_HEAD_VARO: BareHeadLook = { donor: 'survivor', skin: [0.86, 0.74, 0.64], hair: [0.03, 0.026, 0.024, 1], shape: [1.07, 1.01, 1.04] };
 /** default bare head (the Z08 officer and any other `bareHead: true` soldier): older, paler, greying */
-export const BARE_HEAD_OFFICER: BareHeadLook = { donor: 'survivor', skin: [1.02, 0.94, 0.9], hair: [0.3, 0.29, 0.28, 1], shape: [0.97, 1.05, 1.0] };
+export const BARE_HEAD_OFFICER: BareHeadLook = { donor: 'survivor', skin: [1.02, 0.94, 0.9], hair: [0.17, 0.165, 0.16, 1], shape: [0.97, 1.05, 1.0] };
 
 const HERO = { albedoCap: 0.62, env: 0.85, vary: false } as const;
 const TROOP = { albedoCap: 0.62, env: 0.8, vary: true } as const;

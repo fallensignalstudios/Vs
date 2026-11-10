@@ -219,8 +219,10 @@ function build(bodyTpl: ModelTemplate, donorTpl: ModelTemplate, look: BareHeadLo
   head.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
   head.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
   head.setIndex(new THREE.BufferAttribute(filterIndex(dIdx, allIn, remap), 1));
-  // the donor's levels, cut to the same region (a coarse level may drop a vertex the full one used: harmless)
-  const headLods = donorTpl.lods.map((g) => shareAttributes(head, filterIndex(indexArray(g) ?? [], allIn, remap)));
+  // the donor's levels, cut to the same region and to vertices the graft kept (a coarse level only reuses
+  // vertices of the full one, but one may sit in the region without a kept full-resolution triangle)
+  const kept = (a: number, b: number, c: number): boolean => allIn(a, b, c) && remap[a] >= 0 && remap[b] >= 0 && remap[c] >= 0;
+  const headLods = donorTpl.lods.map((g) => shareAttributes(head, filterIndex(indexArray(g) ?? [], kept, remap)));
   return { body, bodyLods, head, headLods, stats: { helmetVerts, headVerts: n, headTris: (head.index?.count ?? 0) / 3 } };
 }
 

@@ -218,7 +218,7 @@ function buildCover(b: ZoneBuilder): void {
   b.coverLow({ x: 29.5, n: 23.5, w: 2.6, yawDeg: 225, style: 'debris' });
   b.coverLow({ x: 37.5, n: 28, yawDeg: FACE.east, style: 'debris' });
   // right (south) rescue loop: the marines' barricades, Lyessa's lane, rubble
-  b.coverLow({ x: 13, n: 5.5, yawDeg: FACE.east, style: 'debris' });
+  b.coverLow({ x: 17.6, n: 3.6, yawDeg: FACE.east, style: 'debris' });
   b.coverHigh({ x: 18.5, n: 8, w: 2.6, yawDeg: FACE.east, style: 'reformation' });
   b.coverLow({ x: 22.4, n: 10.4, w: 2.8, yawDeg: 45, style: 'reformation' });
   b.coverLow({ x: 29.5, n: 5.5, yawDeg: FACE.east, style: 'debris' });
@@ -334,6 +334,7 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('weaverIn', 48, 3.4, 0, 330);
   b.marker('anchor', BREACH_B.x + 1.6, BREACH_B.n + 1.2, 0, FACE.north);
   b.marker('marineOut', 24.2, 11.6, 0, 200);
+  b.marker('seleneCover', 28.2, 8.8, 0, 30);
   // --- recovery ---
   b.marker('sustainLane', 12, 30.5, 0);
   b.marker('sustainLoop', 26.5, 4, 0);
@@ -344,8 +345,8 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('gLyric', 12.5, 7, 0, FACE.east);
   b.marker('gTharne', 11.6, 7.25, 0, 100);
   b.marker('gTharneBlock', 13.4, 6.6, 0, 110);
-  b.marker('gSelene', 13.5, 7.05, 0, FACE.west);
-  b.marker('gSeleneStand', 14.1, 8.3, 0, 240);
+  b.marker('gSelene', 13.4, 7.65, 0, 250);
+  b.marker('gSeleneStand', 15.2, 7.9, 0, 250);
   b.marker('gLyessa', 14.7, 9.1, 0, 230);
   b.marker('gTarrik', 15.1, 6, 0, 290);
   b.marker('impactBelow', 20, 2, 0);

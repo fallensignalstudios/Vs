@@ -334,3 +334,68 @@ describe('GlbHumanoidVisual on a stand-in library', () => {
     expect(() => v.dispose()).not.toThrow();
   });
 });
+
+describe('bare head graft', () => {
+  /** a template whose body is a stack of rings up the centre line: below `headFrom` on the spine, above on the head */
+  function columnTemplate(name: string, radius: number, headFrom: number, lods = false): ModelTemplate {
+    const sk = makeSkeleton();
+    const head = sk.bones.findIndex((b) => b.name === 'Head'), spine = sk.bones.findIndex((b) => b.name === 'Spine');
+    const pos: number[] = [], si: number[] = [], sw: number[] = [], idx: number[] = [];
+    const rings = 14, seg = 8;
+    for (let r = 0; r < rings; r++) {
+      const y = 1.3 + r * 0.05;
+      for (let s = 0; s < seg; s++) {
+        const a = (s / seg) * Math.PI * 2;
+        pos.push(Math.cos(a) * radius * 100, y * 100, Math.sin(a) * radius * 100); // cm, under the 0.01 armature
+        si.push(y >= headFrom ? head : spine, 0, 0, 0);
+        sw.push(1, 0, 0, 0);
+      }
+    }
+    for (let r = 0; r + 1 < rings; r++) for (let s = 0; s < seg; s++) {
+      const a = r * seg + s, b = r * seg + ((s + 1) % seg), c = a + seg, d = b + seg;
+      idx.push(a, b, c, b, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map(() => 0), 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((pos.length / 3) * 2).fill(0.5), 2));
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+    g.setIndex(idx);
+    sk.mesh.geometry = g;
+    sk.root.updateMatrixWorld(true);
+    const rig = { ...makeRigInfo(sk.bones), restMatrix: sk.mesh.matrixWorld.clone() };
+    const coarse = new THREE.BufferGeometry();
+    coarse.setIndex(idx.filter((_, i) => Math.floor(i / 3) % 2 === 0));
+    return {
+      name, entry: { file: name + '.glb', kind: 'humanoid', height: 1.8 }, root: sk.root, mesh: sk.mesh, rig, box: new THREE.Box3(),
+      materials: [sk.mesh.material as THREE.MeshStandardMaterial], triangles: idx.length / 3, lods: lods ? [coarse] : [], lodMesh: 0,
+    };
+  }
+
+  it('cuts the head-weighted top of the body and grafts the donor head onto the body skeleton', async () => {
+    const { bareHeadParts } = await import('./head');
+    const body = columnTemplate('helmeted', 0.15, 1.55, true), donor = columnTemplate('civilian', 0.08, 1.5, true);
+    const parts = bareHeadParts(body, donor, { donor: 'civilian', skin: [1, 1, 1], hair: [0, 0, 0, 0], shape: [1, 1, 1] });
+    expect(parts).not.toBeNull();
+    const p = parts!;
+    expect(p.stats.helmetVerts).toBeGreaterThanOrEqual(50);
+    // every kept body triangle avoids the helmet; the coarse level is cut the same way
+    expect(p.body.index!.count).toBeLessThan(body.mesh!.geometry.index!.count);
+    expect(p.bodyLods.length).toBe(1);
+    // the graft is skinned to the body's head and sits round the body's head joint, in the body's raw space
+    const headIdx = body.mesh!.skeleton.bones.findIndex((b) => b.name === 'Head');
+    const hp = p.head.getAttribute('position'), hs = p.head.getAttribute('skinIndex');
+    const v = new THREE.Vector3();
+    for (let i = 0; i < hp.count; i++) {
+      v.fromBufferAttribute(hp, i).applyMatrix4(body.rig!.restMatrix);
+      expect(Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z)).toBe(true);
+      expect(Math.hypot(v.x, v.z)).toBeLessThan(0.1);
+      if (v.y > 1.6) expect(hs.getX(i)).toBe(headIdx);
+    }
+    // the graft's coarse level only indexes kept vertices
+    for (const g of p.headLods) for (let i = 0; i < g.index!.count; i++) expect(g.index!.getX(i)).toBeLessThan(hp.count);
+    // cached per body / donor / proportions
+    expect(bareHeadParts(body, donor, { donor: 'civilian', skin: [0.5, 0.5, 0.5], hair: [1, 1, 1, 1], shape: [1, 1, 1] })).toBe(p);
+  });
+});

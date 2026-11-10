@@ -1,0 +1,308 @@
+/**
+ * Z03 — the build: shell and west bay, the service path, cover, frost and tissue, the Reformation installation,
+ * the dropship (hatch + tether), light, markers, far field. Numbers live in ./layout.ts.
+ *
+ * Cover rule for the scan: a scan sees the lead only along a clear line from the projector on the service deck.
+ * Every hiding piece on the lower floor is a 2.2 m mass FACING the projector (`faceSource`), so its lee is a
+ * readable pocket; low cover (1.2 m) and ice (translucent: it passes sight) do not hide a standing figure.
+ */
+import * as THREE from 'three';
+import type { ZoneBuilder } from '@/core/api';
+import { LOOKS } from '@/render/looks';
+import { BLUE, FACE, FROST, IVORY } from '../shared';
+import {
+  BAY_X0, D, DECK_H, DECK_N0, DECK_N1, DECK_X0, DECK_X1, EXIT_N, HATCH_HINGE_H, HATCH_LEN, HATCH_W, HOLO, LODGE_RIB_SPAN,
+  LODGE_RIB_X, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
+  VAULT_RISE, W, WALL_H, WRECK_N, WRECK_REAR_X,
+} from './layout';
+import { S } from './state';
+
+/** pale cold light: the exterior glow through the breach and the vault seams */
+const PALE = 0xdcecff;
+
+/** kit yawDeg that makes a piece at (x, n) face the projector (its lee is the hiding pocket) */
+export function faceSource(x: number, n: number): number {
+  return (Math.atan2(SOURCE_X - x, SOURCE_N - n) * 180) / Math.PI;
+}
+
+export function buildSpace(b: ZoneBuilder): void {
+  // the corridor runs east; the Wound sits west, over the breach the dropship came through
+  b.game.sky.setHeading(Math.PI / 2);
+  b.setEnv({
+    sky: 'frozenInterior', look: LOOKS.frozen, ambience: 'frozenCorridor', music: 'approachSelene',
+    // high, from the breach in the west: long rib shadows run east down the corridor toward the installation
+    key: { dirFrom: [-26, 7, 36], intensity: 2.0, color: 0xe4f0ff },
+  });
+  buildShell(b);
+  buildBay(b);
+  buildService(b);
+  buildCover(b);
+  buildFrost(b);
+  buildInstallation(b);
+  buildLight(b);
+  buildMarkers(b);
+  buildScenic(b);
+}
+
+/** floor, long walls, ribs, the enclosed vault, the exit */
+function buildShell(b: ZoneBuilder): void {
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, surfaceMaterial: 'ice' });
+  b.wall({ from: [BAY_X0, D], to: [W, D], height: WALL_H, style: 'conduit' });
+  b.wall({ from: [BAY_X0, 0], to: [W, 0], height: WALL_H, style: 'conduit' });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
+  // full ribs carry the vault; their legs stand in the long walls, ice-clad
+  b.ribRow({ x: RIB_X0, n: D / 2, span: D + 0.3, height: RIB_H, count: RIB_COUNT, spacing: RIB_SPACING, yawDeg: FACE.east, alongDeg: FACE.east, style: 'frozen' });
+  b.ceiling({
+    x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE, bay: RIB_SPACING, bayPhase: 2,
+    hazeColor: 0xd6eaff, glow: 2.2,
+  });
+
+  // exit: door, a short lit vestibule, the white point above with two lit pylons leading the eye up to it
+  S.exit = b.door({ x: W, n: EXIT_N, yawDeg: FACE.east });
+  S.exit.setState('locked');
+  b.floor({ x: W + 3, n: EXIT_N, w: 6, d: 4.4, inlay: 'none' });
+  b.wall({ from: [W, EXIT_N - 2.2], to: [W + 6, EXIT_N - 2.2], height: 5 });
+  b.wall({ from: [W, EXIT_N + 2.2], to: [W + 6, EXIT_N + 2.2], height: 5 });
+  b.wall({ from: [W + 6, EXIT_N - 2.2], to: [W + 6, EXIT_N + 2.2], height: 5, style: 'panelled' });
+  b.ceiling({ x: W + 3, n: EXIT_N, w: 6, d: 4.4, h: 5, style: 'flat' });
+  b.panelLight({ x: W + 5.6, n: EXIT_N, w: 2.2, d: 2.6, h: 0.9, facing: 'west', intensity: 2.2 });
+  b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3, intensity: 1.8 });
+  b.column({ x: W - 0.9, n: EXIT_N - 2.6, height: 8, style: 'pylon', lit: true });
+  b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8, style: 'pylon', lit: true });
+}
+
+/**
+ * The west bay: the dropship lies nose-first among broken ribs, its torn rear wedged into a small frozen rib at
+ * the corridor's mouth. The hatch and the tether are live objects (the arrival animates them).
+ */
+function buildBay(b: ZoneBuilder): void {
+  const game = b.game;
+  b.floor({ x: BAY_X0 / 2, n: D / 2, w: -BAY_X0, d: D, inlay: 'none', noSurface: true });
+  b.wall({ from: [BAY_X0, 0], to: [BAY_X0, D], height: WALL_H * 0.7, style: 'ribbed' });
+  b.rib({ x: -5.6, n: D / 2, span: D + 0.3, height: RIB_H, style: 'broken', yawDeg: FACE.east });
+  b.rib({ x: -12.4, n: D / 2, span: D + 0.3, height: RIB_H - 1, style: 'frozen', yawDeg: FACE.east });
+  // the rib the hull wedged into: its legs frame the hatch (Lyric's hand goes to the north one)
+  b.rib({ x: LODGE_RIB_X, n: WRECK_N, span: LODGE_RIB_SPAN, height: 7.4, style: 'frozen', yawDeg: FACE.east });
+
+  // the hull: nose west, rolled a little onto its north shoulder where it struck
+  const wreck = game.sky.scenic.wreck('reformation', { scale: 1, seed: 33 });
+  wreck.name = 'z03-dropship';
+  wreck.position.copy(b.P(WRECK_REAR_X - 6.5, WRECK_N, 0));
+  wreck.rotation.set(0, Math.PI / 2, 0.035);
+  b.add(wreck);
+
+  // nobody walks back into the hull: the rear pocket (where the three start) is the only floor beyond x = 0.3
+  b.blocker({ x: 0.3, n: (WRECK_N - HATCH_W / 2 - 0.5) / 2, w: 0.6, d: WRECK_N - HATCH_W / 2 - 0.5, height: 4 });
+  const nTop = WRECK_N + HATCH_W / 2 + 0.5;
+  b.blocker({ x: 0.3, n: (nTop + D) / 2, w: 0.6, d: D - nTop, height: 4 });
+  b.blocker({ x: -2.7, n: WRECK_N, w: 0.6, d: HATCH_W + 1.2, height: 4 });
+  const pocket = b.P(-1.2, WRECK_N, 0);
+  b.surface({ shape: { kind: 'rect', hx: 1.45, hz: HATCH_W / 2 + 0.5 }, x: pocket.x, z: pocket.z, y: 0, material: 'metal' });
+
+  // the rear hatch: a ramp plate hinged at the bottom of the torn rear; closed it stands up, open it lies east
+  const mats = b.mats;
+  const pivot = new THREE.Group();
+  pivot.name = 'z03-hatch';
+  pivot.position.copy(b.P(WRECK_REAR_X, WRECK_N, HATCH_HINGE_H));
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.14, HATCH_LEN, HATCH_W), mats.get('refSlate'));
+  plate.position.set(0, HATCH_LEN / 2, 0);
+  pivot.add(plate);
+  const ribs = new THREE.Mesh(new THREE.BoxGeometry(0.06, HATCH_LEN * 0.92, 0.12), mats.get('refSteel'));
+  for (const z of [-1.05, -0.35, 0.35, 1.05]) {
+    const r = ribs.clone();
+    r.position.set(0.09, HATCH_LEN / 2, z);
+    pivot.add(r);
+  }
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, HATCH_W * 0.86), mats.emissive(BLUE, 2.4));
+  strip.position.set(0.09, HATCH_LEN - 0.12, 0);
+  pivot.add(strip);
+  pivot.castShadow = true;
+  b.keep(b.add(pivot));
+  S.hatch = pivot;
+  S.hatchLight = b.point({ x: WRECK_REAR_X - 1.5, n: WRECK_N, h: 1.9, color: 0xcfe4ff, intensity: 0, distance: 11 });
+
+  // the anchor tether: from the hull's north shoulder to the broken rib's north leg (taut once Selene fires it)
+  const from = b.P(-2.2, WRECK_N + 2.6, 3.3);
+  const to = b.P(-5.4, D - 0.7, 6.4);
+  const len = from.distanceTo(to);
+  const tether = new THREE.Group();
+  tether.name = 'z03-tether';
+  tether.position.copy(from);
+  tether.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, len, 6), mats.get('refSteel'));
+  cable.position.y = len / 2;
+  const tipMat = mats.emissive(BLUE, 3);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), tipMat);
+  tip.position.y = len;
+  const root = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.22, 8), mats.get('refNavy'));
+  tether.add(cable, tip, root);
+  tether.scale.set(1, 0.001, 1);
+  b.keep(b.add(tether));
+  S.tether = tether;
+  S.tetherLen = len;
+  // cargo the impact threw out of the rear
+  b.prop('refCrate', { x: 4.9, n: 7.4, yawDeg: 24, variant: 1 });
+  b.prop('refCrate', { x: 1.6, n: 18.3, yawDeg: -15, variant: 0 });
+  b.prop('debrisSmall', { x: 2.4, n: 4.6, yawDeg: 60 });
+  b.prop('debrisSmall', { x: 6.2, n: 15.4, yawDeg: 200 });
+}
+
+/** the upper service path along the south wall: ramp up, deck, ramp down — the angle on the projector */
+function buildService(b: ZoneBuilder): void {
+  const w = DECK_N1 - DECK_N0;
+  const nMid = (DECK_N0 + DECK_N1) / 2;
+  b.ramp({ x: (RAMP_UP_X0 + DECK_X0) / 2, n: nMid, w, d: DECK_X0 - RAMP_UP_X0, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true });
+  b.deck({ x: (DECK_X0 + DECK_X1) / 2, n: nMid, w: DECK_X1 - DECK_X0, d: w, h: DECK_H, solidBelow: true, rails: ['n'], inlay: 'channels' });
+  b.ramp({ x: (DECK_X1 + RAMP_DN_X1) / 2, n: nMid, w, d: RAMP_DN_X1 - DECK_X1, h0: 0, h1: DECK_H, yawDeg: FACE.west, rails: true });
+  // the route is offered in gold: a channel leads from the arrival pocket to the ramp foot and along the deck
+  b.channel([[4.6, 8.6], [RAMP_UP_X0 - 0.4, nMid + 0.6]], { width: 0.07 });
+  b.channel([[DECK_X0 + 0.4, DECK_N1 - 0.35], [DECK_X1 - 0.4, DECK_N1 - 0.35]], { h: DECK_H, width: 0.06 });
+  // two Reformation crate stacks on the deck: the only cover from plane B up here
+  for (const x of [23.4, 28.6]) b.coverHigh({ x, n: 1.7, h: DECK_H, w: 2.4, yawDeg: faceSource(x, 1.7), style: 'reformation' });
+  // the projector's mast is solid to walk into but passes sight and shots (its own actor takes the hits)
+  const p = b.P(SOURCE_X, SOURCE_N, DECK_H + 1);
+  b.collider({ shape: { kind: 'cyl', r: 0.45, hy: 1 }, x: p.x, y: p.y, z: p.z, blocksSight: false, blocksShots: false, tag: 'prop:scanSource' });
+  b.prop('cableBundle', { x: SOURCE_X + 1.6, n: 1.4, h: DECK_H, yawDeg: 90 });
+  b.prop('refCrate', { x: SOURCE_X + 1.3, n: 3.4, h: DECK_H, yawDeg: 8, variant: 2 });
+}
+
+/** the lower floor's hiding pieces (each faces the projector) and a little low cover that does not hide */
+function buildCover(b: ZoneBuilder): void {
+  const high = (x: number, n: number, style: 'ancient' | 'reformation' | 'plate', w = 2.8): void => {
+    b.coverHigh({ x, n, w, yawDeg: faceSource(x, n), style });
+  };
+  // plane A's stretch
+  high(10.2, 12.4, 'ancient');
+  high(14.4, 17.8, 'ancient', 3.0);
+  high(17.6, 8.7, 'reformation', 2.6);
+  // plane B's stretch
+  high(22.8, 14.8, 'ancient', 3.0);
+  high(26.3, 8.6, 'plate', 2.6);
+  high(28.6, 17.6, 'ancient', 3.0);
+  // ice has grown over the King-era plinths (it does not change what they hide)
+  for (const [x, n] of [[14.4, 17.8], [22.8, 14.8], [28.6, 17.6]] as const) {
+    b.frost({ x, n, w: 3.4, d: 1.5, height: 2.7, density: 0.5, yawDeg: faceSource(x, n) + 90, collider: false });
+  }
+  // low cover: something to read the floor by, never a hiding place from an elevated source
+  b.coverLow({ x: 12.8, n: 7.0, yawDeg: 100, style: 'reformation' });
+  b.coverLow({ x: 20.6, n: 19.6, yawDeg: 70, style: 'debris' });
+  b.prop('refCrate', { x: 24.6, n: 11.2, yawDeg: 37, variant: 0 });
+  b.prop('fallenPlate', { x: 31.6, n: 19.6, yawDeg: 210 });
+}
+
+/** frozen atmosphere along the walls (conduits shine through), ice at the feet of things, the tissue behind it */
+function buildFrost(b: ZoneBuilder): void {
+  // north wall curtains, clear of the walkway
+  for (const [x, w] of [[7.5, 7], [16.5, 6], [25, 7], [33.5, 6], [41.5, 5]] as const) {
+    b.frost({ x, n: D - 0.75, w, d: 1.1, height: 6.2, density: 0.7 });
+  }
+  // south wall: by the arrival, and above the deck between the crate stacks
+  b.frost({ x: 2.6, n: 0.75, w: 4.6, d: 1.1, height: 5.6, density: 0.7 });
+  b.frost({ x: 20.8, n: 0.6, h: DECK_H, w: 3.4, d: 0.9, height: 4.8, density: 0.6 });
+  b.frost({ x: 26, n: 0.6, h: DECK_H, w: 2.6, d: 0.9, height: 4.8, density: 0.6 });
+  // east wall either side of the installation
+  b.frost({ x: W - 0.7, n: 17.5, w: 1.0, d: 6, height: 6, density: 0.6 });
+  // ice formations at the feet of walls, ribs and the deck
+  const ice: Array<[number, number, number, number?]> = [
+    [7.2, 20.3, 10], [11.5, 5.1, 80, 0.8], [19.6, 20.6, 140], [30.8, 20.2, 210, 0.9], [36.6, 20.1, 40],
+    [33.2, 5.2, 300, 0.7], [5.6, 1.9, 120, 0.8], [46.4, 19.6, 260],
+  ];
+  for (const [x, n, yawDeg, scale] of ice) b.prop('iceFormation', { x, n, yawDeg, scale });
+
+  // the tissue behind the ice: faint, following the conduits; violet only at a real source
+  b.corruption({ x: 17.2, n: D - 0.35, h: 1.6, r: 1.1, onWall: true, yawDeg: FACE.south, intensity: 0.35 });
+  b.corruption({ x: 2.2, n: 0.35, h: 2.2, r: 0.9, onWall: true, yawDeg: FACE.north, intensity: 0.3 });
+  // the patch that stirs when Lyric is asked what she feels (kept live so it can swell)
+  S.stir = b.keep(b.corruption({ x: 37.4, n: D - 0.35, h: 1.5, r: 1.3, onWall: true, yawDeg: FACE.south, intensity: 0.45 }));
+}
+
+/** the deployed Reformation sensor installation at the east end, around the terminal */
+function buildInstallation(b: ZoneBuilder): void {
+  const [tx, tn] = TERMINAL;
+  b.prop('refConsole', { x: tx, n: tn, yawDeg: FACE.west });
+  b.prop('refSensorMast', { x: 45.6, n: 19.2, yawDeg: 230 });
+  b.prop('refSensorMast', { x: 38.4, n: 19.8, yawDeg: 160 });
+  b.prop('refCrate', { x: 45.9, n: 16.4, yawDeg: 6, variant: 1 });
+  b.prop('refCrate', { x: 46.3, n: 14.6, yawDeg: -4, variant: 2 });
+  b.prop('refCrate', { x: 37.6, n: 8.9, yawDeg: 52, variant: 0 });
+  b.prop('refAmmoCase', { x: 44.1, n: 17.9, yawDeg: 20 });
+  b.prop('cableBundle', { x: 41.2, n: 10.6, yawDeg: 210 });
+  b.prop('cableBundle', { x: 38.6, n: 6.4, yawDeg: 240 });
+  b.prop('refLamp', { x: 40.4, n: 18.6, yawDeg: 200 });
+  b.prop('ancientPylon', { x: 35.6, n: 20.2 });
+
+  const holo = b.game.props.hologram('sensorReconstruction');
+  holo.object.position.copy(b.P(HOLO[0], HOLO[1], 0));
+  holo.object.rotation.y = b.yaw(FACE.west);
+  holo.params.visible = 0.35;
+  holo.params.progress = 0;
+  holo.setText('LOCAL SENSOR RECONSTRUCTION'); // NEW (display header)
+  b.add(holo.object);
+  b.onUpdate((dt, t) => holo.update(dt, t));
+  S.holo = holo;
+  S.holoVisible = 0.35;
+}
+
+/** about a dozen lights: the key, two pale shafts, the installation's cold blue, a gold hint on the offered route */
+function buildLight(b: ZoneBuilder): void {
+  b.spot({ x: 15, n: 11.5, h: WALL_H + 3.2, target: [16, 12, 0], angleDeg: 22, intensity: 700, shaft: true, color: PALE });
+  b.spot({ x: 29.5, n: 12, h: WALL_H + 3.2, target: [28.5, 11.5, 0], angleDeg: 22, intensity: 650, shaft: true, color: PALE });
+  // the installation and the projector: Reformation light, cold
+  b.point({ x: 42, n: 13.2, h: 3.4, color: BLUE, intensity: 46, distance: 16 });
+  b.point({ x: SOURCE_X - 0.6, n: SOURCE_N + 1.2, h: DECK_H + 2.6, color: BLUE, intensity: 14, distance: 9 });
+  // the service ramp is an offered route: warm at its foot
+  b.point({ x: RAMP_UP_X0 + 1.5, n: 5.2, h: 2.6, color: IVORY, intensity: 12, distance: 8 });
+  // the arrival pocket: frost light off the ice so the three read against the hull
+  b.point({ x: 5.2, n: 13.4, h: 3.4, color: FROST, intensity: 18, distance: 10 });
+}
+
+function buildMarkers(b: ZoneBuilder): void {
+  // --- arrival (inside the hull's rear, then out of the hatch) ---
+  b.marker('seleneHatch', -1.5, WRECK_N - 0.7, 0, FACE.east);
+  b.marker('tharneHatch', -1.9, WRECK_N + 0.4, 0, FACE.east);
+  b.marker('lyricHatch', -0.9, WRECK_N + 0.6, 0, FACE.east);
+  b.marker('lyricStep', 2.9, WRECK_N + 0.9, 0, FACE.east);
+  b.marker('tharneCatch', 2.4, WRECK_N + 0.2, 0, 60);
+  b.marker('lyricWall', 3.1, WRECK_N + 2.3, 0, 15);
+  b.marker('wallTouch', LODGE_RIB_X - 0.2, WRECK_N + LODGE_RIB_SPAN / 2 - 0.45, 1.45);
+  b.marker('seleneStep', 4.4, WRECK_N - 0.9, 0, FACE.east);
+  b.marker('start', 4.6, WRECK_N - 0.8, 0, FACE.east);
+  b.marker('tharneStart', 3.4, WRECK_N + 0.6, 0, FACE.east);
+  b.marker('lyricStart', 3.1, WRECK_N + 1.9, 0, FACE.east);
+
+  // --- the scan ---
+  b.marker('scanStart', 6.6, WRECK_N, 0, FACE.east);
+  b.marker('scanLook', 4.2, WRECK_N - 0.4, 0, FACE.east);
+  b.marker('tharneScan', 3.5, WRECK_N + 0.8, 0, FACE.east);
+  b.marker('lyricScan', 2.9, WRECK_N + 2.0, 0, FACE.east);
+  b.marker('past', 37.4, 12, 0, FACE.east);
+  b.marker('source', SOURCE_X, SOURCE_N, DECK_H, FACE.west);
+  b.marker('sourceStand', SOURCE_STAND[0], SOURCE_STAND[1], DECK_H, FACE.east);
+
+  // --- the terminal ---
+  const [tx, tn] = TERMINAL;
+  b.marker('terminal', tx - 1.1, tn, 0, FACE.east);
+  b.marker('terminalStart', 35.6, 12.6, 0, FACE.east);
+  b.marker('tharneT0', 34.2, 13.9, 0, FACE.east);
+  b.marker('lyricT0', 33.8, 11.3, 0, FACE.east);
+  b.marker('tharneTerm', 40.9, 12.6, 0, 50);
+  b.marker('lyricTerm', 39.2, 16.9, 0, 100);
+  b.marker('holo', HOLO[0], HOLO[1], 0, FACE.west);
+  b.marker('stir', 37.4, D - 0.5, 1.5);
+  b.marker('exit', W - 1.9, EXIT_N, 0, FACE.east);
+  b.marker('tharneExit', W - 4.2, EXIT_N + 1.4, 0, FACE.east);
+  b.marker('lyricExit', W - 4.6, EXIT_N - 0.6, 0, FACE.east);
+}
+
+/** far field: the nave beyond the breach, pale haze, frost motes and a little snow falling through the breach */
+function buildScenic(b: ZoneBuilder): void {
+  const game = b.game;
+  const nave = game.sky.scenic.megaRibs({ count: 6, span: 120, height: 95, spacing: 60, seed: 303 });
+  nave.name = 'z03-nave';
+  nave.position.copy(b.P(BAY_X0 - 30, D / 2, -12));
+  nave.rotation.y = Math.PI / 2;
+  b.add(nave);
+  game.vfx.ambient('frostMotes', b.P(W / 2, D / 2, 4), { x: W, y: 8, z: D }, 0.7);
+  game.vfx.ambient('snow', b.P(BAY_X0 / 2 + 2, D / 2, 6), { x: -BAY_X0 + 6, y: 12, z: D }, 0.5);
+  game.vfx.ambient('dust', b.P(W / 2, D / 2, 5), { x: W, y: 9, z: D }, 0.25);
+}

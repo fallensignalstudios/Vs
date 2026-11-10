@@ -197,13 +197,17 @@ export interface CharacterFactory {
    * starts as the procedural figure and switches by itself on a later update(); when they cannot be loaded it
    * stays procedural. `height` follows the body that is drawn. Call preload() while a zone loads to avoid the
    * switch being seen.
+   * Generated bodies, their props and the elite's skin draw coarser baked levels of detail as they get smaller
+   * on screen (≈ 30 % / 10 % of the view height; chosen per frame for the main camera, shadows included).
+   * `?lod=0` in the URL (or setCharacterLodEnabled(false) from '@/chars/glb') draws full meshes only.
    */
   create(archetype: Archetype, opts?: CharacterCreateOpts): CharacterVisual;
   /** Pre-build geometry/material caches for a list of archetypes during loading. */
   warm(archetypes: Archetype[]): void;
   /**
    * Fetch the generated bodies and props (public/models, see its manifest.json) these archetypes use, so the
-   * next create() returns them at once. Always resolves — a missing file is logged once and that archetype
+   * next create() returns them at once. Creature archetypes with a generated skin (the elite) load it too, so
+   * it is worn from the first frame. Always resolves — a missing file is logged once and that archetype
    * keeps its procedural figure. Safe to call repeatedly; already-loaded models cost nothing.
    */
   preload(archetypes: Archetype[]): Promise<void>;

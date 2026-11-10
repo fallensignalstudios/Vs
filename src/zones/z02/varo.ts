@@ -153,7 +153,8 @@ export function* varoScene(z: ZoneRuntime): Routine {
     // “Name.” — at his level, holding his eyes
     const tk = z.m('tarrikKneel');
     const tShot = (): void => c.shot(tk, { yawDeg: 250, distance: 1.5, height: 1.12, lookHeight: 1.12, fov: 36 });
-    const vShot = (): void => c.shot(varo, { yawDeg: 35, distance: 1.4, height: 1.0, lookHeight: 0.88, fov: 36 });
+    // (framed on his bare face: he is drawn without a helmet, chars `malik`)
+    const vShot = (): void => c.shot(varo, { yawDeg: 350, distance: 1.4, height: 1.06, lookHeight: 0.95, fov: 36 });
     malik?.face(tk);
     tShot();
     yield* z.say('Tarrik', 'Name.', { actor: z.player });
