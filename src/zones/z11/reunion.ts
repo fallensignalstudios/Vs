@@ -89,7 +89,7 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     tharne?.teleport(z.m('tharneStop'), z.myaw('tharneStop'));
     g.player.teleport(z.m('seleneLyric'), z.myaw('seleneLyric'));
     hold(z.player, 'R', armOf(lyric, () => z.player.pos));
-    lyric?.visual?.setCorruption(0.24);
+    lyric?.actor.visual?.setCorruption(0.24);
 
     c.twoShot(feet(z, lyric ?? 'lyricStop'), z.player.pos, { side: 1, distance: 1.55, fov: 32 });
     yield 0.6;

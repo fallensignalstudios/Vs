@@ -144,7 +144,11 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'panelled', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
   b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'ribbed' });
   b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'ribbed', doors: [{ at: EXIT_N - n0, width: 3, height: 3.5 }] });
-  b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'glass' });
+  // the glass in three spans so the centre pane is clear of mullions: the Wound hangs in it, seen from the table
+  const cw = 2.2;
+  b.wall({ from: [x0, n1], to: [cx - cw, n1], height: h, style: 'glass' });
+  b.wall({ from: [cx - cw, n1], to: [cx + cw, n1], height: h, style: 'glass' });
+  b.wall({ from: [cx + cw, n1], to: [x1, n1], height: h, style: 'glass' });
   // the ceiling comes forward in stone and turns to glass over the last five metres: the window curves overhead
   b.ceiling({ x: cx, n: (n0 + n1 - 5) / 2, w: x1 - x0, d: n1 - n0 - 5, h, style: 'flat' });
   b.ceiling({ x: cx, n: n1 - 2.5, w: x1 - x0, d: 5, h, style: 'glass' });
@@ -201,8 +205,9 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
 
   // light: warm inside, the cold stays outside
   b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffd6a6, shadow: true });
-  b.point({ x: 2.2, n: n1 - 1.2, h: 3.6, color: 0xff5a3c, intensity: 34, distance: 16 }); // the red remnant's spill (Tarrik's side)
-  b.point({ x: 21.8, n: n1 - 1.2, h: 3.6, color: 0xbcd2ff, intensity: 26, distance: 16 }); // the white remnant's (Selene's)
+  // the remnants' spill through the glass: red from the north-west (Tarrik's side), cold from the north-east (Selene's)
+  b.point({ x: 4.5, n: n1 + 2.5, h: 5.2, color: 0xff6040, intensity: 40, distance: 22 });
+  b.point({ x: 19.5, n: n1 + 2.5, h: 5.2, color: 0xc4d6ff, intensity: 30, distance: 22 });
   b.point({ x: PASSAGE.x + 0.5, n: n0 + 2.2, h: 3.2, color: IVORY, intensity: 12, distance: 10 });
 }
 
@@ -237,7 +242,10 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('galleryIn', PASSAGE.x + 0.6, GAL.n0 + 1.8, 0, 25);
   b.marker('tarrikIn', PASSAGE.x - 0.6, GAL.n0 + 1.2, 0, 25);
   b.marker('seleneStand', TABLE.x + 1.65, TABLE.n + 1.95, 0, 245); // standing by her chair, toward him
-  b.marker('lingerAt', TABLE.x + 1.3, TABLE.n + 1.1, 0, FACE.west);
+  b.marker('lingerAt', TABLE.x + 1.75, TABLE.n + 0.6, 0, 200); // where she stands when she rises
+  b.marker('seleneRise', TABLE.x + 1.75, TABLE.n + 0.6, 0, 200);
+  b.marker('tarrikRise', TABLE.x - 1.75, TABLE.n + 0.7, 0, 150);
+  b.marker('tarrikApproach', TABLE.x - 1.8, TABLE.n + 1.1, 0, FACE.east); // he walks ahead to his chair
   b.marker('tableCentre', TABLE.x, TABLE.n, 0.76);
   b.marker('window', TABLE.x, GAL.n1, 3.2);
   b.marker('exit', GAL.x1 + 1.6, EXIT_N, 0, FACE.east);
