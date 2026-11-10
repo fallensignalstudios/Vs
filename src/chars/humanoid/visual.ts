@@ -16,6 +16,7 @@ import type { BodySolver, SolveOpts } from './anim/solver';
 import { ClothSim, type ClothCapsule } from './cloth';
 import { releaseFigure, retainFigure, type FigureDef } from './figure';
 import { Equipment } from './equip';
+import { flashStrength } from '@/chars/flash';
 
 const DEG = Math.PI / 180;
 const _v = new THREE.Vector3();
@@ -80,6 +81,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private stance: StanceSet;
   private flashLeft = 0;
   private flashDur = 0.12;
+  private flashPeak = 1;
   private frozen = 0;
   private glow = 1;
   private time = 0;
@@ -303,10 +305,11 @@ export class HumanoidVisualImpl implements HumanoidVisual {
 
   // ---- shader state -------------------------------------------------------------------------------------
 
-  flash(color: number, seconds = 0.12): void {
-    _c.set(color);
-    this.uniforms.uFlash.value.set(_c.r, _c.g, _c.b, 1);
-    this.flashDur = Math.max(0.01, seconds);
+  flash(color: number, seconds = 0.12, strength?: number): void {
+    _c.set(Number.isFinite(color) ? color : 0xffffff);
+    this.flashPeak = flashStrength(strength);
+    this.uniforms.uFlash.value.set(_c.r, _c.g, _c.b, this.flashPeak);
+    this.flashDur = Number.isFinite(seconds) ? Math.max(0.01, seconds) : 0.12;
     this.flashLeft = this.flashDur;
   }
 
@@ -404,7 +407,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.uniforms.uTime.value = this.time;
     if (this.flashLeft > 0) {
       this.flashLeft -= dt;
-      this.uniforms.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur);
+      this.uniforms.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur) * this.flashPeak;
     }
 
     // look target → model space

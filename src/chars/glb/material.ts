@@ -11,6 +11,7 @@
  */
 import * as THREE from 'three';
 import type { GlowMask } from './config';
+import { HIT_FLASH_GLSL } from '@/chars/flash';
 
 /** State shared by every material of one character (body and props). */
 export interface SharedUniforms {
@@ -106,6 +107,7 @@ uniform vec3 uTint;
 uniform vec2 uExposed;
 uniform vec4 uBlade;
 ${NOISE}
+${HIT_FLASH_GLSL}
 vec3 gHash3( vec3 p ) {
   p = vec3( dot( p, vec3( 127.1, 311.7, 74.7 ) ), dot( p, vec3( 269.5, 183.3, 246.1 ) ), dot( p, vec3( 113.5, 271.9, 124.6 ) ) );
   return fract( sin( p ) * 43758.5453 );
@@ -261,7 +263,8 @@ const FRAG_EMISSIVE = /* glsl */ `
   totalEmissiveRadiance += vec3( 0.55, 0.82, 1.0 ) * ggBladeBody * ( 0.3 + fres * 1.9 ) * uGlow * shimmer;
   totalEmissiveRadiance += vec3( 0.62, 0.86, 1.0 ) * ggBlade * 4.0 * uGlow;
   totalEmissiveRadiance += uDissolveColor * ggEdge * 5.0;
-  totalEmissiveRadiance += uFlash.rgb * uFlash.a * ( 0.45 + fres );
+  // hit flash: edge tint + albedo lift (src/chars/flash.ts), never a flat fill over the author's design
+  totalEmissiveRadiance += aurHitFlash( uFlash, diffuseColor.rgb, fres );
 }
 `;
 
@@ -325,7 +328,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE);
   };
-  material.customProgramCacheKey = () => 'aurelion-glb-3';
+  material.customProgramCacheKey = () => 'aurelion-glb-4';
 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {

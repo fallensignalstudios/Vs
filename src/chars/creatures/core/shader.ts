@@ -14,6 +14,7 @@
  * are skipped by uniform branches when their amounts are zero.
  */
 import * as THREE from 'three';
+import { HIT_FLASH_GLSL } from '@/chars/flash';
 
 export const GROUPS = 8;
 
@@ -99,6 +100,7 @@ const FRAG_PARS = /* glsl */ `
 varying vec3 vBind;
 uniform float uTime;
 uniform vec4 uFlash;
+${HIT_FLASH_GLSL}
 uniform float uFrozen;
 uniform vec3 uFrostOrigin;
 uniform float uFrostRange;
@@ -309,7 +311,8 @@ const FRAG_EMISSIVE = /* glsl */ `
   float cTp = 0.72 + 0.28 * sin(uTime * 17.0);
   cE += uTelegraph.rgb * uTelegraph.a * cTp * (cFres * 0.75 + cLit * 2.2 + 0.012);
   cE += uRim.rgb * uRim.a * cFres * 1.4;
-  cE += uFlash.rgb * uFlash.a * (0.55 + cFres * 1.2);
+  // hit flash: edge tint + albedo lift (src/chars/flash.ts), never a flat fill
+  cE += aurHitFlash(uFlash, diffuseColor.rgb, cFres);
   totalEmissiveRadiance = cE;
 }
 `;

@@ -21,6 +21,7 @@ import { Rig, warnOnce } from './rig';
 import type { ActionDef, CreatureSpec, Slot } from './spec';
 import { createStateMaterial, GROUPS, setDissolveActive, type StateUniforms } from './shader';
 import { cadenceFor, cadenceRelease, cadenceRetain, type Cadence } from './cadence';
+import { flashStrength } from '@/chars/flash';
 
 
 export type { ActionDef, CreatureSpec, Slot } from './spec';
@@ -276,16 +277,16 @@ export abstract class CreatureBase implements CharacterVisual {
 
   // ------------------------------------------------------------------ CharacterVisual: shader state
 
-  flash(color: number, seconds = 0.12): void {
+  flash(color: number, seconds = 0.12, strength?: number): void {
     _col.set(Number.isFinite(color) ? color : 0xffffff);
-    this.u.uFlash.value.set(_col.r, _col.g, _col.b, 1);
+    this.flashGain = flashStrength(strength);
     this.flashDur = Number.isFinite(seconds) ? Math.max(0.02, seconds) : 0.12;
     this.flashT = this.flashDur;
-    this.flashGain = 1;
     try {
       // accessibility contract: whole-figure flashes are toned down, never removed (they confirm hits)
-      if (this.game && !isStub(this.game.settings) && this.game.settings.get('reduceFlash') === true) this.flashGain = 0.35;
+      if (this.game && !isStub(this.game.settings) && this.game.settings.get('reduceFlash') === true) this.flashGain *= 0.35;
     } catch { /* settings unavailable */ }
+    this.u.uFlash.value.set(_col.r, _col.g, _col.b, this.flashGain);
   }
 
   setFrozen(amount: number): void {

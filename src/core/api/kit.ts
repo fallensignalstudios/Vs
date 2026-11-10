@@ -106,6 +106,36 @@ export interface RampOpts {
   rails?: boolean;
 }
 
+/**
+ * Options of `ceiling()`. Styles: `'flat'` (default) coffered slab with light strips · `'vault'` low barrel vault
+ * with ribs and an apex seam · `'lattice'` open beam grid (the sky shows through) · `'glass'` glazed lattice ·
+ * ADDED (kit) `'vaultClosed'` — an ENCLOSED barrel vault for upper white-gold halls: a thick shell springing from
+ * the wall tops (`h` = the wall height), transverse ribs every `bay` metres, and in every bay two narrow seams high
+ * either side of the crown that open onto bright warm haze (light boxes: no sky, no stars). Both gable ends are
+ * closed, each with a vertical light seam; soft sheets of light fall from the seams along the zone's key light
+ * (`shafts`, hidden when the quality profile has no volumetrics). The shell casts no shadow, so the key light
+ * still lands on the floor as the light that enters through the seams. Cost: ~3 draw calls, ~3k triangles.
+ *
+ *   // Z01: a 56 × 26 m hall with 10 m walls and 15.5 m ribs → the vault springs from the wall tops, crown at 16.3
+ *   b.ceiling({ x: 28, n: 13, w: 56, d: 26, h: 10, style: 'vaultClosed', rise: 6.3, bay: 8 });
+ *
+ * The vault spans the SHORT side of the rect and runs along the long one; `h` is its springing height. For the
+ * lower terminal pass `mat: 'blackStone'` (dark shell, gold-framed seams).
+ */
+export interface CeilingOpts extends RectOpts {
+  style?: 'vault' | 'flat' | 'lattice' | 'glass' | 'vaultClosed';
+  /** vaultClosed: height of the crown above `h` (default 0.24 × the span, at least 2 m) */
+  rise?: number;
+  /** vaultClosed: rib spacing along the vault (default 7 m; rounded so the bays divide the length evenly) */
+  bay?: number;
+  /** vaultClosed: brightness of the seam haze (default 3; above 1 it blooms) */
+  glow?: number;
+  /** vaultClosed: haze / light-sheet colour (default 0xfff0d6, warm white) */
+  hazeColor?: number;
+  /** vaultClosed: soft sheets of light from the seams (default true) */
+  shafts?: boolean;
+}
+
 export interface WallOpts {
   /** segment endpoints in plan coords */
   from: [number, number]; to: [number, number];
@@ -260,7 +290,8 @@ export interface ZoneBuilder {
   ringWall(o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; /** ADDED (kit): default 0.6 */ thickness?: number }): THREE.Object3D;
   /** blocks movement only (invisible) — "simple blocking volumes behind scenery" */
   blocker(o: RectOpts & { height?: number }): ColliderHandle;
-  ceiling(o: RectOpts & { style?: 'vault' | 'flat' | 'lattice' | 'glass' }): THREE.Object3D;
+  /** ceiling slab / vault over a rect; see CeilingOpts for the styles (ADDED: 'vaultClosed', the enclosed vault) */
+  ceiling(o: CeilingOpts): THREE.Object3D;
 
   rib(o: RibOpts): THREE.Object3D;
   /** evenly spaced ribs along a line */

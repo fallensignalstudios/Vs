@@ -3,9 +3,10 @@
  * A wall segment's local frame: +X runs from `from` to `to`, Y up from the base height, Z across the thickness.
  */
 import * as THREE from 'three';
-import type { MatId, RectOpts, WallOpts } from '@/core/api';
+import type { CeilingOpts, MatId, WallOpts } from '@/core/api';
 import { familyOf, KitCtx, Part } from './core';
 import { solidArcs } from './structure';
+import { emitClosedVault } from './vault';
 
 type Style = NonNullable<WallOpts['style']>;
 
@@ -205,7 +206,7 @@ export function buildRingWall(ctx: KitCtx, o: { x: number; n: number; r: number;
   return part.done();
 }
 
-export function buildCeiling(ctx: KitCtx, o: RectOpts & { style?: 'vault' | 'flat' | 'lattice' | 'glass' }): THREE.Object3D {
+export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
   const w0 = ctx.num(o.w, 20, 1), d0 = ctx.num(o.d, 20, 1), h = ctx.num(o.h, 8);
   // author along the longer side: local Z = long axis
   const turn = w0 > d0, w = turn ? d0 : w0, d = turn ? w0 : d0;
@@ -214,6 +215,10 @@ export function buildCeiling(ctx: KitCtx, o: RectOpts & { style?: 'vault' | 'fla
   const style = o.style ?? 'flat';
   const wg = part.g(familyOf(o.mat).frame), trim = part.g('goldTrim'), light = part.g('whiteLight');
   const bays = Math.max(1, Math.round(d / 6));
+  if (style === 'vaultClosed') {
+    emitClosedVault(ctx, part, o, w, d, h);
+    return part.done();
+  }
   if (style === 'vault') {
     const rise = w * 0.24, n = 14, th = 0.35;
     const arc = (i: number, off: number): [number, number] => {

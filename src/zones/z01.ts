@@ -36,6 +36,8 @@ const D = 26;
 /** wall height and rib apex: the vault reads as an "immense span" above 10 m walls */
 const WALL_H = 10;
 const RIB_H = 15.5;
+/** the enclosed vault's crown (its shell clears the rib apex) */
+const VAULT_CROWN = 16.4;
 /** the three firing lanes (n of the south / centre / north lane on the main floor) */
 const LANE_N = [4.5, 10.5, 16.5] as const;
 /** entry (west wall) and exit (east wall) door centres */
@@ -118,9 +120,10 @@ function buildShell(b: ZoneBuilder): void {
   b.wall({ from: [W, 0], to: [W, D], height: APERTURE_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
   b.wall({ from: [W, 0], to: [W, D], h: APERTURE_H, height: WALL_H - APERTURE_H, style: 'plain', doors: [{ at: APERTURE_N, width: 3.6, height: 2.2 }] });
 
-  // seven ribs carry the vault; their legs stand against the long walls
+  // seven ribs carry the vault; their legs stand against the long walls. The vault is ENCLOSED: it springs from
+  // the wall tops and its crown clears the rib apex; high seams between its ribs glow with warm haze (no sky)
   b.ribRow({ x: 4, n: D / 2, span: D - 1, height: RIB_H, count: 7, spacing: 8, yawDeg: FACE.east, alongDeg: FACE.east });
-  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: RIB_H + 0.3, style: 'lattice' });
+  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_CROWN - WALL_H, bay: 8 });
 
   // exit: door, a lit vestibule beyond it, the white point above
   S.exit = b.door({ x: W, n: EXIT_N, yawDeg: FACE.east });

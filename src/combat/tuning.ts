@@ -195,6 +195,18 @@ export const TUNING = {
     flashWeak: 0xffe08a,
     flashHurt: 0xff4a3a,
     flashBlock: 0x9fc8ff,
+    /**
+     * Hit-flash strengths (CharacterVisual.flash: edge tint + albedo lift, never a flat fill). Hits on enemies
+     * stay punchy; on the protagonist the flash is a brief edge tint so it never reads as a damage state or hides
+     * the character (the HUD vignette and camera shake carry the hurt).
+     */
+    flashStrengthHit: 1,
+    flashStrengthWeak: 1.25,
+    flashStrengthBlock: 0.6,
+    flashStrengthHurt: 0.35,
+    flashStrengthPlayerBlock: 0.4,
+    /** seconds of the protagonist's hurt flash */
+    flashHurtSeconds: 0.09,
   },
 
   move: {

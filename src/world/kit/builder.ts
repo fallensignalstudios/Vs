@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import type {
+  CeilingOpts,
   BarrierHandle, ColliderDesc, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
   MatId, MaterialLibrary, PhysicsWorld, PropKind, PropOpts, RampOpts, RectOpts, RibOpts, ScriptHandle, SurfaceDesc, SurfaceHandle,
   WallOpts, ZoneBuilder, ZoneEnvOpts,
@@ -117,7 +118,7 @@ export class ZoneBuilderImpl implements ZoneBuilder {
   walls(points: Array<[number, number]>, o?: Omit<WallOpts, 'from' | 'to'> & { closed?: boolean }): THREE.Object3D { return buildWalls(this.ctx, points, o); }
   ringWall(o: Parameters<ZoneBuilder['ringWall']>[0]): THREE.Object3D { return buildRingWall(this.ctx, o); }
   blocker(o: RectOpts & { height?: number }): ColliderHandle { return buildBlocker(this.ctx, o); }
-  ceiling(o: RectOpts & { style?: 'vault' | 'flat' | 'lattice' | 'glass' }): THREE.Object3D { return buildCeiling(this.ctx, o); }
+  ceiling(o: CeilingOpts): THREE.Object3D { return buildCeiling(this.ctx, o); }
   rib(o: RibOpts): THREE.Object3D { return buildRib(this.ctx, o); }
   ribRow(o: RibOpts & { count: number; spacing: number; alongDeg?: number }): THREE.Object3D { return buildRibRow(this.ctx, o); }
   column(o: Parameters<ZoneBuilder['column']>[0]): THREE.Object3D { return buildColumn(this.ctx, o); }

@@ -55,7 +55,7 @@ export function presentHit(game: Game, target: Actor, hit: HitInfo, res: HitResu
 
   if (res.perfect) {
     fx(game, 'deflect', 1);
-    v?.flash(H.flashBlock, 0.14);
+    v?.flash(H.flashBlock, 0.14, onPlayer ? H.flashStrengthPlayerBlock : H.flashStrengthBlock);
     if (involved) {
       game.time.hitStop(0.07);
       game.camera.shake(0.22, 0.2);
@@ -69,7 +69,7 @@ export function presentHit(game: Game, target: Actor, hit: HitInfo, res: HitResu
     fx(game, shield ? 'shieldHit' : 'sparkHit', hit.heavy ? 1.2 : 0.85);
     sfx(game, shield ? (melee ? 'bladeHitShield' : 'shieldHit') : 'guardBlock');
     if (v && !res.guardBroken) v.play('guardHit', _react);
-    v?.flash(H.flashBlock, 0.08);
+    v?.flash(H.flashBlock, 0.08, onPlayer ? H.flashStrengthPlayerBlock : H.flashStrengthBlock);
     if (res.guardBroken) {
       fx(game, shield ? 'shieldBreak' : 'sparkHeavy', 1);
       sfx(game, shield ? 'shieldBreak' : 'staggerBreak');
@@ -84,7 +84,9 @@ export function presentHit(game: Game, target: Actor, hit: HitInfo, res: HitResu
 
   // ---- a clean hit ------------------------------------------------------------------------------------
   if (v) {
-    v.flash(onPlayer ? H.flashHurt : res.weakPoint ? H.flashWeak : H.flashHit, res.weakPoint || hit.heavy ? 0.16 : 0.1);
+    if (onPlayer) v.flash(H.flashHurt, H.flashHurtSeconds, H.flashStrengthHurt);
+    else if (res.weakPoint) v.flash(H.flashWeak, 0.16, H.flashStrengthWeak);
+    else v.flash(H.flashHit, hit.heavy ? 0.16 : 0.1, H.flashStrengthHit);
     if (!res.killed && res.applied > 0) v.play(hit.heavy || res.staggered ? 'hitHeavy' : 'hitLight', _react);
   }
 

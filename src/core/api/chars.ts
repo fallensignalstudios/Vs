@@ -135,8 +135,13 @@ export interface CharacterVisual {
   /** Which held equipment is visible. */
   setLoadout(opts: { melee?: boolean; ranged?: boolean; shield?: boolean; prop?: 'case' | 'rifle' | 'none' }): void;
 
-  /** Brief additive flash on the whole figure (hit confirm). */
-  flash(color: number, seconds?: number): void;
+  /**
+   * Brief hit-confirm flash: an edge (fresnel) tint plus a lift of the surface's own albedo in `color` — the
+   * figure's design stays readable at the peak; it is never a flat fill. `seconds` default 0.12 (linear decay).
+   * ADDED: `strength` 0..1.5, default 1 (a punchy enemy confirm). Use ~0.35 on the protagonist (a hurt flash
+   * must not read as a damage state or hide the character), ~0.5 for block/charge cues.
+   */
+  flash(color: number, seconds?: number, strength?: number): void;
   /** 0..1 frozen/arrested look (frost shell, desaturate, pose hold) */
   setFrozen(amount: number): void;
   /** 0..1 Eclipse corruption overlay amount */

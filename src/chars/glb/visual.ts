@@ -23,6 +23,7 @@ import type { ModelInstance, ModelLibrary } from './library';
 import { createGlbMaterial, createSharedUniforms, type GlbMaterial, type SharedUniforms } from './material';
 import { generatedProp, proceduralProp, type PropRig } from './props';
 import { Retargeter } from './retarget';
+import { flashStrength } from '@/chars/flash';
 import type { RigInfo } from './analyze';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -91,6 +92,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   private seenVersion = -1;
   private flashLeft = 0;
   private flashDur = 0.12;
+  private flashPeak = 1;
   private readonly pins: Array<{ pos: THREE.Vector3; w: number; target: number } | null> = [null, null];
   private exposed: { part: string; amount: number } | null = null;
   private disposed = false;
@@ -341,12 +343,13 @@ export class GlbHumanoidVisual implements HumanoidVisual {
 
   // ---- state effects ----------------------------------------------------------------------------------------
 
-  flash(color: number, seconds = 0.12): void {
-    _col.set(color);
-    this.shared.uFlash.value.set(_col.r, _col.g, _col.b, 1);
-    this.flashDur = Math.max(0.01, seconds);
+  flash(color: number, seconds = 0.12, strength?: number): void {
+    _col.set(Number.isFinite(color) ? color : 0xffffff);
+    this.flashPeak = flashStrength(strength);
+    this.shared.uFlash.value.set(_col.r, _col.g, _col.b, this.flashPeak);
+    this.flashDur = Number.isFinite(seconds) ? Math.max(0.01, seconds) : 0.12;
     this.flashLeft = this.flashDur;
-    if (!this.body) this.driver.flash(color, seconds);
+    if (!this.body) this.driver.flash(color, seconds, strength);
     this.eachFallback((f) => { f.fm.uniforms.uFlash.value.copy(this.shared.uFlash.value); });
   }
 
@@ -433,7 +436,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     this.shared.uTime.value += dt;
     if (this.flashLeft > 0) {
       this.flashLeft -= dt;
-      this.shared.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur);
+      this.shared.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur) * this.flashPeak;
     }
     for (const p of b.props) {
       if (!p.fallback) continue;

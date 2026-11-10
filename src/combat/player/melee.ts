@@ -263,7 +263,7 @@ export class Melee {
     p.visual?.setGlow(1 + 2.2 * k);
     if (k >= 1 && !this.chargeFull) {
       this.chargeFull = true;
-      p.visual?.flash(p.kit.color, 0.18);
+      p.visual?.flash(p.kit.color, 0.18, 0.5);
       p.game.audio.play('echoGain', { pos: p.actor.pos, volume: 0.6 });
       p.game.input.rumble(0.3, 0.6, 90);
     }

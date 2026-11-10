@@ -83,7 +83,8 @@ export function glyphText(game: Game, action: ButtonAction): string {
 
 /**
  * Key-cap element for a glyph string. Single characters get a square cap, words a wide cap; gamepad face buttons
- * a round cap. The element is reusable: call `setKeycap` to change the text later.
+ * a round cap. Single letters are set in the title face so Q / O / I never read as 0 / 1 at prompt size.
+ * The element is reusable: call `setKeycap` to change the text later.
  */
 export function keycap(text: string, cls = ''): HTMLSpanElement {
   const el = h('span', `aur-key ${cls}`.trim());
@@ -92,6 +93,8 @@ export function keycap(text: string, cls = ''): HTMLSpanElement {
 }
 
 const capState = new WeakMap<HTMLElement, string>();
+/** a single letter of any script: set in the title face (see `.aur-key.is-letter` in styles/base.css) */
+const LETTER = /^\p{L}$/u;
 
 export function setKeycap(el: HTMLElement, text: string, round = false): void {
   const key = round ? `${text}\u0001` : text;
@@ -99,6 +102,7 @@ export function setKeycap(el: HTMLElement, text: string, round = false): void {
   capState.set(el, key);
   el.textContent = text;
   el.classList.toggle('is-wide', text.length > 1);
+  el.classList.toggle('is-letter', LETTER.test(text));
   el.classList.toggle('is-round', round);
 }
 
