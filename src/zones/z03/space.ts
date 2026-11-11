@@ -12,7 +12,7 @@ import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, FROST, IVORY } from '../shared';
 import {
   BAY_X0, D, DECK_H, DECK_N0, DECK_N1, DECK_X0, DECK_X1, EXIT_N, HATCH_HINGE_H, HATCH_LEN, HATCH_W, HOLO, LODGE_RIB_SPAN,
-  LODGE_RIB_X, HOLO_H, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, TETHER_FROM, TETHER_TO, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
+  LODGE_RIB_X, HOLO_H, HOLO_SCALE, RAMP_DN_X1, RAMP_UP_X0, RIB_COUNT, TETHER_FROM, TETHER_TO, RIB_H, RIB_SPACING, RIB_X0, SOURCE_N, SOURCE_STAND, SOURCE_X, TERMINAL,
   VAULT_RISE, W, WALL_H, WRECK_N, WRECK_REAR_X,
 } from './layout';
 import { S } from './state';
@@ -22,15 +22,20 @@ const PALE = 0xdcecff;
 
 /**
  * LOOKS.frozen, a little lower and hazier: the white-gold reads as ice-lit stone rather than a sunlit hall, so the
- * scan planes' cold sheets, the conduits in the ice and the gold channels carry the frame.
+ * scan planes' cold sheets, the conduits in the ice and the gold channels carry the frame. Integration (relay-route
+ * painting): the air and the fill are a grey silver, not teal — the stone reads silver-white and the cold lives
+ * in the frost, the light seams and the blue planes, which now separate from the walls behind them.
  */
 const LOOK = {
   ...LOOKS.frozen,
-  exposure: 0.9,
-  fog: { color: 0x48697c, density: 0.03 },
-  ambient: { sky: 0x8fb8d2, ground: 0x1c2a34, intensity: 0.48 },
+  exposure: 1.0,
+  fog: { color: 0x646b72, density: 0.024 },
+  grade: { ...LOOKS.frozen.grade, tint: 0xf1f3f5, saturation: 0.86, contrast: 1.2, shadowsTint: 0xb6c2d0, highlightsTint: 0xfaf7f0 },
+  ambient: { sky: 0xadb6bf, ground: 0x25262a, intensity: 0.48 },
   envIntensity: 0.8,
 };
+/** the light that comes in through the breach and the vault seams: cold daylight, a little less blue than ice */
+const DAYLIGHT = 0xe6eef6;
 
 /** kit yawDeg that makes a piece at (x, n) face the projector (its lee is the hiding pocket) */
 export function faceSource(x: number, n: number): number {
@@ -43,7 +48,7 @@ export function buildSpace(b: ZoneBuilder): void {
   b.setEnv({
     sky: 'frozenInterior', look: LOOK, ambience: 'frozenCorridor', music: 'approachSelene',
     // high, from the breach in the west: long rib shadows run east down the corridor toward the installation
-    key: { dirFrom: [-26, 7, 36], intensity: 1.35, color: 0xdcebff },
+    key: { dirFrom: [-26, 7, 36], intensity: 1.35, color: DAYLIGHT },
   });
   buildShell(b);
   buildBay(b);
@@ -67,7 +72,7 @@ function buildShell(b: ZoneBuilder): void {
   // one enclosed vault over the corridor and the bay (bays line up with x = −14, −6, 2, 10 … 42)
   b.ceiling({
     x: (BAY_X0 + W) / 2, n: D / 2, w: W - BAY_X0, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE,
-    bay: RIB_SPACING, bayPhase: 1, hazeColor: 0xd6eaff, glow: 1.5,
+    bay: RIB_SPACING, bayPhase: 1, hazeColor: 0xe2e9f0, glow: 1.5,
   });
 
   // exit: door, a short lit vestibule, the white point above with two lit pylons leading the eye up to it
@@ -142,12 +147,13 @@ function buildBay(b: ZoneBuilder): void {
   tether.name = 'z03-tether';
   tether.position.copy(from);
   tether.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
-  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len, 6), mats.get('refSteel'));
+  // (integration) a cable that reads at the establishing distance: thicker, its lit core brighter (it was a thread)
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, len, 8), mats.get('refSteel'));
   cable.position.y = len / 2;
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, len, 5), mats.emissive(BLUE, 1.8));
-  core.position.set(0.03, len / 2, 0.03);
-  const tipMat = mats.emissive(BLUE, 3);
-  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), tipMat);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, len, 6), mats.emissive(BLUE, 2.6));
+  core.position.set(0.05, len / 2, 0.05);
+  const tipMat = mats.emissive(BLUE, 3.4);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), tipMat);
   tip.position.y = len;
   const root = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.22, 8), mats.get('refNavy'));
   tether.add(cable, core, tip, root);
@@ -249,13 +255,14 @@ function buildInstallation(b: ZoneBuilder): void {
   const holo = b.game.props.hologram('sensorReconstruction');
   holo.object.position.copy(b.P(HOLO[0], HOLO[1], HOLO_H));
   holo.object.rotation.y = b.yaw(FACE.west);
-  holo.params.visible = 0.5;
+  holo.object.scale.setScalar(HOLO_SCALE);
+  holo.params.visible = 0.6;
   holo.params.progress = 0;
   holo.setText('LOCAL SENSOR RECONSTRUCTION'); // NEW (display header)
   b.add(holo.object);
   b.onUpdate((dt, t) => holo.update(dt, t));
   S.holo = holo;
-  S.holoVisible = 0.5;
+  S.holoVisible = 0.6;
 }
 
 /** about a dozen lights: the key, two pale shafts, the installation's cold blue, a gold hint on the offered route */

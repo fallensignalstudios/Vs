@@ -60,6 +60,7 @@ export function setupScanner(z: ZoneRuntime): void {
     if (S.source === actor) S.source = null;
   });
   for (const spec of [PLANE_A, PLANE_B]) S.planes.push(makePlane(z, spec, lens, fast));
+  tintPlanes(z);
   onZoneEvent(z, 'actor:died', ({ actor: a, killer }) => {
     if (a === S.source) takeDownSource(z, killer, true);
   });
@@ -69,6 +70,23 @@ export function setupScanner(z: ZoneRuntime): void {
     onDone: () => takeDownSource(z, game.player.actor, false),
   });
   if (z.flag('z03SourceDown') === true) quietDown(z);
+}
+
+/**
+ * (integration) The planes' colour: a saturated cold blue (linear RGB, × the shader's own 1.1). The engine draws a
+ * scan plane pale blue-white, which over this zone's pale frozen stone reads as a sheet of glass; the relay-route
+ * painting's plane is a blue LIGHT sheet with a hot edge. `ai.devices.scanPlane` takes no colour yet (requested),
+ * so the zone re-tints the sheets it made through their ShaderMaterial's `uColor` uniform — a no-op if the visual
+ * ever changes shape. Only Z03 makes scan planes.
+ */
+const PLANE_RGB = [0.12, 0.5, 1.8] as const;
+
+function tintPlanes(z: ZoneRuntime): void {
+  z.game.scene.getObjectByName('vfx-scanplanes')?.traverse((o) => {
+    const mat = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+    const u = mat?.uniforms?.uColor?.value as unknown;
+    if (u instanceof THREE.Vector3) u.set(PLANE_RGB[0], PLANE_RGB[1], PLANE_RGB[2]);
+  });
 }
 
 function makePlane(z: ZoneRuntime, spec: PlaneSpec, lens: THREE.Vector3, fast: boolean): PlaneState {

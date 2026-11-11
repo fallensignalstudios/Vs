@@ -231,6 +231,7 @@ function* o2Scene(z: ZoneRuntime): Routine {
   const tharne = z.cast('tharne');
   yield* z.cinematic('z04-o2', function* (c: CineCtx): Routine {
     walkTo(z, tharne, 'tharneO2');
+    z.game.player.cancelAction?.();
     S.holoVisible = 1;
     S.holoProgress = 0.35;
     const holo = z.m('o2Holo');

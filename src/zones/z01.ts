@@ -104,6 +104,7 @@ function build(b: ZoneBuilder): void {
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
+  buildPipes(b);
   b.finalize();
 }
 
@@ -283,6 +284,20 @@ function buildScenic(b: ZoneBuilder): void {
   game.vfx.ambient('goldMotes', b.P(22, 11, 4), { x: 26, y: 8, z: 14 }, 0.25);
 }
 
+/**
+ * Integration wave (relay-route painting): twin gold service pipes climb the south wall between the ribs and jog
+ * over under the vault, as the painting's walls do. Visual only, tight to the wall face (the recovery pocket at
+ * x = 28 and the growth are left alone).
+ */
+function buildPipes(b: ZoneBuilder): void {
+  // (between the wall pilasters, clear of the rib legs)
+  for (const x of [7.6, 16.0, 33.4, 38.0, 47.6]) {
+    for (const dx of [0, 0.3]) {
+      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, WALL_H - 3.4 - dx], [x + dx + 0.55, 0.44, WALL_H - 2.7 - dx], [x + dx + 0.55, 0.44, WALL_H - 0.2]], { r: 0.075 });
+    }
+  }
+}
+
 // =====================================================================================================================
 // Cast
 // =====================================================================================================================
@@ -300,7 +315,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   const lyessa = z.companion('lyessa', end ? 'lyessaEnd' : stage === 'fight' ? 'lyessaPost1' : 'lyessaStart', 'hold');
   lyessa.holdAt(z.m(end ? 'lyessaEnd' : stage === 'fight' ? 'lyessaPost1' : 'lyessaStart'), z.myaw('lyessaStart'));
   // the soldier on the right (named in Z02), and three more of the squad
-  z.npc('dominionSoldier', end ? 'malikEnd' : 'malikStart', 'aimRifle', 'malik');
+  // (integration wave: Malik Varo's own body, bare-headed; `aimRifle` draws his rifle)
+  z.npc('varo', end ? 'malikEnd' : 'malikStart', 'aimRifle', 'malik');
   z.npc('dominionSoldier', end ? 'soldierAEnd' : 'soldierA', 'aimRifle', 'soldierA');
   z.npc('dominionSoldier', end ? 'soldierBEnd' : 'soldierB', 'aimRifle', 'soldierB');
   z.npc('dominionSoldier', end ? 'soldierCEnd' : 'soldierC', 'aimRifle', 'soldierC');
@@ -589,7 +605,7 @@ const Z01_DEF: ZoneDef = {
   id: 'Z01',
   title: 'Pressure Hall',
   art: 'relay-route',
-  cast: ['secDrone', 'commandEmitter', 'dominionSoldier', 'lyessa'],
+  cast: ['secDrone', 'commandEmitter', 'dominionSoldier', 'varo', 'lyessa'],
   build,
   beats,
   /** per-frame zone animation on the sim clock: the tissue's grip during the insert */

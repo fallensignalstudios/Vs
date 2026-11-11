@@ -16,16 +16,22 @@ import {
 } from './layout';
 import { S, resetState } from './state';
 
+/** x of the paired gold pipe runs on the long walls: between the rib legs, clear of the doors */
+const PIPE_X = [3.6, 14.5, 25.6, 36.4, 47.5, 58.4] as const;
+
 /**
- * LOOKS.relay with more haze and a little less fill: the far end recedes into silver air and the key, the shafts
- * and the strips carry the room (the shared preset reads as an evenly lit white box at this scale).
+ * LOOKS.relay with more haze and less fill: the far end recedes into silver air and the key, the shafts and the
+ * strips carry the room (the shared preset reads as an evenly lit white box at this scale). Integration: the fill
+ * comes DOWN to 0.48 and the contrast goes UP to 1.2, over the preset's 1.14 (B's request — at 0.66 / 1.12 the
+ * hall read pale and flat), so the silver-white walls model under the key and the polished floor reads dark; a
+ * little more exposure and warm highlights keep the painting's daylight and the gold of the pipes and the ring.
  */
 const Z04_LOOK: DeepPartial<Look> = {
   ...LOOKS.relay,
-  exposure: 1.0,
+  exposure: 1.06,
   fog: { color: 0xa4adba, density: 0.012 },
-  grade: { ...LOOKS.relay.grade, contrast: 1.12 },
-  ambient: { ...LOOKS.relay.ambient, intensity: 0.66 },
+  grade: { ...LOOKS.relay.grade, contrast: 1.2, highlightsTint: 0xffefda },
+  ambient: { ...LOOKS.relay.ambient, intensity: 0.48 },
 };
 
 export function build(b: ZoneBuilder): void {
@@ -53,16 +59,32 @@ export function build(b: ZoneBuilder): void {
 function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
   const door = (at: number) => [{ at, width: DOOR_W, height: DOOR_H }];
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed', doors: door(ENTRY_X) });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'ribbed', doors: door(EXIT_X) });
+  // integration (relay-route painting): the long walls are pale panelled stone carrying paired gold pipe runs —
+  // the 'ribbed' style's tall lit seams read as neon strips the painting does not have
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'panelled', doors: door(ENTRY_X) });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'panelled', doors: door(EXIT_X) });
   // paired gold conduits climb the north wall either side of the ring (concept: the pipes framing the far door)
   for (const x of [EXIT_X - 7.4, EXIT_X + 7.4]) {
-    for (const dx of [-0.36, 0.36]) b.conduit([[x + dx, D - 0.5, 0.2], [x + dx, D - 0.5, WALL_H - 1]], { r: 0.1 });
+    for (const dx of [-0.38, 0.38]) b.conduit([[x + dx, D - 0.5, 0.2], [x + dx, D - 0.5, WALL_H - 1]], { r: 0.13 });
   }
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'conduit' });
-  // the right side is open to the megastructure: glass from floor to vault
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'glass' });
-  for (const x of RIB_X) b.rib({ x, n: D / 2, span: D - 1.4, height: RIB_H, yawDeg: FACE.east, lit: true });
+  // … and between the rib legs along both long walls (on the deck's floor where it backs onto the north wall)
+  for (const x of PIPE_X) {
+    for (const [n, side] of [[0.5, 'S'], [D - 0.5, 'N']] as const) {
+      if (side === 'N' && Math.abs(x - EXIT_X) < 9) continue;
+      const h0 = side === 'N' && x > DECK.x0 ? DECK_H + 0.1 : 0.2;
+      for (const dx of [-0.36, 0.36]) b.conduit([[x + dx, n, h0], [x + dx, n, WALL_H - 1]], { r: 0.12 });
+    }
+  }
+  // the west wall behind the colonnade: the same pale panelling, its pipe pairs between the column bays
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled' });
+  for (const n of [9.5, 17.5, 25.5, 33.5]) {
+    for (const dn of [-0.36, 0.36]) b.conduit([[0.6, n + dn, 0.2], [0.6, n + dn, WALL_H - 1]], { r: 0.12 });
+  }
+  // the right side is open to the megastructure: glass from floor to vault, in wide daylight panes (the painting's
+  // open side — the hazy ribs and towers beyond read through 6 m bays, not a 3 m grille)
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'glass', mullionSpacing: 6 });
+  // the ribs are pale structure, not light (their lit seams were the neon arcs over the hall)
+  for (const x of RIB_X) b.rib({ x, n: D / 2, span: D - 1.4, height: RIB_H, yawDeg: FACE.east, lit: false });
   b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: RIB_H + 0.3, style: 'vault' });
 
   // entry: the Z03 corridor end, sealed once she is through
@@ -131,9 +153,9 @@ function buildHighRoute(b: ZoneBuilder): void {
  */
 function buildServicePath(b: ZoneBuilder): void {
   for (const n of COL_N) {
-    b.column({ x: COL_X, n, r: COL_R, height: RIB_H, style: 'faceted', lit: true });
+    b.column({ x: COL_X, n, r: COL_R, height: RIB_H, style: 'faceted', lit: false });
     // paired gold conduits up the room face of every column
-    for (const dn of [-0.42, 0.42]) b.conduit([[COL_X + COL_R + 0.12, n + dn, 0.2], [COL_X + COL_R + 0.12, n + dn, RIB_H - 1]], { r: 0.09 });
+    for (const dn of [-0.42, 0.42]) b.conduit([[COL_X + COL_R + 0.12, n + dn, 0.2], [COL_X + COL_R + 0.12, n + dn, RIB_H - 1]], { r: 0.12 });
   }
   const screen = (n0: number, n1: number) => b.wall({ from: [COL_X, n0], to: [COL_X, n1], height: SCREEN_H, thickness: 0.5, style: 'panelled' });
   screen(COL_N[0] + COL_R, COL_N[1] - COL_R);

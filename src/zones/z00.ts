@@ -17,6 +17,7 @@
  * FILES: ./z00/context.ts (the five context cards), ./z00/obstruction.ts (arm + plate), ./z00/smoke.ts.
  */
 import * as THREE from 'three';
+import { asScenicShip } from '@/core/api';
 import type { Beat, CineCtx, Companion, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { AMBER, BLUE, CINDER, FACE, atPost, setDoor, tutorialHint, waitOr, walkTo } from './shared';
@@ -55,6 +56,14 @@ const VEST_X1 = W + 5.5;
 const WRECK: [number, number] = [24, 44];
 const RIB: [number, number] = [14, 21.2];
 
+/**
+ * The Reformation dropship's crossing (integration wave): seconds over the fracture, and the seconds until its
+ * light has finished washing the next chamber. The pass is measured to clear the standing rib leg seen from the
+ * rubble-edge camera (world x −14 → 60 at n 46 → 43, h 27 → 23).
+ */
+const SHIP_PASS = 4.5;
+const SHIP_END = 6.2;
+
 /** speaker label for the squad until Z02 names one of them */
 const SOLDIER = 'Dominion Soldier';
 
@@ -64,6 +73,7 @@ const SOLDIER = 'Dominion Soldier';
 
 interface Z00 {
   ship: THREE.Object3D | null;
+  /** seconds since the dropship's pass began (0 … SHIP_END) */
   shipT: number;
   shipActive: boolean;
   sweep: THREE.SpotLight | null;
@@ -86,15 +96,19 @@ function build(b: ZoneBuilder): void {
   b.game.sky.setHeading(0);
   b.setEnv({
     // a touch darker than the stock crash look: the shelter is lit by its amber lamp, not by the sky
-    sky: 'crashRib', look: { ...LOOKS.crash, exposure: 0.86 }, ambience: 'crash', music: 'context',
+    // integration wave: back toward the stock exposure, so the silver-white stone and the gold read (relay-route
+    // painting); the shelter is still in the vault's shade and lit by its amber lamp
+    sky: 'crashRib', look: { ...LOOKS.crash, exposure: 0.97, ambient: { ...LOOKS.crash.ambient, intensity: 0.5 } }, ambience: 'crash', music: 'context',
     // the white remnant, high in the north-east, falls through the breach; the vault keeps the pocket in shade
     key: { dirFrom: [16, 26, 30], intensity: 2.0, color: 0xffeedd },
   });
   buildShell(b);
   buildBreach(b);
   buildBulkhead(b);
+  dressBulkhead(b);
   buildDoorway(b);
   buildPocket(b);
+  buildPipes(b);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -136,16 +150,20 @@ function buildBreach(b: ZoneBuilder): void {
   // the dead the squad carried in out of the wreck, under tarps by the breach
   b.prop('casualtyTarp', { x: 8.2, n: 18.4, yawDeg: 95 });
   b.prop('casualtyTarp', { x: 10.1, n: 18.7, yawDeg: 80 });
-  // the crash apron outside (visual only): scorched white-gold paving running out to the wreck
-  b.floor({ x: 14, n: 64, w: 150, d: 84, h: -0.05, inlay: 'channels', noSurface: true });
+  // the crash apron outside (visual only): scorched, broken paving running out to the wreck
+  b.floor({ x: 14, n: 64, w: 150, d: 84, h: -0.05, inlay: 'channels', noSurface: true, finish: 'worn' });
+  // the floor the breach tore open: worn, cracked flagstones along the rubble edge (a visual skin a centimetre
+  // over the polished slab; the walking surface is the slab's)
+  b.floor({ x: (BREACH_X0 + BREACH_X1) / 2, n: (EDGE_N + 16.6) / 2, w: BREACH_X1 - BREACH_X0 - 1.2, d: EDGE_N - 16.6, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'worn' });
 }
 
 /** the collapsed bulkhead with its one gap, the gantry and the arm */
 function buildBulkhead(b: ZoneBuilder): void {
   const g0 = GAP_N - GAP_W / 2;
   const g1 = GAP_N + GAP_W / 2;
-  b.wall({ from: [BULK_X, 0], to: [BULK_X, g0], height: BULK_H, thickness: 1.1, style: 'ribbed' });
-  b.wall({ from: [BULK_X, g1], to: [BULK_X, EDGE_N + 0.2], height: BULK_H, thickness: 1.1, style: 'ribbed' });
+  // (integration wave: 'conduit' — the King-era service wall with its twin gold pipes; the footprint is unchanged)
+  b.wall({ from: [BULK_X, 0], to: [BULK_X, g0], height: BULK_H, thickness: 1.1, style: 'conduit' });
+  b.wall({ from: [BULK_X, g1], to: [BULK_X, EDGE_N + 0.2], height: BULK_H, thickness: 1.1, style: 'conduit' });
   // the break line on top of the bulkhead and at its north end
   b.prop('rubblePile', { x: BULK_X + 0.2, n: EDGE_N - 0.6, scale: 1.1, yawDeg: 15 });
   b.prop('rubblePile', { x: BULK_X - 0.9, n: 14.5, scale: 0.8, yawDeg: 70 });
@@ -154,6 +172,69 @@ function buildBulkhead(b: ZoneBuilder): void {
   b.prop('conduitJunction', { x: BULK_X + 0.9, n: g0 - 0.8 });
   b.conduit([[BULK_X + 0.62, 0.4, ARM_PIVOT_H - 0.6], [BULK_X + 0.62, g0 - 0.3, ARM_PIVOT_H - 0.6]], { r: 0.08, glow: true });
   buildArm(b, BULK_X, GAP_N, GAP_W, ARM_PIVOT_H);
+}
+
+/** a private stream for set dressing, so the zone's own `b.rand()` sequence (prop variants) is untouched */
+function localRand(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Integration wave (backlog: "the bulkhead reads as a plain wall"): the bulkhead is a King-era partition brought
+ * down in the crash, and must read as one. A broken crest of stepped blocks along its top (kept clear of the
+ * gantry), its torn service runs — the relay-route painting's twin gold pipes — along the west face, hanging
+ * where the north end broke, and slabs of the fallen upper course resting in the rubble at its foot. Visual only:
+ * no colliders, nothing in the walkable floor (the bulkhead's footprint and the gap are unchanged).
+ */
+function dressBulkhead(b: ZoneBuilder): void {
+  const g0 = GAP_N - GAP_W / 2;
+  const g1 = GAP_N + GAP_W / 2;
+  const rnd = localRand(4107);
+  // the broken crest: the upper course survives in stepped, uneven blocks, gaps where it fell
+  for (const [n0, n1] of [[0.25, g0 - 1.6], [g1 + 1.6, EDGE_N - 0.2]] as const) {
+    let n = n0;
+    while (n < n1 - 0.35) {
+      const len = Math.min(n1 - n, 0.8 + rnd() * 1.9);
+      if (rnd() > 0.2) {
+        // (≤ 0.95 m thick with the skew: clear of the service conduit on the east face's top)
+        const skew = (rnd() - 0.5) * 0.16;
+        b.wall({ from: [BULK_X + skew, n], to: [BULK_X - skew, n + len], h: BULK_H, height: 0.3 + rnd() * rnd() * 2.2, thickness: 0.7 + rnd() * 0.2, style: 'plain', noCollider: true });
+      }
+      n += len + 0.05 + rnd() * 0.3;
+    }
+  }
+  // the torn service runs on the west face: two gold pipes at the top of the wall, cut at the gap, the north
+  // run hanging where the wall broke
+  const x = BULK_X - 0.84;
+  for (const [dh, dn] of [[0, 0], [0.26, 0.12]] as const) {
+    const h = 2.95 + dh;
+    b.conduit([[x, 0.5, h], [x, g0 - 0.25 - dn, h]], { r: 0.065 });
+    b.conduit([[x, g1 + 0.25 + dn, h], [x, 17.6 - dn, h], [x + 0.1, 18.6 - dn, h - 1.3], [x - 0.05, 19.1 - dn, 0.18]], { r: 0.065 });
+  }
+  // fallen blocks of the upper course in the rubble at the north end (beyond the walkable edge)
+  for (const [n, s, yaw] of [[EDGE_N + 0.5, 1.1, 25], [EDGE_N + 1.2, 0.9, -40]] as const) {
+    // (an explicit variant: no draw from the zone's shared stream, so every other prop keeps its variant)
+    b.prop('fallenPlate', { x: BULK_X - 0.2, n, yawDeg: yaw, scale: s, collider: false, h: 0.25, variant: 0 });
+  }
+}
+
+/**
+ * The relay-route painting's walls carry gold service pipes up their faces; the south wall gets three twin runs
+ * between its ribs (they jog over at the top, as in the painting). Visual only, tight to the wall.
+ */
+function buildPipes(b: ZoneBuilder): void {
+  for (const x of [8.0, 16.0, 23.9]) {
+    for (const dx of [0, 0.3]) {
+      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, 8.4 - dx], [x + dx + 0.55, 0.44, 9.1 - dx], [x + dx + 0.55, 0.44, WALL_H - 0.2]], { r: 0.075 });
+    }
+  }
 }
 
 /** the lit rib doorway, the buckled shutter jammed in it, the vestibule and a glimpse of the next chamber */
@@ -209,9 +290,15 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: WRECK[0] + 5, n: WRECK[1] + 2, h: 4, color: AMBER, intensity: 90, distance: 30, flicker: 0.3 });
   // a cool bounce off the breach so the squad separates from the shaded wall
   b.point({ x: 12, n: 16.5, h: 6, color: 0xc8d8ec, intensity: 12, distance: 16 });
+  // integration wave: the white remnant's light, bounced off the pale stone high in the room — a cool daylight
+  // fill so the silver-white walls and the gold read (relay-route painting), the shelter still in shade
+  b.point({ x: 9, n: 9, h: 10.5, color: 0xdfe6f0, intensity: 240, distance: 24 });
+  b.point({ x: 22.5, n: 12, h: 10.5, color: 0xdfe6f0, intensity: 210, distance: 22 });
   // the passing ship's light: sweeps the next chamber once (intensity driven by the landing scene)
   // (it streams back through the vestibule and the doorway, over the jammed plate, into the room)
-  const sweep = b.spot({ x: VEST_X1 + 9, n: EXIT_N, h: 6.5, target: [W - 3, EXIT_N, 0], angleDeg: 20, intensity: 0, color: BLUE, shaft: true });
+  // (integration wave: aimed high through the vestibule, over the jammed plate — the beam shows in the vestibule's
+  // air and on its ceiling and the lintel, the parts of it the doorway shot can see)
+  const sweep = b.spot({ x: VEST_X1 + 9, n: EXIT_N, h: 6.5, target: [W + 1.5, EXIT_N, 3.6], angleDeg: 20, intensity: 0, color: BLUE, shaft: true });
   S.sweep = sweep;
 }
 
@@ -258,14 +345,15 @@ function buildScenic(b: ZoneBuilder): void {
   b.onUpdate((_dt, t) => {
     for (const c of S.smoke) c.update(t);
   });
-  // the dropship that crosses the fracture during the landing (hidden until then)
+  // the dropship that crosses the fracture during the landing (hidden until then): the generated Reformation
+  // dropship (22 m, nose −Z turned east), its own cold-blue engine planes and running lights at full burn
   const ship = game.sky.scenic.ship('reformationTransport');
   ship.visible = false;
   ship.rotation.y = -Math.PI / 2;
-  for (const [x, y, z] of [[0, 1.2, -15], [6.5, 0.8, 2], [-6.5, 0.8, 2]] as const) {
-    const light = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), b.mats.emissive(BLUE, 9));
-    light.position.set(x, y, z);
-    ship.add(light);
+  const ctl = asScenicShip(ship);
+  if (ctl) {
+    ctl.engines = 1.4;
+    ctl.lights = 1;
   }
   b.add(ship);
   b.keep(ship);
@@ -290,7 +378,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   z.spawnPlayer('tarrik', 'start');
   const lyessa = z.companion('lyessa', open ? 'lyessaWait' : 'lyessa', open ? 'follow' : 'hold');
   if (!open) lyessa.holdAt(z.m('lyessa'), z.myaw('lyessa'));
-  z.npc('dominionSoldier', open ? 'malikDoor' : 'malik', 'idle', 'malik');
+  // the soldier who names himself in Z02: Malik Varo, bare-headed, his own face from the first frame
+  z.npc('varo', open ? 'malikDoor' : 'malik', 'idle', 'malik');
   z.npc('dominionSoldier', open ? 'soldierADoor' : 'soldierA', 'idle', 'soldierA');
   z.npc('dominionSoldier', open ? 'soldierBDoor' : 'soldierB', 'idle', 'soldierB');
   z.npc('dominionSoldier', open ? 'soldierCDoor' : 'soldierC', 'idle', 'soldierC');
@@ -319,21 +408,26 @@ function update(z: ZoneRuntime, dt: number): void {
   updateObstruction(z, dt);
   const ship = S.ship;
   if (!ship || !S.shipActive) return;
-  S.shipT = z.skipping ? 1 : Math.min(1, S.shipT + dt / 7.5);
-  const t = S.shipT;
-  // west → east across the fracture, descending a little toward the terminal's heart
-  ship.position.set(-70 + 170 * t, 27 - 7 * t, -(43 - 5 * t));
+  S.shipT = z.skipping ? SHIP_END : Math.min(SHIP_END, S.shipT + dt);
+  const sec = S.shipT;
+  const t = Math.min(1, sec / SHIP_PASS);
+  // west → east across the fracture, low over the outer nave and descending a little toward the terminal's heart:
+  // in the open sky between the fractured rib's legs as seen from the rubble edge
+  ship.position.set(-14 + 74 * t, 27 - 4 * t, -(46 - 3 * t));
   ship.rotation.z = Math.sin(t * Math.PI) * 0.06;
   ship.visible = t < 1;
-  // its hull crosses the key light: a shadow passes over the shelter; its lights wash the next chamber once
-  const over = Math.exp(-Math.pow((t - 0.47) / 0.11, 2));
-  if (S.key) S.key.intensity = S.keyBase * (1 - 0.7 * over);
+  // its hull crosses the key light: a shadow passes over the shelter; its lights wash the next chamber once, as it
+  // clears the room to the east
+  const over = Math.exp(-Math.pow((t - 0.5) / 0.14, 2));
+  if (S.key) S.key.intensity = S.keyBase * (1 - 0.55 * over);
   if (S.sweep) {
-    const reveal = Math.exp(-Math.pow((t - 0.62) / 0.1, 2));
+    // (peaks while the scene holds on the doorway, 3.3 … 5.6 s into the pass)
+    const reveal = Math.exp(-Math.pow((sec - 4.3) / 0.85, 2));
     S.sweep.intensity = 1800 * reveal;
-    S.sweep.position.set(VEST_X1 + 9, 6.5, -(EXIT_N - 4 + 8 * t));
+    const u = Math.min(1, Math.max(0, (sec - 3.2) / 2.6));
+    S.sweep.position.set(VEST_X1 + 9, 6.5, -(EXIT_N - 4 + 8 * u));
   }
-  if (t >= 1) {
+  if (sec >= SHIP_END) {
     S.shipActive = false;
     if (S.key) S.key.intensity = S.keyBase;
     if (S.sweep) S.sweep.intensity = 0;
@@ -382,8 +476,8 @@ function* opening(z: ZoneRuntime, lyessa: Companion | null, wounded: Companion |
     S.shipActive = true;
     if (!z.skipping) game.audio.play('engineSpool', { pos: z.P(14, 40, 24), volume: 0.8 });
     // from the rubble edge, panning with it as it crosses the nave beyond the fracture
-    c.cut({ pos: z.P(13.2, 18.6, 1.2), look: z.P(-14, 46, 27), fov: 52 });
-    c.moveAsync({ pos: z.P(13.4, 18.8, 1.25), look: z.P(30, 44, 24), fov: 50 }, 3.4, 'inOut');
+    c.cut({ pos: z.P(13.2, 18.6, 1.2), look: z.P(-8, 46, 34), fov: 52 });
+    c.moveAsync({ pos: z.P(13.4, 18.8, 1.25), look: z.P(44, 43.5, 31), fov: 50 }, 3.3, 'linear');
     lyessa?.stopAction();
     if (lyessa) {
       lyessa.holdAt(z.m('lyessaAim'), z.myaw('lyessaAim'));
@@ -435,7 +529,7 @@ function* opening(z: ZoneRuntime, lyessa: Companion | null, wounded: Companion |
     yield 0.6;
 
     // end state — identical watched or skipped
-    S.shipT = 1;
+    S.shipT = SHIP_END;
     S.shipActive = true;
     if (lyessa) {
       if (!atPost(z, lyessa, 'lyessa', 0.3)) lyessa.teleport(z.m('lyessa'), z.myaw('lyessa'));
@@ -508,7 +602,7 @@ const Z00_DEF: ZoneDef = {
   id: 'Z00',
   title: 'Broken Landing',
   art: 'wound-overlook',
-  cast: ['dominionSoldier', 'lyessa'],
+  cast: ['dominionSoldier', 'varo', 'lyessa'],
   build,
   beats,
   update,

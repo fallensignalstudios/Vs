@@ -13,7 +13,7 @@ import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
 import { damp, yawTo } from '@/core/mathx';
 import { FROST, VIOLET, atPost, conversation, feet, waitOr, walkTo } from '../shared';
-import { HATCH_OPEN_DEG, TERMINAL, TETHER_FROM, TETHER_TO, WRECK_N, WRECK_REAR_X } from './layout';
+import { HATCH_OPEN_DEG, HOLO_GRID_H, TERMINAL, TETHER_FROM, TETHER_TO, WRECK_N, WRECK_REAR_X } from './layout';
 import { S } from './state';
 
 /** Lyric's marks here: violet traces above her collar, along her jaw (Z05 starts her at 0.2, Z06 at 0.26) */
@@ -264,7 +264,8 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     const sel = z.m('terminal');
     const th = z.m('tharneTerm');
     const ly = z.m('lyricTerm');
-    const display = holo.clone().setY(1.2);
+    // the middle of the reconstruction (its grid floats at HOLO_GRID_H; the figures stand on it)
+    const display = holo.clone().setY(HOLO_GRID_H + 0.3);
     game.player.playScripted('interact', { faceTo: z.P(TERMINAL[0], TERMINAL[1], 1) });
 
     // before she reads: the dark tissue behind the ice stirs
@@ -303,14 +304,19 @@ export function* terminalScene(z: ZoneRuntime): Routine {
     S.holoProgress = 0.15;
     S.holo?.setText('LOCAL SENSOR RECONSTRUCTION'); // NEW (display header)
     game.player.teleport(sel, yawTo(sel.x, sel.z, display.x, display.z));
-    c.cut({ pos: z.P(40.2, 14.4, 2.25), look: display, fov: 42 });
-    c.moveAsync({ pos: z.P(40.7, 14.2, 2.1), look: display, fov: 38 }, 8, 'inOut');
+    // (the look sits over the grid so the header line along its far edge stays in frame)
+    const over = display.clone().setY(HOLO_GRID_H + 0.6);
+    c.cut({ pos: z.P(40.2, 14.4, 2.25), look: over, fov: 44 });
+    c.moveAsync({ pos: z.P(40.7, 14.2, 2.1), look: over, fov: 40 }, 8, 'inOut');
     if (!z.skipping) game.audio.play('ambConsoleTick', { pos: holo });
     tharne?.face(holo);
     yield 1.2;
     S.holoProgress = 0.55;
-    // he reads it off the display (he keeps his eyes on it), the reconstruction beside him in the frame
-    c.shot(th, { yawDeg: bearing(th, display) + 48, distance: 2.3, height: 1.55, lookHeight: 1.3, fov: 38 });
+    // he reads it off the display (he keeps his eyes on it): from the console side, Tharne at the left of the
+    // frame and the reconstruction beside him at the same distance — the figures walking through the fans he names
+    const mid = th.clone().lerp(display, 0.36).setY(1.45);
+    c.cut({ pos: z.P(39.3, 14.2, 1.85), look: mid, fov: 44 });
+    c.moveAsync({ pos: z.P(39.6, 14.0, 1.8), look: mid, fov: 42 }, 9, 'inOut');
     yield* sayHeld(z, 'Tharne', 'The forward relay nodes are compromised.', tharne); // NEW
     yield* sayHeld(z, 'Tharne', 'They address friendly contacts as threats.', tharne); // NEW
     yield* sayHeld(z, 'Tharne', 'Two drones ahead are on that net.', tharne); // NEW
@@ -318,11 +324,12 @@ export function* terminalScene(z: ZoneRuntime): Routine {
 
     // the deployment manifest, then the line she stops on
     S.holo?.setText('DEPLOYMENT MANIFEST'); // NEW (display header)
-    ui.statusBoard(MANIFEST.slice(0, 2), { title: 'DEPLOYMENT MANIFEST' }); // NEW (title)
+    // (integration) the board sits in the lower third: the frame is her close-up and the rows run under it
+    ui.statusBoard(MANIFEST.slice(0, 2), { title: 'DEPLOYMENT MANIFEST', placement: 'lowerThird' }); // NEW (title)
     const toDisplay = bearing(sel, display);
     c.shot(sel, { yawDeg: toDisplay + 205, distance: 1.5, height: 1.62, lookHeight: 1.5, fov: 30 });
     yield 1.6;
-    ui.statusBoard(MANIFEST, { title: 'DEPLOYMENT MANIFEST' });
+    ui.statusBoard(MANIFEST, { title: 'DEPLOYMENT MANIFEST', placement: 'lowerThird' });
     yield 1.4;
     if (!z.skipping) game.audio.play('ambCommBlip', { pos: sel });
     yield* z.say('Sol', 'Keeper Veyne.', { offscreen: true, channel: 'radio' }); // NEW (his opening on the channel)

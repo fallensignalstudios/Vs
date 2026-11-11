@@ -195,7 +195,7 @@ function* ringScene(z: ZoneRuntime): Routine {
     yield* say(z, 'Selene', 'Come on.', sel);
     // the machinery answers from three systems: too much mass and too little power
     S.holoHold = true;
-    S.holo?.setText('TOO LITTLE POWER'); // NEW (the overlay's label holds 16 characters)
+    S.holo?.setText('TOO LITTLE POWER'); // NEW (from the book's "too little power")
     if (!z.skipping) game.audio.play('structuralGroan', { pos: ring, volume: 0.8 });
     c.cut({ pos: z.P(0, 0).copy(ring).add(new THREE.Vector3(2.8, 1.2, 2.6)), look: z.m('planeCenter'), fov: 50 });
     yield 2.2;
@@ -310,11 +310,13 @@ function* passScene(z: ZoneRuntime): Routine {
     const dir = carrier.position.clone().sub(eye).setY(0).normalize();
     c.cut({ pos: eye, look: eye.clone().addScaledVector(dir, 100).setY(eye.y + 72), fov: 56 });
     yield 4.8;
-    // the trajectory ends (the strip says «CARRIER SIGNAL LOST» once the scene hands back); she lets the plane go
+    // the trajectory ends on «CARRIER SIGNAL LOST» — the overlay now holds the full 19 characters (polish 3), so
+    // the over-shoulder frame below reads it in the scene, not only on the strip after; she lets the plane go
     S.holoHold = true;
     if (S.holo) {
-      S.holo.setText('');
-      S.holo.params.visible = 0;
+      S.holo.setText('CARRIER SIGNAL LOST'); // NEW (the strip's words, SCRIPT_SOURCE Z05 carrier)
+      S.holo.params.progress = 1;
+      S.holo.params.visible = 1;
     }
     if (S.stab) S.stab.params.plane = 0.15;
     releasePlane();

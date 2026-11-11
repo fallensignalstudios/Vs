@@ -56,6 +56,13 @@ export function setConsumed(target: number): void {
 }
 
 /** true once the cut has been made this load */
+/** world position of the wrapped stump (false until the cut, or when the body has no forearm bone) */
+export function stumpWorld(out: THREE.Vector3): boolean {
+  if (!I.wrap || !I.wrap.visible) return false;
+  I.wrap.getWorldPosition(out);
+  return true;
+}
+
 export function isAmputated(): boolean {
   return I.amputated;
 }

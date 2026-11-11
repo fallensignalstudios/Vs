@@ -46,6 +46,14 @@ const ALC_H = 5.4;
 /** the casualty-log relay in the side loop's north passage */
 const LOG_X = 13;
 const LOG_N = 15.3;
+/** the survivor-bend look, moved from sepia to cool neutral (see build) */
+const Z02_LOOK = {
+  ...LOOKS.survivorBend,
+  exposure: 0.94,
+  fog: { color: 0x2e3034, density: 0.022 },
+  grade: { ...LOOKS.survivorBend.grade, tint: 0xf2f3f6, saturation: 0.82, contrast: 1.07, lift: 0.006, shadowsTint: 0xb0bcd2, highlightsTint: 0xfff3e4 },
+  ambient: { sky: 0x7c8088, ground: 0x24211e, intensity: 0.46 },
+};
 /** the lead reaching this point of the north leg ends the walk (the cut begins once the call is over) */
 const CUT_AT: [number, number] = [EXIT_X, 13.5];
 
@@ -74,8 +82,10 @@ function build(b: ZoneBuilder): void {
   resetVaro();
   b.game.sky.setHeading(0);
   b.setEnv({
-    sky: 'crashRib', look: LOOKS.survivorBend, ambience: 'survivorBend', music: 'approachTarrik',
-    key: { dirFrom: [12, -6, 30], intensity: 1.3, color: 0xffe8d0 },
+    // integration wave: the bend keeps its muted, low-key breath after E1, but leaves the sepia grade for the
+    // relay-route painting's cool silver stone (warmth only in the gold and the squad's amber practicals)
+    sky: 'crashRib', look: Z02_LOOK, ambience: 'survivorBend', music: 'approachTarrik',
+    key: { dirFrom: [12, -6, 30], intensity: 1.3, color: 0xf4f1ec },
   });
   buildShell(b);
   buildAlcove(b);
@@ -85,6 +95,7 @@ function build(b: ZoneBuilder): void {
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
+  buildWear(b);
   b.finalize();
 }
 
@@ -187,13 +198,15 @@ function buildDressing(b: ZoneBuilder): void {
 /** muted, low-key: warm practicals, a cold sealed room, the bright threshold (about a dozen lights) */
 function buildLight(b: ZoneBuilder): void {
   b.point({ x: 4.6, n: 2.6, h: 2.3, color: AMBER, intensity: 16, distance: 9, flicker: 0.06 });
-  b.panelLight({ x: 11.5, n: 3.8, w: 3, d: 1.2, h: RIB_H - 0.2, facing: 'down', intensity: 1.1, color: 0xffe2c0 });
-  b.panelLight({ x: 26, n: 3.8, w: 3, d: 1.2, h: RIB_H - 0.2, facing: 'down', intensity: 1.2, color: 0xffe2c0 });
+  b.panelLight({ x: 11.5, n: 3.8, w: 3, d: 1.2, h: RIB_H - 0.2, facing: 'down', intensity: 1.1, color: 0xf6efe4 });
+  b.panelLight({ x: 26, n: 3.8, w: 3, d: 1.2, h: RIB_H - 0.2, facing: 'down', intensity: 1.2, color: 0xf6efe4 });
+  // the squad's field light on the floor by the wounded man: his face and the gauntlet read in the scene
+  b.point({ x: 5.9, n: 2.5, h: 0.9, color: 0xf2ece2, intensity: 5, distance: 3.6 });
   // the sealed room: cold, still, enough to read the figures through the glass
   b.point({ x: 9.5, n: 11, h: 4.2, color: 0xc4d2e6, intensity: 16, distance: 10 });
   b.point({ x: 17, n: 11, h: 4.2, color: 0xc4d2e6, intensity: 14, distance: 10 });
   // the far doorway: the atrium's light pours in
-  b.spot({ x: EXIT_X, n: D + 3, h: 4.5, target: [EXIT_X, D - 6, 0], angleDeg: 38, intensity: 420, color: 0xfff1dc, shaft: true });
+  b.spot({ x: EXIT_X, n: D + 3, h: 4.5, target: [EXIT_X, D - 6, 0], angleDeg: 38, intensity: 420, color: 0xf8f4ec, shaft: true });
 }
 
 function buildMarkers(b: ZoneBuilder): void {
@@ -233,14 +246,35 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('cas3', 18.6, 11.6, 0, FACE.west);
 }
 
+/**
+ * Integration wave: the floor at the bend took the impact (the debris there): worn, cracked flagstones as a
+ * visual skin a centimetre over the polished slab (the walking surface is the slab's), and gold service pipes
+ * up the outer walls between the ribs, as the relay-route painting's walls carry them. Visual only.
+ */
+function buildWear(b: ZoneBuilder): void {
+  // (two patches either side of the gold route channel, which stays on top of the polished slab)
+  b.floor({ x: 28.0, n: 3.0, w: 3.4, d: 5.0, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'worn' });
+  b.floor({ x: 23.8, n: 2.3, w: 2.4, d: 3.6, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'worn' });
+  // (between the pilasters and the rib legs of the south leg, clear of the medical stop where Varo sits)
+  for (const x of [12.4, 16.6]) {
+    for (const dx of [0, 0.3]) {
+      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, WALL_H - 2.2 - dx], [x + dx + 0.5, 0.44, WALL_H - 1.6 - dx], [x + dx + 0.5, 0.44, WALL_H - 0.2]], { r: 0.07 });
+    }
+  }
+}
+
 /** the circular atrium beyond the far doorway (Z05's shell, glimpsed), haze and motes */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
-  // the doorway opens high on the atrium's rim: the shell sits entirely below the bend's floor (scenic pieces
-  // have no collision, and its tiers would otherwise stand inside this room), so the view from the threshold
-  // falls away into the great circular well
+  // the doorway opens on the atrium's rim (integration wave; it used to sit 158 m under the floor, so the door
+  // looked onto the roof lattice): the shell's centre is 84 m due north of the door, so the threshold's ledge
+  // runs out to the black-stone lip of the well and the bend lies on the ring floor, inside the gallery tiers
+  // (r 84 … 105 < 110.5) — nothing of the shell stands in the room. Turned 45° so the room's bearing is clear of
+  // the four floor-level stubs (nearest 22.5° east, beyond the room's 3.5 m east of the door line); the long
+  // broken spans pass a tier (≈ 25 m) above the vault. The ring floor sits just under the slab.
   const shell = game.sky.scenic.atriumShell({ radius: 130, height: 150, shaftRadius: 70, tiers: 4, seed: 5 });
-  shell.position.copy(b.P(EXIT_X, D + 118, -158));
+  shell.position.copy(b.P(EXIT_X, D + 84, -0.3));
+  shell.rotation.y = Math.PI / 4;
   b.add(shell);
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 3), { x: W, y: 6, z: D }, 0.5);
   game.vfx.ambient('goldMotes', b.P(EXIT_X, D - 3, 3), { x: 7, y: 5, z: 7 }, 0.3);
@@ -388,10 +422,12 @@ function* cut(z: ZoneRuntime): Routine {
     yield waitOr(z, () => z.skipping || atPost(z, malik, 'varoCut', 1.2), 3);
     yield 2.2;
     // through the threshold, out over the void and up: the perspective leaves him
+    // (integration wave: the shell now stands at the rim — the move crosses the well toward the far gallery
+    // tiers instead of looking down on its roof)
     c.cut({ pos: t.clone().add(new THREE.Vector3(0, 1.75, 0.9)), look: z.P(EXIT_X, D + 60, 4), fov: 50 });
-    c.moveAsync({ pos: z.P(EXIT_X, D + 2.5, 2.1), look: z.P(EXIT_X + 4, D + 80, -20), fov: 52 }, 2.4, 'in');
+    c.moveAsync({ pos: z.P(EXIT_X, D + 2.5, 2.1), look: z.P(EXIT_X + 4, D + 80, -6), fov: 52 }, 2.4, 'in');
     yield 2.3;
-    c.moveAsync({ pos: z.P(EXIT_X + 14, D + 70, 30), look: z.P(EXIT_X + 40, D + 210, -90), fov: 58 }, 8, 'out');
+    c.moveAsync({ pos: z.P(EXIT_X + 10, D + 62, 32), look: z.P(EXIT_X + 34, D + 232, 26), fov: 58 }, 8, 'out');
     yield 2.6;
     game.ui.card('ELSEWHERE — THE REFORMATION APPROACH', { style: 'context', seconds: 5.5 }); // NEW (zone-note text)
     yield 2.2;

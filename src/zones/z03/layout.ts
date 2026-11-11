@@ -87,6 +87,12 @@ export const PROGRESS_STEP = 3;
 /** the deployed terminal (Reformation console, reconstruction hologram) and the exit */
 export const TERMINAL: [number, number] = [42.6, 15.6];
 export const HOLO: [number, number] = [43.3, 12.7];
-/** the reconstruction stands on a crate, a sand-table at waist height */
-export const HOLO_H = 0.82;
+/**
+ * The reconstruction: a sand-table projection hovering over a crate. Drawn HOLO_SCALE × the kit's size so its
+ * ghost figures and scan fans read at conversation distance, with its grid at HOLO_GRID_H (just above the
+ * crate's lid — the kit draws the grid 0.95 m over the prop's origin, so the origin sits at HOLO_H).
+ */
+export const HOLO_SCALE = 1.35;
+export const HOLO_GRID_H = 1.3;
+export const HOLO_H = HOLO_GRID_H - 0.95 * HOLO_SCALE;
 export const EXIT_N = 7;

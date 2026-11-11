@@ -13,6 +13,18 @@ import {
 } from './layout';
 import { S } from './state';
 
+/**
+ * LOOKS.atrium toward the wound-overlook painting (integration): charcoal air and near-neutral shadows instead of
+ * the preset's night-blue cast, so the black mirror floor, its gold inlay and the pale pylons carry the platform
+ * and the colour lives where the painting keeps it — in the battle, the Wound and the remnants overhead.
+ */
+const LOOK = {
+  ...LOOKS.atrium,
+  fog: { color: 0x16171d, density: 0.004 },
+  grade: { ...LOOKS.atrium.grade, tint: 0xf6f4f2, saturation: 1.02, shadowsTint: 0xb6bad0 },
+  ambient: { ...LOOKS.atrium.ambient, sky: 0x7a7e92 },
+};
+
 /** half-angle (deg) of a 6 m bridge's gap in the platform rim */
 const RIM_GAP = 5.4;
 
@@ -20,7 +32,7 @@ export function buildSpace(b: ZoneBuilder): void {
   const game = b.game;
   // sky state persists between zone loads (and a reload of this zone): start the atrium from a clean sky
   game.sky.reset();
-  b.setEnv({ sky: 'battleCeiling', look: LOOKS.atrium, ambience: 'atrium', music: 'atrium' });
+  b.setEnv({ sky: 'battleCeiling', look: LOOK, ambience: 'atrium', music: 'atrium' });
   S.centre.copy(b.P(CX, CN, 0));
   S.key = b.keyLight;
   S.keyBase = b.keyLight ? b.keyLight.intensity : 2;

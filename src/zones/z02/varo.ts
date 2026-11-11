@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { isHumanoidVisual } from '@/core/api';
 import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { AMBER, waitOr, walkTo, atPost } from '../shared';
-import { amputate, attachInfection, setConsumed, setInfectionGrowth } from './infection';
+import { amputate, attachInfection, setConsumed, setInfectionGrowth, stumpWorld } from './infection';
 
 /** subtitle labels: nameless until he says his name */
 const SOLDIER = 'Dominion Soldier';
@@ -77,13 +77,15 @@ export function* varoScene(z: ZoneRuntime): Routine {
     const hand = new THREE.Vector3();
     const handPos = (): THREE.Vector3 => (malik?.actor.visual ? malik.actor.visual.socket('handL').getWorldPosition(hand) : hand.copy(varo).setY(0.5));
     handPos();
-    // in front of him and to his left, low: the hand in his lap, his body behind it
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.34, 0.55, -0.52)), look: hand.clone(), fov: 30 });
-    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(-0.26, 0.46, -0.42)), look: hand.clone(), fov: 26 }, 3.4, 'inOut');
-    c.dof(0.66, 0.7);
+    // in front of him and to his left, above: the cracked gauntlet in his lap, his chest plate behind it
+    // (integration wave: wider and higher — the old 0.6 m insert read as dark plates on the generated body)
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.5, 0.78, -0.78)), look: hand.clone().add(new THREE.Vector3(0, 0.08, 0)), fov: 38 });
+    c.moveAsync({ pos: hand.clone().add(new THREE.Vector3(-0.4, 0.66, -0.64)), look: hand.clone().add(new THREE.Vector3(0, 0.06, 0)), fov: 32 }, 3.4, 'inOut');
+    c.dof(0.98, 0.6);
     if (!z.skipping) {
       game.events.emit('caption', { text: 'A soldier screams', kind: 'alert', pos: varo }); // NEW
-      game.audio.play('eclipseBreath', { pos: varo, volume: 0.6 });
+      game.audio.play('soldierScream', { pos: varo });
+      game.audio.play('eclipseBreath', { pos: varo, volume: 0.45 });
       game.audio.play('armorRattle', { pos: varo });
     }
     malik?.play('hitHeavy');
@@ -118,7 +120,7 @@ export function* varoScene(z: ZoneRuntime): Routine {
     yield 2.4;
     // and under it, the tissue moves another centimeter beneath his skin
     handPos();
-    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.24, 0.42, -0.4)), look: hand.clone().add(new THREE.Vector3(0, 0.03, 0)), fov: 24 });
+    c.cut({ pos: hand.clone().add(new THREE.Vector3(-0.36, 0.58, -0.56)), look: hand.clone().add(new THREE.Vector3(0, 0.04, 0)), fov: 28 });
     setInfectionGrowth(0.95);
     yield 1.9;
     c.shot(tp, { yawDeg: 280, distance: 1.6, height: 1.5, lookHeight: 1.65, fov: 34 });
@@ -146,15 +148,24 @@ export function* varoScene(z: ZoneRuntime): Routine {
       game.audio.play('cinderIgnite', { pos: elbow, volume: 0.35 });
     }
     setConsumed(1);
+    // the sealed stump, close, from between the two kneeling figures: the dark wrap at the elbow and, beyond
+    // it, what is left of the arm going under the black mass (integration wave: the stump close-up)
+    const stump = new THREE.Vector3();
+    if (stumpWorld(stump)) {
+      c.cut({ pos: stump.clone().add(new THREE.Vector3(0.36, 0.5, -1.0)), look: stump.clone().add(new THREE.Vector3(-0.1, -0.04, 0.06)), fov: 32 });
+      c.dof(1.15, 0.55);
+    }
     yield 1.4;
+    c.dof(null);
     lyessa?.face(varo);
     lyessa?.actor.visual?.lookAt(null);
 
     // “Name.” — at his level, holding his eyes
     const tk = z.m('tarrikKneel');
     const tShot = (): void => c.shot(tk, { yawDeg: 250, distance: 1.5, height: 1.12, lookHeight: 1.12, fov: 36 });
-    // (framed on his bare face: he is drawn without a helmet, chars `malik`)
-    const vShot = (): void => c.shot(varo, { yawDeg: 350, distance: 1.4, height: 1.06, lookHeight: 0.95, fov: 36 });
+    // (framed on his bare face — chars `malik` is his own generated body, bare-headed — from his left, so the
+    // frame is his alone: seated against the wall, his head sits a third of a metre behind his feet)
+    const vShot = (): void => c.cut({ pos: varo.clone().add(new THREE.Vector3(-0.45, 1.02, -1.05)), look: varo.clone().add(new THREE.Vector3(0.07, 0.9, 0.3)), fov: 30 });
     malik?.face(tk);
     tShot();
     yield* z.say('Tarrik', 'Name.', { actor: z.player });
@@ -170,8 +181,10 @@ export function* varoScene(z: ZoneRuntime): Routine {
     // the reverse: low beyond the black mass, his head bowed over it
     const limb = z.m('limb');
     malik?.actor.visual?.lookAt(limb);
-    c.cut({ pos: limb.clone().add(new THREE.Vector3(-0.75, 0.32, -0.62)), look: varo.clone().setY(0.62), fov: 38 });
-    c.dof(0.95, 0.6);
+    // (from the west along the wall, beyond the mass: the black tissue low in the foreground, Varo bowed over
+    // it, Tarrik kneeling beyond)
+    c.cut({ pos: limb.clone().add(new THREE.Vector3(-1.3, 0.95, -0.15)), look: limb.clone().add(new THREE.Vector3(0.45, 0.45, -0.05)), fov: 48 });
+    c.dof(1.9, 0.5);
     yield* z.say(VARO, 'Was I…', { actor: malik });
     c.dof(null);
     malik?.actor.visual?.lookAt(null);
