@@ -66,7 +66,7 @@ export function* kingScene(z: ZoneRuntime): Routine {
     c.twoShot(kp, tp, { side: 1, distance: 1.9, fov: 38 });
     yield 1.2;
     // half of it is still a man; one eye fixes on him — close over his shoulder (a soft light on the human half)
-    if (S.kingLight) S.kingLight.intensity = 3.2;
+    if (S.kingLight) S.kingLight.intensity = 4.5;
     c.twoShot(kp, tp, { side: -1, distance: 0.9, height: 1.72, fov: 30 });
     c.dof(2.6, 0.5);
     yield 0.5;

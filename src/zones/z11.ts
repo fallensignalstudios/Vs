@@ -28,7 +28,7 @@ import { callbackLine, restAtBench, reunionScene } from './z11/reunion';
 import { alertScene, conversationScene, evidenceAfterExchange } from './z11/table';
 import { o4Scene } from './z11/o4';
 import { SEAT_S, sitPlayer, sitTarrik } from './z11/stage';
-import { sheathe } from './z11/framing';
+import { lyricFace, sheathe } from './z11/framing';
 
 // =====================================================================================================================
 // Build
@@ -68,7 +68,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   if (reunion) {
     tharne.holdAt(z.m('tharneGate'), z.myaw('tharneGate'));
     lyric.holdAt(z.m('lyricGate'), z.myaw('lyricGate'));
-    lyric.actor.visual?.setCorruption(0.24);
+    lyricFace(lyric);
   } else {
     restAtBench(z, tharne, lyric);
   }

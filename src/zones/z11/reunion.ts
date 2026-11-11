@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import type { CineCtx, Companion, Routine, ZoneRuntime } from '@/core/api';
 import { yawTo } from '@/core/mathx';
 import { atPost, feet, waitOr, walkTo } from '../shared';
-import { sheathe, toward, towardPose } from './framing';
+import { lyricFace, sheathe, toward, towardPose } from './framing';
 import { S, comm, hold } from './state';
 
 /** Lyric's upper arm on the side facing `from` (a hand rests there) */
@@ -97,7 +97,7 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     tharne?.teleport(z.m('tharneStop'), z.myaw('tharneStop'));
     g.player.teleport(z.m('seleneLyric'), z.myaw('seleneLyric'));
     hold(z.player, 'R', armOf(lyric, () => z.player.pos));
-    lyric?.actor.visual?.setCorruption(0.24);
+    lyricFace(lyric);
 
     c.twoShot(feet(z, lyric ?? 'lyricStop'), z.player.pos, { side: 1, distance: 1.55, fov: 32 });
     yield 0.6;
@@ -234,7 +234,7 @@ export function restAtBench(z: ZoneRuntime, tharne: Companion | null, lyric: Com
     lyric.stopAction();
     lyric.teleport(z.m('lyricRest'), z.myaw('lyricRest'));
     lyric.play('sitInjured');
-    lyric.actor.visual?.setCorruption(0.24);
+    lyricFace(lyric);
   }
 }
 

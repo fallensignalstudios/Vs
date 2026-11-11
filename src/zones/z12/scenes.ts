@@ -104,11 +104,12 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     yield* say('Tharne', 'The command grammar distributed to the active nodes can interrogate terminal state,', tharne);
     yield* say('Tharne', 'model release conditions, and authenticate partial authority pathways.', tharne);
     yield* say('Tharne', 'It should not be capable of executing final release without contrary concurrence.', tharne);
-    toward(c, lyric, tharne, -40, 1.9, 28, 1.6);
+    // (a speaking companion turns to the lead: frame Lyric from Tarrik's side so her face is seen, Tharne beyond)
+    toward(c, lyric, z.player, -32, 1.9, 28, 1.6);
     yield* say('Lyric', 'Should.', lyric);
     toward(c, tharne, lyric, 35, 2.0, 29, 1.6);
     yield* say('Tharne', 'Yes.', tharne);
-    toward(c, lyric, tharne, -40, 1.9, 28, 1.6);
+    toward(c, lyric, z.player, -32, 1.9, 28, 1.6);
     yield* say('Lyric', 'That word is doing a remarkable amount of labor.', lyric);
     // the alert over the concourse
     c.cut({ pos: z.P(FAREWELL.x, 3.2, 1.8), look: z.P(FAREWELL.x, 17.5, 4.6), fov: 46 });
@@ -297,6 +298,34 @@ export function* releaseScene(z: ZoneRuntime): Routine {
   }, { blendOut: 0.7 });
 }
 
+/**
+ * A camera that stays put at `from` and follows a departing craft (eased aim; the field narrows as it recedes so
+ * the craft and its escort keep their size in frame). It never ends by itself: it runs in a race with the line it
+ * covers, so the line always decides when the shot ends (watched or skipped). Nothing moves while skipping.
+ */
+function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: THREE.Vector3): Routine {
+  const idle = (): boolean => false;
+  if (!ship) {
+    yield idle;
+    return;
+  }
+  const aim = new THREE.Vector3();
+  const look = new THREE.Vector3();
+  ship.getWorldPosition(look);
+  for (;;) {
+    if (z.skipping) {
+      yield idle;
+      return;
+    }
+    ship.getWorldPosition(aim);
+    look.lerp(aim, 0.12);
+    const dist = Math.max(1, from.distanceTo(look));
+    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(26 / dist)), 16, 58);
+    c.cut({ pos: from, look: look.clone(), fov });
+    yield;
+  }
+}
+
 /** at the ramp: they board; the craft leave along opposite vectors; the displays; the closing cards */
 export function* departureScene(z: ZoneRuntime): Routine {
   const g = z.game;
@@ -325,9 +354,21 @@ export function* departureScene(z: ZoneRuntime): Routine {
     S.t = 0;
     if (!z.skipping) g.audio.play('shipDepart', { pos: z.m('centre') });
     yield RISE + 0.8;
-    yield* z.say('Dominion Command', 'CROWNWATCH · SOVEREIGN PRIORITY · IMMEDIATE RETURN', { channel: 'system', offscreen: true }); // NEW (speaker label; the text is the book's)
+    // “Amber ships surround Tarrik, while blue-white vessels close around Selene.” Each display line rides a shot
+    // that follows its craft out from behind, toward the Wound, while its own escort closes in around it
+    // (integration wave: the escorts are the generated craft — see updateZ12). Same lines, same timing.
+    yield { race: [
+      z.say('Dominion Command', 'CROWNWATCH · SOVEREIGN PRIORITY · IMMEDIATE RETURN', { channel: 'system', offscreen: true }), // NEW (speaker label; the text is the book's)
+      // from behind, as his craft turns and heads out toward the Wound and the red remnant beyond it
+      follow(z, c, sp?.dom?.object ?? null, z.P(14.5, 2.0, 1.6)),
+    ] };
+    yield { race: [
+      z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true }), // NEW (speaker label; the text is the book's)
+      // across the hangar, as hers goes out over the edge toward the white remnant and her escort closes in
+      follow(z, c, sp?.ref?.object ?? null, z.P(10.0, 8.0, 1.6)),
+    ] };
+    // the two groups, diverging along opposite vectors over the open edge
     c.cut({ pos: z.P(21, 21.4, 1.4), look: z.P(21, 120, 24), fov: 58 });
-    yield* z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true }); // NEW (speaker label; the text is the book's)
     yield waitOr(z, () => z.skipping || S.t >= FLIGHT_END - 3, 14);
     if (!z.skipping) ui.card('Each now carries the truth the other civilization buried.\nEach possesses one half of the authority required to open the prison.\nEach believes the other will refuse.', { style: 'context' });
     yield 9;

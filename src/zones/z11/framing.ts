@@ -37,6 +37,17 @@ export function toward(c: CineCtx, subject: Body, listener: Body, offDeg: number
   c.cut(towardPose(subject, listener, offDeg, dist, fov, h));
 }
 
+/**
+ * Lyric's infection as Z06 leaves it and Z07 / Z08 carry it (face-only, 0.45): violet in the irises, dark veins
+ * at the temples and down the neck — “It isn’t reversing.” Nothing else on the figure changes (polish 3, chars).
+ */
+export const LYRIC_CORRUPTION = 0.45;
+export function lyricFace(lyric: Actor | Companion | null | undefined): void {
+  if (!lyric) return;
+  const a = (lyric as Companion).actor ?? (lyric as Actor);
+  a.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face' });
+}
+
 /** stow the leads' weapons (the player's kit draws its melee weapon on spawn and on a checkpoint restore) */
 export function sheathe(...who: Array<Actor | Companion | null | undefined>): void {
   for (const b of who) {

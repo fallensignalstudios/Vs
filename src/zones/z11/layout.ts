@@ -16,7 +16,7 @@
 import * as THREE from 'three';
 import type { HeroProp, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { AMBER, BLUE, FACE, GOLD, IVORY } from '../shared';
+import { AMBER, BLUE, FACE, GOLD } from '../shared';
 
 // =====================================================================================================================
 // Constants
@@ -34,6 +34,8 @@ export const BARRIER_E_X = 19.5;
 export const PASSAGE = { x: 6, w: 3, n0: 10, n1: 16, h: 4.2 } as const;
 /** the gallery (plan §Z11: 24 × 16 m) */
 export const GAL = { x0: 0, x1: 24, n0: 16, n1: 32, h: 7 } as const;
+/** where the gallery's stone ceiling gives way to glass (north of it the roof is glazed up to the window) */
+const GLASS_ROOF_N = 23;
 /** the observation set: centre and yaw (long axis north–south) */
 export const TABLE = { x: 12, n: 26, yawDeg: FACE.east } as const;
 /** the exit door on the gallery's east wall (toward the outer ring / Z12) */
@@ -41,6 +43,24 @@ export const EXIT_N = 19.5;
 /** seats used by the two leads (prop socket indices): Tarrik on the west side, Selene on the east, window end */
 export const SEAT_TARRIK = 3;
 export const SEAT_SELENE = 0;
+
+/**
+ * Integration wave: the gallery toward the wound-overlook painting — charcoal and silver, cool and quiet, the
+ * warmth only in the gold channels, the seams and the one pool of light over the table. (The `observation` look
+ * kept the room sepia: warm highlights, lifted lavender shadows.)
+ */
+export const Z11_LOOK = {
+  ...LOOKS.observation,
+  // graded like the Z09 overlook (woundGallery), which the woundVista sky is authored against: a cool white
+  // balance and blue-leaning shadows turn its warm haze charcoal; a little more fill than Z09 for the faces
+  exposure: 0.95,
+  fog: { color: 0x08080d, density: 0.008 },
+  grade: { tint: 0xeef0fc, saturation: 0.9, contrast: 1.16, lift: -0.01, shadowsTint: 0xb0b8f8, highlightsTint: 0xffeedc },
+  ambient: { sky: 0x50546a, ground: 0x0d0c0f, intensity: 0.38 },
+  envIntensity: 1.0,
+};
+/** the cool, neutral fill of the room's own lamps (the painting's silver stone); gold stays in the channels */
+const SILVER = 0xe6ebf4;
 
 export interface Z11Space {
   lift: import('@/core/api').DoorHandle | null;
@@ -60,10 +80,14 @@ export function buildSpace(b: ZoneBuilder): Z11Space {
   // presets are authored with the Wound to the north: the gallery's glass faces north, no heading change
   game.sky.setHeading(0);
   b.setEnv({
-    sky: 'observation', look: LOOKS.observation, ambience: 'observation', music: 'observation',
+    // integration wave: the `woundVista` sky — the wound-overlook painting's own: the soft vortex with its funnel,
+    // the charcoal sky, the small crimson remnant left, the white one right (same layout as `observation`)
+    sky: 'woundVista', look: Z11_LOOK, ambience: 'observation', music: 'observation',
     // the hard white remnant is the key: high from the north-east, cold, through the glass (steep for the mirror floor)
     key: { dirFrom: [16, 22, 34], color: 0xe4ecff, intensity: 1.45, shadow: true },
   });
+  // the distant fleets stay quiet: a few far flashes (as the `observation` sky had them)
+  game.sky.setBattleIntensity(0.08);
   const sp: Z11Space = { lift: null, liftLight: null, barrierW: null, barrierE: null, exit: null, set: null };
   buildLanding(b, sp);
   buildPassage(b);
@@ -124,7 +148,7 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   b.prop('refConsole', { x: 18.7, n: 1.6, yawDeg: 270 });
   b.prop('medKit', { x: 9.4, n: 9.2, yawDeg: 10 });
   b.prop('ancientBench', { x: 14.6, n: 9.1, yawDeg: 180 });
-  b.point({ x: cx, n: 5.4, h: 4.6, color: IVORY, intensity: 15, distance: 16 });
+  b.point({ x: cx, n: 5.4, h: 4.6, color: SILVER, intensity: 15, distance: 16 });
 }
 
 function buildPassage(b: ZoneBuilder): void {
@@ -133,7 +157,7 @@ function buildPassage(b: ZoneBuilder): void {
   b.wall({ from: [x - w / 2, n0], to: [x - w / 2, n1], height: h, style: 'panelled' });
   b.wall({ from: [x + w / 2, n0], to: [x + w / 2, n1], height: h, style: 'panelled' });
   b.ceiling({ x, n: (n0 + n1) / 2, w, d: n1 - n0, h, style: 'flat' });
-  b.panelLight({ x, n: (n0 + n1) / 2, w: 1.2, d: 3.4, h: h - 0.05, facing: 'down', color: IVORY, intensity: 1.6 });
+  b.panelLight({ x, n: (n0 + n1) / 2, w: 1.2, d: 3.4, h: h - 0.05, facing: 'down', color: SILVER, intensity: 1.6 });
 }
 
 /** the gallery: mirror floor, the glass wall, one rib framing it, the table and six chairs, the exit east */
@@ -144,14 +168,13 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'panelled', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
   b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'ribbed' });
   b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'ribbed', doors: [{ at: EXIT_N - n0, width: 3, height: 3.5 }] });
-  // the glass in three spans so the centre pane is clear of mullions: the Wound hangs in it, seen from the table
-  const cw = 1.85;
-  b.wall({ from: [x0, n1], to: [cx - cw, n1], height: h, style: 'glass' });
-  b.wall({ from: [cx - cw, n1], to: [cx + cw, n1], height: h, style: 'glass' });
-  b.wall({ from: [cx + cw, n1], to: [x1, n1], height: h, style: 'glass' });
-  // the ceiling comes forward in stone and turns to glass over the last five metres: the window curves overhead
-  b.ceiling({ x: cx, n: (n0 + n1 - 5) / 2, w: x1 - x0, d: n1 - n0 - 5, h, style: 'flat' });
-  b.ceiling({ x: cx, n: n1 - 2.5, w: x1 - x0, d: 5, h, style: 'glass' });
+  // the broad transparent wall: one span with no mullions between its end frames (kit `mullionSpacing: 0`), so
+  // the Wound hangs in clear glass from every seat, as open as the painting's terrace
+  b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'glass', mullionSpacing: 0 });
+  // the ceiling comes forward in stone and turns to glass over the north half: the window curves overhead, so the
+  // whole Wound (its upper crust included) reads from the room's door as well as from the table
+  b.ceiling({ x: cx, n: (n0 + GLASS_ROOF_N) / 2, w: x1 - x0, d: GLASS_ROOF_N - n0, h, style: 'flat' });
+  b.ceiling({ x: cx, n: (GLASS_ROOF_N + n1) / 2, w: x1 - x0, d: n1 - GLASS_ROOF_N, h, style: 'glass' });
   b.rib({ x: cx, n: n1 - 0.7, span: x1 - x0 - 0.6, height: h - 0.25, depth: 0.9, lit: true, yawDeg: FACE.north });
   b.door({ x: PASSAGE.x, n: n0, yawDeg: FACE.north, frameOnly: true });
   // light as information: a gold line at the foot of the glass, and one from the door to the table
@@ -204,12 +227,12 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.whitePoint({ x: x1 - 0.8, n: EXIT_N, h: 5.2, intensity: 1.6 });
 
   // light: warm inside, the cold stays outside
-  b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffd6a6, shadow: false });
+  b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffe6c8, shadow: false });
   // the remnants' spill through the glass: red from the north-west (Tarrik's side), cold from the north-east (Selene's)
   // (high, so their highlight in the mirror floor falls by the glass, not across the room)
   b.point({ x: 4.5, n: n1 + 2.5, h: 8.5, color: 0xff6040, intensity: 46, distance: 24 });
   b.point({ x: 19.5, n: n1 + 2.5, h: 8.5, color: 0xc4d6ff, intensity: 34, distance: 24 });
-  b.point({ x: PASSAGE.x + 0.5, n: n0 + 2.2, h: 3.2, color: IVORY, intensity: 12, distance: 10 });
+  b.point({ x: PASSAGE.x + 0.5, n: n0 + 2.2, h: 3.2, color: SILVER, intensity: 12, distance: 10 });
 }
 
 /** everything the scripts touch */
@@ -256,7 +279,8 @@ function buildMarkers(b: ZoneBuilder): void {
 /** the far field: the broken system below the gallery, dust in the light */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
-  const vista = game.sky.scenic.terminalVista({ radius: 2600, drop: 320, density: 0.8, seed: 1101, clearWound: false });
+  // (clearWound: nothing stands or shines inside the woundVista void, so the opening floats above the spires)
+  const vista = game.sky.scenic.terminalVista({ radius: 2600, drop: 420, density: 0.65, seed: 1101 });
   vista.position.copy(b.P(GAL.x0 + 12, GAL.n1 + 2, 0));
   b.add(vista);
   game.vfx.ambient('dust', b.P(12, 24, 3), { x: 22, y: 6, z: 14 }, 0.3);

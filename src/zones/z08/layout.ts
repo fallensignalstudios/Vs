@@ -13,7 +13,7 @@
  * glass over a dark sky — the battle outside goes on in amber, blue-white and violet. Violet only at the breach
  * and at the Weaver's anchor (the real sources).
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import type { MissionState, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
@@ -71,10 +71,10 @@ export function build(b: ZoneBuilder, state: MissionState): void {
   buildRecesses(b, west);
   buildDeck(b);
   buildCover(b);
-  buildCourt(b);
+  const gold = buildCourt(b);
   buildBarriers(b);
   buildGear(b, west);
-  buildDressing(b);
+  buildDressing(b, gold);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -188,16 +188,22 @@ function buildCover(b: ZoneBuilder): void {
 }
 
 /** gold rings round the court: the arena reads from any angle; light as information */
-function buildCourt(b: ZoneBuilder): void {
-  const ring = (r: number, seg: number, width: number, intensity: number) => {
+function buildCourt(b: ZoneBuilder): THREE.Material | null {
+  const ring = (r: number, seg: number, width: number, intensity: number): THREE.Object3D => {
     const pts: Array<[number, number]> = [];
     for (let i = 0; i <= seg; i++) {
       const a = (i / seg) * Math.PI * 2;
       pts.push([COURT.x + Math.cos(a) * r, COURT.n + Math.sin(a) * r]);
     }
-    b.channel(pts, { width, intensity });
+    return b.channel(pts, { width, intensity });
   };
-  ring(6.6, 40, 0.07, 2.2);
+  // the outer ring's gold is also the walls' inlay (dressing.ts): the kit's flush-strip material, whose glow fades
+  // to its true average once a line is under a pixel wide — far wall lines do not shimmer
+  let gold: THREE.Material | null = null;
+  ring(6.6, 40, 0.07, 2.2).traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (!gold && (o as THREE.Mesh).isMesh && m && !Array.isArray(m)) gold = m;
+  });
   ring(4.4, 32, 0.05, 1.8);
   ring(1.6, 16, 0.05, 2.4);
   const x0 = COURT.x - COURT.w / 2, x1 = COURT.x + COURT.w / 2, n0 = COURT.n - COURT.d / 2, n1 = COURT.n + COURT.d / 2;
@@ -213,12 +219,9 @@ function buildCourt(b: ZoneBuilder): void {
     pts.push([CLEAN_ANCHOR.x + Math.cos(a) * 1.7, CLEAN_ANCHOR.n + Math.sin(a) * 1.7]);
   }
   b.channel(pts, { width: 0.09, intensity: 3.2, color: GOLD });
-  // a soft gold pool inside the ring, not a lamp: the old up-facing light panel bloomed into a white slab on the
-  // mirror floor in every southern view (integration wave)
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(1.25, 32).rotateX(-Math.PI / 2), b.mats.emissive(GOLD, 0.55));
-  pool.position.copy(b.P(CLEAN_ANCHOR.x, CLEAN_ANCHOR.n, 0.012));
-  pool.name = 'z08-clean-anchor';
-  b.add(pool);
+  // (integration wave: the up-facing light panel that sat inside the ring is gone — on the mirror floor it bloomed
+  // into a white slab in every southern view; the bright ring alone marks the anchor)
+  return gold;
 }
 
 /**
@@ -345,13 +348,14 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('exit', EXIT_X, D + 3.4, 0, FACE.north);
 }
 
-/** far field: the crucible is one cell of a far larger structure; dust in the shafts, gold motes over the court */
+/** far field: the crucible is one cell of a far larger structure; dust in the shafts */
 function buildScenic(b: ZoneBuilder): void {
   const game = b.game;
   const nave = game.sky.scenic.megaRibs({ count: 6, span: 190, height: 130, spacing: 85, seed: 808 });
   nave.position.copy(b.P(-70, D / 2, -6));
   nave.rotation.y = -Math.PI / 2;
   b.add(nave);
+  // (integration wave: the gold motes over the court are gone — their draw call pays for the gold inlay and the
+  // crystal growth, Z08 being the zone with the least headroom; the dust still hangs in the shafts)
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 6), { x: W, y: 12, z: D }, 0.45);
-  game.vfx.ambient('goldMotes', b.P(COURT.x, COURT.n, 4), { x: 22, y: 8, z: 18 }, 0.25);
 }

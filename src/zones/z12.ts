@@ -19,7 +19,7 @@
  */
 import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { walkTo } from './shared';
-import { sheathe } from './z11/framing';
+import { lyricFace, sheathe } from './z11/framing';
 import { buildScenic, buildSpace } from './z12/layout';
 import { S, buildObjects, carry, resetZ12, updateZ12 } from './z12/state';
 import { concourseScene, departureScene, farewellScene, releaseScene, toShips } from './z12/scenes';
@@ -46,7 +46,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   tharne.holdAt(z.m('tharneWait'), z.myaw('tharneWait'));
   const lyric = z.companion('lyric', 'lyricWait', 'hold');
   lyric.holdAt(z.m('lyricWait'), z.myaw('lyricWait'));
-  lyric.actor.visual?.setCorruption(0.24);
+  lyricFace(lyric);
   sheathe(z.player, selene); // nobody here is fighting
   // she still has the Cauldron recorder in her hand
   carry(S.recorder, selene.actor, 'handL');
@@ -66,11 +66,14 @@ function* concourse(z: ZoneRuntime): Routine {
 
 /** `farewell`: the two of them, beneath the Wound */
 function* farewell(z: ZoneRuntime): Routine {
+  // the score's farewell cue (farewell_departure) carries through the release and the departure
+  z.game.audio.setMusic('farewell', 2);
   yield* farewellScene(z);
 }
 
 /** `departure`: release, the look back, the walk to the shuttle, the two craft leave; CP9 */
 function* departure(z: ZoneRuntime): Routine {
+  z.game.audio.setMusic('farewell', 2); // (already playing after `farewell`; a checkpoint or debug entry starts it)
   yield* releaseScene(z);
   z.objective('Walk to the shuttle', 'domRampBottom'); // NEW
   yield z.untilNear('domRampBottom', 2.4);

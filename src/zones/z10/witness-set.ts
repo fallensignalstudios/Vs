@@ -126,17 +126,35 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
     sill.rotation.y = m.rotation.y;
     group.add(sill);
   }
-  // consoles of the bridge crew (empty: the officers and the engineer are voices)
-  const desk = own(new THREE.BoxGeometry(2.2, 1, 0.8));
+  // consoles of the bridge crew (empty: the officers and the engineer are voices) — a stepped plinth, a slanted
+  // reading slab with a gold edge and a lit face, so they read as consoles rather than blocks
+  const plinth = own(new THREE.BoxGeometry(1.7, 0.86, 0.5));
+  const foot = own(new THREE.BoxGeometry(2.1, 0.12, 0.8));
+  const slab = own(new THREE.BoxGeometry(2.2, 0.1, 0.78));
+  const lip = own(new THREE.BoxGeometry(2.24, 0.03, 0.03));
+  const face = own(new THREE.PlaneGeometry(1.9, 0.5));
+  const faceMat = mats.emissive(0xffe6b8, 1.8);
+  const tilt = -0.36;
   for (const [dx, dn, yaw] of [[-7, 5, 0.6], [7, 5, -0.6], [-9.5, 0, 1.2], [9.5, 0, -1.2]] as const) {
-    const d = new THREE.Mesh(desk, frameMat);
-    d.position.copy(P(b, dx, dn, FLOOR + 0.5));
-    d.rotation.y = yaw;
-    group.add(d);
-    const top = new THREE.Mesh(own(new THREE.PlaneGeometry(1.9, 0.5)), mats.emissive(0xffe6b8, 1.8));
-    top.rotation.set(-Math.PI / 2.6, yaw, 0, 'YXZ');
-    top.position.copy(P(b, dx, dn, FLOOR + 1.04));
-    group.add(top);
+    const g = new THREE.Group();
+    g.position.copy(P(b, dx, dn, FLOOR));
+    g.rotation.y = yaw;
+    const f = new THREE.Mesh(foot, frameMat);
+    f.position.y = 0.06;
+    const p = new THREE.Mesh(plinth, frameMat);
+    p.position.y = 0.55;
+    const top = new THREE.Group();
+    top.position.set(0, 1.0, 0);
+    top.rotation.x = tilt;
+    const sl = new THREE.Mesh(slab, frameMat);
+    const e = new THREE.Mesh(lip, trim);
+    e.position.set(0, 0.03, 0.39);
+    const lit = new THREE.Mesh(face, faceMat);
+    lit.rotation.x = -Math.PI / 2;
+    lit.position.y = 0.052;
+    top.add(sl, e, lit);
+    g.add(f, p, top);
+    group.add(g);
   }
 
   // --- the star, its halo, the two remnants and the Wound (far beyond the glass; they ignore fog) ---

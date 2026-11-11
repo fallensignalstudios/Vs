@@ -124,6 +124,15 @@ export function updateZ12(z: ZoneRuntime, dt: number): void {
   if (S.t < 0) return;
   S.t = z.skipping ? FLIGHT_END : Math.min(FLIGHT_END, S.t + dt);
   for (const f of S.flights) fly(f, S.t);
+  // “Amber ships surround Tarrik, while blue-white vessels close around Selene.” — once each craft has turned out
+  // of the hangar its own escort closes in (about 7 s); a skip lands them in formation
+  if (S.t >= RISE + TURN) {
+    for (const ship of [S.sp?.dom, S.sp?.ref]) {
+      if (!ship) continue;
+      ship.params.escort = 1;
+      if (z.skipping) ship.snap();
+    }
+  }
 }
 
 function fly(f: Flight, t: number): void {

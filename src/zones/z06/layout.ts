@@ -136,7 +136,12 @@ function buildExit(b: ZoneBuilder): void {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     ring.push([PLATE.x + Math.cos(a) * 7.2, PLATE.n + Math.sin(a) * 7.2]);
   }
-  b.channel(ring, { width: 0.06, intensity: 2.4 });
+  // (its material is also the walls' gold inlay — dressing.ts: the kit's flush-strip gold, whose glow fades to its
+  // true average once a line is under a pixel wide, so the far wall lines do not shimmer)
+  b.channel(ring, { width: 0.06, intensity: 2.4 }).traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (!S.inlayGold && (o as THREE.Mesh).isMesh && m && !Array.isArray(m)) S.inlayGold = m;
+  });
   // the route continues: a gold channel from the plate ground to the exit threshold
   b.channel([[31, 10.5], [43, 10.5], [49.5, 17], [W - 0.4, 17], [W - 0.4, EXIT_N - 1.2]], { width: 0.07 });
 }

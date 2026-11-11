@@ -55,8 +55,8 @@ export function* protocolScene(z: ZoneRuntime): Routine {
     toPad(z, 'selene');
     // “Two interfaces rise from the floor, one before each of them.” — the crownmark-chamber painting's framing:
     // low on the axis, the two of them small at their interfaces either side of Crownmark Five, the rings and the
-    // pale pylons filling the volume above; the protocol strings sit low, over the empty floor
-    terminal(z, ['MERIDIAN COMPLETION PROTOCOL', 'INDEPENDENT ASSENT REQUIRED'], true, 'lowerThird');
+    // pale pylons filling the volume above; the protocol strings stand at the side, clear of the three of them
+    terminal(z, ['MERIDIAN COMPLETION PROTOCOL', 'INDEPENDENT ASSENT REQUIRED'], true, 'side');
     c.cut({ pos: z.P(C.x, C.n - 11.8, 1.05), look: z.P(C.x, C.n, 4.2), fov: 60 });
     c.moveAsync({ pos: z.P(C.x, C.n - 10.9, 1.1), look: z.P(C.x, C.n, 4.5), fov: 58 }, 5, 'inOut');
     setRise(1);

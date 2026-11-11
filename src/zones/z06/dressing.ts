@@ -9,7 +9,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ZoneBuilder } from '@/core/api';
-import { GOLD } from '../shared';
 import { BREACH_A, BREACH_B, D, W } from './layout';
 import { S } from './state';
 
@@ -45,30 +44,32 @@ export function buildDressing(b: ZoneBuilder): void {
   for (const x of BAYS_S) for (const s of [-1, 1]) bar(x + s * 0.6, FACE, true);
   for (const n of SIDE_W) for (const s of [-1, 1]) bar(FACE, n + s * 0.6, false);
   for (const n of SIDE_E) for (const s of [-1, 1]) bar(W - FACE, n + s * 0.6, false);
-  add(b, gold, b.mats.emissive(GOLD, 2.0), 'z06-inlay');
+  add(b, gold, S.inlayGold ?? b.mats.get('goldChannel'), 'z06-inlay');
 
-  // violet crystal growth heaped either side of each breach and climbing its jambs
+  // violet crystal growth heaped either side of each breach: big clusters on the floor at the opening's corners
+  // and against the foot of the wall, one more grown out of each heap at knee height (nothing higher up the
+  // jambs: the wall's relief makes a wall-anchored cluster float)
   const out = { dark: [] as THREE.BufferGeometry[], lit: [] as THREE.BufferGeometry[] };
-  const south = new THREE.Vector3(0, 0, 1);
-  const north = new THREE.Vector3(0, 0, -1);
   const up = new THREE.Vector3(0, 1, 0);
-  const a = BREACH_A.x;
-  const an = D - 0.32;
-  for (const [x, h, c, s] of [[a - 2.7, 0.3, 9, 1.6], [a - 2.9, 2.5, 6, 1.2], [a - 3.4, 4.6, 4, 0.9], [a + 2.7, 0.3, 8, 1.5], [a + 3.0, 2.8, 5, 1.0]] as const) {
-    cluster(out, b.P(x, an, h), south, c, s, 0.3, 0.85);
-  }
-  cluster(out, b.P(a - 2.4, D - 1.0, 0), up.clone().add(new THREE.Vector3(0, 0, 0.35)).normalize(), 6, 1.1, 0.2, 0.7);
-  const bx = BREACH_B.x;
-  const bn = 0.32;
-  for (const [x, h, c, s] of [[bx - 2.7, 0.3, 8, 1.4], [bx - 3.0, 2.6, 5, 1.0], [bx + 2.7, 0.3, 8, 1.5], [bx + 2.9, 2.4, 5, 1.1], [bx + 3.3, 4.4, 3, 0.8]] as const) {
-    cluster(out, b.P(x, bn, h), north, c, s, 0.3, 0.85);
-  }
+  // wallN: plan n just proud of the wall's relief; toRoom: +1 when the room is to the south (world +z)
+  const breach = (bx: number, wallN: number, toRoom: number): void => {
+    const floorN = wallN - 0.6 * toRoom;
+    const lean = (dx: number): THREE.Vector3 => up.clone().add(new THREE.Vector3(dx, 0, 0.45 * toRoom)).normalize();
+    const face = (dx: number): THREE.Vector3 => new THREE.Vector3(dx, 0.25, toRoom).normalize();
+    for (const s of [-1, 1]) {
+      cluster(out, b.P(bx + s * 2.9, floorN, 0), lean(s * 0.35), 9, 1.6, 0.18, 0.7);
+      cluster(out, b.P(bx + s * 4.1, floorN + 0.3 * toRoom, 0), lean(s * 0.5), 5, 1.0, 0.15, 0.75);
+      cluster(out, b.P(bx + s * 2.5, wallN - 0.2 * toRoom, 0.9), face(s * 0.4), 5, 1.0, 0.18, 0.7);
+    }
+  };
+  breach(BREACH_A.x, D - 0.8, 1);
+  breach(BREACH_B.x, 0.8, -1);
   const body = new THREE.MeshStandardMaterial({
-    color: 0x241034, emissive: 0x8236e8, emissiveIntensity: 0.22, roughness: 0.14, metalness: 0.4, flatShading: true,
+    color: 0x2a1038, emissive: 0x9a3ce0, emissiveIntensity: 0.2, roughness: 0.12, metalness: 0.5, flatShading: true,
   });
   body.name = 'z06-crystal';
   const core = new THREE.MeshStandardMaterial({
-    color: 0x3a1858, emissive: 0x9a4cff, emissiveIntensity: 1.15, roughness: 0.12, metalness: 0.25, flatShading: true,
+    color: 0x2a1046, emissive: 0x9a4cff, emissiveIntensity: 0.85, roughness: 0.12, metalness: 0.3, flatShading: true,
   });
   core.name = 'z06-crystal-lit';
   S.owned.push(body, core);

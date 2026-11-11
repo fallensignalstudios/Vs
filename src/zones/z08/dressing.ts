@@ -5,13 +5,13 @@
  * the organism brought through the breach — climbing the north wall and the rib legs either side of the doorway,
  * with dark shards strewn below it (violet only at the real source: the breach and the anchor beside it).
  *
- * All of it is visual: no collider, no nav change, no light. Static, so finalize() merges it by material (three
- * materials in all). The two crystal materials are the zone's own and are released with the zone state.
+ * All of it is visual: no collider, no nav change, no light. Two meshes, two draw calls (the gold and the crystal;
+ * Z08 has the least draw-call headroom of the zones — layout.ts gave up the court's gold motes for them). The
+ * crystal material is the zone's own and is released with the zone state.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ZoneBuilder } from '@/core/api';
-import { GOLD, IVORY } from '../shared';
 import { D, EXIT_X, ENTRY_X, RECESS_E, RECESS_W, W } from './layout';
 import { S } from './state';
 
@@ -41,9 +41,10 @@ function rand(): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-export function buildDressing(b: ZoneBuilder): void {
+/** `gold`: the court ring's channel material, shared by the inlay (null → the library's gold channel) */
+export function buildDressing(b: ZoneBuilder, gold: THREE.Material | null): void {
   seed = 0x08c2a7; // the same growth on every load
-  buildInlays(b);
+  buildInlays(b, gold);
   buildCrystals(b);
 }
 
@@ -65,9 +66,8 @@ function bar(b: ZoneBuilder, s: Strip): THREE.BufferGeometry {
   return geo;
 }
 
-function buildInlays(b: ZoneBuilder): void {
+function buildInlays(b: ZoneBuilder, mat: THREE.Material | null): void {
   const gold: THREE.BufferGeometry[] = [];
-  const bright: THREE.BufferGeometry[] = [];
   const nN = D - FACE; // north wall, room face
   const nS = FACE; // south wall
   const xW = FACE; // west wall
@@ -100,8 +100,8 @@ function buildInlays(b: ZoneBuilder): void {
     t.translate(c.x, c.y, c.z);
     gold.push(t);
   }
-  // the bright line up the gate's axis, from the lintel to the glass (the painting's beam of light)
-  bright.push(bar(b, up(gx, nN - 0.03, GATE.innerH + 0.6, WALL_TOP - 0.2, 0.16)));
+  // the line up the gate's axis, from the lintel to the glass (the painting's beam of light): the widest of them
+  gold.push(bar(b, up(gx, nN - 0.03, GATE.innerH + 0.6, WALL_TOP - 0.2, 0.2)));
   // the entry (south wall): a smaller frame
   for (const s of [-1, 1]) gold.push(bar(b, up(ENTRY_X + s * 2.75, nS, 0, 5.2, 0.1)));
   gold.push(bar(b, [ENTRY_X - 2.75, nS, 5.2, ENTRY_X + 2.75, nS, 5.2, 0.1]));
@@ -114,8 +114,9 @@ function buildInlays(b: ZoneBuilder): void {
     gold.push(bar(b, [r.x0 + 0.4, n, 4.35, r.x1 - 0.4, n, 4.35, 0.06]));
   }
 
-  add(b, gold, b.mats.emissive(GOLD, 2.2), 'z08-inlay');
-  add(b, bright, b.mats.emissive(IVORY, 4.5), 'z08-gate-axis');
+  // the court ring's gold (the kit's flush-strip material: polygon offset, and no shimmer once a line is thinner
+  // than a pixel at the far walls)
+  add(b, gold, mat ?? b.mats.get('goldChannel'), 'z08-inlay');
 }
 
 /** a vertical bar on a north–south (west / east) wall: thin side toward the room */
@@ -155,12 +156,9 @@ function crystal(len: number, r: number): THREE.BufferGeometry {
 
 /**
  * A cluster grown from a point on a surface: `count` crystals fanned round the surface normal `nrm` (world), the
- * longest near the middle. `lit` = the share of crystals that carry the bright core material.
+ * longest near the middle, `spread` = the widest tilt from the normal (radians).
  */
-function cluster(
-  b: ZoneBuilder, out: { dark: THREE.BufferGeometry[]; lit: THREE.BufferGeometry[] },
-  at: THREE.Vector3, nrm: THREE.Vector3, count: number, size: number, lit: number, spread = 0.75,
-): void {
+function cluster(out: THREE.BufferGeometry[], at: THREE.Vector3, nrm: THREE.Vector3, count: number, size: number, spread: number): void {
   const q = new THREE.Quaternion();
   const m = new THREE.Matrix4();
   const tangent = new THREE.Vector3().crossVectors(nrm, Math.abs(nrm.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
@@ -184,60 +182,51 @@ function cluster(
     const twist = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI);
     m.compose(base, q.multiply(twist), new THREE.Vector3(1, 1, 1));
     geo.applyMatrix4(m);
-    (rand() < lit ? out.lit : out.dark).push(geo);
+    out.push(geo);
   }
 }
 
 function buildCrystals(b: ZoneBuilder): void {
-  const out = { dark: [] as THREE.BufferGeometry[], lit: [] as THREE.BufferGeometry[] };
+  const out: THREE.BufferGeometry[] = [];
   const south = new THREE.Vector3(0, 0, 1); // the north wall's room face points south (world +z)
   const upV = new THREE.Vector3(0, 1, 0);
   const nN = D - 0.32;
-  const onWall = (x: number, h: number, count: number, size: number, lit = 0.18): void =>
-    cluster(b, out, b.P(x, nN, h), south, count, size, lit, 0.85);
-  const onFloor = (x: number, n: number, count: number, size: number, lit = 0.15): void =>
-    cluster(b, out, b.P(x, n, 0), upV.clone().add(new THREE.Vector3(0, 0, 0.35)).normalize(), count, size, lit, 0.7);
+  const onWall = (x: number, h: number, count: number, size: number): void => cluster(out, b.P(x, nN, h), south, count, size, 0.85);
+  const onFloor = (x: number, n: number, count: number, size: number): void =>
+    cluster(out, b.P(x, n, 0), upV.clone().add(new THREE.Vector3(0, 0, 0.35)).normalize(), count, size, 0.7);
   // the breach: heaped either side of the doorway, climbing the wall past the gate frame
   // (between the rib legs: the doorway's bay runs x 30.7–39.3)
-  onWall(EXIT_X - 3.5, 0.3, 11, 2.1, 0.2);
+  onWall(EXIT_X - 3.5, 0.3, 11, 2.1);
   onWall(EXIT_X - 3.4, 2.8, 7, 1.5);
   onWall(EXIT_X - 3.7, 5.0, 5, 1.1);
-  onWall(EXIT_X - 3.2, 7.2, 3, 0.8, 0.35);
-  onWall(EXIT_X + 3.5, 0.3, 10, 1.9, 0.2);
+  onWall(EXIT_X - 3.2, 7.2, 3, 0.8);
+  onWall(EXIT_X + 3.5, 0.3, 10, 1.9);
   onWall(EXIT_X + 3.6, 2.6, 6, 1.3);
-  onWall(EXIT_X + 3.4, 5.2, 4, 1.0, 0.35);
+  onWall(EXIT_X + 3.4, 5.2, 4, 1.0);
   onFloor(EXIT_X - 3.2, D - 1.2, 8, 1.5);
   onFloor(EXIT_X + 2.7, D - 1.1, 7, 1.2);
-  // up the rib legs either side of the doorway (their faces toward the doorway and the room)
+  // up the rib legs either side of the doorway (their keels toward the doorway: ±0.96 m 1.25 m out from the wall)
   for (const [x, s] of [[29.25, 1], [40.75, -1]] as const) {
     const side = new THREE.Vector3(s, 0, 0.6).normalize();
     // (only on the straight foot of the leg: higher up the arch leans in over the room)
     for (const [h, cnt, size] of [[0.4, 7, 1.4], [2.2, 6, 1.1], [3.8, 4, 0.8]] as const) {
-      cluster(b, out, b.P(x + s * 1.45, D - 1.25, h), side, cnt, size, 0.18, 0.8);
+      cluster(out, b.P(x + s * 0.99, D - 1.25, h), side, cnt, size, 0.8);
     }
   }
   // round the Weaver's anchor (the second source) and along the foot of the north wall toward it
   onWall(22.5, 0.2, 6, 1.0);
   onWall(26.5, 1.4, 4, 0.8);
   onFloor(23.6, D - 0.9, 5, 0.8);
-  // dark shards strewn on the floor below the breach (no glow: broken growth, the painting's black rubble)
-  const shards = { dark: [] as THREE.BufferGeometry[], lit: [] as THREE.BufferGeometry[] };
+  // broken shards strewn on the floor below the breach (the painting's black rubble)
   for (const [x, n, s] of [[31.6, 45.2, 0.45], [38.4, 45.6, 0.5], [33.6, 43.6, 0.35], [41.8, 44.2, 0.4], [28.2, 46.0, 0.4], [36.9, 44.6, 0.3]] as const) {
-    cluster(b, shards, b.P(x, n, 0), new THREE.Vector3(rand() - 0.5, 0.6, rand() - 0.5).normalize(), 3, s, 0, 1.2);
+    cluster(out, b.P(x, n, 0), new THREE.Vector3(rand() - 0.5, 0.6, rand() - 0.5).normalize(), 3, s, 1.2);
   }
 
-  const body = new THREE.MeshStandardMaterial({
-    color: 0x180a26, emissive: 0x7a30e0, emissiveIntensity: 0.12, roughness: 0.12, metalness: 0.55, flatShading: true,
+  // one material for all of it (draw calls: Z08 has the least headroom): dark faceted crystal with a violet glow
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x2a1038, emissive: 0x9a3ce0, emissiveIntensity: 0.26, roughness: 0.12, metalness: 0.5, flatShading: true,
   });
-  body.name = 'z08-crystal';
-  const core = new THREE.MeshStandardMaterial({
-    color: 0x2a1046, emissive: 0x9a4cff, emissiveIntensity: 0.85, roughness: 0.12, metalness: 0.3, flatShading: true,
-  });
-  core.name = 'z08-crystal-lit';
-  const shard = new THREE.MeshStandardMaterial({ color: 0x0c0a12, emissive: 0x2a1060, emissiveIntensity: 0.2, roughness: 0.22, metalness: 0.4, flatShading: true });
-  shard.name = 'z08-shard';
-  S.owned.push(body, core, shard);
-  add(b, out.dark, body, 'z08-crystals');
-  add(b, out.lit, core, 'z08-crystals-lit');
-  add(b, [...shards.dark, ...shards.lit], shard, 'z08-shards');
+  crystalMat.name = 'z08-crystal';
+  S.owned.push(crystalMat);
+  add(b, out, crystalMat, 'z08-crystals');
 }
