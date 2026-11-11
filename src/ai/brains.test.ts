@@ -355,6 +355,26 @@ describe('brains', () => {
     expect(looks.at(-1)).toBeNull();
   });
 
+  it('SpawnOpts.look / spawnNpc look reach the character factory (and nothing else does)', () => {
+    const w = makeAiWorld();
+    w.arena();
+    w.hero('tarrik', 0, 10);
+    const asked: Array<[string, unknown]> = [];
+    const chars = w.game.chars as unknown as { create: (a: string, o?: unknown) => unknown };
+    const create = chars.create.bind(chars);
+    chars.create = (a: string, o?: unknown): unknown => {
+      asked.push([a, o]);
+      return create(a, o);
+    };
+    w.ai.spawnEnemy('linkbound', { pos: { x: 0, y: 0, z: -6 }, dormant: true, seed: 9, look: { halfHuman: true, nonsense: 1 } as never });
+    w.ai.spawnNpc('kingWitness', { pos: { x: 3, y: 0, z: 0 }, look: { halo: false } });
+    w.ai.spawnEnemy('secDrone', { pos: { x: 4, y: 0, z: -8 }, dormant: true });
+    expect(asked[0]).toEqual(['linkbound', { halfHuman: true, seed: 9 }]);
+    expect(asked[1]).toEqual(['kingWitness', { halo: false }]);
+    expect(asked[2][0]).toBe('secDrone');
+    expect(Object.keys(asked[2][1] as object)).toEqual(['seed']);
+  });
+
   it('companion orders: hold, teleport, suppress, cinderStrike, bad input', () => {
     allowWarnings = true;
     const w = makeAiWorld();

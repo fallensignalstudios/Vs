@@ -23,7 +23,7 @@ export function ceramic(size: number): PbrLayers {
   const smudge = fbm(size, { freq: 5, octaves: 4, gain: 0.6, seed: 14 }).data;
   const web = fbm(size, { freq: 9, octaves: 4, gain: 0.6, seed: 19, mode: 'ridged' }).data;
   const vf = veinFields(size, 15);
-  const v1 = veins(size, { freq: 3, seed: 15, warp: 0.22, width: 0.02, breakup: 0.5, swell: 0.85, flow: [1, 2], amp: 0.9 }, vf).data;
+  const v1 = veins(size, { freq: 3, seed: 15, warp: 0.22, width: 0.017, breakup: 0.55, swell: 0.85, flow: [1, 2], amp: 0.9 }, vf).data;
   const v2 = veins(size, { freq: 5, seed: 16, warp: 0.14, width: 0.0026, breakup: 0.8, swell: 0.7, flow: [2, -1], amp: 1.2 }, vf).data;
   const v3 = veins(size, { freq: 4, seed: 17, warp: 0.2, width: 0.006, breakup: 0.7, swell: 0.8, flow: [1, 3], amp: 1.1 }, vf).data;
   const wear = fbm(size, { freq: 9, octaves: 5, gain: 0.62, seed: 18 }).data;
@@ -38,7 +38,8 @@ export function ceramic(size: number): PbrLayers {
     // broad veins are soft smoky bands eroded by the fine noise; a hairline web shows only in cloudier regions
     const band = v1[i] * (0.55 + fine[i] * 0.9);
     const w = Math.pow(web[i], 9) * sstep(0.45, 0.75, cloud[i]);
-    const vein = Math.min(1, band * 0.5 + v2[i] * 0.5 + v3[i] * 0.42 + w * 0.45);
+    // (soft smoky bands and fine grey threads — strong enough to read at room scale, never as black cracks)
+    const vein = Math.min(1, band * 0.36 + v2[i] * 0.46 + v3[i] * 0.3 + w * 0.42);
     // grime: the etched veins and the low spots hold a little dirt
     const grime = 1 - (1 - cav[i]) * 0.55;
     const lum = (1 + c * 0.2 + f * 0.06) * grime;

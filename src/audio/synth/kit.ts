@@ -128,7 +128,8 @@ export class Kit {
   private onQuantum(t: number): number {
     const sr = this.ac.sampleRate;
     // (a hundredth of a frame early: start times round UP to a frame, and n·128/sr can land a rounding error late)
-    return (Math.ceil((t * sr) / QUANTUM - 1e-6) * QUANTUM - 0.01) / sr;
+    // (and never before zero: at t = 0 — an offline bake of a loop — that hundredth would be a negative time)
+    return Math.max(0, (Math.ceil((t * sr) / QUANTUM - 1e-6) * QUANTUM - 0.01) / sr);
   }
 
   /** uniform random in [lo, hi) */

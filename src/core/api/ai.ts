@@ -25,7 +25,7 @@
 import type * as THREE from 'three';
 import type { Vec3Like } from './common';
 import type { Actor, Team } from './combat';
-import type { HumanoidArchetype } from './chars';
+import type { CharacterCreateOpts, HumanoidArchetype } from './chars';
 
 /**
  * ADDED (polish 3). What an attack telegraph announces — `ai:telegraph` names it, so a zone reacts to the attack
@@ -92,6 +92,11 @@ export interface SpawnOpts {
   name?: string;
   /** ADDED. Relay network a contamDrone belongs to (default: the only network that exists, if any). */
   network?: string;
+  /**
+   * ADDED (polish 3). How the body is drawn — passed to `chars.create`: e.g. `{ halfHuman: true }` for a linkbound
+   * whose face is half human, `{ bareHead: true }`, `{ corruption }`, `{ variant }`. `seed` is the spawn's own.
+   */
+  look?: Pick<CharacterCreateOpts, 'halfHuman' | 'bareHead' | 'corruption' | 'variant' | 'halo'>;
   /**
    * ADDED. Rectangles (world XZ) the enemy never enters, never charges through and never attacks into
    * (survivor recesses in E4). Used by the elite; also changeable later with `EliteController.setNoGo`.
@@ -438,7 +443,8 @@ export interface AiSystem {
   /** Fighting / following ally with a full humanoid figure. Team 'player'. Never dies (downed → recovers). */
   spawnCompanion(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; mode?: CompanionMode; name?: string }): Companion;
   /** Non-combat protected NPC (survivors, wounded, authorities). Same handle type for posing/moving. */
-  spawnNpc(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; pose?: string; name?: string; seed?: number }): Companion;
+  /** ADDED (polish 3) `opts.look`: how the figure is drawn, as SpawnOpts.look (e.g. `{ halo: false }` for Vesryn). */
+  spawnNpc(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; pose?: string; name?: string; seed?: number; look?: SpawnOpts['look'] }): Companion;
   createEncounter(def: EncounterDef): Encounter;
   readonly encounters: readonly Encounter[];
   readonly links: LinkSystem;

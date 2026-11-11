@@ -7,7 +7,7 @@
  * afterwards, inside the ActorManager.
  */
 import type {
-  Actor, ActorDesc, AiStats, AiSystem, Companion, CompanionMode, DeviceSystem, EliteController, Encounter, EncounterDef,
+  Actor, ActorDesc, AiStats, AiSystem, CharacterCreateOpts, Companion, CompanionMode, DeviceSystem, EliteController, Encounter, EncounterDef,
   EnemyRole, Game, HumanoidArchetype, LinkSystem, SpawnOpts, Team, Vec3Like, WeakPoint,
 } from '@/core/api';
 import { TUNING } from '@/combat/tuning';
@@ -40,6 +40,18 @@ const ROLE_NAME: Record<EnemyRole, string> = {
   secDrone: 'Security drone', contamDrone: 'Contaminated drone', enforcer: 'Enforcer', linkbound: 'Linkbound',
   wallrunner: 'Wallrunner', weaver: 'Weaver', elite: 'Breach organism',
 };
+
+/** SpawnOpts.look → the create options it may carry (anything else is dropped) */
+function lookOpts(look: SpawnOpts['look'] | undefined): CharacterCreateOpts {
+  if (!look || typeof look !== 'object') return {};
+  const out: CharacterCreateOpts = {};
+  if (look.halfHuman === true) out.halfHuman = true;
+  if (look.bareHead === true) out.bareHead = true;
+  if (look.halo === false) out.halo = false;
+  if (typeof look.corruption === 'number' && Number.isFinite(look.corruption)) out.corruption = look.corruption;
+  if (typeof look.variant === 'number' && Number.isFinite(look.variant)) out.variant = look.variant;
+  return out;
+}
 
 function weakPointsFor(role: EnemyRole): WeakPoint[] {
   const E = TUNING.enemies;
@@ -156,7 +168,7 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
       default:
         brain = new LinkboundBrain(this, o);
     }
-    const visual = game.chars.create(role, { seed });
+    const visual = game.chars.create(role, { ...lookOpts(o.look), seed });
     const desc: ActorDesc = {
       archetype: role, name: o.name ?? ROLE_NAME[role], team: o.team ?? ROLE_TEAM[role],
       pos: o.pos, yaw: fin(o.yaw, 0),
@@ -181,13 +193,14 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
     return actor;
   }
 
-  private spawnHumanoid(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; name?: string; seed?: number }, npc: boolean, mode: CompanionMode): CompanionImpl {
+  private spawnHumanoid(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; name?: string; seed?: number; look?: SpawnOpts['look'] }, npc: boolean, mode: CompanionMode): CompanionImpl {
     const game = this.game;
     const c = new CompanionImpl(this, who, npc, mode, this.comps.filter((x) => !x.npc).length, (x) => {
       const i = this.comps.indexOf(x);
       if (i >= 0) this.comps.splice(i, 1);
     });
-    const visual = game.chars.create(who, opts?.seed !== undefined ? { seed: opts.seed } : undefined);
+    const look = lookOpts(opts?.look);
+    const visual = game.chars.create(who, opts?.seed !== undefined ? { ...look, seed: opts.seed } : Object.keys(look).length ? look : undefined);
     const health = companionHealth(who);
     const name = opts?.name ?? String(who).charAt(0).toUpperCase() + String(who).slice(1);
     const actor = game.actors.spawn({
@@ -206,7 +219,7 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
     return this.spawnHumanoid(who, opts, false, opts?.mode ?? 'follow');
   }
 
-  spawnNpc(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; pose?: string; name?: string; seed?: number }): Companion {
+  spawnNpc(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; pose?: string; name?: string; seed?: number; look?: SpawnOpts['look'] }): Companion {
     const c = this.spawnHumanoid(who, opts, true, 'scripted');
     if (opts?.pose) c.play(opts.pose, { loop: true });
     return c;

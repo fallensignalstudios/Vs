@@ -65,7 +65,7 @@ const MAX_VOICE_CLIPS = 12;
 /** … and at most this many seconds of them */
 const MAX_VOICE_SECONDS = 90;
 /** compressed voice files fetched at once by a prefetch */
-const PREFETCH_PARALLEL = 4;
+const PREFETCH_PARALLEL = 6;
 /** individual warnings about broken voice files before they are only counted */
 const MAX_VOICE_WARNINGS = 12;
 /** speech level the clips are brought to: dBFS RMS over the frames that carry speech */

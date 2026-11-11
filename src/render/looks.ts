@@ -146,7 +146,7 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   // (quarantine concept). Its own grade: gold-warm highlights, cool steel shadows, the hardest contrast of the
   // white-gold rooms, little fill — the court is lit by the walls, not by the air.
   crucible: look({
-    exposure: 1.06,
+    exposure: 1.12,
     bloom: { intensity: 1.0, threshold: 0.96, radius: 0.78 },
     fog: { color: 0x2e2822, density: 0.008 },
     grade: { tint: 0xfff0d8, saturation: 1.0, contrast: 1.24, lift: -0.012, shadowsTint: 0xa6b4dc, highlightsTint: 0xffd890 },
