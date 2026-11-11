@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Game, SkyPreset } from '@/core/api';
 import type { Carrier } from './carrier';
 import { insideHull } from './carrierHull';
+import { woundScale } from './dome';
 import { createSkySystem } from './index';
 import { battleFrame, battlePlaneCoords } from './fleet';
 import { SKY_PRESETS, SKY_PRESET_IDS, SkyState, blendSkyStates, dirFromAzEl, rotateSkyState, slerpDir } from './presets';
@@ -54,10 +55,28 @@ describe('sky presets', () => {
     expect(obs.whiteVis).toBe(1);
   });
 
-  it('crashRib Wound is small and contained; woundVista Wound dominates the horizon', () => {
+  it('crashRib Wound is small and contained; woundVista Wound dominates the horizon, wholly above the city', () => {
     expect(SKY_PRESETS.crashRib.wound.radius).toBeLessThan(4);
-    expect(SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(10);
-    expect(SKY_PRESETS.woundVista.wound.at[1] - SKY_PRESETS.woundVista.wound.radius).toBeLessThan(0); // dips below the horizon
+    expect(SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(8);
+    // the disc's lower limb clears the horizon (and the spires capped under it): a clean, seam-free silhouette
+    expect(SKY_PRESETS.woundVista.wound.at[1] - SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(3);
+    // the red remnant is the one accent, and smaller than the Wound by far
+    expect(SKY_PRESETS.woundVista.red.radius).toBeLessThan(SKY_PRESETS.woundVista.wound.radius * 0.6);
+    expect(SKY_PRESETS.woundVista.sat).toBeLessThan(0.6);
+  });
+
+  it('interior presets close overhead; Z10 sees the Wound through its shut boundary; Z07 sees the battle at eye level', () => {
+    const frozen = new SkyState().setFromDef(SKY_PRESETS.frozenInterior);
+    expect(frozen.enclosure).toBeGreaterThan(0.5);
+    expect(frozen.stars).toBe(0);
+    expect(frozen.horizon.r + frozen.horizon.g + frozen.horizon.b).toBeGreaterThan(0.6); // bright haze, not night
+    const core = new SkyState().setFromDef(SKY_PRESETS.coreChamber);
+    expect(core.woundVis).toBe(1);
+    expect(core.veil).toBeGreaterThan(0.2);
+    expect(core.fleet).toBe(0);
+    const breach = SKY_PRESETS.breachDeep.battle;
+    expect(breach.at[1]).toBeLessThan(25); // through a glass wall, not over it
+    expect(breach.fleet).toBeGreaterThan(0.3);
   });
 
   it('all directions are unit vectors and every key light comes from above', () => {
@@ -360,6 +379,64 @@ describe('sky system', () => {
     sky.carrier.visible = true;
     sky.setPreset('battleCeiling', { blendSeconds: 2 });
     expect(sky.carrier.visible).toBe(true);
+  });
+
+  it('the Wound contracts with its activity, and both Wound setters can snap (explicitly, or during a skip / load)', () => {
+    expect(woundScale(0.3)).toBeCloseTo(1, 6);
+    expect(woundScale(0.05)).toBeLessThan(0.9);
+    expect(woundScale(0)).toBeCloseTo(0.86, 6);
+    expect(woundScale(1)).toBeGreaterThan(1);
+    expect(Number.isFinite(woundScale(Number.NaN))).toBe(true);
+    const cam = new THREE.PerspectiveCamera();
+    const sky = createSkySystem(fakeGame());
+    sky.setPreset('coreChamber');
+    const dome = sky.root.getObjectByName('sky:dome') as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+    sky.setWoundActivity(0.3, { snap: true });
+    expect(sky.woundActivity).toBe(0.3);
+    expect(dome.material.uniforms.uWoundScale.value).toBeCloseTo(1, 6);
+    // eased by default…
+    sky.setWoundActivity(0.05);
+    sky.update(1 / 60, cam);
+    expect(sky.woundActivity).toBeGreaterThan(0.2);
+    // …but a snap lands at once, scale included
+    sky.setWoundActivity(0.05, { snap: true });
+    expect(sky.woundActivity).toBe(0.05);
+    expect(dome.material.uniforms.uWoundScale.value).toBeLessThan(0.9);
+    sky.setBoundaryClosed(true, 4, { snap: true });
+    expect(sky.boundaryClosed).toBe(1);
+    sky.setBoundaryClosed(false, 4);
+    sky.update(1 / 60, cam);
+    expect(sky.boundaryClosed).toBeGreaterThan(0.9);
+    // a skipped cinematic (or a zone load) fast-forwards: the setters snap without being asked
+    const mission = { loading: false, runtime: { skipping: true } };
+    const ff = createSkySystem(fakeGame({ mission }));
+    ff.setPreset('coreChamber');
+    ff.setWoundActivity(0.02);
+    expect(ff.woundActivity).toBe(0.02);
+    ff.setBoundaryClosed(true, 4);
+    expect(ff.boundaryClosed).toBe(1);
+    mission.runtime.skipping = false;
+    mission.loading = true;
+    ff.setWoundActivity(0.4);
+    expect(ff.woundActivity).toBe(0.4);
+    mission.loading = false;
+    ff.setWoundActivity(0.1);
+    expect(ff.woundActivity).toBe(0.4);
+  });
+
+  it('a quiet battle is visibly quieter than a hot one (fewer streaks, softer flashes)', () => {
+    const glowAt = (k: number): number => {
+      const sky = createSkySystem(fakeGame());
+      const cam = new THREE.PerspectiveCamera();
+      sky.setPreset('breachDeep');
+      sky.setBattleIntensity(k);
+      let sum = 0;
+      for (let i = 0; i < 1800; i++) { sky.update(1 / 60, cam); sum += sky.battleGlow.r + sky.battleGlow.g + sky.battleGlow.b; }
+      return sum;
+    };
+    const hot = glowAt(0.7), quiet = glowAt(0.12);
+    expect(hot).toBeGreaterThan(0);
+    expect(quiet).toBeLessThan(hot * 0.35);
   });
 
   it('reset() returns to the neutral start state', () => {
@@ -731,6 +808,17 @@ describe('scenic factory', () => {
         }
       });
       expect(glowing, name).toBe(0);
+    }
+    // …and no structure at all stands inside the disc: spires in its azimuth band are capped under the lower limb,
+    // so the silhouette is never cut (the accretion swirl beyond the rim may sink behind them)
+    for (const [name, o] of [['terminalVista', f.terminalVista({ corridor: 640 })], ['crownmarkArm', f.crownmarkArm()]] as const) {
+      let inDisc = 0;
+      o.traverse((c) => {
+        const m = c as THREE.Mesh;
+        const pos = m.isMesh && !m.geometry.getAttribute('iPos') ? m.geometry.getAttribute('position') : null;
+        if (pos) for (let i = 0; i < pos.count; i++) if (insideWound(cone, pos.getX(i), pos.getY(i), pos.getZ(i), 1)) inDisc++;
+      });
+      expect(inDisc, name).toBe(0);
     }
     // the rule is opt-out for other skies
     let lit = 0;

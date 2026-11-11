@@ -184,6 +184,8 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
   const guns: Gun[] = ships.map(() => ({ cool: 0.5 + rand() * 5, left: 0, gap: 0, target: -1 }));
   let arcCool = 4 + rand() * 6;
   let softFlash = false;
+  /** current battle intensity (0..1): shapes the tempo of new flashes; scripted impacts use the hot tempo */
+  let tempo = 1;
   const glow = new THREE.Color(0, 0, 0);
 
   const spawnFlash = (u: number, v: number, size: number, peak: number, decay: number, c: THREE.Color, whiten: number): void => {
@@ -196,9 +198,11 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       if (k > spent) { spent = k; slot = f; }
     }
     slot.live = true; slot.u = u; slot.v = v; slot.age = 0; slot.size = size;
-    slot.atk = softFlash ? 0.28 : 0.045;
-    slot.decay = softFlash ? decay * 2.2 : decay;
-    slot.peak = softFlash ? Math.min(peak * 0.3, 2.2) : peak;
+    // a quiet battle flashes slower and softer (longer swell, lower peak); a hot one snaps
+    const calm = 1 - tempo;
+    slot.atk = softFlash ? 0.28 : 0.045 + 0.16 * calm;
+    slot.decay = (softFlash ? decay * 2.2 : decay) * (1 + 0.9 * calm);
+    slot.peak = softFlash ? Math.min(peak * 0.3, 2.2) : peak * (0.55 + 0.45 * tempo);
     slot.r = c.r + (1 - c.r) * whiten; slot.g = c.g + (1 - c.g) * whiten; slot.b = c.b + (1 - c.b) * whiten;
   };
 
@@ -227,7 +231,7 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       tr.u1 = tr.u0 + (tr.u1 - tr.u0) * k; tr.v1 = tr.v0 + (tr.v1 - tr.v0) * k;
     }
     const dist = Math.hypot(tr.u1 - tr.u0, tr.v1 - tr.v0);
-    tr.dur = (0.9 + rand() * 0.5) * (0.6 + dist * 0.9) * (big ? 1.5 : 1);
+    tr.dur = (0.9 + rand() * 0.5) * (0.6 + dist * 0.9) * (big ? 1.5 : 1) * (1.5 - 0.5 * tempo);
     tr.len = (big ? 0.085 : 0.05) / Math.max(dist, 0.05);
     tr.t = 0;
   };
@@ -268,6 +272,9 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       }
 
       // ---- guns: salvos of several bolts; tempo and density follow the intensity
+      let liveTracers = 0;
+      for (let i = 0; i < MAX_TRACERS; i++) if (tracers[i].live) liveTracers++;
+      tempo = k;
       if (dt > 0) {
         for (let si = 0; si < ships.length; si++) {
           const ship = ships[si], gun = guns[si];
@@ -277,12 +284,13 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
             if (gun.gap <= 0) { fire(si, gun); gun.left--; gun.gap = 0.07 + rand() * 0.09; }
             continue;
           }
-          gun.cool -= dt * (0.15 + 1.85 * k);
+          // a quiet battle is visibly quiet: far fewer salvos, shorter ones, and a cap on what is in flight
+          gun.cool -= dt * (0.06 + 1.94 * Math.pow(k, 1.25));
           if (gun.cool <= 0) {
             gun.cool = 1.6 + rand() * 5.2;
-            if (k > 0.02 && rand() < 0.25 + 0.75 * k) {
+            if (k > 0.02 && rand() < 0.12 + 0.88 * k && liveTracers < 10 + 110 * k) {
               gun.target = pickTarget(ship, fleetVis);
-              if (gun.target >= 0) { gun.left = 2 + Math.floor(rand() * (2 + 5 * k)); gun.gap = 0; }
+              if (gun.target >= 0) { gun.left = 1 + Math.floor(rand() * (1 + 6 * k)); gun.gap = 0; }
             }
           }
         }
@@ -375,6 +383,8 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
     },
     impact(dir, colorHex, strength) {
       const s = clamp01(strength);
+      const was = tempo;
+      tempo = 1; // a scripted hit is always a hard, fast flash
       const spread = fleet.uniforms.uSpread.value;
       let u = (rand() - 0.5) * 0.9, v = (rand() - 0.5) * 0.7;
       if (dir && battlePlaneCoords(fleet.uniforms.uFrame.value, spread, dir, _uv)) { u = _uv.u; v = _uv.v; }
@@ -382,6 +392,7 @@ export function createFleetBattle(shared: SharedUniforms, seed = 7283): FleetBat
       const size = (0.022 + 0.05 * s) / Math.max(spread, 0.2);
       spawnFlash(u, v, size, 7 + 16 * s, 0.45 + 0.9 * s, c, 0.4);
       spawnFlash(u + (rand() - 0.5) * size, v + (rand() - 0.5) * size, size * 0.45, 5 + 8 * s, 0.25 + 0.3 * s, c, 0.7);
+      tempo = was;
     },
     clear() {
       for (let i = 0; i < MAX_TRACERS; i++) { tracers[i].live = false; const o = (T0 + i) * 4; iC[o] = 0; iC[o + 1] = 0; iC[o + 2] = 0; }

@@ -17,7 +17,13 @@ export interface PropCollider {
   sight?: boolean;
 }
 
-export interface PropLight { color: number; intensity: number; distance: number; at: [number, number, number] }
+export interface PropLight {
+  color: number; intensity: number; distance: number; at: [number, number, number];
+  /** make it a spot aimed at this local point (fixtures that must light their own face, not whoever stands there) */
+  target?: [number, number, number];
+  /** spot half-angle, degrees (default 35) */
+  angleDeg?: number;
+}
 
 export interface PropDef {
   /** number of visual variants (default 1); `variant` cycles through them */

@@ -102,15 +102,18 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
     key: { at: [23, 38], color: 0xe6edff, intensity: 2.2 },
     fill: { at: [-27, 31], color: 0xff5a3c, intensity: 0.35 },
   }),
-  // Z03–Z04: frozen atmosphere scatters everything into a pale cold glow; bodies are only diffuse light.
+  // Z03–Z04: daylight inside the megastructure. Frozen atmosphere scatters everything into bright cold haze; the
+  // structure's own upper space (far ribs and tiers, a few warm seams) closes overhead instead of open sky. No
+  // stars; the bodies are only diffuse light.
   frozenInterior: D({
     wound: { at: [0, 20], radius: 3, vis: 0, lens: 0.5, debris: 0.4, halo: 0.5, activity: 0.2 },
-    white: { at: [28, 34], radius: 0.5, vis: 0.35 },
-    stars: 0.22, nebula: 0.3, zenith: 0x060b14, horizon: 0x1b2a3a, haze: 0x2a4257, hazeAmt: 0.92, hazeFall: 1.6,
-    hazeWhite: 0x38546a, ground: 1, gain: 0.9, scenicHaze: 0.0022, scenicAmbient: 0.8,
-    battle: { at: [30, 48], spread: 40, fleet: 0.25, intensity: 0.25 },
-    key: { at: [28, 42], color: 0xbfe0ff, intensity: 1.5 },
-    fill: { at: [-60, 30], color: 0x7fb4d8, intensity: 0.3 },
+    white: { at: [28, 34], radius: 0.5, vis: 0.22 },
+    stars: 0, starDensity: 0, nebula: 0, zenith: 0x7c8b99, horizon: 0xaab8c2, haze: 0xa9b7c1, hazeAmt: 0.85, hazeFall: 2.4,
+    hazeWhite: 0x34424e, ground: 1, gain: 1.0, scenicHaze: 0.0015, scenicAmbient: 1.25,
+    enclosure: 0.9, enclosureColor: 0x9cabb8,
+    battle: { at: [30, 30], spread: 40, fleet: 0, intensity: 0.15 },
+    key: { at: [28, 42], color: 0xdfeeff, intensity: 1.6 },
+    fill: { at: [-60, 30], color: 0x9fc4dc, intensity: 0.35 },
   }),
   // Z05: looking up through the transparent ceiling into the fleet battle.
   battleCeiling: D({
@@ -124,11 +127,13 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
     key: { at: [62, 74], color: 0xfff0dd, intensity: 1.8 },
     fill: { at: [-64, 34], color: 0xff5a3c, intensity: 0.3 },
   }),
-  // Z06–Z08: enclosed. Only muffled impacts leak in.
+  // Z06–Z08: enclosed, looking out through deep glass: a dark field of grey-blue nebula and the distant fleet
+  // battle low over the horizon, at eye level through a glass wall (not overhead), muffled.
   breachDeep: D({
-    stars: 0.14, nebula: 0.25, zenith: 0x010104, horizon: 0x05040a, haze: 0x0a0812, hazeAmt: 0.8, hazeFall: 2.5,
-    ground: 1, gain: 0.7, scenicHaze: 0.003, scenicAmbient: 0.35,
-    battle: { at: [0, 60], spread: 45, fleet: 0.15, intensity: 0.3 },
+    stars: 0.6, starDensity: 0.55, nebula: 4.5, nebulaTint: 0xc0c6d6, sat: 0.75,
+    zenith: 0x0b0b12, horizon: 0x16161f, haze: 0x1c1c26, hazeAmt: 0.55, hazeFall: 7,
+    ground: 1, gain: 1.0, scenicHaze: 0.003, scenicAmbient: 0.35,
+    battle: { at: [0, 15], spread: 34, fleet: 0.6, intensity: 0.3 },
     key: { at: [20, 60], color: 0x9aa4c8, intensity: 0.5 },
   }),
   // Z09: the Wound overlook concept painting. A desaturated night — charcoal, grey-violet, teal-black — with the red
@@ -136,20 +141,24 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   // its accretion swirl reaching down behind the spires; few stars.
   woundVista: D({
     wound: { at: [0, 15], radius: 9.5, vis: 1, lens: 0.42, debris: 1, halo: 1, activity: 0.45 },
-    red: { at: [-41, 25], radius: 4.4, vis: 1 },
+    red: { at: [-34, 21], radius: 4.1, vis: 1 },
     white: { at: [34, 17], radius: 0.30, vis: 1 },
     // (authored a touch warm: the gallery grade pulls shadows toward blue)
-    stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 2.6, tint: 0xfff3c4,
-    zenith: 0x221f1e, horizon: 0x302b29, haze: 0x463d38, hazeAmt: 0.8, hazeFall: 12,
+    stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 2.6, tint: 0xfff2d0,
+    zenith: 0x221f1e, horizon: 0x302b29, haze: 0x4d433d, hazeAmt: 0.88, hazeFall: 11,
     hazeRed: 0x260907, hazeWhite: 0x16161a, ground: 1, scenicHaze: 0.00055, scenicAmbient: 1.0,
     battle: { at: [62, 30], spread: 26, fleet: 0.3, intensity: 0.15 },
     key: { at: [34, 24], color: 0xf6efe4, intensity: 1.7 },
-    fill: { at: [-41, 23], color: 0xff5a3c, intensity: 0.4 },
+    fill: { at: [-34, 21], color: 0xff5a3c, intensity: 0.4 },
   }),
-  // Z10: enclosed nested machinery; the view boundary is shut — dim grey nebula between immense members.
+  // Z10: enclosed nested machinery; the view boundary is shut — a dark membrane between the chamber and space. The
+  // Wound is still out there, dimmed and greyed behind it among grey nebula and debris: when its pressure is drawn
+  // back (setWoundActivity → 0) the disc visibly contracts.
   coreChamber: D({
-    stars: 0.5, nebula: 0.9, zenith: 0x020306, horizon: 0x07080c, haze: 0x0d0e13, hazeAmt: 0.6, hazeFall: 4,
-    ground: 1, gain: 0.8, scenicHaze: 0.0012, scenicAmbient: 0.5,
+    wound: { at: [0, 27], radius: 8, vis: 1, lens: 0.3, debris: 0.8, halo: 0.9, activity: 0.3 },
+    stars: 0.45, starDensity: 0.45, nebula: 2.6, nebulaTint: 0xc4c0c0, sat: 0.35, swirl: 2.0, veil: 0.5,
+    zenith: 0x0c0c0d, horizon: 0x141315, haze: 0x161518, hazeAmt: 0.55, hazeFall: 4,
+    ground: 1, gain: 0.9, scenicHaze: 0.0012, scenicAmbient: 0.5,
     key: { at: [0, 78], color: 0xffe9c4, intensity: 1.5 },
   }),
   // Z11: red remnant left, hard white remnant right, the Wound between.

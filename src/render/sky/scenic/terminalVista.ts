@@ -113,8 +113,11 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
     const hh = lim.top - base;
     if (hh < 24) return;
     const detail = dist < 1500 ? 1 : dist < 2600 ? (rand() < 0.5 ? 1 : 0) : 0;
+    // the city mass reads dark: only the tall spires stand pale against it (the painting's sparse ivory needles)
+    const tall = hh > R * 0.085;
+    const t: SpireTone = !lim.lit ? 'black' : tall ? (tone === 'black' ? 'mixed' : tone) : rand() < 0.62 ? 'black' : tone;
     addPier(b, cards, x, z, base, r, 640, rand, dist < 1700 ? 1 : 0, lim.lit);
-    addSpire(b, cards, { x, y: base, z, h: hh, r: Math.min(r, hh * 0.09), tone: lim.lit ? tone : 'black', rand, detail, style, lit: lim.lit, rot: Math.atan2(x, z) });
+    addSpire(b, cards, { x, y: base, z, h: hh, r: Math.min(r, hh * 0.09), tone: t, rand, detail, style, lit: lim.lit, rot: Math.atan2(x, z) });
   };
 
   // ---- the hub citadel: a crown of spires around the white point, kept under the Wound's lower limb
@@ -130,7 +133,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   // ---- junction spires and ranks along every arm
   for (const [x, z, fr] of junctions) spire(x + 60, z + 50, R * (0.1 + rand() * 0.07) * (1.15 - fr * 0.4), R * 0.0085, pick(tones), pick(styles));
   for (const arm of arms) {
-    const step = (230 + rand() * 60) / density;
+    const step = (320 + rand() * 80) / density;
     for (let d = R * 0.1; d < arm.len - 80; d += step * (0.8 + rand() * 0.5)) {
       const side = rand() < 0.5 ? -1 : 1;
       const [cx, cz] = armPoint(arm.a, d);
@@ -170,7 +173,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
     }
   }
   // scattered spires between the arms, and far silhouettes all around the horizon
-  const scatter = Math.round(46 * density);
+  const scatter = Math.round(30 * density);
   for (let i = 0; i < scatter; i++) {
     const a = (rand() - 0.5) * Math.PI * 1.7;
     const d = R * (0.12 + rand() * 0.6);

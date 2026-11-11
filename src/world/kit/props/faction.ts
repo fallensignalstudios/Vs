@@ -216,7 +216,16 @@ export const FACTION_PROPS: PropTable = {
       p.g('refNavy').push().move(0, 0.953, -0.02).rotX(-0.155).box(0.94, 0.012, 0.4, 0, 0, 0).pop();
       steel.boxOn(0.05, 0.62, 0.05, 0, 1.0, 0.24);
       navy.cbox(1.0, 0.56, 0.05, 0.02, 0, 1.72, 0.24);
-      p.g(p.ctx.emissive(PALETTE.refBlue, 1.5)).box(0.9, 0.46, 0.012, 0, 1.72, 0.208);
+      // the display: a deep blue field with brighter readout rows — below the bloom threshold, so it stays a
+      // blue screen in a dark room instead of blooming to a flat white card
+      p.g(p.ctx.emissive(0x173a66, 0.85)).box(0.9, 0.46, 0.012, 0, 1.72, 0.208);
+      const rows = p.g(p.ctx.emissive(0x7cbcf2, 0.95));
+      rows.box(0.8, 0.03, 0.004, 0, 1.9, 0.2);
+      for (let i = 0; i < 5; i++) {
+        const w = 0.2 + ((i * 3) % 5) * 0.09;
+        rows.box(w, 0.016, 0.004, -0.38 + w / 2, 1.83 - i * 0.055, 0.2);
+      }
+      p.g(p.ctx.emissive(PALETTE.refBlue, 1.2)).box(0.16, 0.12, 0.004, 0.3, 1.64, 0.2);
       for (const s of [-1, 1]) steel.tube([[s * 0.62, 0.3, -0.2], [s * 0.68, 0.5, -0.2], [s * 0.68, 0.7, -0.2], [s * 0.62, 0.84, -0.2]], 0.018, 5);
       p.g('rubber').tube([[0.4, 0.1, 0.28], [0.6, 0.03, 0.6], [0.5, 0.03, 1.2]], 0.02, 5);
     },

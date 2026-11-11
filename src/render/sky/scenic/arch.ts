@@ -118,11 +118,11 @@ function tower(b: GeoBuilder, cards: LightCards, o: SpireOpts, x: number, z: num
     const rad = (r * (1 - 0.2 * ((t0 + t1) / 2))) * 0.93 + 0.25;
     if (detail >= 2) {
       b.push().translate(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad).rotateY(a);
-      b.dress(0, 0).paint(KING.light, 1.5).box(0, 0, 0, 0.5, yb - ya, Math.max(r * 0.06, 0.8));
+      b.dress(0, 0).paint(KING.light, 1.0).box(0, 0, 0, 0.5, yb - ya, Math.max(r * 0.045, 0.8));
       b.paint(KING.gold, gg, 0.7).box(-0.2, 0, 0, 0.5, (yb - ya) * 1.04, Math.max(r * 0.15, 1.5));
       b.pop().dress(0, 1);
     } else {
-      cards.strip(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad, Math.max(r * 0.045, 0.6), yb - ya, KING.light, 1.0 + rand() * 0.9);
+      cards.strip(x + Math.cos(a) * rad, (ya + yb) / 2, z - Math.sin(a) * rad, Math.max(r * 0.045, 0.6), yb - ya, KING.light, 0.8 + rand() * 0.6);
     }
   }
   // lit openings near the base, a beacon on the tallest

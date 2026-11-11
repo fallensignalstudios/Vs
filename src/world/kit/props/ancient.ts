@@ -140,7 +140,9 @@ export const ANCIENT_PROPS: PropTable = {
       }
     },
     colliders: () => [{ box: [2.3, 2.2, 0.7] }],
-    light: () => ({ color: PALETTE.goldLight, intensity: 7, distance: 6, at: [0, 1.6, -0.9] }),
+    // a narrow wash from above the panel down its face: it lights the bays and the hands on the levers, and the
+    // operator's head (≈ 1.7 m, 0.9 m in front) stays outside the cone instead of taking the full light
+    light: () => ({ color: PALETTE.goldLight, intensity: 9, distance: 5, at: [0, 2.55, -0.55], target: [0, 1.25, -0.12], angleDeg: 32 }),
   },
   controlRing: {
     build(p) {

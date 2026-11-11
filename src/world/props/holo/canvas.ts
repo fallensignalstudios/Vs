@@ -151,8 +151,10 @@ export class HoloCanvas {
   /**
    * Pixel-font text: `capacity` characters of 15 cells each, left edge at x, vertical centre at y. `dir` −1
    * mirrors the row for displays that are read from the −Z side without being turned around.
+   * `fit` (metres): a line that would run wider than this at `cell` size is drawn smaller so it fits — headers
+   * keep their full size up to their nominal length and shrink beyond it instead of being cut off.
    */
-  text(text: string, x: number, y: number, cell: number, color: number, alpha = 1, z = 0, dir = 1, capacity = text.length): TextField {
+  text(text: string, x: number, y: number, cell: number, color: number, alpha = 1, z = 0, dir = 1, capacity = text.length, fit = 0): TextField {
     const first = this.used;
     for (let i = 0; i < capacity; i++) {
       for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
@@ -160,9 +162,31 @@ export class HoloCanvas {
       }
     }
     const range: Range = [first, this.used - first];
+    let shownCell = cell;
+    const layout = (k: number): void => {
+      const cs = cell * k;
+      if (cs === shownCell) return;
+      shownCell = cs;
+      const h = cs * 0.43;
+      for (let i = 0; i < capacity; i++) {
+        for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) {
+          const id = first + i * 15 + r * 3 + c;
+          if (id >= this.used) continue;
+          const cx = x + dir * (i * cs * 4 + (c + 0.5) * cs), cy = y + (2 - r) * cs;
+          const q = [cx - h, cy - h, z, cx + h, cy - h, z, cx + h, cy + h, z, cx - h, cy + h, z];
+          this.pos.set(q, id * 12);
+          this.pos0.set(q, id * 12);
+        }
+      }
+      this.dirtyPos = true;
+    };
     const field: TextField = {
       range,
       set: (s: string): void => {
+        const n = Math.min(capacity, s.length);
+        // natural width of n characters: 4 cells per character minus the trailing gap
+        const width = n > 0 ? (n * 4 - 1) * cell : 0;
+        layout(fit > 0 && width > fit ? fit / width : 1);
         for (let i = 0; i < capacity; i++) {
           const m = i < s.length ? glyphMask(s[i]) : 0;
           for (let b = 0; b < 15; b++) this.setGate(first + i * 15 + b, (m >> (14 - b)) & 1);

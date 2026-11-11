@@ -324,8 +324,8 @@ export class ZoneRuntimeImpl implements ZoneRuntime {
       player.enabled = prev.enabled;
       // give the lock back when the same lead still faces the same living, targetable foe
       const lock = prev.lock;
-      if (lock && !this.disposed && now === actor && player.lockTarget === null && lock.alive && lock.targetable !== false
-        && (isStub(g.actors) || g.actors.areHostile(actor!, lock))) player.lockTarget = lock;
+      if (lock && actor && !this.disposed && now === actor && player.lockTarget === null && lock.alive && lock.targetable !== false
+        && (isStub(g.actors) || g.actors.areHostile(actor, lock))) player.lockTarget = lock;
       camera.cine.finish();
       camera.release(this.disposed ? 0 : opts?.blendOut ?? 0.6);
       g.events.emit('cinematic:end', { id, skipped: cine.skipped });

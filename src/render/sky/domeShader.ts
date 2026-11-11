@@ -389,7 +389,7 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
   dens = max(dens, 0.7 * stream * smoothstep(0.3, 0.7, 0.5 * cloud + 0.5 * fine));
   float wisp = smoothstep(0.46, 0.84, 0.6 * fine + 0.5 * cloud) * (0.45 + 0.55 * arms);
   vec3 dustDark = vec3(0.030, 0.026, 0.026);
-  vec3 dustLit = vec3(0.150, 0.132, 0.125) * (0.40 + 0.80 * sw * sw) + vec3(0.115, 0.016, 0.012) * (sr * sr * sr + streamR * 0.8);
+  vec3 dustLit = vec3(0.145, 0.130, 0.135) * (0.40 + 0.80 * sw * sw) + vec3(0.115, 0.016, 0.012) * (sr * sr * sr + streamR * 0.8);
   // the remnants light the outer swirl less than the inner, where it is densest
   vec3 swirl = mix(dustDark, dustLit, wisp * (0.55 + 0.45 * exp(-max(rn - 1.1, 0.0) / 0.6))) * uSwirl;
   // clots of dark matter churning in it (the dark smoke of the painting): they swallow the light
@@ -429,7 +429,7 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
   float open = 1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn));
   float armBias = 0.55 + 0.45 * arms;
   {
-    float fill = (0.40 * armBias * smoothstep(1.0, 1.12, rn) * (1.0 - smoothstep(1.35, 2.0, rn)) + 0.50 * stream) * open;
+    float fill = (0.40 * armBias * smoothstep(1.0, 1.12, rn) * (1.0 - smoothstep(1.5, 2.4, rn)) + 0.55 * stream) * open;
     vec2 rk = rockBand(turn + uTime * 0.00095, rn, 22.0, 7.0, 3.0, fill, px, R, L, SKY_DETAIL >= 1);
     lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
   }

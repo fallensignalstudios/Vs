@@ -49,9 +49,19 @@ export function buildProp(ctx: KitCtx, kind: PropKind, o: PropOpts): THREE.Objec
   }
   const l = def.light?.(variant);
   if (l) {
-    const light = new THREE.PointLight(l.color, l.intensity, l.distance * Math.max(1, scale), 2);
+    let light: THREE.PointLight | THREE.SpotLight;
+    if (l.target) {
+      const spot = new THREE.SpotLight(l.color, l.intensity, l.distance * Math.max(1, scale), ((l.angleDeg ?? 35) * Math.PI) / 180, 0.6, 2);
+      spot.target.position.set(l.target[0], l.target[1], l.target[2]);
+      group.add(spot.target);
+      light = spot;
+    } else {
+      light = new THREE.PointLight(l.color, l.intensity, l.distance * Math.max(1, scale), 2);
+    }
     light.position.set(l.at[0], l.at[1], l.at[2]);
     light.name = `prop-light:${kind}`;
+    // a fixture light: finalize() may share it with its neighbours or drop it to emissive-only (light budget)
+    light.userData.kitFixture = true;
     group.add(light);
     ctx.lights.push(light);
   }
