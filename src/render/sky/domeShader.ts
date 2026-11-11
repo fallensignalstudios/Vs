@@ -382,7 +382,7 @@ const vec3 VIOLET = vec3(0.62, 0.30, 0.95);
 const vec3 LAVGREY = vec3(0.60, 0.565, 0.66);
 // warm-neutral grey smoke, and the crimson that bleeds into it on the red remnant's side
 const vec3 SMOKE = vec3(1.0, 1.0, 0.88);
-const vec3 RED_SMOKE = vec3(1.0, 0.46, 0.40);
+const vec3 RED_SMOKE = vec3(1.0, 0.34, 0.33);
 // opacity of the void at this pixel: woundComposite writes it, the horizon haze and the white remnant read it
 float gWoundVoid;
 
@@ -416,7 +416,7 @@ vec2 splatRock(vec2 q, float fill, float big, float seed, float aa, vec2 toL) {
   vec3 h = hash33(vec3(c, seed));
   if (h.z >= fill) return vec2(0.0);
   float u = 1.0 - h.z / fill;
-  float size = big * (0.25 + 0.75 * u * sqrt(u));
+  float size = big * (0.28 + 0.72 * u);
   vec2 r = q - c - 0.5 - (h.xy - 0.5) * max(1.0 - 3.1 * size, 0.0);
   vec2 rr = rot2(r, h.x * 6.2832);
   rr.y *= 1.0 + 0.8 * h.y; // some are long shards
@@ -463,9 +463,9 @@ vec2 arcLayer(vec2 sq, float cs, vec2 o, float L, float flow, vec4 prof, float f
 void arcRocks(vec3 ac, float L, vec2 su, vec2 sv, vec4 prof, float flow, float seed, float pxn, vec2 Lc, bool fine, inout float occ, inout float rim) {
   vec2 sq = vec2(ac.z + flow, ac.y);
   vec2 Ls = vec2(dot(Lc, su), dot(Lc, sv));
-  vec2 r = arcLayer(sq, 0.6, vec2(0.0, 0.5), L, flow, prof, 0.85, 1.0, seed, pxn, Ls);
+  vec2 r = arcLayer(sq, 0.6, vec2(0.0, 0.5), L, flow, prof, 0.95, 1.0, seed, pxn, Ls);
   rim = rim * (1.0 - r.x) + r.y; occ += r.x * (1.0 - occ);
-  r = arcLayer(sq, 0.22, vec2(0.37, 0.61), L, flow, prof, 0.8, 0.5, seed + 3.0, pxn, Ls);
+  r = arcLayer(sq, 0.24, vec2(0.37, 0.5), L, flow, prof, 0.9, 0.5, seed + 3.0, pxn, Ls);
   rim = rim * (1.0 - r.x) + r.y; occ += r.x * (1.0 - occ);
   #if SKY_DETAIL >= 1
   if (fine) {
@@ -559,6 +559,18 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     #endif
     fsk = smoothstep(0.15, 0.85, 0.6 * f1 + 0.4 * f2);
   }
+  // drag streaks: a looser spiral (≈ 25° pitch), so matter pulled in over the edge crosses it instead of following it
+  float fdr = 0.5;
+  if (x > -0.34 && x < 0.75) {
+    vec2 fe = rot2(dir, 2.1 * lr + spin * 1.5);
+    float g1 = vnoise(vec3(fe * 3.2, rho * 2.4 + 21.0));
+    #if SKY_DETAIL >= 1
+    float g2 = lite ? g1 : vnoise(vec3(fe * 8.0 + 5.0, rho * 5.5 + 13.0));
+    #else
+    float g2 = g1;
+    #endif
+    fdr = smoothstep(0.18, 0.82, 0.62 * g1 + 0.38 * g2);
+  }
 
   // --- 1. smoke: a broad, lit, marbled field of warm-grey smoke: fine turbulence with only a mild shear (no arms).
   //        It reaches further up-left, down the funnel toward the horizon and toward the red remnant, whose crimson
@@ -578,7 +590,7 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     // thin pale folds where the turbulence shears: the marbling
     float marble = pow(1.0 - abs(2.0 * fine - 1.0), 6.0);
     float prof = smoothstep(0.86, 1.04, rho) * pow(1.0 - smoothstep(0.95, hReach + 0.4, rn), 1.4);
-    float smA = prof * (0.55 + 0.45 * smoothstep(0.28, 0.7, s)) * uWoundHalo;
+    float smA = min(prof * (1.0 + 0.8 * down * smoothstep(1.0, 1.5, rn)), 1.0) * (0.55 + 0.45 * smoothstep(0.28, 0.7, s)) * uWoundHalo;
     float v = (0.05 + 0.10 * smoothstep(0.3, 0.8, s) + 0.07 * marble * smoothstep(0.4, 0.7, s)) * (0.75 + 0.4 * ulw);
     vec3 smC = SMOKE * v + LAVGREY * 0.10 * ulw * exp(-max(x, 0.0) / 0.3) * smoothstep(0.4, 0.8, s);
     float bleed = sr * smoothstep(0.95, 1.8, rn);
@@ -633,8 +645,8 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     #endif
     // on the right flank the same matter is sheared along the spiral into streaks, and where it reaches in over the
     // void it is dragged into the funnel's spiral (streaks, never lumps)
-    float n = mix(blob, 0.4 * blob + 0.6 * fsk, rgt * 0.85);
-    n = mix(n, 0.3 * blob + 0.7 * fsk, smoothstep(0.06, -0.1, x));
+    float n = mix(blob, 0.35 * blob + 0.65 * fdr, rgt * 0.85);
+    n = mix(n, 0.3 * blob + 0.7 * fdr, smoothstep(0.06, -0.1, x));
     matter = smoothstep(0.36, 0.52, n + 0.7 * (band - 0.5));
     // ink: black rock where the mass is densest, its edges bitten by finer noise (eroded, not cut); out past the
     // matter only its largest masses survive, as splatter breaking away
@@ -650,13 +662,13 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     float rimBand = 1.0 - smoothstep(0.62 + aaI, 0.64 + aaI + clamp(1.6 * gl, 0.002, 0.06), inkF);
     float inkRim = inkA * rimBand * facing * facing;
     // the matter's light: mottled, strongest upper left, dimmer and greyer in the right flank's streaks
-    float mott = clamp(0.62 + 0.35 * (ero - 0.5) + 1.5 * (blob - 0.5) + 0.8 * rgt * (fsk - 0.5), 0.15, 1.8);
-    // the matter darkens into the funnel: lit only where it faces out of the opening
-    float deep = 0.12 + 0.88 * smoothstep(-0.1, 0.16, x);
-    vec3 matC = LAVGREY * (0.04 + 0.28 * gate) * mott * deep;
+    float mott = clamp(0.62 + 0.35 * (ero - 0.5) + 1.6 * (blob - 0.5) + 1.0 * rgt * (fdr - 0.5), 0.12, 1.9);
+    // the matter darkens into the funnel, but unevenly: lit streaks run on down into it
+    float deep = 0.1 + 0.9 * smoothstep(-0.12, 0.16, x + 0.16 * (fdr - 0.5));
+    vec3 matC = LAVGREY * (0.05 + 0.34 * gate) * mott * deep;
     matC = mix(matC, RED_SMOKE * (0.04 + 0.16 * gate) * mott * deep, redness * 0.45);
     // violet light from a knot nearby washes the matter around it
-    matC = mix(matC, VIOLET * 0.30 * mott * deep, min(cl * 0.35, 0.45) * vio);
+    matC = mix(matC, VIOLET * 0.30 * mott * deep, min(cl * 0.3, 0.4) * vio);
     col = mix(col, matC, matter * 0.94 * uWoundDebris * open);
     vec3 rimC = mix(LAVGREY * 0.26 * gate, vec3(0.26, 0.05, 0.025), redness) * deep;
     // the rock is charcoal with a faint grain and sheen, never a flat cut-out
