@@ -146,16 +146,17 @@ export interface SkySystem {
   setBattleIntensity(n: number): void;
   /**
    * 0..1 restrained violet movement behind the Wound boundary. The Wound also breathes with it: drawn back toward 0
-   * it visibly CONTRACTS (to 86 % of its radius at 0; the authored size at the default 0.3; +3 % at 1) — void,
-   * shell and smoke together — and the violet glow, the glowing cracks and veins of its shell and its glints
-   * withdraw; at 1 they flare. Eased (≈ 1 s) unless snapped.
+   * it visibly CONTRACTS (to 80 % of its radius at 0; the authored size at the default 0.3; +3 % at 1) — void,
+   * crust and smoke together — its crust thins, and the violet knots and veins glowing in its crust withdraw; at 1
+   * they flare and the crust swells. Eased (≈ 1 s) unless snapped.
    * ADDED `opts.snap`: land on the value at once. The sky also snaps by itself while the mission fast-forwards a
    * skipped cinematic or loads a zone (`game.mission.runtime.skipping` / `game.mission.loading`), so a skipped scene
    * lands in the state it would have reached watched; pass `{ snap: z.skipping }` to be explicit.
    */
   setWoundActivity(n: number, opts?: { snap?: boolean }): void;
   /**
-   * Consequence visual: boundary closed / stability recovering (subtle gold rim settles, violet stills).
+   * Consequence visual: boundary closed / stability recovering (the opening settles to its slow outline and a calm,
+   * thin gold seam seals it; its crust stays, dimmed; the violet stills).
    * `seconds` (default 3; ≤ 0 = instant) is the transition. ADDED `opts.snap`: instant, whatever `seconds` says;
    * like setWoundActivity it also snaps by itself during a skip or a zone load.
    */
@@ -260,6 +261,14 @@ export interface ScenicFactory {
    * Shuttle ≈ 26 m long × 17 m span × 7 m high and transport ≈ 31 × 15 × 9 m (near-field PBR, resting on
    * y = 0, nose toward −Z, ramp / cargo door at +Z); capitals ≈ 620 m (far-field hazed material, origin at the
    * hull centre). No collision — see the interface note.
+   * ADDED (integration wave, SHIPS): the kinds are now the generated ships, at the forge's scale — shuttle 18 m
+   * (19.2 m span, 6.6 m high), transport = the Reformation dropship 22 m (22 m span, 6 m high; its closed ramp
+   * door is at the stern, +Z), Dominion capital 600 m, Reformation capital = the carrier 500 m — each with
+   * additive engine glow (amber crown rings / cold-blue planes and plumes) and baked LODs. The model loads
+   * asynchronously into the returned object; the procedural ship is shown until then (and stays if the file cannot
+   * be loaded). Engines default to 1 on capitals and 0.6 (hovering) on the small craft. Read and drive the live
+   * state with {@link asScenicShip}; `await asScenicShip(ship)?.ready` in an async build() to never show the
+   * stand-in.
    */
   ship(kind: 'dominionShuttle' | 'reformationTransport' | 'dominionCapital' | 'reformationCapital', opts?: { scale?: number }): THREE.Object3D;
   /**
@@ -267,6 +276,34 @@ export interface ScenicFactory {
    * high at scale 1, with debris and scorch scattered within ≈ 12 m. No collision — see the interface note.
    */
   wreck(kind: 'dominion' | 'reformation', opts?: { scale?: number; seed?: number }): THREE.Object3D;
+}
+
+/**
+ * ADDED (integration wave, SHIPS): live controls of a ship built by `sky.scenic.ship()`.
+ *
+ *   const ship = game.sky.scenic.ship('reformationTransport');   // Z00: the dropship crossing the fracture
+ *   const ctl = asScenicShip(ship);
+ *   if (ctl) ctl.engines = 1.2;                                   // full burn while it crosses
+ *   await ctl?.ready;                                             // (async build) never show the stand-in
+ */
+export interface ScenicShipControls {
+  readonly kind: 'dominionShuttle' | 'reformationTransport' | 'dominionCapital' | 'reformationCapital';
+  /** resolves true once the generated model replaced the procedural stand-in, false if the stand-in stays */
+  readonly ready: Promise<boolean>;
+  /** true while the generated model is shown */
+  readonly generated: boolean;
+  /** engine level 0…1.5: crown rings / blue planes, the hull's glowing texels, plume length. Instant. */
+  engines: number;
+  /** running lights 0…1 (wingtips, beacons). Instant. */
+  lights: number;
+  /** hull length in metres, including the object's own scale (the stand-in's while it is shown) */
+  readonly length: number;
+}
+
+/** ADDED (integration wave, SHIPS): the controls of a `sky.scenic.ship()` object; null for anything else. */
+export function asScenicShip(obj: THREE.Object3D | null | undefined): ScenicShipControls | null {
+  const c = (obj?.userData as { ship?: unknown } | undefined)?.ship as ScenicShipControls | undefined;
+  return c && typeof c === 'object' && typeof c.ready === 'object' ? c : null;
 }
 
 export type { Vec3Like };

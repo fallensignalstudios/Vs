@@ -7,7 +7,7 @@
  * the object-space materials and are never merged.
  */
 import * as THREE from 'three';
-import type { ColliderDesc, ColliderHandle, Game, MatId, PhysicsWorld, QualityProfile, SurfaceDesc, SurfaceHandle } from '@/core/api';
+import type { ColliderDesc, ColliderHandle, Game, MatId, PhysicsWorld, QualityProfile, SurfaceDesc, SurfaceFinish, SurfaceHandle } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { RENDER_LAYERS } from '@/core/api/render';
 import { mulberry32 } from '@/core/mathx';
@@ -230,8 +230,30 @@ export class KitCtx {
     let m = this.inlays.get(key);
     if (!m) {
       // (named apart from the kit-glow variants: this one is solid stone and casts shadows)
-      m = this.clone<THREE.Material>('whiteGold', { color: 0xcfc6b6 });
+      // integration wave: a cool silver-grey, not a warm ivory (the paintings' furniture is pale grey marble)
+      m = this.clone<THREE.Material>('whiteGold', { color: 0xc9ccd2 });
       m.name = 'kit-aged:whiteGold';
+      this.inlays.set(key, m);
+    }
+    return m;
+  }
+
+  /**
+   * ADDED (integration wave): the walking top of a floor / deck / ramp / bridge in a {@link SurfaceFinish}:
+   * `'polished'` (or none) is the material itself; `'worn'` / `'hangar'` are cached per-builder clones wearing the
+   * `stone_worn` / `concrete_hangar` photographic sets (rough: no mirror, no planar reflection).
+   */
+  finish(mat: MatId, finish: SurfaceFinish | undefined): MatRef {
+    if (finish !== 'worn' && finish !== 'hangar') {
+      if (finish !== undefined && finish !== 'polished') this.warn(`finish:${String(finish)}`, `unknown finish "${String(finish)}" — using the polished top`);
+      return mat;
+    }
+    const surface = finish === 'worn' ? 'stone_worn' : 'concrete_hangar';
+    const key = `finish:${mat}:${finish}`;
+    let m = this.inlays.get(key);
+    if (!m) {
+      m = this.clone<THREE.Material>(mat, { surface });
+      m.name = `kit-finish:${mat}:${finish}`;
       this.inlays.set(key, m);
     }
     return m;

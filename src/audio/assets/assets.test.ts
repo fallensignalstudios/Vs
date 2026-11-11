@@ -530,6 +530,32 @@ describe('score director and voice-over on the engine', () => {
     expect(got().length).toBe(20);
   });
 
+  it('integration: a line said in several zones is prefetched with every one of them (manifest `zones`)', async () => {
+    const yes = voLineId('Tarrik', 'Yes.'), move = voLineId('Tarrik', 'Move.'), solo = voLineId('Tarrik', 'Only here.');
+    const ctx = new FakeContext();
+    const files: Record<string, () => FetchResult> = {
+      'vo/manifest.json': () => ok({
+        [yes]: { file: `${yes}.mp3`, seconds: 1, zone: 'Z10', zones: ['Z02', 'Z10', 'Z11', 'Z12'] },
+        // a manifest whose list leaves the first zone out still counts it
+        [move]: { file: `${move}.mp3`, seconds: 1, zone: 'Z00', zones: ['Z06', 7, ''] },
+        [solo]: { file: `${solo}.mp3`, seconds: 1, zone: 'Z10' },
+      }, 'application/json'),
+    };
+    for (const id of [yes, move, solo]) files[`vo/${id}.mp3`] = mp3(1);
+    const { lib, fetched } = fakeLibrary(ctx, files, 2);
+    const got = (): string[] => fetched.filter((p) => p.endsWith('.mp3')).map((p) => p.slice(3, -4));
+    // a jump straight into Z12 (and the next zone) already has the Z10 line said again there
+    await lib.prefetchVoices(['Z12', null]);
+    expect(got()).toEqual([yes]);
+    expect(lib.voiceMeta(yes)).toEqual({ file: `${yes}.mp3`, seconds: 1, zone: 'Z10', zones: ['Z02', 'Z10', 'Z11', 'Z12'] });
+    expect(lib.voiceMeta(move)).toEqual({ file: `${move}.mp3`, seconds: 1, zone: 'Z00', zones: ['Z00', 'Z06'] });
+    await lib.prefetchVoices(['Z06']);
+    expect(got()).toEqual([yes, move]);
+    // a file already here is not fetched again for a later zone it is also said in
+    await lib.prefetchVoices(['Z10', 'Z02', 'Z00']);
+    expect(got().sort()).toEqual([yes, move, solo].sort());
+  });
+
   it('holds the spoken line while the game is paused and picks it up a moment earlier', async () => {
     const id = voLineId('Tharne', 'Two planes. Count them.');
     const { ctx, lib, engine } = await world([], { [id]: 20 });

@@ -6,6 +6,10 @@
  *    mapping, so kit geometry needs no UVs; patches chain with any other `onBeforeCompile` user (see patch.ts)
  *  - materials exist from construction (flat placeholder maps) and pick the real maps up when `init()` finishes,
  *    so factories that run before `Game.init()` can already call `get()`
+ *  - ADDED (integration wave): the generated photographic sets in `public/textures/` are layered over the
+ *    procedural families (defs.ts `pbr`, surfaces.ts): fetched lazily per zone when a material wearing one is
+ *    requested, faded in without a recompile, released when a zone no longer uses them. `clone(id, { surface })`
+ *    puts any set on any textured material (the kit's floor `finish` uses it).
  */
 import * as THREE from 'three';
 import type { Game, MaterialLibrary, MatId, MatTextureSet, Palette } from '@/core/api';
@@ -14,13 +18,14 @@ import { isStub } from '@/core/stub';
 import { clamp01 } from '@/core/mathx';
 import { dataTexture, packLayers, placeholderSet, toTextureSet, type TextureSet } from './bake';
 import { corruptPatch } from './corrupt';
-import { MAT_DEFS, type EffectSpec, type MatDef } from './defs';
+import { MAT_DEFS, pbrParams, SURFACE_FINISH, type EffectSpec, type MatDef, type PbrSpec } from './defs';
 import { glassPatch, glowPatch, icePatch, sparklePatch, translucencyPatch } from './effects';
 import { barrierPatch, hologramPatch, shieldPatch } from './effectsUnlit';
-import { FAMILIES, FAMILY_IDS, familySize, type FamilyId } from './families';
+import { FAMILIES, FAMILY_IDS, familySize, type FamilyId, type FamilyTier } from './families';
 import { AUR_TIME, ensureHost, findUniform, getHost, setPatchParam, type AurUniform, type SurfacePatch } from './patch';
 import { bakeDetail, bakeMacro, bakeVeins } from './shared';
-import { familyUniforms, triplanarPatch, type FamilyUniforms } from './triplanar';
+import { familyUniforms, meanLuminance, triplanarPatch, type FamilyUniforms } from './triplanar';
+import { isSurfaceSetId, SurfaceSets, surfaceMapSize, type SurfaceSetId } from './surfaces';
 
 const DEFAULT_TEXTURE_SIZE = 512;
 const DEFAULT_ANISOTROPY = 4;
@@ -65,12 +70,31 @@ class MaterialLibraryImpl implements MaterialLibrary {
   private wantAniso = DEFAULT_ANISOTROPY;
   private maxAniso = 0;
   private baking = false;
+  /** ADDED (integration wave): the photographic PBR sets (`game.mats.surfaces.info()` for memory / timings) */
+  readonly surfaces: SurfaceSets;
 
   constructor(private readonly game: Game | null) {
     for (const id of FAMILY_IDS) {
       const set = placeholderSet(id);
       this.families.set(id, { uniforms: familyUniforms(set), set });
     }
+    this.surfaces = new SurfaceSets({
+      quality: () => {
+        this.readQuality();
+        return { size: surfaceMapSize(this.wantSize), anisotropy: this.wantAniso };
+      },
+      onZone: (loading, ready) => {
+        const ev = game?.events;
+        if (!ev || isStub(ev) || typeof ev.on !== 'function') return;
+        ev.on('zone:loading', loading);
+        ev.on('zone:ready', ready);
+      },
+      refreshEnvironment: () => {
+        const r = game?.render;
+        if (r && !isStub(r)) r.refreshEnvironment({ scene: true });
+      },
+      debug: game?.flags?.debug === true,
+    });
   }
 
   get ready(): boolean { return this._ready; }
@@ -146,12 +170,13 @@ class MaterialLibraryImpl implements MaterialLibrary {
       const entry = this.families.get(id);
       if (!entry) continue;
       try {
-        const set = toTextureSet(packLayers(def.generate(familySize(def.tier, size))), anisotropy, id);
+        const set = toTextureSet(packLayers(def.generate(familySize(this.tierOf(id, def.tier), size))), anisotropy, id);
         const old = entry.set;
         entry.set = set;
         entry.uniforms.albedo.value = set.albedo;
         entry.uniforms.normal.value = set.normal;
         entry.uniforms.orm.value = set.orm;
+        (entry.uniforms.stats.value as THREE.Vector4).x = Math.max(0.02, meanLuminance(set.albedo.image.data as Uint8Array));
         old.albedo.dispose(); old.normal.dispose(); old.orm.dispose();
       } catch (err) {
         warnOnce(`family "${id}" failed to bake (${String(err)}); keeping the flat fallback`);
@@ -164,12 +189,30 @@ class MaterialLibraryImpl implements MaterialLibrary {
   }
 
   /**
+   * ADDED (integration wave): a family that only ever sits under a photographic set (every material of it wears
+   * one) is a blend / mask layer, not the surface: it bakes one tier smaller where the sets can load (about 50 MB
+   * less GPU memory at high). Without a page to load into (tests, tools) the tiers are unchanged.
+   */
+  private tierOf(id: FamilyId, tier: FamilyTier): FamilyTier {
+    if (!this.surfaces.enabled) return tier;
+    let used = false;
+    for (const def of Object.values(MAT_DEFS) as MatDef[]) {
+      if (def.family !== id) continue;
+      used = true;
+      if (!def.pbr) return tier;
+    }
+    if (!used) return tier;
+    return tier === 'hero' ? 'mid' : 'small';
+  }
+
+  /**
    * Follow quality changes made after `init()`: anisotropy is applied to the live textures at once; a different
    * texture size re-bakes in place — but never while the game is being played (synthesis would hitch), only on
    * the title / pause / loading screens.
    */
   private followQuality(): void {
     this.readQuality();
+    this.surfaces.followQuality(this.game?.phase !== 'playing');
     if (this.wantSize !== this.bakedSize) {
       if (this.game?.phase === 'playing') return;
       void this.bake().catch((err) => console.error('[mats] re-bake failed; keeping the previous textures', err));
@@ -209,7 +252,11 @@ class MaterialLibraryImpl implements MaterialLibrary {
     const host = ensureHost(mat);
     host.local = local;
     const fam = def.family ? this.families.get(def.family) : undefined;
-    if (def.family && def.tp && fam) host.add(triplanarPatch(def.family, fam.uniforms, { macro: this.macro, detail: this.detail }, def.tp));
+    if (def.family && def.tp && fam) {
+      const pbr = def.pbr ? { uniforms: this.surfaces.uniforms(def.pbr.set), params: pbrParams(def.pbr) } : undefined;
+      host.add(triplanarPatch(def.family, fam.uniforms, { macro: this.macro, detail: this.detail }, def.tp, pbr));
+      if (def.pbr) this.surfaces.touch(def.pbr.set);
+    }
     if (def.effects) for (const e of def.effects) host.add(this.effectPatch(e));
     return mat;
   }
@@ -227,7 +274,28 @@ class MaterialLibraryImpl implements MaterialLibrary {
     const key = `${id}|${isLocal ? 'L' : 'W'}`;
     let m = this.shared.get(key);
     if (!m) { m = this.build(id, def, isLocal); this.shared.set(key, m); }
+    // the zone being built uses this material: keep its photographic set (fetch it if it is not in yet)
+    else if (def.pbr) this.surfaces.touch(def.pbr.set);
     return m;
+  }
+
+  /**
+   * ADDED (integration wave): `def` wearing another photographic set (`'none'` = procedural only). The set's
+   * finish preset (defs.ts SURFACE_FINISH) brings the material properties that suit it.
+   */
+  private withSurface(id: MatId, def: MatDef, surface: unknown): { def: MatDef; props: Record<string, unknown> } {
+    if (surface === 'none' || surface === false || surface === null) return { def: { ...def, pbr: undefined }, props: {} };
+    if (!isSurfaceSetId(surface)) {
+      warnOnce(`clone("${id}"): unknown surface "${String(surface)}" ignored (sets: see public/textures/manifest.json)`);
+      return { def, props: {} };
+    }
+    if (!def.family || !def.tp) {
+      warnOnce(`clone("${id}"): "${id}" is not a textured material — surface "${surface}" ignored`);
+      return { def, props: {} };
+    }
+    const fin = SURFACE_FINISH[surface as SurfaceSetId];
+    const pbr: PbrSpec = fin ? fin.pbr : { set: surface as SurfaceSetId };
+    return { def: { ...def, pbr }, props: fin ? fin.props : {} };
   }
 
   get(id: MatId): THREE.Material {
@@ -239,14 +307,18 @@ class MaterialLibraryImpl implements MaterialLibrary {
   }
 
   clone<T extends THREE.Material = THREE.MeshStandardMaterial>(rawId: MatId, overrides?: Record<string, unknown>): T {
-    const { id, def } = this.def(rawId);
+    const found = this.def(rawId);
+    const id = found.id;
     const o = overrides ?? {};
+    const surf = 'surface' in o && o.surface !== undefined ? this.withSurface(id, found.def, o.surface) : { def: found.def, props: {} };
+    const def = surf.def;
     const local = typeof o.objectSpace === 'boolean' ? o.objectSpace : (def.local ?? false);
     const mat = this.build(id, def, local);
-    const values: Record<string, unknown> = {};
+    if (def.pbr && def.pbr !== found.def.pbr) mat.name = `${mat.name}:${def.pbr.set}`;
+    const values: Record<string, unknown> = { ...surf.props };
     for (const k in o) {
       const v = o[k];
-      if (k === 'objectSpace' || v === undefined) continue;
+      if (k === 'objectSpace' || k === 'surface' || v === undefined) continue;
       // a named shader parameter wins over a same-named material property when the value is a number
       if (typeof v === 'number' && setPatchParam(mat, k, v)) continue;
       if (k in mat) values[k] = v;
@@ -314,6 +386,11 @@ class MaterialLibraryImpl implements MaterialLibrary {
     this.clock = Number.isFinite(time) ? time : this.clock + (Number.isFinite(dt) ? dt : 0);
     AUR_TIME.value = this.clock;
     if (this._ready && !this.baking && this.game) this.followQuality();
+  }
+
+  /** ADDED (integration wave): the photographic set a material id wears by default (null = procedural only). */
+  surfaceOf(rawId: MatId): SurfaceSetId | null {
+    return this.def(rawId).def.pbr?.set ?? null;
   }
 }
 

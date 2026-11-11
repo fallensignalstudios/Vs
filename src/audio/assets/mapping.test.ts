@@ -40,7 +40,11 @@ describe('state → track mapping', () => {
     expect(by('relay_combat')).toEqual(['combatSelene']);
     expect(by('atrium_carrier')).toEqual(['atrium', 'carrier', 'duel']);
     expect(by('eclipse_combat')).toEqual(['combatEclipse', 'elite', 'resonance']);
-    expect(by('core_witness')).toEqual(['consequence', 'core', 'observation', 'recognition', 'witness']);
+    expect(by('core_witness')).toEqual(['consequence', 'core', 'observation', 'recognition']);
+    // integration: the three story cues, one scene each
+    expect(by('witness_elegy')).toEqual(['witness']);
+    expect(by('farewell_departure')).toEqual(['farewell']);
+    expect(by('wound_vista')).toEqual(['woundVista']);
     expect(by(null)).toEqual(['approachTarrik', 'breach', 'context', 'decision', 'quarantine', 'silence']);
   });
 
@@ -107,8 +111,26 @@ describe('loop arithmetic (against the real manifest)', () => {
       const bars = (l.to - l.from) / (240 / m.bpm);
       expect(Math.abs(bars - Math.round(bars)), `${t}: ${bars} bars`).toBeLessThan(0.01);
       expect(Math.round(bars)).toBe(m.loopBars);
-      expect(loopPeriod(l)).toBeCloseTo((m.seconds - 2) / Math.pow(2, TRACKS[t].tune / 12), 9);
+      expect(loopPeriod(l)).toBeCloseTo((m.seconds - 2 - m.loopStart) / Math.pow(2, TRACKS[t].tune / 12), 9);
     }
+  });
+
+  it('integration: wound_vista plays its sparse reveal once, then loops the full section from 38.4 s', () => {
+    const m = MANIFEST.wound_vista;
+    const l = loopSpec('wound_vista', m);
+    expect(l.intro).toBe(0);
+    expect(l.from).toBeCloseTo(38.4, 9);
+    expect(l.to).toBeCloseTo(86.4, 9);
+    expect(loopPeriod(l)).toBeCloseTo(48, 9); // 10 bars at 50 BPM
+    // the heartbeat and the glass swells keep their phase across the seam: whole bars and whole swells (9.6 s)
+    expect(((l.to - l.from) / 9.6) % 1).toBeCloseTo(0, 9);
+    // the story cues hand the next scene's recording to the library while they play
+    expect(SCORE_PLAN.quarantine.warm).toBe('wound_vista');
+    expect(SCORE_PLAN.core.warm).toBe('witness_elegy');
+    expect(SCORE_PLAN.departure.warm).toBe('farewell_departure');
+    // the elegy carries Witness V alone (a resolved bell's F♯ would fight its D minor); the farewell is in F
+    expect(SCORE_PLAN.witness.generativeLayers).toEqual([]);
+    expect(TRACKS.farewell_departure.tonic % 12).toBe(5);
   });
 
   it('loops the regions of atrium_carrier inside the file, on bar lines, clear of the next section', () => {

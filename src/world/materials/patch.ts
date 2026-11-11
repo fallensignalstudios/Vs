@@ -52,6 +52,8 @@ export interface ParamBinding {
   comp?: 'x' | 'y' | 'z' | 'w';
   /** value transform (e.g. metres-per-repeat → repeats-per-metre) */
   map?: (v: number) => number;
+  /** ADDED (integration wave): further uniforms the same parameter drives (e.g. a photo layer's scale) */
+  also?: ParamBinding[];
 }
 
 /** Global animation clock shared by every patched material (seconds). */
@@ -418,12 +420,15 @@ export function setPatchParam(material: THREE.Material, name: string, value: num
   let hit = false;
   for (const p of host.patches) {
     const b = p.params?.[name];
-    const u = b && p.uniforms ? p.uniforms[b.uniform] : undefined;
-    if (!b || !u) continue;
-    const v = b.map ? b.map(value) : value;
-    if (b.comp) (u.value as Record<string, number>)[b.comp] = v;
-    else u.value = v;
-    hit = true;
+    if (!b || !p.uniforms) continue;
+    for (const bb of [b, ...(b.also ?? [])]) {
+      const u = p.uniforms[bb.uniform];
+      if (!u) continue;
+      const v = bb.map ? bb.map(value) : value;
+      if (bb.comp) (u.value as Record<string, number>)[bb.comp] = v;
+      else u.value = v;
+      hit = true;
+    }
   }
   return hit;
 }

@@ -288,6 +288,9 @@ export class HumanoidVisualImpl implements HumanoidVisual {
       this.flare = 1;
       this.setLoadout({ melee: true, ranged: false });
     }
+    // (integration) aiming a rifle needs the rifle: a figure that carries a long gun draws it — an NPC posed
+    // `aimRifle` whose companion kit put it away (Varo in Z00/Z01) otherwise aims with empty hands
+    if (name === 'aimRifle' && this.fig.items.ranged?.rifle && !this.equip.loadout.ranged && this.equip.loadout.prop !== 'rifle') this.setLoadout({ ranged: true });
     return this.animator.play(name, opts);
   }
 

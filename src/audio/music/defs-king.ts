@@ -9,7 +9,7 @@ import { KING, KING_RESOLVED, SELENE, SELENE_FRAGMENT, TARRIK, TARRIK_FRAGMENT, 
 
 const D = 38; // D2
 
-type KingState = 'title' | 'atrium' | 'quarantine' | 'recognition' | 'core' | 'witness' | 'consequence' | 'observation' | 'departure' | 'credits';
+type KingState = 'title' | 'atrium' | 'quarantine' | 'woundVista' | 'recognition' | 'core' | 'witness' | 'consequence' | 'observation' | 'departure' | 'farewell' | 'credits';
 
 export const KING_MUSIC: Record<KingState, MusicDef> = {
   title: {
@@ -47,6 +47,21 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
     layers: [
       { kind: 'held', notes: [69], g: 0.5, wet: 0.8 },
       { kind: 'sub', g: 0.12 },
+    ],
+  },
+
+  /**
+   * Z09 overlook (ADDED, integration — normally the `wound_vista` recording carries it; this is what plays while it
+   * loads): the Wound's slow double heartbeat under a low D fifth, glass that does not settle.
+   */
+  woundVista: {
+    family: 'king', bpm: 50, beats: 4, tonic: D, db: -26, fixedIntensity: 0.4,
+    chords: [ch(0, '5', 8)],
+    layers: [
+      { kind: 'sub', g: 0.45 },
+      { kind: 'held', notes: [50, 57], g: 0.28, wet: 0.75 },
+      { kind: 'pad', voice: 'glass', low: 62, n: 2, g: 0.1, wet: 0.8 },
+      { kind: 'perc', inst: 'boom', tiers: ['X.x.....X.x.....'], g: 0.36, room: 0.3, wet: 0.4 },
     ],
   },
 
@@ -134,6 +149,21 @@ export const KING_MUSIC: Record<KingState, MusicDef> = {
       { kind: 'pad', voice: 'glass', low: 62, n: 2, g: 0.16, wet: 0.6 },
       { kind: 'motif', voice: 'horn', phrases: TARRIK, every: 4, base: 50, g: 0.34, wet: 0.5 },
       { kind: 'motif', voice: 'glass', phrases: SELENE, every: 4, at: 2, base: 74, g: 0.3, wet: 0.65 },
+    ],
+  },
+
+  /**
+   * Z12 farewell and departure (ADDED, integration — normally the `farewell_departure` recording; this plays while it
+   * loads): F major, bell-like glass over low strings and a warm pad, no drums.
+   */
+  farewell: {
+    family: 'neutral', bpm: 65, beats: 4, tonic: 41, db: -22, fixedIntensity: 0.4,
+    chords: [ch(0, 'M', 2), ch(5, 'sus2', 2), ch(9, 'm', 2), ch(7, 'sus4', 2)],
+    layers: [
+      { kind: 'sub', g: 0.4, follow: true },
+      { kind: 'strings', low: 41, n: 2, g: 0.28, bright: [850, 1900], wet: 0.4 },
+      { kind: 'pad', voice: 'warm', low: 53, n: 3, g: 0.16, bright: [850, 1700], wet: 0.4 },
+      { kind: 'pad', voice: 'glass', low: 65, n: 2, g: 0.12, wet: 0.6 },
     ],
   },
 

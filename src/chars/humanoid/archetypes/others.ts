@@ -1,4 +1,4 @@
-/** Survivors, the Linkbound, and the King-era Witness. */
+/** Survivors, the Linkbound, and the King-era Witness figures (the King, Vesryn). */
 import type { ArchetypeDef } from '../figure';
 import { PART, ZONE, type Surf } from '../geo/builder';
 import { box, loft, torus, tube, type Sec, type V3 } from '../geo/prims';
@@ -175,5 +175,19 @@ export const kingWitness: ArchetypeDef = {
     draft.luminous = 0.26;
     draft.rim = { color: 0xffe2a8, amount: 0.45 };
     draft.breath = 0.4;
+  },
+};
+
+/**
+ * Vesryn, the King's chronicler in Witness V (ADDED, integration): the Witness figure without the halo, a little
+ * smaller. Normally drawn with the generated `vesryn` body; this figure is its driver and its fallback.
+ */
+export const vesryn: ArchetypeDef = {
+  proportions: (rng, variant) => {
+    const p = kingWitness.proportions(rng, variant);
+    return { ...p, height: p.height * 0.94, bulk: p.bulk * 0.92 };
+  },
+  build(ctx) {
+    kingWitness.build({ ...ctx, variant: WITNESS_NO_HALO });
   },
 };

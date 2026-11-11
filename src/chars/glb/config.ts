@@ -76,11 +76,32 @@ export interface GlbArchetype {
   extra?: 'satchel';
   /** always drawn bare-headed: the helmet is cut and this head grafted on (see head.ts) */
   bareHead?: BareHeadLook;
+  /** the body shows its own face (a hero-tier head): CharacterCreateOpts.bareHead never grafts another one on */
+  ownFace?: boolean;
+  /** a figure in a remembered scene (Witness V): self-light and a warm edge light over the textures — see WitnessLook */
+  witness?: WitnessLook;
+  /** the King's five-point halo is held behind the head (CharacterCreateOpts.halo, default true) */
+  halo?: boolean;
 }
+
+/**
+ * How a Witness V figure glows on a generated body — the procedural Witness's light without its translucency (the
+ * figures are real people now; they stay solid so nothing sorts wrongly through a robe or a coat).
+ */
+export interface WitnessLook {
+  /** albedo self-illumination (the procedural Witness has 0.26) */
+  luminous: number;
+  /** the edge light: white at the head, warming to gold toward the hem, strongest at grazing angles */
+  edge: number;
+}
+
+/** amber-gold inlay and leaf engraving on ivory plate (the King): saturated gold only — the ivory stays out */
+export const MASK_GOLD: GlowMask = { hue: 0.11, width: 0.05, sat: 0.55, val: 0.62, gain: 1.1 };
 
 /**
  * Bare heads for helmeted soldiers (CharacterCreateOpts.bareHead). The generated civilian gives the head; the
  * looks re-tint and re-proportion it so two named soldiers and the civilians never share one face.
+ * (Integration: Varo and the Z08 officer now have their own bodies; BARE_HEAD_VARO is kept for tooling only.)
  */
 export const BARE_HEAD_VARO: BareHeadLook = { donor: 'survivor', skin: [0.86, 0.74, 0.64], hair: [0.03, 0.026, 0.024, 1], shape: [1.07, 1.01, 1.04] };
 /** default bare head (the Z08 officer and any other `bareHead: true` soldier): older, paler, greying */
@@ -89,7 +110,10 @@ export const BARE_HEAD_OFFICER: BareHeadLook = { donor: 'survivor', skin: [1.02,
 const HERO = { albedoCap: 0.62, env: 0.85, vary: false } as const;
 const TROOP = { albedoCap: 0.62, env: 0.8, vary: true } as const;
 
-/** Archetype → generated model. Archetypes missing here (kingWitness) always use the procedural figure. */
+/**
+ * Archetype → generated model (every humanoid archetype has one). Integration: Malik Varo (`malik` injured, `varo`
+ * armed), the Z08 `officer`, the King (`kingWitness`) and `vesryn` have their own hero-tier bodies with real faces.
+ */
 export const GLB_ARCHETYPES: Partial<Record<HumanoidArchetype, GlbArchetype>> = {
   tarrik: { ...HERO, model: 'tarrik', props: { melee: 'velkorran', ranged: 'cinderline', case: 'sealed_case' }, mask: MASK_DOMINION },
   selene: { ...HERO, model: 'selene', props: { melee: 'verity', ranged: 'axiom', case: 'sealed_case' }, mask: MASK_REFORMATION, albedoCap: 0.42 },
@@ -99,7 +123,15 @@ export const GLB_ARCHETYPES: Partial<Record<HumanoidArchetype, GlbArchetype>> = 
   enforcer: { ...TROOP, model: 'enforcer', props: { shield: 'tower_shield', ranged: 'cinderline' }, mask: MASK_DOMINION },
   linkbound: { ...TROOP, model: 'linkbound', props: {}, mask: MASK_ECLIPSE },
   dominionSoldier: { ...TROOP, model: 'soldier_dominion', props: { ranged: 'rifle_dominion' }, mask: MASK_DOMINION },
-  malik: { ...TROOP, vary: false, model: 'soldier_dominion', props: { case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.2 }, tint: [0.86, 0.8, 0.78], bareHead: BARE_HEAD_VARO },
+  // Malik Varo: the generated hero body (bare head, crowned-flame engraving whose amber grooves the mask lights)
+  malik: { ...HERO, model: 'varo', props: { case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.5 }, ownFace: true },
+  varo: { ...HERO, model: 'varo', props: { ranged: 'rifle_dominion', case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.8 }, ownFace: true },
+  // the officer: black-bronze plate with thin amber trim; his infection is the shader's corruption tint, not the file
+  officer: { ...HERO, model: 'officer', props: {}, mask: { ...MASK_DOMINION, gain: 1.4 }, ownFace: true, albedoCap: 0.5 },
+  // Witness V: the King in ivory and gold (the plate scaled to 0.85, as the forge report asks for bright rooms), and
+  // his chronicler in a charcoal coat — both lit from within, the King more than Vesryn
+  kingWitness: { ...HERO, model: 'king', props: {}, mask: MASK_GOLD, ownFace: true, albedoCap: 0.55, env: 0.7, tint: [0.85, 0.85, 0.85], witness: { luminous: 0.07, edge: 0.45 }, halo: true },
+  vesryn: { ...HERO, model: 'vesryn', props: {}, mask: MASK_NONE, ownFace: true, albedoCap: 0.5, env: 0.7, witness: { luminous: 0.05, edge: 0.28 } },
   cross: { ...TROOP, vary: false, model: 'soldier_dominion', props: { ranged: 'cinderline' }, mask: MASK_DOMINION, tint: [1.08, 0.94, 0.86] },
   reformationSoldier: { ...TROOP, model: 'soldier_reformation', props: {}, mask: MASK_REFORMATION },
   reformationMarine: { ...TROOP, model: 'soldier_reformation', props: {}, mask: MASK_REFORMATION, tint: [0.84, 0.88, 0.96] },
@@ -122,6 +154,7 @@ export const PROP_MASKS: Record<string, GlowMask> = {
 /** The bare head an archetype is drawn with: its own, the default when `bareHead` is asked for, or none. */
 export function bareHeadFor(cfg: GlbArchetype, wanted?: boolean): BareHeadLook | null {
   if (cfg.bareHead) return cfg.bareHead;
+  if (cfg.ownFace) return null;
   return wanted && cfg.model !== BARE_HEAD_OFFICER.donor ? BARE_HEAD_OFFICER : null;
 }
 

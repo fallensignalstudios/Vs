@@ -1,6 +1,16 @@
 /**
  * Scenic ships.
- *  - Capitals (≈ 620 m): far-field hazed material + light cards, 2 draw calls.
+ *  - GENERATED (integration wave, OWNER: ships): each kind is now one of the forge's generated ships
+ *    (src/world/props/ships): dominionShuttle → ship_dominion_shuttle (18 m), reformationTransport →
+ *    ship_reformation_dropship (22 m), dominionCapital → ship_dominion_capital (600 m), reformationCapital →
+ *    ship_reformation_carrier (500 m); nose −Z, scale and facing from the forge report, additive engine glow
+ *    (amber crown rings / cold-blue planes, halos that never shrink below ~2 px), baked LODs. The model loads
+ *    asynchronously into the returned group; the procedural ship below is built at once and shown until the model is
+ *    ready — and for good if it cannot be loaded. Capitals keep the far-field rules: fog-exempt, hazed toward the
+ *    sky colour with the shared uniforms, no shadows. `asScenicShip(obj)` (@/core/api) reads the live controls.
+ *  STAND-INS (shown until the model is ready, and the fallback):
+ *  - Capitals: the generated capitals' own low-poly silhouettes (hulls.ts `buildGeneratedCapital`, 3 k / 1.5 k
+ *    faces) in the far-field hazed material + light cards at their real engines, 2 draw calls.
  *  - Shuttle / transport (≈ 26 / 31 m): near-field PBR split by material role, using the shared material library
  *    when it is available (so they match the faction kit) and a palette-matched MeshStandardMaterial fallback
  *    when it is not. ≤ 7 draw calls each; they cast and receive zone shadows. Crashed hull sections live in
@@ -10,9 +20,11 @@ import * as THREE from 'three';
 import type { Game, MatId } from '@/core/api';
 import { PALETTE } from '@/core/api';
 import { isStub } from '@/core/stub';
+import { GeneratedShip, type ShipModelId } from '@/world/props/ships';
+import { GLSL_HAZE } from '../glsl';
 import type { SharedUniforms } from '../shared';
 import { GeoBuilder } from './geo';
-import { HULL_ROLES, PartSink, buildHull, paletteFor, type HullRole, type ShipKind } from './hulls';
+import { GENERATED_CAPITAL_LIGHTS, HULL_ROLES, PartSink, buildGeneratedCapital, buildHull, paletteFor, type HullRole, type ShipKind } from './hulls';
 import { LightCards } from './lights';
 import { createScenicMaterial } from './material';
 import { num } from './opts';
@@ -165,12 +177,78 @@ function splitMeshes(sink: PartSink, name: string, material: (role: HullRole) =>
   return group;
 }
 
+/** the generated model behind each scenic kind */
+const MODEL: Record<ShipKind, ShipModelId> = {
+  dominionShuttle: 'dominionShuttle', reformationTransport: 'reformationDropship',
+  dominionCapital: 'dominionCapital', reformationCapital: 'reformationCarrier',
+};
+/** lengths (m) of the procedural stand-ins at scale 1 */
+const PROC_LENGTH: Record<ShipKind, number> = { dominionShuttle: 26, reformationTransport: 31, dominionCapital: 620, reformationCapital: 620 };
+
+/**
+ * Live controls of a scenic ship (stored on `object.userData.ship`; zones read them with `asScenicShip()` from
+ * @/core/api, which documents them).
+ */
+export interface ScenicShipState {
+  readonly kind: ShipKind;
+  readonly ready: Promise<boolean>;
+  readonly generated: boolean;
+  engines: number;
+  lights: number;
+  readonly length: number;
+}
+
 export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: ShipKind, scale?: number): THREE.Object3D {
-  const faction = factionOf(kind);
   const s = num(scale, 1, 0.05, 20);
+  const capital = kind === 'dominionCapital' || kind === 'reformationCapital';
+  const proc = buildProcedural(shared, mats, kind);
+  proc.name = `scenic:${kind}:procedural`;
+  const group = new THREE.Group();
+  group.name = `scenic:${kind}`;
+  group.add(proc);
+  group.userData.scenic = proc.userData.scenic;
+  const gen = new GeneratedShip(MODEL[kind], capital
+    ? {
+      frame: 'minusZ', origin: 'centre', minPx: 2.2, engines: 1, lights: 1, shadows: false,
+      haze: {
+        glsl: GLSL_HAZE,
+        uniforms: {
+          uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite, uRedDir: shared.uRedDir,
+          uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir, uHazeDensity: shared.uHazeDensity,
+        },
+      },
+    }
+    : { frame: 'minusZ', origin: 'ground', engines: 0.6, lights: 1 });
+  group.add(gen.object);
+  const ready = gen.ready.then((ok) => {
+    if (ok) {
+      proc.visible = false;
+      group.userData.scenic = { kind, triangles: gen.triangles, generated: true };
+    }
+    return ok;
+  });
+  const state: ScenicShipState = {
+    kind,
+    ready,
+    get generated() { return gen.loaded; },
+    get engines() { return gen.engines; },
+    set engines(v: number) { gen.engines = v; },
+    get lights() { return gen.lights; },
+    set lights(v: number) { gen.lights = v; },
+    get length() { return (gen.loaded ? gen.length : PROC_LENGTH[kind]) * group.scale.x; },
+  };
+  group.userData.ship = state;
+  group.scale.setScalar(s);
+  return group;
+}
+
+/** The original procedural ship (the stand-in until — or instead of — the generated model). */
+function buildProcedural(shared: SharedUniforms, mats: ShipMaterials, kind: ShipKind): THREE.Object3D {
+  const faction = factionOf(kind);
   if (kind === 'dominionCapital' || kind === 'reformationCapital') {
+    // the stand-in is the generated capital's own low-poly silhouette (hulls.ts), lit at its real engines
     const b = new GeoBuilder();
-    buildHull(kind, PartSink.single(paletteFor(kind), b));
+    buildGeneratedCapital(kind, PartSink.single(paletteFor(kind), b));
     const group = new THREE.Group();
     group.name = `scenic:${kind}`;
     const mesh = new THREE.Mesh(b.build(), createScenicMaterial(shared, {
@@ -180,23 +258,16 @@ export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: Shi
     const cards = new LightCards();
     const dom = faction === 'dominion';
     const engine = dom ? PALETTE.domAmber : PALETTE.refBlue;
-    const pts: Array<[number, number, number, number]> = dom
-      ? [[38, -8, 352, 34], [-38, -8, 352, 34], [0, 12, 360, 42]]
-      : [[-17, 12, 344, 20], [17, 12, 344, 20], [-17, -12, 344, 20], [17, -12, 344, 20]];
-    for (const [x, y, z, size] of pts) cards.point(x, y, z, size, engine, 5).point(x, y, z + size * 0.5, size * 2.2, engine, 0.9);
-    const run: Array<[number, number, number]> = dom
-      ? [[0, 208, 196], [0, -110, 110], [72, -4, 120], [-72, -4, 120], [0, -30, -346]]
-      : [[0, 98, 40], [0, 0, -400], [86, 0, -170], [-86, 0, -170], [164, 20, 150], [-164, 20, 150], [0, -64, -96]];
-    for (const [x, y, z] of run) cards.point(x, y, z, 4, dom ? 0xff5030 : 0xe6f2ff, 5);
+    const anchors = GENERATED_CAPITAL_LIGHTS[kind];
+    const size = dom ? 30 : 14;
+    for (const [x, y, z] of anchors.engines) cards.point(x, y, z, size, engine, 5).point(x, y, z + size * 0.5, size * 2.2, engine, 0.9);
+    for (const [x, y, z] of anchors.running) cards.point(x, y, z, 4, dom ? 0xff5030 : 0xe6f2ff, 5);
     const lights = cards.build(shared, { name: `scenic:${kind}:lights` });
     group.add(mesh, lights);
-    group.scale.setScalar(s);
     group.userData.scenic = { kind, triangles: b.triangleCount, lights: cards.count };
     return group;
   }
   const sink = PartSink.split(paletteFor(kind));
   buildHull(kind, sink);
-  const group = splitMeshes(sink, `scenic:${kind}`, (role) => mats.get(faction, role));
-  group.scale.setScalar(s);
-  return group;
+  return splitMeshes(sink, `scenic:${kind}`, (role) => mats.get(faction, role));
 }

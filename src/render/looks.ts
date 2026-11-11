@@ -30,9 +30,10 @@ function look(over: DeepPartial<Look>): Look {
 }
 
 /**
- * Tuned presets. Art direction (BRIEF §4): warm ivory / gold upper halls, cold cyan frozen corridor,
- * near-black mirror stone with gold in the lower terminal; violet never comes from the grade — only from
- * real corruption sources in the scene.
+ * Tuned presets. Art direction (BRIEF §4): white-gold upper halls, cold cyan frozen corridor, near-black mirror
+ * stone with gold in the lower terminal; violet never comes from the grade — only from real corruption sources in
+ * the scene. Integration wave (the four concept paintings): the halls read cool, bright silver-white marble over
+ * dark polished floors, with the warmth confined to gold light — grades no longer tint the whole image sepia.
  */
 export const LOOKS: Readonly<Record<LookName, Look>> = {
   // the engine reference: no tint, no split-tone, neutral contrast — the other looks are graded away from it
@@ -41,28 +42,32 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   // Z00 — fractured white-gold landing: smoke haze, amber emergency practicals, teal shadows. Polish 3: less
   // fill (the light comes through the breach and from the fires), deeper shadows, the stone reads greyer.
   crash: look({
-    exposure: 0.96,
+    // integration wave: toward the relay-route painting — cool smoky daylight, silver stone, warm only in the
+    // amber practicals and the gold (the old grade read sepia)
+    exposure: 1.0,
     bloom: { intensity: 0.82, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x2c221a, density: 0.022 },
-    grade: { tint: 0xffe8cc, saturation: 0.86, contrast: 1.18, lift: -0.004, shadowsTint: 0x9cc0f0, highlightsTint: 0xffc98a },
-    vignette: 0.52, grain: 0.45, chromaticAberration: 0.32,
+    fog: { color: 0x34383e, density: 0.02 },
+    grade: { tint: 0xf6f4f0, saturation: 0.86, contrast: 1.16, lift: -0.004, shadowsTint: 0x9cbcec, highlightsTint: 0xffe2bc },
+    vignette: 0.5, grain: 0.42, chromaticAberration: 0.3,
     ao: { intensity: 3.6, radius: 1.3 },
-    ambient: { sky: 0x6e6152, ground: 0x1e140c, intensity: 0.36 },
-    envIntensity: 0.7,
+    ambient: { sky: 0x7a808c, ground: 0x1c1b1a, intensity: 0.42 },
+    envIntensity: 0.82,
   }),
 
   // Z01 — long ivory hall under its ENCLOSED vault (kit 'vaultClosed'): light enters through the high seams and the
   // key; the floor bounce is warm but low, so the hall has real pools and shadow (relay-route painting: grey
   // veined marble, deep shade under the cover) and the far end recedes into warm haze rather than into grey.
   pressureHall: look({
-    exposure: 0.92,
+    // integration wave: cool daylight haze and silver-white stone over the dark mirror floor; warmth only in the
+    // gold channels and seams (the relay-route painting), no longer a sepia hall
+    exposure: 1.0,
     bloom: { intensity: 0.72, threshold: 1.0, radius: 0.74 },
-    fog: { color: 0x9a8f7c, density: 0.016 },
-    grade: { tint: 0xf4f4f6, saturation: 0.9, contrast: 1.16, lift: -0.004, shadowsTint: 0xb4c2e0, highlightsTint: 0xfff0d8 },
+    fog: { color: 0x9aa2ae, density: 0.015 },
+    grade: { tint: 0xf6f6f8, saturation: 0.9, contrast: 1.15, lift: -0.004, shadowsTint: 0xbcc6da, highlightsTint: 0xfff4e6 },
     vignette: 0.4, grain: 0.26, chromaticAberration: 0.16,
     ao: { intensity: 3.6, radius: 1.4 },
-    ambient: { sky: 0xa8a294, ground: 0x5a4c3a, intensity: 0.36 },
-    envIntensity: 0.72,
+    ambient: { sky: 0xb6b9c0, ground: 0x403e3c, intensity: 0.5 },
+    envIntensity: 0.9,
   }),
 
   // Z02 — survivor bend: muted and low-key; soft contrast, lifted blacks, warm practicals. A breath after E1.
@@ -146,14 +151,16 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   // (quarantine concept). Its own grade: gold-warm highlights, cool steel shadows, the hardest contrast of the
   // white-gold rooms, little fill — the court is lit by the walls, not by the air.
   crucible: look({
-    exposure: 1.12,
+    // integration wave: silver-white walls and a black mirror floor with warm gold light (quarantine painting):
+    // the walls stay cool, the gold carries the warmth
+    exposure: 1.16,
     bloom: { intensity: 1.0, threshold: 0.96, radius: 0.78 },
-    fog: { color: 0x2e2822, density: 0.008 },
-    grade: { tint: 0xfff0d8, saturation: 1.0, contrast: 1.24, lift: -0.012, shadowsTint: 0xa6b4dc, highlightsTint: 0xffd890 },
+    fog: { color: 0x2a2c30, density: 0.008 },
+    grade: { tint: 0xfaf8f4, saturation: 0.98, contrast: 1.2, lift: -0.012, shadowsTint: 0xb8c0d4, highlightsTint: 0xffe2aa },
     vignette: 0.44, grain: 0.3, chromaticAberration: 0.24,
     ao: { intensity: 3.5, radius: 1.5 },
-    ambient: { sky: 0x9a8e7a, ground: 0x1e1812, intensity: 0.42 },
-    envIntensity: 0.88,
+    ambient: { sky: 0xa8aab0, ground: 0x1a1918, intensity: 0.5 },
+    envIntensity: 0.95,
   }),
 
   // Z09 — wound gallery: near-black, crushed, cold; the sky does the talking (wound-overlook concept).
@@ -172,27 +179,31 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
   // grade: silver-cold and nearly colourless except the gold — cold steel shadows, gold highlights, crushed
   // blacks, a wide bloom on the rings and the core.
   core: look({
-    exposure: 1.0,
+    // integration wave: a touch more fill and environment so the silver-white rings and the polished floor read
+    // (crownmark-chamber painting) — still the hardest, coldest grade
+    exposure: 1.04,
     bloom: { intensity: 1.04, threshold: 0.98, radius: 0.82 },
     fog: { color: 0x050507, density: 0.0066 },
-    grade: { tint: 0xf6f4f0, saturation: 0.8, contrast: 1.28, lift: -0.02, shadowsTint: 0x9aa6cc, highlightsTint: 0xffd486 },
+    grade: { tint: 0xf2f4f8, saturation: 0.8, contrast: 1.26, lift: -0.02, shadowsTint: 0x9aa6cc, highlightsTint: 0xfff0dc },
     vignette: 0.5, grain: 0.28, chromaticAberration: 0.2,
     ao: { intensity: 3.2, radius: 1.4 },
-    ambient: { sky: 0x4a4a4e, ground: 0x09090b, intensity: 0.22 },
-    envIntensity: 1.15,
+    ambient: { sky: 0x5a5e66, ground: 0x0a0a0c, intensity: 0.28 },
+    envIntensity: 1.25,
   }),
 
   // Z11 — observation gallery: quiet and warm inside — its own grade is the soft one: low contrast, lifted
   // dusky-violet shadows, amber highlights, a wide gentle bloom; the cold stays outside the glass.
   observation: look({
-    exposure: 0.98,
+    // integration wave: less sepia — the stone stays silver, the warmth lives in the amber highlights and the
+    // gold channels; still the soft grade (low contrast, lifted dusky-violet shadows, wide bloom)
+    exposure: 1.0,
     bloom: { intensity: 0.8, threshold: 0.96, radius: 0.86 },
-    fog: { color: 0x120f12, density: 0.01 },
-    grade: { tint: 0xffe6c8, saturation: 0.84, contrast: 0.96, lift: 0.022, shadowsTint: 0xc4b6dc, highlightsTint: 0xffc47e },
+    fog: { color: 0x121114, density: 0.01 },
+    grade: { tint: 0xf4f0ec, saturation: 0.84, contrast: 0.98, lift: 0.02, shadowsTint: 0xbeb8da, highlightsTint: 0xffd6a4 },
     vignette: 0.58, grain: 0.38, chromaticAberration: 0.14,
     ao: { intensity: 2.8, radius: 1.0 },
-    ambient: { sky: 0x6b5e62, ground: 0x1e1410, intensity: 0.4 },
-    envIntensity: 1.0,
+    ambient: { sky: 0x68686e, ground: 0x161418, intensity: 0.42 },
+    envIntensity: 1.05,
   }),
 
   // Z12 — outer-ring hangar: wide, blue-grey haze, neutral-cool; both fleets' light at wary distance.

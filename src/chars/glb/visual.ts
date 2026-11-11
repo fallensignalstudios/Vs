@@ -24,6 +24,7 @@ import { gameLodOpts, LodSwitch } from './lod';
 import type { ModelInstance, ModelLibrary } from './library';
 import { createGlbMaterial, createSharedUniforms, type GlbMaterial, type SharedUniforms } from './material';
 import { generatedProp, proceduralProp, satchel, type PropRig } from './props';
+import { witnessHalo, type WitnessHalo } from './halo';
 import { Retargeter } from './retarget';
 import { flashStrength } from '@/chars/flash';
 import { corruptionCode, frostCode } from '@/chars/regions';
@@ -111,12 +112,19 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   private disposed = false;
   /** bare head grafted over the helmet (CharacterCreateOpts.bareHead / the archetype's own), or null */
   private readonly headLook: BareHeadLook | null;
+  /** CharacterCreateOpts.wounded (integration) */
+  private readonly wounded: boolean;
+  /** the King's halo is drawn (config `halo` and CharacterCreateOpts.halo) */
+  private readonly wantHalo: boolean;
+  private halo: WitnessHalo | null = null;
 
   constructor(private readonly game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
     this.archetype = archetype;
     // a linkbound whose face is half human needs a face: it is drawn bare-headed
     const halfHuman = opts.halfHuman === true && archetype === 'linkbound';
     this.headLook = bareHeadFor(cfg, opts.bareHead || halfHuman);
+    this.wounded = opts.wounded === true;
+    this.wantHalo = cfg.halo === true && opts.halo !== false;
     this.seed = Number.isFinite(opts.seed) ? Math.floor(opts.seed as number) : 0;
     this.variant = Number.isFinite(opts.variant) ? Math.floor(opts.variant as number) : 0;
     const jitter = cfg.vary ? 1 + (hash01(this.seed * 1.31 + 2.7) - 0.5) * 0.06 : 1;
@@ -216,6 +224,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     this.buildSockets(body);
     this.buildProps(body);
     this.buildExtras(body);
+    this.applyLook(body);
     this.root.add(inst.root, attach);
     // levels of detail: one switch for the body (and its grafted head) and every generated prop
     const lod = new LodSwitch(gameLodOpts(this.game, () => this.height));
@@ -333,6 +342,37 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     return { mesh, fig, fm };
   }
 
+  /**
+   * Integration looks on the body's own materials: a Witness figure's light, the wounded King's broken shoulder /
+   * blood / ash (shader uniforms, see material.ts), and the King's halo on the visible head.
+   */
+  private applyLook(body: Body): void {
+    const g = this.scale, w = this.cfg.witness, rt = body.retarget;
+    const sh = this.wounded ? rt.restPos(rt.has('uArmL') ? 'uArmL' : rt.chestRole, new THREE.Vector3()) : null;
+    for (const m of body.materials) {
+      if (w) m.own.uWitness.value.set(w.luminous, w.edge, body.height / g, 0);
+      if (sh) {
+        // the figure's LEFT shoulder (−X in rest space): centred a little above the joint, over the pauldron
+        m.own.uWound.value.set(1, -1, 0, 0);
+        m.own.uShoulder.value.set(sh.x / g - 0.02, sh.y / g + 0.02, sh.z / g, 0.16);
+      }
+    }
+    const head = body.sockets.head;
+    if (this.wantHalo && head) {
+      const halo = witnessHalo(g);
+      halo.setGlow(this.shared.uGlow.value);
+      head.add(halo.mesh);
+      this.halo = halo;
+      this.syncHalo();
+      body.extras.push({ dispose: () => { halo.dispose(); if (this.halo === halo) this.halo = null; } });
+    }
+  }
+
+  /** the halo shows while the figure glows at all and is not dissolved */
+  private syncHalo(): void {
+    if (this.halo) this.halo.mesh.visible = this.shared.uGlow.value > 0.001 && this.shared.uDissolve.value < 0.5;
+  }
+
   private buildExtras(body: Body): void {
     if (this.cfg.extra !== 'satchel') return;
     const rig = body.inst.template.rig!;
@@ -412,6 +452,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     if (!this.body) this.driver.setDissolve(a, color);
     else {
       for (const m of this.body.inst.meshes) m.visible = a < 0.999;
+      this.syncHalo();
       this.eachFallback((f) => { f.fm.uniforms.uDissolve.value = a; if (color !== undefined) f.fm.uniforms.uDissolveColor.value.set(color); });
     }
   }
@@ -419,6 +460,8 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   setGlow(amount: number): void {
     const a = Math.max(0, Number.isFinite(amount) ? amount : 1);
     this.shared.uGlow.value = a;
+    this.halo?.setGlow(a);
+    this.syncHalo();
     if (!this.body) this.driver.setGlow(a);
     this.eachFallback((f) => { f.fm.uniforms.uGlow.value = a; });
   }

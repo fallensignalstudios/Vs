@@ -8,7 +8,8 @@
  *    pinned for a while are dropped; their compressed bytes are kept (1.5 MB each), so coming back to one
  *    costs a decode and no network.
  *  - Voice-over is fetched AHEAD and decoded LATE: `prefetchVoices(zones)` (on `zone:loading`) brings in the
- *    compressed files of those zones' lines (~20 KB a line, ~13 MB for the whole game — all of it is kept),
+ *    compressed files of those zones' lines — every zone a line is said in, manifest `zones` (~20 KB a line,
+ *    ~13 MB for the whole game — all of it is kept),
  *    and checks each one is really an intact audio stream (sniff.ts). A clip is decoded when its line is
  *    spoken; a small LRU of decoded clips is kept. A listed file that is gone or broken is reported once and
  *    the line counts as unrecorded from then on.
@@ -214,7 +215,15 @@ export class AssetLibrary {
       const out: Record<string, VoiceMeta> = {};
       for (const [id, v] of Object.entries(j ?? {})) {
         if (!isRecord(v) || typeof v.file !== 'string' || typeof v.seconds !== 'number' || !(v.seconds > 0)) continue;
-        out[id] = typeof v.zone === 'string' && v.zone ? { file: v.file, seconds: v.seconds, zone: v.zone } : { file: v.file, seconds: v.seconds };
+        const meta: { file: string; seconds: number; zone?: string; zones?: string[] } = { file: v.file, seconds: v.seconds };
+        if (typeof v.zone === 'string' && v.zone) meta.zone = v.zone;
+        // every zone the line is said in (integration); the first zone always counts as one of them
+        if (Array.isArray(v.zones)) {
+          const zones = v.zones.filter((z): z is string => typeof z === 'string' && z.length > 0);
+          if (meta.zone && !zones.includes(meta.zone)) zones.unshift(meta.zone);
+          if (zones.length) meta.zones = zones;
+        }
+        out[id] = meta;
       }
       this.voices = out;
       return j ? out : null;
@@ -410,29 +419,31 @@ export class AssetLibrary {
   }
 
   /**
-   * Fetch (compressed, not decoded) the voice files of the lines first spoken in these zones, in manifest
-   * order and a few at a time; after the first call the files of lines without a zone follow, once. Zones
-   * asked for before are not fetched again. Resolves when done; never rejects.
+   * Fetch (compressed, not decoded) the voice files of the lines spoken in these zones — every zone a line occurs
+   * in (manifest `zones`; `zone` alone when it has none) — in manifest order and a few at a time; after the first
+   * call the files of lines without a zone follow, once. Zones asked for before are not fetched again, and a file
+   * already here is not fetched twice. Resolves when done; never rejects.
    */
   async prefetchVoices(zones: ReadonlyArray<string | null | undefined>): Promise<void> {
     const manifest = this.voices ?? (await this.loadVoices());
     if (!manifest) return;
-    const want: string[] = [];
+    const want = new Set<string>();
     for (const z of zones) {
       if (typeof z !== 'string' || !z || this.prefetched.has(z)) continue;
       this.prefetched.add(z);
-      for (const [id, m] of Object.entries(manifest)) if (m.zone === z) want.push(id);
+      for (const [id, m] of Object.entries(manifest)) if (m.zone === z || m.zones?.includes(z)) want.add(id);
     }
     if (!this.prefetched.has('')) {
       this.prefetched.add('');
-      for (const [id, m] of Object.entries(manifest)) if (!m.zone) want.push(id);
+      for (const [id, m] of Object.entries(manifest)) if (!m.zone && !m.zones?.length) want.add(id);
     }
+    const list = [...want];
     let next = 0;
     const worker = async (): Promise<void> => {
-      while (next < want.length) await this.fetchClip(want[next++]);
+      while (next < list.length) await this.fetchClip(list[next++]);
     };
     const workers: Array<Promise<void>> = [];
-    for (let k = 0; k < Math.min(PREFETCH_PARALLEL, want.length); k++) workers.push(worker());
+    for (let k = 0; k < Math.min(PREFETCH_PARALLEL, list.length); k++) workers.push(worker());
     await Promise.all(workers).catch(() => undefined);
   }
 

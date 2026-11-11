@@ -69,6 +69,19 @@ describe('polish 3 character options', () => {
     expect(createHumanoid(null, 'tarrik', { halo: false }).triangles).toBe(createHumanoid(null, 'tarrik').triangles);
   });
 
+  it('integration: aimRifle draws the long gun of a figure that carries one (Varo posed as an NPC)', () => {
+    const varo = createHumanoid(null, 'varo');
+    varo.setLoadout({ melee: false, ranged: false });
+    const eq = (varo as unknown as { equip: { loadout: { ranged: boolean }; rangedHeld: boolean } }).equip;
+    expect(eq.loadout.ranged).toBe(false);
+    varo.play('aimRifle', { loop: true });
+    expect(eq.loadout.ranged).toBe(true);
+    // a figure without a rifle is left as it is
+    const officer = createHumanoid(null, 'officer');
+    officer.play('aimRifle', { loop: true });
+    expect((officer as unknown as { equip: { loadout: { ranged: boolean } } }).equip.loadout.ranged).toBe(false);
+  });
+
   it('breath, verityCollapsed and igniteBlades are authored clips', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {

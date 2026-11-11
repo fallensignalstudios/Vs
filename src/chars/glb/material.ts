@@ -54,6 +54,15 @@ export interface OwnUniforms {
   uHair: { value: THREE.Vector4 };
   /** eye centre in rest metres and skull size (w = 0: this surface has no face — props) */
   uFace: { value: THREE.Vector4 };
+  /**
+   * ADDED (integration) a Witness V figure's light (config WitnessLook): x = albedo self-light, y = edge light,
+   * z = standing height in rest metres (for the head-to-hem colour); 0, 0 = off
+   */
+  uWitness: { value: THREE.Vector4 };
+  /** ADDED (integration) CharacterCreateOpts.wounded: x = amount (0 = off), y = side of the broken shoulder (−1 = the figure's left, −X) */
+  uWound: { value: THREE.Vector4 };
+  /** the broken shoulder's centre in rest metres, w = its radius */
+  uShoulder: { value: THREE.Vector4 };
 }
 
 export interface GlbMaterial {
@@ -127,6 +136,9 @@ uniform vec4 uHair;
 uniform vec4 uLocal;
 uniform vec4 uFace;
 uniform float uFlare;
+uniform vec4 uWitness;
+uniform vec4 uWound;
+uniform vec4 uShoulder;
 ${NOISE}
 ${HIT_FLASH_GLSL}
 ${FROST_REGION_GLSL}
@@ -166,6 +178,9 @@ float ggBladeBody;
 float ggHair;
 float ggFz;
 float ggIris;
+float ggChip;
+float ggCrack;
+float ggBlood;
 `;
 
 /** after <color_fragment>: painted-light mask, albedo cap, dissolve, frost and corruption tint */
@@ -189,6 +204,46 @@ const FRAG_COLOR = /* glsl */ `
     ggHair = smoothstep( 0.34, 0.17, mx ) * uHair.w;
     diffuseColor.rgb = mix( diffuseColor.rgb, uHair.rgb * ( 0.45 + lum * 14.0 ), ggHair );
   }
+  // WOUNDED (integration): the plate broken along one shoulder, blood under one eye, ash in the hair
+  ggChip = 0.0; ggCrack = 0.0; ggBlood = 0.0;
+  if ( uWound.x > 0.0 ) {
+    // the shoulder: an uneven patch over the cap and the top of the arm, cracked through, whole flakes of plate
+    // chipped off down to the dark metal under them, soot spreading out of the breaks
+    vec3 sd = ( vRest - uShoulder.xyz ) / ( uShoulder.w * vec3( 1.15, 1.3, 1.1 ) );
+    float reg = smoothstep( 1.0, 0.3, length( sd ) + ( gNoise( vRest * 9.0 + 3.1 ) - 0.5 ) * 0.6 );
+    if ( reg > 0.0 ) {
+      // warped cells so the breaks run crooked, not as a tiling; only some cell walls are cracks
+      vec3 wp = vRest * 14.0 + vec3( gNoise( vRest * 11.0 ), gNoise( vRest * 11.0 + 7.3 ), gNoise( vRest * 11.0 + 13.1 ) ) * 1.6;
+      vec3 cell = gCells( wp + vec3( 1.7, 0.3, 4.2 ) );
+      float pick = fract( cell.z * 7.31 );
+      ggCrack = smoothstep( 0.08, 0.0, cell.y ) * step( 0.3, pick ) * smoothstep( 0.05, 0.35, reg ) * uWound.x;
+      ggChip = step( 0.42, cell.z ) * smoothstep( 0.25, 0.6, reg ) * smoothstep( 0.02, 0.08, cell.y ) * uWound.x;
+      // soot: spreading out of the break, heaviest where the plate is gone
+      float soot = clamp( reg * ( 0.35 + 0.65 * gFbm( vRest * 14.0 + 2.0 ) ) + ggChip * 0.3, 0.0, 1.0 ) * uWound.x;
+      diffuseColor.rgb *= 1.0 - 0.82 * soot;
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.032, 0.027, 0.023 ), ggChip * 0.95 );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.01, 0.008, 0.007 ), ggCrack );
+    }
+    if ( uFace.w > 0.0 ) {
+      float s = max( uFace.w, 0.05 ) / 0.21;
+      vec3 fd = vRest - uFace.xyz;
+      // blood: a run from under the figure's right eye (+X) down the cheek, thinning as it goes, wandering a little
+      float wob = ( gNoise( vec3( 3.0, vRest.y * 70.0, 1.0 ) ) - 0.5 ) * 0.007 * s;
+      // (dark enough to read by value alone: Witness V is graded almost to sepia)
+      float wid = mix( 0.0095, 0.003, smoothstep( -0.014 * s, -0.09 * s, fd.y ) ) * s;
+      float run = smoothstep( wid, wid * 0.35, abs( fd.x - 0.03 * s + wob ) )
+        * smoothstep( -0.008 * s, -0.018 * s, fd.y ) * smoothstep( -0.105 * s, -0.08 * s, fd.y );
+      ggBlood = run * smoothstep( 0.1, 0.5, -vRestN.z ) * uWound.x;
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.004, 0.003 ), ggBlood * 0.96 );
+      // ash: the darkest, least saturated texels of the hair (above the brow, or behind the ears) go dusty grey in patches
+      float scalp = max( smoothstep( 0.05 * s, 0.075 * s, fd.y ), smoothstep( 0.035 * s, 0.08 * s, fd.z ) * smoothstep( -0.05 * s, -0.01 * s, fd.y ) );
+      float hair = smoothstep( 0.32, 0.15, mx ) * smoothstep( 0.5, 0.25, sat ) * aurHead( fd, s );
+      float ash = scalp * hair * smoothstep( 0.5, 0.68, gFbm( vRest * 34.0 + 5.0 ) ) * uWound.x;
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.22, 0.215, 0.2 ) * ( 0.7 + 0.6 * gNoise( vRest * 130.0 ) ), ash * 0.7 );
+      ggHair = max( ggHair, ash );
+    }
+  }
+
   #ifdef DOUBLE_SIDED
   // the inside of skirts, tassets and hems: a shell has no lining, so it reads dark
   if ( ! gl_FrontFacing ) diffuseColor.rgb *= uParams.z;
@@ -296,6 +351,12 @@ roughnessFactor = mix( roughnessFactor, 0.14 + ggCell * 0.3, ggFrost * 0.85 );
 metalnessFactor = mix( metalnessFactor, 0.0, ggFrost * 0.8 );
 roughnessFactor = mix( roughnessFactor, 0.4, ggCorr * 0.6 );
 metalnessFactor = mix( metalnessFactor, 0.2, ggCorr * 0.7 );
+// wounded: the chipped metal is rougher and duller, the cracks matt, the blood wet
+roughnessFactor = mix( roughnessFactor, 0.62, ggChip );
+metalnessFactor = mix( metalnessFactor, 0.55, ggChip );
+roughnessFactor = mix( roughnessFactor, 0.9, ggCrack );
+roughnessFactor = mix( roughnessFactor, 0.28, ggBlood );
+metalnessFactor *= 1.0 - ggBlood;
 `;
 
 /** after <normal_fragment_maps>: every ice crystal catches the light at its own angle */
@@ -314,6 +375,13 @@ const FRAG_EMISSIVE = /* glsl */ `
   // rim: brightest on upper, grazing surfaces
   float up = 0.55 + 0.45 * clamp( normal.y * 0.8 + 0.4, 0.0, 1.0 );
   totalEmissiveRadiance += uRim.rgb * ( uRim.a * fres * up );
+  // a Witness V figure: lit from within, a warm light gathering at its edges — white at the head, gold at the hem
+  if ( uWitness.x + uWitness.y > 0.0 ) {
+    float gy = clamp( vRest.y / max( uWitness.z, 0.5 ), 0.0, 1.0 );
+    vec3 wc = mix( vec3( 1.0, 0.7, 0.34 ), vec3( 1.0, 0.94, 0.82 ), gy );
+    totalEmissiveRadiance += diffuseColor.rgb * uWitness.x;
+    totalEmissiveRadiance += wc * uWitness.y * ( 0.03 + 0.05 * gy + 0.5 * pow( 1.0 - ndv, 3.0 ) );
+  }
   // frost: a cold shell that reads without lighting the scene
   totalEmissiveRadiance *= 1.0 - ggFz * 0.55;
   totalEmissiveRadiance += vec3( 0.5, 0.78, 1.0 ) * ( ggFrost * ( 0.035 + fres * 0.3 ) + ggRidge * 0.2 + ggFz * fres * 0.1 );
@@ -387,6 +455,9 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
     uBlade: { value: new THREE.Vector4(0, 0, 0, 0) },
     uHair: { value: new THREE.Vector4(0, 0, 0, 0) },
     uFace: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uWitness: { value: new THREE.Vector4(0, 0, 1.8, 0) },
+    uWound: { value: new THREE.Vector4(0, -1, 0, 0) },
+    uShoulder: { value: new THREE.Vector4(0, -10, 0, 0.13) },
   };
   const unit = Math.cbrt(Math.abs(own.uRest.value.determinant()));
   own.uRestUnit.value = unit > 1e-9 ? 1 / unit : 1;
@@ -405,7 +476,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE);
   };
-  material.customProgramCacheKey = () => 'aurelion-glb-7';
+  material.customProgramCacheKey = () => 'aurelion-glb-8';
 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {

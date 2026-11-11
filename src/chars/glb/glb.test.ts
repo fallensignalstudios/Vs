@@ -6,7 +6,7 @@ import { createHumanoid } from '../humanoid';
 import { ARCHETYPES } from '../humanoid/archetypes';
 import type { HumanoidVisualImpl } from '../humanoid/visual';
 import { eigenSym3, fitRestMatrix, quantile, resolveRoles, type HandInfo, type RigInfo } from './analyze';
-import { GLB_ARCHETYPES, ITEM_SLOTS, modelsFor } from './config';
+import { bareHeadFor, GLB_ARCHETYPES, ITEM_SLOTS, modelsFor } from './config';
 import type { ModelInstance, ModelLibrary, ModelTemplate } from './library';
 import { alignFrames, Retargeter, solveJoint } from './retarget';
 import { GlbHumanoidVisual } from './visual';
@@ -238,9 +238,27 @@ describe('configuration and factory', () => {
     for (const a of Object.keys(GLB_ARCHETYPES)) expect(ARCHETYPES[a as HumanoidArchetype]).toBeDefined();
     expect(modelsFor('tarrik')).toEqual(['tarrik', 'velkorran', 'cinderline', 'sealed_case']);
     expect(modelsFor('selene')).toEqual(['selene', 'verity', 'axiom', 'sealed_case']);
-    expect(modelsFor('malik')[0]).toBe('soldier_dominion');
-    expect(modelsFor('kingWitness')).toEqual([]);
     expect(modelsFor('elite')).toEqual([]);
+  });
+
+  it('integration: Varo, the officer, the King and Vesryn have their own hero bodies with real faces', () => {
+    expect(modelsFor('malik')).toEqual(['varo', 'sealed_case']);
+    expect(modelsFor('varo')).toEqual(['varo', 'rifle_dominion', 'sealed_case']);
+    expect(modelsFor('officer')).toEqual(['officer']);
+    expect(modelsFor('kingWitness')).toEqual(['king']);
+    expect(modelsFor('vesryn')).toEqual(['vesryn']);
+    // their own faces: asking for a bare head never grafts a civilian's on (or fetches the donor)
+    for (const a of ['malik', 'varo', 'officer', 'kingWitness', 'vesryn'] as const) {
+      expect(bareHeadFor(GLB_ARCHETYPES[a]!, true), a).toBeNull();
+      expect(modelsFor(a, true)).not.toContain('survivor');
+    }
+    expect(bareHeadFor(GLB_ARCHETYPES.dominionSoldier!, true)).not.toBeNull();
+    // only the King holds the halo; both Witness figures carry the Witness light, the King more
+    expect(GLB_ARCHETYPES.kingWitness!.halo).toBe(true);
+    expect(GLB_ARCHETYPES.vesryn!.halo).toBeFalsy();
+    expect(GLB_ARCHETYPES.kingWitness!.witness!.edge).toBeGreaterThan(GLB_ARCHETYPES.vesryn!.witness!.edge);
+    // every humanoid archetype in the contract has a generated body now
+    for (const a of Object.keys(ARCHETYPES)) expect(GLB_ARCHETYPES[a as HumanoidArchetype], a).toBeDefined();
   });
 
   it('without a page to load into, the factory hands out procedural figures and preload still resolves', async () => {
@@ -332,6 +350,51 @@ describe('GlbHumanoidVisual on a stand-in library', () => {
     expect(v.isPlaying('death')).toBe(false);
     for (const slot of ITEM_SLOTS) expect(typeof slot).toBe('string');
     expect(() => v.dispose()).not.toThrow();
+  });
+
+  it('integration: the King holds his halo on the visible head, carries the Witness light, and can be wounded', () => {
+    const own = (v: GlbHumanoidVisual) => (v as unknown as { body: { materials: Array<{ own: Record<string, { value: THREE.Vector4 }> }> } }).body.materials[0].own;
+    const king = new GlbHumanoidVisual(null, 'kingWitness', cfg('kingWitness'), fakeLibrary({ value: true }), { wounded: true });
+    king.update(1 / 60);
+    const halo = king.root.getObjectByName('witnessHalo') as THREE.Mesh;
+    expect(halo).toBeDefined();
+    expect(halo.parent).toBe(king.socket('head'));
+    // the halo follows setGlow (and goes dark at 0), and dissolves with the figure
+    const c0 = (halo.material as THREE.MeshBasicMaterial).color.r;
+    king.setGlow(2);
+    expect((halo.material as THREE.MeshBasicMaterial).color.r).toBeCloseTo(c0 * 2, 5);
+    king.setGlow(0);
+    expect(halo.visible).toBe(false);
+    king.setGlow(1);
+    king.setDissolve(1);
+    expect(halo.visible).toBe(false);
+    king.setDissolve(0);
+    expect(halo.visible).toBe(true);
+    const u = own(king);
+    expect(u.uWitness.value.x).toBeGreaterThan(0);
+    expect(u.uWitness.value.z).toBeCloseTo(king.height, 5);
+    // wounded: the LEFT shoulder (−X, at shoulder height)
+    expect(u.uWound.value.x).toBe(1);
+    expect(u.uShoulder.value.x).toBeLessThan(0);
+    expect(u.uShoulder.value.y).toBeGreaterThan(1.2);
+    expect(u.uShoulder.value.y).toBeLessThan(1.7);
+    king.dispose();
+    expect(halo.parent).toBeNull();
+
+    // no halo when asked, none on Vesryn, no wound unless asked
+    const bare = new GlbHumanoidVisual(null, 'kingWitness', cfg('kingWitness'), fakeLibrary({ value: true }), { halo: false });
+    expect(bare.root.getObjectByName('witnessHalo')).toBeUndefined();
+    expect(own(bare).uWound.value.x).toBe(0);
+    bare.dispose();
+    const ves = new GlbHumanoidVisual(null, 'vesryn', cfg('vesryn'), fakeLibrary({ value: true }), { halo: true });
+    expect(ves.root.getObjectByName('witnessHalo')).toBeUndefined();
+    expect(own(ves).uWitness.value.y).toBeGreaterThan(0);
+    for (const action of ['idle', 'talk', 'breath', 'walkAway']) expect(ves.info(action)).toEqual(createHumanoid(null, 'vesryn').info(action));
+    ves.dispose();
+    // soldiers carry no Witness light
+    const varo = new GlbHumanoidVisual(null, 'varo', cfg('varo'), fakeLibrary({ value: true }));
+    expect(own(varo).uWitness.value.x + own(varo).uWitness.value.y).toBe(0);
+    varo.dispose();
   });
 });
 

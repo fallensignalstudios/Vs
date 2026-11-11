@@ -123,7 +123,10 @@ export type MusicState =
   | 'atrium' | 'duel' | 'carrier'
   | 'breach' | 'combatEclipse' | 'decision' | 'elite' | 'resonance'
   | 'quarantine' | 'recognition' | 'core' | 'witness' | 'consequence'
-  | 'observation' | 'departure' | 'credits';
+  | 'observation' | 'departure' | 'credits'
+  // ADDED (integration): recorded story cues — `woundVista` the Z09 overlook (wound_vista, loops its full section),
+  // `farewell` the Z12 farewell and departure (farewell_departure). `witness` now plays witness_elegy.
+  | 'woundVista' | 'farewell';
 
 export type AmbienceId =
   | 'none' | 'crash' | 'pressureHall' | 'survivorBend' | 'frozenCorridor' | 'relayOverlook'

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type {
   BarrierHandle, CeilingOpts, ColliderDesc, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
-  MatId, MaterialLibrary, PhysicsWorld, PropKind, PropOpts, RampOpts, RectOpts, RibOpts, ScriptHandle, SurfaceDesc, SurfaceHandle,
+  MatId, MaterialLibrary, PhysicsWorld, PropKind, PropOpts, RampOpts, RectOpts, RibOpts, ScriptHandle, SurfaceDesc, SurfaceFinish, SurfaceHandle,
   WallOpts, ZoneBuilder, ZoneEnvOpts,
 } from '@/core/api';
 import { mulberry32 } from '@/core/mathx';
@@ -21,6 +21,9 @@ import { buildProp } from './props';
 import { buildColumn, buildRib, buildRibRow } from './ribs';
 import { buildBlocker, buildBridge, buildDeck, buildDisc, buildFloor, buildRail, buildRamp, type DeckExtras } from './structure';
 import { buildCeiling, buildRingWall, buildWall, buildWalls } from './walls';
+
+/** reflection strength of mirror-polished floors (render: > 1 boosts the reflected radiance; 1.5 is already strong) */
+const POLISHED_REFLECTION = 1.25;
 
 export class ZoneBuilderImpl implements ZoneBuilder {
   readonly physics: PhysicsWorld;
@@ -112,7 +115,11 @@ export class ZoneBuilderImpl implements ZoneBuilder {
   disc(o: DiscOpts): THREE.Object3D { return buildDisc(this.ctx, o); }
   ramp(o: RampOpts): THREE.Object3D { return buildRamp(this.ctx, o); }
   deck(o: RectOpts & DeckExtras): THREE.Object3D { return buildDeck(this.ctx, o); }
-  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid' }): THREE.Object3D { return buildBridge(this.ctx, o); }
+  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid'; finish?: SurfaceFinish }): THREE.Object3D { return buildBridge(this.ctx, o); }
+
+  surfaceMaterial(finish: SurfaceFinish, base: MatId = 'whiteGoldFloor'): THREE.Material {
+    return this.ctx.mat(this.ctx.finish(base, finish));
+  }
   wall(o: WallOpts): THREE.Object3D { return buildWall(this.ctx, o); }
   walls(points: Array<[number, number]>, o?: Omit<WallOpts, 'from' | 'to'> & { closed?: boolean }): THREE.Object3D { return buildWalls(this.ctx, points, o); }
   ringWall(o: Parameters<ZoneBuilder['ringWall']>[0]): THREE.Object3D { return buildRingWall(this.ctx, o); }
@@ -182,13 +189,17 @@ export class ZoneBuilderImpl implements ZoneBuilder {
     computeBounds(this.mergedMeshes, this.bounds.makeEmpty());
     const render = isStub(game.render) ? null : game.render;
 
-    // polished floors: merged slabs plus any kept (unmerged) reflective slab
+    // polished floors: merged slabs plus any kept (unmerged) reflective slab. Integration wave: a mirror-polished
+    // top (the dark marble floors) reflects a little stronger than the physical default — the paintings' floors
+    // read wet; a rough finish ('worn', 'hangar') keeps the plain strength (its roughness fades the mirror out).
     this.root.traverse((o) => {
       const y = o.userData.kitReflectY;
       const mesh = o as THREE.Mesh;
       if (typeof y !== 'number' || !mesh.isMesh || ctx.reflective.has(mesh)) return;
       ctx.reflective.set(mesh, y);
-      try { render?.registerReflectiveFloor(mesh, { y: y + this.root.getWorldPosition(new THREE.Vector3()).y }); } catch (err) { ctx.warn('reflect', `registerReflectiveFloor failed: ${String(err)}`); }
+      const rough = (mesh.material as THREE.MeshStandardMaterial).roughness;
+      const strength = typeof rough === 'number' && rough <= 0.15 ? POLISHED_REFLECTION : 1;
+      try { render?.registerReflectiveFloor(mesh, { y: y + this.root.getWorldPosition(new THREE.Vector3()).y, strength }); } catch (err) { ctx.warn('reflect', `registerReflectiveFloor failed: ${String(err)}`); }
     });
 
     budgetLights(ctx);

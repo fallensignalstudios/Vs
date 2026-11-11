@@ -561,3 +561,44 @@ describe('polish 3', () => {
     expect(b.stats.lights).toBe(lights);
   });
 });
+
+describe('integration wave: surface finishes', () => {
+  it("finish 'worn' / 'hangar' puts the photographic set on the walking top only; physics is unchanged", () => {
+    const names = (root: THREE.Group): string[] => {
+      const out: string[] = [];
+      root.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if ((o as THREE.Mesh).isMesh && m) out.push(m.name); });
+      return out;
+    };
+    const plain = builder(), worn = builder(), hangar = builder();
+    plain.b.floor({ x: 0, n: 0, w: 10, d: 10, reflective: true });
+    worn.b.floor({ x: 0, n: 0, w: 10, d: 10, reflective: true, finish: 'worn' });
+    worn.b.deck({ x: 20, n: 0, w: 6, d: 6, h: 2, finish: 'worn' });
+    worn.b.ramp({ x: 30, n: 0, w: 3, d: 10, h0: 0, h1: 2, finish: 'worn' });
+    worn.b.bridge({ from: [40, 0], to: [50, 0], finish: 'worn' });
+    worn.b.disc({ x: 60, n: 0, r: 4, finish: 'worn' });
+    hangar.b.floor({ x: 0, n: 0, w: 10, d: 10, mat: 'blackStoneFloor', finish: 'hangar' });
+    for (const x of [plain, worn, hangar]) x.b.finalize();
+    expect(names(plain.root).some((n) => n.includes('kit-finish'))).toBe(false);
+    expect(names(worn.root).filter((n) => n.includes('kit-finish:whiteGoldFloor:worn')).length).toBeGreaterThan(0);
+    expect(names(hangar.root).some((n) => n.includes('kit-finish:blackStoneFloor:hangar'))).toBe(true);
+    // one cached material per (base, finish) and builder; same walkable surface as the polished floor
+    expect(worn.b.surfaceMaterial?.('worn')).toBe(worn.b.surfaceMaterial?.('worn'));
+    expect(worn.b.surfaceMaterial?.('polished')).toBe(worn.b.mats.get('whiteGoldFloor'));
+    const p = plain.b.physics.groundAt(1, -1, 2), q = worn.b.physics.groundAt(1, -1, 2);
+    expect(p?.y).toBeCloseTo(0, 5);
+    expect(q?.y).toBe(p?.y);
+  });
+
+  it('an unknown finish warns once and keeps the polished top', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { b, root } = builder();
+    b.floor({ x: 0, n: 0, w: 4, d: 4, finish: 'mossy' as never });
+    b.floor({ x: 8, n: 0, w: 4, d: 4, finish: 'mossy' as never });
+    b.finalize();
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('mossy')).length).toBe(1);
+    let finished = false;
+    root.traverse((o) => { if ((((o as THREE.Mesh).material as THREE.Material | undefined)?.name ?? '').includes('kit-finish')) finished = true; });
+    expect(finished).toBe(false);
+    warn.mockRestore();
+  });
+});

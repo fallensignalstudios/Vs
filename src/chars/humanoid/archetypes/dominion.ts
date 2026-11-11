@@ -1,4 +1,4 @@
-/** Dominion figures: Enforcer, Lyessa, Malik, line soldier, Cross. */
+/** Dominion figures: Enforcer, Lyessa, Malik (injured), Varo (armed), the Z08 officer, line soldier, Cross. */
 import type { ArchetypeDef } from '../figure';
 import { PART, ZONE, type Surf } from '../geo/builder';
 import { box, type V3 } from '../geo/prims';
@@ -153,6 +153,61 @@ export const dominionSoldier: ArchetypeDef = {
     draft.moveset = RIFLE_MOVES;
     draft.rim = { color: 0xffc890, amount: 0.2 };
     draft.girth = 1.15;
+  },
+};
+
+// ---------------------------------------------------------------------------------------------------------
+/**
+ * Centurion Malik Varo before his injury (Z00/Z01): a line soldier's kit, bare-headed, the Dominion rifle.
+ * (ADDED, integration.) Normally drawn with the generated `varo` body; this figure is its driver and its fallback.
+ */
+export const varo: ArchetypeDef = {
+  proportions: () => ({ height: 1.85, shoulder: 0.196, hip: 0.097, bulk: 1.05, fem: 0 }),
+  build(ctx) {
+    const { b, rig, draft } = ctx;
+    const pal: Pal = { ...DOM_PAL, plate: { color: 0x523b29, metal: 0.9, rough: 0.46 } };
+    const skin: Surf = { color: 0xa9764e };
+    buildBody(b, rig, { suit: pal.suit, skin, glove: pal.leather, boot: pal.leather, noBoots: true });
+    buildHead(b, rig, { skin, hair: { color: 0x15100c }, style: 'buzz', jaw: 1.04 });
+    cuirass(b, rig, pal, { faction: 'dom', heft: 0.024, lames: 2, keel: 0.05 });
+    gorget(b, rig, pal, { faction: 'dom', height: 0.06 });
+    for (const s of [-1, 1]) pauldron(b, rig, s, pal, { faction: 'dom', R: 0.112, lames: 2, ridge: true });
+    for (const s of [-1, 1]) armArmor(b, rig, s, pal, { faction: 'dom', heft: 0.8 });
+    waist(b, rig, pal, { faction: 'dom', heft: 0.7, tassets: 'front', pouches: [130, -140], buckle: 'round' });
+    for (const s of [-1, 1]) legArmor(b, rig, s, pal, { faction: 'dom', heft: 0.7 });
+    draft.items.ranged = rifle(b, rig, pal, true);
+    draft.items.case = sealedCase(b, rig, REF_PAL);
+    draft.loadout = { melee: false, ranged: true, shield: false, prop: 'none' };
+    draft.moveset = RIFLE_MOVES;
+    draft.rim = { color: 0xffc890, amount: 0.2 };
+    draft.girth = 1.15;
+  },
+};
+
+// ---------------------------------------------------------------------------------------------------------
+/**
+ * The Z08 Dominion officer the breach organism kept alive inside itself (ADDED, integration): black-bronze officer
+ * plate with a high gorget, bare-headed, greying, unarmed. Normally drawn with the generated `officer` body.
+ */
+export const officer: ArchetypeDef = {
+  proportions: () => ({ height: 1.82, shoulder: 0.186, hip: 0.095, bulk: 0.94, fem: 0 }),
+  build(ctx) {
+    const { b, rig, draft } = ctx;
+    const pal: Pal = { ...DOM_PAL, plate: { color: 0x2a2220, metal: 0.9, rough: 0.4 }, trim: { color: 0x9a6a3a, metal: 1, rough: 0.4 } };
+    const skin: Surf = { color: 0xc8a48a };
+    buildBody(b, rig, { suit: pal.suit, skin, glove: pal.leather, boot: pal.leather, noBoots: true });
+    buildHead(b, rig, { skin, hair: { color: 0x3c3834 }, style: 'crop', jaw: 0.96, eye: 0x3a3a40 });
+    cuirass(b, rig, pal, { faction: 'dom', heft: 0.02, lames: 2, keel: 0.04 });
+    gorget(b, rig, pal, { faction: 'dom', height: 0.11 });
+    for (const s of [-1, 1]) pauldron(b, rig, s, pal, { faction: 'dom', R: 0.098, lames: 1 });
+    for (const s of [-1, 1]) armArmor(b, rig, s, pal, { faction: 'dom', heft: 0.6 });
+    waist(b, rig, pal, { faction: 'dom', heft: 0.6, tassets: 'front', buckle: 'round' });
+    for (const s of [-1, 1]) legArmor(b, rig, s, pal, { faction: 'dom', heft: 0.6 });
+    skirt(b, rig, { arc: [-150, 150], top: 1.0, bottom: 0.62, flare: 0.08, out: 0.05, surf: { color: 0x5a1416, rough: 0.7, part: PART.cloth, zone: ZONE.leg }, follow: 0.4 });
+    draft.loadout = { melee: false, ranged: false, shield: false, prop: 'none' };
+    draft.moveset = GENERIC;
+    draft.rim = { color: 0xffc890, amount: 0.2 };
+    draft.girth = 1.1;
   },
 };
 

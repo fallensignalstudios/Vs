@@ -6,7 +6,8 @@
 import * as THREE from 'three';
 import { PALETTE as P, type MatId } from '@/core/api/materials';
 import type { FamilyId } from './families';
-import type { TriplanarParams } from './triplanar';
+import type { PbrLayerParams, TriplanarParams } from './triplanar';
+import { SET_DEFAULTS, SET_LUMINANCE_MEAN, type SurfaceSetId } from './surfaces';
 import type { GlowMode, GlowParams, IceParams } from './effects';
 import type { BarrierParams, HologramParams, ShieldParams } from './effectsUnlit';
 
@@ -20,6 +21,30 @@ export type EffectSpec =
   | { kind: 'shield'; params?: ShieldParams }
   | { kind: 'barrier'; params?: BarrierParams };
 
+/**
+ * ADDED (integration wave): the photographic set a material wears over its procedural family (needs `family` and
+ * `tp`). `scale` defaults to the set's `tileMeters`, `isotropic` / `emissiveMask` to what the set allows.
+ * `replaceColor` (default false): the photo is the colour, so the material's `color` (which tints the procedural
+ * family, e.g. navy paint over the white `coated` maps) is divided back out once the photo is in. Leave it off
+ * where the material is white, so a clone's `color` override still tints the photo (aged stone, dim variants).
+ */
+export interface PbrSpec extends Partial<PbrLayerParams> {
+  set: SurfaceSetId;
+  replaceColor?: boolean;
+}
+
+export function pbrParams(spec: PbrSpec): PbrLayerParams & { replaceColor: boolean } {
+  const d = SET_DEFAULTS[spec.set];
+  return {
+    ...spec,
+    scale: spec.scale ?? d.tileMeters,
+    isotropic: spec.isotropic ?? d.isotropic,
+    emissiveMask: spec.emissiveMask ?? d.emissive,
+    replaceColor: spec.replaceColor ?? false,
+    meanLuminance: SET_LUMINANCE_MEAN[spec.set],
+  };
+}
+
 export interface MatDef {
   /** three.js base: standard / physical are lit PBR; basic hosts the unlit effect materials */
   base: 'standard' | 'physical' | 'basic';
@@ -27,6 +52,8 @@ export interface MatDef {
   props: Record<string, unknown>;
   family?: FamilyId;
   tp?: TriplanarParams;
+  /** ADDED (integration wave): photographic PBR set layered over the family (see surfaces.ts) */
+  pbr?: PbrSpec;
   /** default mapping space: object-space for things that are worn or carried */
   local?: boolean;
   effects?: EffectSpec[];
@@ -34,6 +61,19 @@ export interface MatDef {
 
 const GOLD_LEAF = 0xe8c06a;
 const BARE_STEEL = 0xaab3be;
+
+// ---------------------------------------------------------------- integration wave: the photographic sets
+// Colour target (the four concept paintings): cool, bright white-silver marble walls with gold inlay; dark,
+// highly polished floors that mirror the lights and the gold lines; warm only in the gold.
+
+/** King-era walls, ribs and columns: pale ashlar pulled cool and silver, the procedural veining kept in it. */
+const PALE_STONE: PbrSpec = { set: 'stone_pale', scale: 7.2, saturation: 0.12, tint: 0xf2f4f8, gain: 1.32, contrast: 0.75, blend: 0.6, photo: 0.55, normal: 0.1, roughAmp: 0.4 };
+/** Upper-hall floors: the dark marble lifted to a deep polished grey (the relay-route floor, darker). */
+// (polished stone is flat: the photo's normal stays faint, or the mirror reflection crinkles like wet asphalt)
+const UPPER_FLOOR: PbrSpec = { set: 'marble_dark', scale: 4.2, saturation: 0.5, tint: 0xe8e8ea, gain: 6.5, contrast: 0.62, blend: 0.1, normal: 0.12, roughAmp: 0.9 };
+/** Lower-terminal floors: near-black mirror marble with fine pale veins. */
+const BLACK_FLOOR: PbrSpec = { set: 'marble_dark', scale: 4, saturation: 0.7, gain: 1.15, blend: 0.08, normal: 0.12, roughAmp: 0.8 };
+const BLACK_WALL: PbrSpec = { set: 'marble_dark', scale: 3.2, saturation: 0.7, gain: 1.2, blend: 0.2, normal: 0.35, roughAmp: 0.8 };
 
 /** Shared look of the upper-terminal ceramic. */
 const CERAMIC_TP: TriplanarParams = {
@@ -54,14 +94,16 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   // ------------------------------------------------------------------ King-era substrate — upper
   whiteGold: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.36, metalness: 0.22 },
+    props: { color: 0xffffff, roughness: 0.34, metalness: 0.16 },
     family: 'ceramic',
     tp: CERAMIC_TP,
+    pbr: PALE_STONE,
   },
   whiteGoldPanel: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.36, metalness: 0.22 },
+    props: { color: 0xffffff, roughness: 0.34, metalness: 0.16 },
     family: 'ceramic',
+    pbr: PALE_STONE,
     tp: {
       ...CERAMIC_TP,
       panel: {
@@ -72,9 +114,11 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     },
   },
   whiteGoldFloor: {
-    base: 'standard',
-    props: { color: 0xffffff, roughness: 0.11, metalness: 0.15 },
+    // integration wave: physical (ior 1.75) so the polished marble mirrors the hall like the paintings' floors
+    base: 'physical',
+    props: { color: 0xffffff, roughness: 0.085, metalness: 0.04, ior: 1.75 },
     family: 'ceramicFloor',
+    pbr: UPPER_FLOOR,
     tp: {
       scale: 4,
       normal: 1,
@@ -94,9 +138,11 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     tp: { scale: 1.5, normal: 0.8, roughAmp: 0.08, macro: { albedo: 0.05, rough: 0.04, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.04, rough: 0.04, albedo: 0.015 } },
   },
   goldDark: {
+    // integration wave: the ancient relic trim — blackened metal with gold chevron inlay
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.46, metalness: 1 },
+    props: { color: 0xffffff, roughness: 0.42, metalness: 1 },
     family: 'goldAged',
+    pbr: { set: 'metal_blackgold', scale: 1.4, tint: 0xfff2dc, gain: 1.35, blend: 0.25, normal: 0.9, roughAmp: 0.7 },
     tp: { scale: 2, normal: 1, roughAmp: 0.8, macro: { albedo: 0.12, rough: 0.08, scale: 17, hue: 0.2 }, detail: { scale: 0.27, normal: 0.14, rough: 0.1, albedo: 0.04 } },
   },
 
@@ -105,6 +151,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'physical',
     props: { color: 0xffffff, roughness: 0.15, metalness: 0, ior: 1.85 },
     family: 'blackStone',
+    pbr: BLACK_WALL,
     tp: {
       scale: 5, normal: 0.7, roughAmp: 0.16,
       macro: { albedo: 0.3, rough: 0.05, scale: 29, hue: 0.1 },
@@ -116,6 +163,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'physical',
     props: { color: 0xffffff, roughness: 0.1, metalness: 0, ior: 1.9 },
     family: 'blackStone',
+    pbr: BLACK_FLOOR,
     tp: {
       scale: 5, normal: 0.55, roughAmp: 0.1,
       macro: { albedo: 0.3, rough: 0.04, scale: 31, hue: 0.1 },
@@ -131,6 +179,8 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xffffff, roughness: 0.4, metalness: 1 },
     family: 'bronze',
+    // Dominion equipment: engraved bronze plate (0.5–1 m per tile on props, the set's notes)
+    pbr: { set: 'bronze_plate', scale: 0.85, blend: 0.3, roughAmp: 0.8 },
     tp: { scale: 1.6, normal: 1, roughAmp: 0.8, macro: { albedo: 0.1, rough: 0.07, scale: 11, hue: 0.2 }, detail: { scale: 0.21, normal: 0.12, rough: 0.1, albedo: 0.04 } },
   },
   domOxblood: {
@@ -169,6 +219,9 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0x1d2d4c, roughness: 0.58, metalness: 0.35 },
     family: 'coated',
+    // Reformation equipment: navy hull panels with silver trim; lifted (the set reads dark in dim rooms) and
+    // less metallic than the map, so the paint keeps its colour away from bright reflections
+    pbr: { set: 'panel_navy', scale: 2.2, gain: 1.25, saturation: 0.8, blend: 0.15, metal: 0.55, roughAmp: 1, replaceColor: true },
     tp: {
       scale: 1.6, normal: 1, roughAmp: 0.3,
       macro: { albedo: 0.1, rough: 0.06, scale: 11, hue: 0.1 },
@@ -217,6 +270,8 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xffffff, roughness: 0.66, metalness: 0 },
     family: 'rime',
+    // frost dressing: feathery crystals over dark stone, brightened toward rime white
+    pbr: { set: 'frost', scale: 1.3, gain: 1.35, saturation: 0.8, tint: 0xf2f8ff, blend: 0.3, roughAmp: 0.8 },
     tp: { scale: 1.2, normal: 1, roughAmp: 0.3, macro: { albedo: 0.1, rough: 0.08, scale: 9, hue: 0 }, detail: { scale: 0.19, normal: 0.14, rough: 0.1, albedo: 0.04 } },
     effects: [
       { kind: 'translucency', color: 0xbfe6ff, strength: 0.5 },
@@ -229,6 +284,8 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xffffff, roughness: 0.3, metalness: 0 },
     family: 'tissue',
+    // corruption: wet black membrane, its violet vein mask drives the (pulsing) accent glow below
+    pbr: { set: 'eclipse_tissue', scale: 2.8, blend: 0.25, roughAmp: 1 },
     tp: {
       scale: 1.6, normal: 1.25, roughAmp: 0.34,
       macro: { albedo: 0.2, rough: 0.07, scale: 7, hue: 0 },
@@ -329,3 +386,16 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
 };
 
 export const MAT_IDS = Object.keys(MAT_DEFS) as MatId[];
+
+/**
+ * ADDED (integration wave): how a set is worn when it is put on another material with
+ * `mats.clone(id, { surface: '<set>' })` (the kit's floor `finish` uses this): the photo layer plus the material
+ * properties that suit it (a worn flagstone is not a mirror). Sets without an entry use their defaults.
+ */
+export const SURFACE_FINISH: Partial<Record<SurfaceSetId, { pbr: PbrSpec; props: Record<string, unknown> }>> = {
+  stone_worn: { pbr: { set: 'stone_worn', scale: 3, saturation: 0.7, tint: 0xe6e9ee, gain: 1.15, blend: 0.2, roughAmp: 1, replaceColor: true }, props: { roughness: 0.6, metalness: 0 } },
+  concrete_hangar: { pbr: { set: 'concrete_hangar', scale: 6, saturation: 0.6, blend: 0.12, roughAmp: 1, replaceColor: true }, props: { roughness: 0.62, metalness: 0.04 } },
+  marble_dark: { pbr: BLACK_FLOOR, props: { roughness: 0.1, metalness: 0 } },
+  stone_pale: { pbr: PALE_STONE, props: { roughness: 0.34, metalness: 0.16 } },
+  frost: { pbr: { set: 'frost', scale: 1.5, roughAmp: 1, blend: 0.2, replaceColor: true }, props: { roughness: 0.6, metalness: 0 } },
+};

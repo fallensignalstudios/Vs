@@ -3,7 +3,7 @@
  * solids that match its visuals (decks get a slab solid, ramps an under-fill, exposed edges rails).
  */
 import * as THREE from 'three';
-import type { ColliderHandle, DiscOpts, FloorOpts, MatId, RampOpts, RectOpts, SurfaceDesc } from '@/core/api';
+import type { ColliderHandle, DiscOpts, FloorOpts, MatId, RampOpts, RectOpts, SurfaceDesc, SurfaceFinish } from '@/core/api';
 import { yawTo } from '@/core/mathx';
 import type { V2 } from './geo';
 import { familyOf, KitCtx, Part, type Family } from './core';
@@ -20,6 +20,7 @@ export interface DeckExtras {
   railGaps?: Array<{ side: Side; at: number; width: number }>;
   supports?: boolean;
   base?: number;
+  finish?: SurfaceFinish;
 }
 
 function surfaceKind(mat: MatId, given?: SurfaceDesc['material']): SurfaceDesc['material'] {
@@ -38,7 +39,7 @@ export function buildFloor(ctx: KitCtx, o: FloorOpts): THREE.Object3D {
   const w = ctx.num(o.w, 10, 0.2), d = ctx.num(o.d, 10, 0.2), h = ctx.num(o.h, 0), th = ctx.num(o.thickness, 0.5, 0.05);
   const mat = o.mat ?? 'whiteGoldFloor';
   const part = new Part(ctx, 'floor', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h), ctx.yaw(ctx.num(o.yawDeg, 0)));
-  part.g(mat, o.reflective ? h : null).tbox(w, th, d, 0.02, 0, -th, 0);
+  part.g(ctx.finish(mat, o.finish), o.reflective ? h : null).tbox(w, th, d, 0.02, 0, -th, 0);
   drawInlay(part, defaultInlay(o, w * d), w / 2, d / 2);
   if (!o.noSurface) {
     ctx.surface({ shape: { kind: 'rect', hx: w / 2, hz: d / 2 }, x: part.pose.x, z: part.pose.z, yaw: part.pose.yaw, y: h, material: surfaceKind(mat, o.surfaceMaterial), tag: 'floor' });
@@ -51,7 +52,7 @@ export function buildDisc(ctx: KitCtx, o: DiscOpts): THREE.Object3D {
   const mat = o.mat ?? 'whiteGoldFloor';
   const part = new Part(ctx, 'disc', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h));
   const seg = Math.max(32, Math.min(128, Math.round(r * 5)));
-  part.g(mat, o.reflective ? h : null).arcBand(inner, r, 0, Math.PI * 2, -th, 0, seg);
+  part.g(ctx.finish(mat, o.finish), o.reflective ? h : null).arcBand(inner, r, 0, Math.PI * 2, -th, 0, seg);
   drawInlay(part, defaultInlay(o, Math.PI * r * r), r, r, r);
   if (!o.noSurface) {
     ctx.surface({ shape: { kind: 'disc', r, inner: inner > 0 ? inner : undefined }, x: part.pose.x, z: part.pose.z, y: h, material: surfaceKind(mat), tag: 'disc' });
@@ -147,7 +148,7 @@ export function buildRamp(ctx: KitCtx, o: RampOpts): THREE.Object3D {
   const part = new Part(ctx, 'ramp', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), base), ctx.yaw(ctx.num(o.yawDeg, 0)));
   const hw = w / 2, hd = d / 2, top = o.mat ?? 'whiteGoldFloor', fam = familyOf(top);
   // low end at +Z (local south), high end at −Z (local north)
-  part.g(top).quad([-hw, a, hd], [hw, a, hd], [hw, b, -hd], [-hw, b, -hd]);
+  part.g(ctx.finish(top, o.finish)).quad([-hw, a, hd], [hw, a, hd], [hw, b, -hd], [-hw, b, -hd]);
   const body = part.g(fam.panel);
   const corners: V2[] = [[hd, 0], [hd, a], [-hd, b], [-hd, 0]];
   const side = corners.filter((p, i, arr) => i === 0 || p[1] !== arr[i - 1][1] || p[0] !== arr[i - 1][0]);
@@ -189,7 +190,7 @@ export function buildDeck(ctx: KitCtx, o: RectOpts & DeckExtras): THREE.Object3D
   const base = Math.min(ctx.num(o.base, 0), h - th), drop = h - base;
   const mat = o.mat ?? 'whiteGoldFloor', hw = w / 2, hd = d / 2, fam = familyOf(mat);
   const part = new Part(ctx, 'deck', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h), ctx.yaw(ctx.num(o.yawDeg, 0)));
-  part.g(mat).tbox(w, th, d, 0.02, 0, -th, 0);
+  part.g(ctx.finish(mat, o.finish)).tbox(w, th, d, 0.02, 0, -th, 0);
   // fascia band, gold line, warm under-lip strip
   const fy = -th - 0.12, fh = th + 0.08;
   for (const s of [-1, 1]) {
@@ -238,7 +239,7 @@ export function buildDeck(ctx: KitCtx, o: RectOpts & DeckExtras): THREE.Object3D
   return part.done();
 }
 
-export function buildBridge(ctx: KitCtx, o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid' }): THREE.Object3D {
+export function buildBridge(ctx: KitCtx, o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid'; finish?: SurfaceFinish }): THREE.Object3D {
   const h = ctx.num(o.h, 0), width = ctx.num(o.width, 4, 1), a = ctx.P(o.from[0], o.from[1], h), b = ctx.P(o.to[0], o.to[1], h);
   const L = Math.max(0.5, Math.hypot(b.x - a.x, b.z - a.z)), yaw = yawTo(a.x, a.z, b.x, b.z), mat = o.mat ?? 'whiteGoldFloor';
   const part = new Part(ctx, 'bridge', a, yaw);
@@ -247,7 +248,7 @@ export function buildBridge(ctx: KitCtx, o: { from: [number, number]; to: [numbe
   const hw = width / 2, fam = familyOf(mat);
   for (const [s0, s1, jagStart, jagEnd] of spans) {
     const len = s1 - s0, zc = -(s0 + s1) / 2;
-    part.g(mat).tbox(width, 0.35, len, 0.02, 0, -0.35, zc);
+    part.g(ctx.finish(mat, o.finish)).tbox(width, 0.35, len, 0.02, 0, -0.35, zc);
     for (const s of [-1, 1]) {
       part.g(fam.frame).box(0.34, 0.75, len, s * (hw - 0.17), -0.72, zc);
       part.g('goldTrim').box(0.05, 0.05, len, s * (hw + 0.005), -0.2, zc);

@@ -15,12 +15,15 @@ export type HumanoidArchetype =
   | 'lyessa'              // Dominion officer, rifle
   | 'tharne'              // Reformation technical specialist
   | 'lyric'               // Reformation; carries the sealed case; Eclipse-sensitive
-  | 'malik'               // injured Dominion soldier
+  | 'malik'               // Centurion Malik Varo, injured (Z02): unarmed, dressings — the generated `varo` body
+  | 'varo'                // ADDED (integration) Centurion Malik Varo, armed (Z00/Z01): bare-headed, Dominion rifle — `varo` body
+  | 'officer'             // ADDED (integration) the Z08 Dominion officer found alive inside the organism — `officer` body
   | 'dominionSoldier' | 'reformationSoldier' | 'reformationMarine'
   | 'enforcer'            // Dominion Enforcer: heavy, tower shield with energy rim, shock baton
   | 'medic' | 'survivor'
   | 'linkbound'           // Eclipse-coerced body in appropriated mixed-faction armour
-  | 'kingWitness'         // luminous historical figure (Witness V) — never a combatant
+  | 'kingWitness'         // the King in Witness V (luminous, never a combatant) — the generated `king` body
+  | 'vesryn'              // ADDED (integration) the King's chronicler in Witness V, no halo — the `vesryn` body
   | 'cross' | 'sol';      // faction authorities seen on comm displays
 
 export type CreatureArchetype =
@@ -234,15 +237,24 @@ export interface CharacterCreateOpts {
    */
   halfHuman?: boolean;
   /**
-   * ADDED (polish 3). `kingWitness` only: false = without the King's halo (Vesryn, Witness V). Default true.
+   * ADDED (polish 3). `kingWitness` only: false = without the King's five-point halo. Default true. (Integration:
+   * Vesryn now has his own archetype, `vesryn`, which never has a halo — use it rather than a haloless King.)
    */
   halo?: boolean;
+  /**
+   * ADDED (integration). Generated bodies only (meant for the King in Witness V: «armour broken along one shoulder.
+   * Blood runs beneath one eye»): the plate of the figure's LEFT shoulder cracked, chipped to the dark metal under it
+   * and scorched; a run of blood from under the RIGHT eye down the cheek; ash greying the hair. A surface tint in
+   * the body's shader (no geometry, no draw call); procedural figures ignore it.
+   */
+  wounded?: boolean;
 }
 
 export interface CharacterFactory {
   /**
    * Humanoid archetypes that have a generated body in public/models (the five leads, soldiers, Enforcer,
-   * Linkbound, survivors) return it, animated by the procedural moveset: same actions, timings, events and
+   * Linkbound, survivors; integration: `malik` / `varo` → varo.glb, `officer` → officer.glb, `kingWitness` →
+   * king.glb, `vesryn` → vesryn.glb) return it, animated by the procedural moveset: same actions, timings, events and
    * sockets as the procedural figure (see HumanoidVisual). When the model files are not loaded yet the visual
    * starts as the procedural figure and switches by itself on a later update(); when they cannot be loaded it
    * stays procedural. `height` follows the body that is drawn. Call preload() while a zone loads to avoid the
@@ -334,6 +346,8 @@ export const HUMANOID_SOCKETS = [
  *    · `igniteBlades` (Selene) — the hilt comes up, the blades snap out and FLARE cold-white for ≈ 1 s, then she
  *      settles into her guard. Draws Verity (setLoadout({ melee: true })) if it was put away. Play it out of
  *      `verityCollapsed` after stop('verityCollapsed'). 'hit' marks the ignition.
+ *  - ADDED (integration): `aimRifle` draws the figure's long gun (setLoadout({ ranged: true })) if it carries one and
+ *    it is put away — a posed rifleman never aims with empty hands.
  *  - Unknown action names play a small generic gesture and warn once.
  * Locomotion: the stride follows the distance the root really moved (feet do not slide on starts, stops, turns or
  * against walls), planted feet stay put in world space, and a figure turned on the spot takes turn steps. Report

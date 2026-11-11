@@ -78,10 +78,12 @@ export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: numb
   const hw = w / 2, hd = d / 2;
   const R = ctx.num(o.rise, Math.max(2, w * 0.24), 0.5, w);
   const glow = ctx.num(o.glow, 3.2, 0, 20);
-  const hazeColor = ctx.num(o.hazeColor, 0xffe6bf);
+  // integration wave: daylight-white haze (the paintings' upper space is a cool bright haze, not amber)
+  const hazeColor = ctx.num(o.hazeColor, 0xf6f0e6);
   const fam = familyOf(o.mat);
-  // the shell is lit from below by the hall itself: a faint warm bounce keeps it ivory rather than grey
-  const shellMat = ctx.variant(o.mat ?? 'whiteGold', fam.dark ? {} : { emissive: 0x6b5c46, emissiveIntensity: 0.45 });
+  // the shell is lit from below by the hall itself: a faint bounce keeps it pale rather than grey (integration
+  // wave: a neutral silver bounce, not a warm ivory one)
+  const shellMat = ctx.variant(o.mat ?? 'whiteGold', fam.dark ? {} : { emissive: 0x60646c, emissiveIntensity: 0.5 });
   const shell = part.g(shellMat), rib = part.g(fam.frame), trim = part.g('goldTrim');
 
   // ---- the arch: t = 0 left springing → π/2 crown → π right springing -----------------------------------

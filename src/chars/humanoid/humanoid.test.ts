@@ -4,8 +4,8 @@ import { HUMANOID_ACTIONS, isHumanoidVisual, type HumanoidArchetype } from '@/co
 import { createHumanoid } from './index';
 import { listActions, listArchetypes } from './debug';
 
-const ALL: HumanoidArchetype[] = ['tarrik', 'selene', 'lyessa', 'tharne', 'lyric', 'malik', 'dominionSoldier', 'reformationSoldier',
-  'reformationMarine', 'enforcer', 'medic', 'survivor', 'linkbound', 'kingWitness', 'cross', 'sol'];
+const ALL: HumanoidArchetype[] = ['tarrik', 'selene', 'lyessa', 'tharne', 'lyric', 'malik', 'varo', 'officer', 'dominionSoldier', 'reformationSoldier',
+  'reformationMarine', 'enforcer', 'medic', 'survivor', 'linkbound', 'kingWitness', 'vesryn', 'cross', 'sol'];
 
 function finite(root: THREE.Object3D): boolean {
   let ok = true;

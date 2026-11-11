@@ -9,6 +9,7 @@
  */
 import * as THREE from 'three';
 import { PALETTE } from '@/core/api';
+import { SILHOUETTE_LIGHTS, silhouette } from '@/world/props/ships/silhouettes';
 import { GeoBuilder, type P3 } from './geo';
 
 export type HullRole = 'hull' | 'accent' | 'dark' | 'metal' | 'glow' | 'glass' | 'engine';
@@ -538,6 +539,31 @@ export function buildHull(kind: ShipKind, s: PartSink): void {
   else if (kind === 'dominionShuttle') buildDominionShuttle(s);
   else buildReformationTransport(s);
 }
+
+/**
+ * ADDED (integration wave, SHIPS): the GENERATED capitals (public/models/ship_dominion_capital.glb, 600 m;
+ * ship_reformation_carrier.glb, 500 m) as low-poly silhouettes — ~3 k / 1.5 k flat faces, each painted with its
+ * own averaged texture colour; faces on the glowing texels glow. Same frame as `buildHull` (nose −Z, metres), so
+ * a vertex-coloured consumer (the fleet impostors in ../fleet.ts, a far-field stand-in) can swap it in; light
+ * anchors that sit on these hulls are in `GENERATED_CAPITAL_LIGHTS`.
+ */
+export function buildGeneratedCapital(kind: 'dominionCapital' | 'reformationCapital', s: PartSink): void {
+  const m = silhouette(kind === 'reformationCapital' ? 'reformationCarrier' : 'dominionCapital');
+  const glow = paletteFor(kind).glow.glow;
+  const p = m.pos;
+  const at = (v: number): P3 => [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]];
+  for (let f = 0; f < m.tris; f++) {
+    const lit = m.faceGlow[f] > 0;
+    s.builder(lit ? 'glow' : 'hull').paint(m.faceColor[f], lit ? glow * 0.6 : 0, lit ? 1 : 1.15)
+      .poly([at(m.idx[f * 3]), at(m.idx[f * 3 + 1]), at(m.idx[f * 3 + 2])]);
+  }
+}
+
+/** ADDED (integration wave, SHIPS): engine centres and running lights on the generated capitals (nose −Z, metres). */
+export const GENERATED_CAPITAL_LIGHTS: Readonly<Record<'dominionCapital' | 'reformationCapital', { engines: ReadonlyArray<readonly [number, number, number]>; running: ReadonlyArray<readonly [number, number, number]> }>> = {
+  dominionCapital: SILHOUETTE_LIGHTS.dominionCapital,
+  reformationCapital: SILHOUETTE_LIGHTS.reformationCarrier,
+};
 
 export function paletteFor(kind: ShipKind): HullPalette {
   return kind.startsWith('dominion') ? DOMINION_PALETTE : REFORMATION_PALETTE;

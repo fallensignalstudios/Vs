@@ -184,6 +184,7 @@ export const MUSIC_NORM: Readonly<Record<string, number>> = {
   departure: 9.394,
   duel: 4.392,
   elite: 2.859,
+  farewell: 13.23,
   observation: 32.31,
   quarantine: 6.16,
   recognition: 10.45,
@@ -199,6 +200,7 @@ export const MUSIC_NORM: Readonly<Record<string, number>> = {
   "stinger:sever": 0.7217,
   title: 10.28,
   witness: 11.53,
+  woundVista: 6.48,
 };
 
 export const AMB_NORM: Readonly<Record<string, number>> = {

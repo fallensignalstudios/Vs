@@ -157,10 +157,12 @@ describe('material library', () => {
         expect(s.fragmentShader.length, id).toBeGreaterThan(THREE.ShaderLib.basic.fragmentShader.length);
         // every sampler / vector uniform the GLSL declares (and has enabled) has a holder
         const panel = s.fragmentShader.includes('#define AUR_PANEL'), mask = s.fragmentShader.includes('#define AUR_MASK');
+        const pbr = s.fragmentShader.includes('#define AUR_PBR '), emit = s.fragmentShader.includes('#define AUR_PBR_EMIT');
         for (const name of s.fragmentShader.match(/uniform \w+ (\w+);/g) ?? []) {
           const u = name.replace(/uniform \w+ (\w+);/, '$1');
           if (!/^(tp|glow|ice|spk|glass|aur|holo|shield|bar|cor)[A-Z]/.test(u)) continue;
           if ((/^tp(Panel|Wear)/.test(u) && !panel) || (/^tpMask/.test(u) && !mask)) continue;
+          if ((/^tp(X|Fam)/.test(u) && !pbr) || (u === 'tpXEmit' && !emit)) continue;
           expect(s.uniforms[u], `${id}.${u}`).toBeDefined();
         }
       }

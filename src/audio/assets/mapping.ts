@@ -21,7 +21,11 @@ import { clamp, clamp01, lerp } from '@/core/mathx';
 import type { MusicState } from '@/core/api';
 import type { Layer, MusicDef } from '../music/types';
 
-export const TRACK_NAMES = ['main_theme', 'dominion_combat', 'frozen_stealth', 'relay_combat', 'atrium_carrier', 'eclipse_combat', 'core_witness'] as const;
+export const TRACK_NAMES = [
+  'main_theme', 'dominion_combat', 'frozen_stealth', 'relay_combat', 'atrium_carrier', 'eclipse_combat', 'core_witness',
+  // ADDED (integration): three story cues, one per scene
+  'witness_elegy', 'farewell_departure', 'wound_vista',
+] as const;
 export type TrackName = (typeof TRACK_NAMES)[number];
 
 /** One entry of `public/audio/music/manifest.json`. */
@@ -59,6 +63,12 @@ export interface VoiceMeta {
    * (compressed) on `zone:loading`; entries without a zone are fetched after those, once. Optional.
    */
   zone?: string;
+  /**
+   * ADDED (integration) every zone the line is spoken in, in zone order ('Z00', 'Z02', …) — a line said in several
+   * zones («Yes.», «Move.») is prefetched with each of them, so a reload or a jump into a later zone has it too.
+   * Optional; without it the line belongs to `zone` alone.
+   */
+  zones?: readonly string[];
 }
 
 /** Seconds at the end of each track that cross-fade (equal power) under the start of the next pass. */
@@ -115,6 +125,14 @@ export const TRACKS: Readonly<Record<TrackName, TrackInfo>> = {
   },
   eclipse_combat: { tonic: 38, tune: 0 },
   core_witness: { tonic: 38, tune: 2 },
+  // Witness V (118 s, D minor, 60 BPM): solemn strings, the ensemble from ~32 s, the last chord at 112 s, a lone D
+  // bell into the tail. Composed as one piece for the scene; if the scene outlasts it, it comes round again whole.
+  witness_elegy: { tonic: 38, tune: 0 },
+  // Z12 farewell (109 s, F major, no drums): bell and low strings, a swell 30–72 s, a quiet coda on an open F–C fifth
+  farewell_departure: { tonic: 41, tune: 0 },
+  // Z09 overlook (88.4 s, 50 BPM): a heartbeat from the first second, the full texture at 38.4 s. Later passes loop
+  // only that full section (manifest loopStart 38.4 → 86.4, 10 bars); the first pass plays the sparse reveal.
+  wound_vista: { tonic: 38, tune: 0 },
 };
 
 /** How a MusicState is scored. */
@@ -162,7 +180,10 @@ export const SCORE_PLAN: Readonly<Record<MusicState, ScorePlan>> = {
   silence: gen(),
   title: rec('main_theme', -20),
   credits: rec('main_theme', -19),
-  departure: rec('main_theme', -22),
+  // Z12 concourse; the farewell's recording is what comes next
+  departure: rec('main_theme', -22, { warm: 'farewell_departure' }),
+  // Z12 farewell and departure (ADDED, integration)
+  farewell: rec('farewell_departure', -22, { warm: 'main_theme' }),
 
   context: gen(),
   // generative and held back, so the recorded battle cue arrives as a step up
@@ -186,11 +207,16 @@ export const SCORE_PLAN: Readonly<Record<MusicState, ScorePlan>> = {
   resonance: rec('eclipse_combat', -28, { tone: [650, 650], layers: ['pad:glass', 'pad:air', 'brass'] }),
   decision: gen(0, 'eclipse_combat'),
 
-  quarantine: gen(0, 'core_witness'),
+  // Z08's end and Z09's descent: the generative held tone; the overlook's recording is what comes next
+  quarantine: gen(0, 'wound_vista'),
+  // Z09 overlook (ADDED, integration): the Wound's heartbeat. The whole file is levelled by its mean, which includes
+  // the sparse reveal, so the looped full section (−15.7 dB) plays about 1 dB over this on later passes.
+  woundVista: rec('wound_vista', -23, { warm: 'core_witness' }),
   recognition: rec('core_witness', -25, { layers: RESOLVED_BELL }),
   // the clockwork of the alignment is free-time ticking over the drone, and follows intensity
-  core: rec('core_witness', [-24, -21.5], { layers: ['motif:bell:resolved', 'pulse:clock'] }),
-  witness: rec('core_witness', -21, { layers: RESOLVED_BELL }),
+  core: rec('core_witness', [-24, -21.5], { layers: ['motif:bell:resolved', 'pulse:clock'], warm: 'witness_elegy' }),
+  // Witness V (integration): the elegy written for it, alone — no bell over it (its F♯ would fight the D minor)
+  witness: rec('witness_elegy', -21, { warm: 'core_witness' }),
   consequence: rec('core_witness', -24, { layers: RESOLVED_BELL }),
   // under unhurried voices: the drone far back and dark, the soft keyboard in front of it
   observation: rec('core_witness', -29, { tone: [2400, 2400], layers: ['pad:felt', 'motif:felt'] }),

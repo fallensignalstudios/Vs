@@ -49,6 +49,16 @@
  *    fire-control station light their own faces with a narrow spot from above, not a point light at head height.
  *  - MIRROR FLOORS (`reflective: true`): keep the key light steep (≥ 40° elevation) or behind the usual view,
  *    otherwise its reflection blooms into a white glint. finalize() warns about it.
+ *  - SURFACES (integration wave): the kit's materials now wear the generated photographic PBR sets
+ *    (public/textures/, loaded lazily per zone, procedural detail kept as a blend): white-gold walls, ribs and
+ *    columns → `stone_pale` (cool silver-white ashlar with the procedural veining), upper floors → `marble_dark`
+ *    lifted to a deep polished grey, `blackStone*` → `marble_dark` (near-black mirror marble), `goldDark` (relic
+ *    trim, door leaves, bands) → `metal_blackgold`, Dominion bronze → `bronze_plate`, Reformation navy →
+ *    `panel_navy`, frost dressing → `frost`, corruption tissue → `eclipse_tissue` (its vein mask glows).
+ *    Mirror-polished floors register with a slightly stronger planar reflection (1.25). Damaged or industrial
+ *    floors: `finish: 'worn'` / `'hangar'` on floor / disc / ramp / deck / bridge (see SurfaceFinish). For the
+ *    paintings' silver-white chamber look, build walls and pillars WITHOUT `mat: 'blackStone'` (white-gold =
+ *    silver marble now) and keep `blackStoneFloor` for the mirror floor.
  *  - LIFECYCLE: the builder animates itself on the sim clock (it registers one routine with `game.scripts`);
  *    the mission system calls `dispose()` on zone unload (as a safety net the builder also disposes itself when
  *    its root, once attached to a scene, is removed again). `update()` exists for hosts without a script runner.
@@ -80,9 +90,28 @@ export interface RectOpts {
   mat?: MatId;
 }
 
+/**
+ * ADDED (integration wave): the finish of a walkable top — which photographic surface set it wears
+ * (public/textures/). `'polished'` (default) is the material's own: polished dark marble for `whiteGoldFloor`
+ * (a deep grey in the upper halls) and `blackStoneFloor` (near-black mirror). `'worn'` = dark worn flagstones
+ * (`stone_worn`, rough, no mirror) for damaged areas; `'hangar'` = the steel-and-concrete deck plates
+ * (`concrete_hangar`, 1 m plates) for hangars and landing pads. The kit keeps the slab's substrate (its frame,
+ * seams, inlays) and only changes the top. Physics is unchanged.
+ *
+ *   b.floor({ x: 21, n: 12, w: 42, d: 24, mat: 'blackStoneFloor', finish: 'hangar' });   // Z12 deck
+ *   b.floor({ x: 10, n: 30, w: 12, d: 8, finish: 'worn', h: 0.01 });                  // a cracked patch
+ *
+ * For a custom mesh: `b.surfaceMaterial('worn')` (cached per zone) or `b.mats.clone('whiteGoldFloor', { surface:
+ * 'stone_worn' })` (caller disposes). Valid `surface` values: the set names in public/textures/manifest.json,
+ * or `'none'` for the procedural maps only.
+ */
+export type SurfaceFinish = 'polished' | 'worn' | 'hangar';
+
 export interface FloorOpts extends RectOpts {
   /** slab thickness below the walking surface (default 0.5) */
   thickness?: number;
+  /** ADDED (integration wave): see {@link SurfaceFinish} (default 'polished') */
+  finish?: SurfaceFinish;
   /** inlay style drawn into the floor */
   inlay?: 'none' | 'channels' | 'radial' | 'grid' | 'crownmark';
   /** register with the renderer as a reflective floor */
@@ -94,6 +123,8 @@ export interface FloorOpts extends RectOpts {
 
 export interface DiscOpts {
   x: number; n: number; r: number; inner?: number; h?: number; mat?: MatId; thickness?: number;
+  /** ADDED (integration wave): see {@link SurfaceFinish} */
+  finish?: SurfaceFinish;
   inlay?: FloorOpts['inlay']; reflective?: boolean; noSurface?: boolean;
   /** build a low rim/rail collider around the outer edge except in these [startDeg,endDeg] gaps */
   rim?: { height?: number; gapsDeg?: Array<[number, number]> };
@@ -109,6 +140,8 @@ export interface RampOpts {
   yawDeg?: number;
   mat?: MatId;
   rails?: boolean;
+  /** ADDED (integration wave): see {@link SurfaceFinish} */
+  finish?: SurfaceFinish;
 }
 
 /**
@@ -144,7 +177,7 @@ export interface CeilingOpts extends RectOpts {
   bayPhase?: number;
   /** vaultClosed: brightness of the seam haze (default 3.2; above 1 it blooms) */
   glow?: number;
-  /** vaultClosed: haze / light-sheet colour (default 0xffe6bf, warm white) */
+  /** vaultClosed: haze / light-sheet colour (default 0xf6f0e6, daylight white; integration wave — was 0xffe6bf) */
   hazeColor?: number;
   /** vaultClosed: soft sheets of light from the seams (default true) */
   shafts?: boolean;
@@ -302,7 +335,7 @@ export interface ZoneBuilder {
   /** raised deck: slab + walkable top + solid underside block + edge rails with gaps */
   deck(o: RectOpts & { thickness?: number; solidBelow?: boolean; rails?: Array<'n' | 's' | 'e' | 'w'>; inlay?: FloorOpts['inlay'] } & DeckExtraOpts): THREE.Object3D;
   /** bridge span between two points: walkable, with side rails (fall protection is automatic) */
-  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid' }): THREE.Object3D;
+  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid'; /** ADDED (integration wave) */ finish?: SurfaceFinish }): THREE.Object3D;
   wall(o: WallOpts): THREE.Object3D;
   /** closed or open polyline of walls */
   walls(points: Array<[number, number]>, o?: Omit<WallOpts, 'from' | 'to'> & { closed?: boolean }): THREE.Object3D;
@@ -390,6 +423,13 @@ export interface ZoneBuilder {
   dispose(): void;
   /** true once finalize() has run (doors / barriers refresh the nav grid themselves from then on) */
   readonly finalized: boolean;
+  /**
+   * ADDED (integration wave): the walking-surface material of a {@link SurfaceFinish} on `base` (default
+   * `'whiteGoldFloor'`), for custom meshes. Cached per zone, owned and disposed by the builder; world-space
+   * mapped (do not use it on moving meshes). Optional only because the mission's fallback builder lacks it:
+   * `b.surfaceMaterial?.('worn')`.
+   */
+  surfaceMaterial?(finish: SurfaceFinish, base?: MatId): THREE.Material;
   /** Bounds of everything the kit built, in zone-root space. Valid after finalize(). */
   readonly bounds: THREE.Box3;
   /** The key directional light created by setEnv (null before setEnv, or with `key: null`). */
@@ -403,6 +443,8 @@ export interface ZoneBuilder {
 
 /** ADDED (kit): further options of `ZoneBuilder.deck`. */
 export interface DeckExtraOpts {
+  /** ADDED (integration wave): see {@link SurfaceFinish} */
+  finish?: SurfaceFinish;
   /** gaps in the edge rails (where a ramp or stair joins): `at` = centre of the gap measured from the WEST end of an 'n' / 's' side or the SOUTH end of an 'e' / 'w' side (before rotation), `width` in metres */
   railGaps?: Array<{ side: 'n' | 's' | 'e' | 'w'; at: number; width: number }>;
   /** support pylons under an open deck (default true when the deck stands more than 1.5 m above `base`) */
@@ -505,10 +547,51 @@ export interface HeroProps {
    * Sockets: `rampBottom` (floor, at the ramp foot), `rampTop` (door sill, 1.0–1.1 m up), `door` (just
    * inside), `engines`. Colliders: hull + two nacelle boxes (the ramp itself has none — add a walkable ramp
    * surface between the two sockets if a character should walk aboard).
+   * ADDED (integration wave): the craft are now the generated ships (shuttle 14.4 m with 15.4 m wings, dropship
+   * 15 m with 15 m wings, on struts) and the call returns a {@link DepartureShipProp} — an escort flight and the
+   * load state. Footprints, sockets and colliders changed: read them from the prop, as before.
    */
-  departureShip(kind: 'dominionShuttle' | 'reformationTransport'): HeroProp<{ engines: number; ramp: number }>;
+  departureShip(kind: 'dominionShuttle' | 'reformationTransport'): DepartureShipProp;
   /** holographic displays: trajectory overlay, threat-track streams, diagnostic, forecast clock — see {@link HologramProp} */
   hologram(kind: HologramKind): HologramProp;
+}
+
+/**
+ * ADDED (integration wave, SHIPS): the departure craft of `HeroProps.departureShip`.
+ *
+ * THE CRAFT. `dominionShuttle` is the generated Dominion shuttle (public/models/ship_dominion_shuttle.glb) drawn
+ * 14.4 m long: stubby wings at local x −3.3…0.9 reaching z ±7.7 at 1.85–2.65 m height, the door on the flat forward
+ * flank (x ≈ 2.2), four rear crown engines and five lift thrusters in amber. `reformationTransport` is the
+ * generated Reformation dropship drawn 15 m long on 0.95 m landing struts: its side hatch (x ≈ −4.4) is the door,
+ * wings 3.7 m up reaching z ±7.5, cold blue-white engine pods. (The forge's nominal 18 / 22 m do not fit the Z12
+ * berths.) The hull loads asynchronously; until it is ready — and for good if the file cannot be loaded — the
+ * procedural craft stands in, with its doorway on the same spot. Sockets, ramp and colliders never move.
+ *
+ * ENGINES. `engines` 0…1 lights the crown rings / blue planes, the hull's glowing texels and the exhaust plumes
+ * (0.05–0.1 = parked and smouldering, 1 = take-off).
+ *
+ * ESCORT. `escort` 0…1 (eases at 1/7 per second; `snap()` lands at once): an escort flight of the same craft
+ * (Dominion shuttles in amber around Tarrik's, Reformation dropships in blue-white around Selene's) closes in from
+ * far ahead and wide, and holds formation around the craft. The escorts are CHILDREN of the craft, so they follow
+ * the zone's own flight path; they wait 26–40 lengths ahead, so raise `escort` only once the craft has turned
+ * out of the hangar. 0 hides them. `configureEscort()` before the first raise sets their number and spread.
+ *
+ *   const dom = game.props.departureShip('dominionShuttle');
+ *   dom.configureEscort({ count: 4 });
+ *   // … in the departure, once the craft points out of the hangar:
+ *   dom.params.engines = 1; dom.params.escort = 1;      // and dom.snap() when skipping
+ */
+export interface DepartureShipProp extends HeroProp<{ engines: number; ramp: number; escort: number }> {
+  /** resolves true once the generated hull is on screen, false when the procedural craft stays */
+  readonly whenLoaded: Promise<boolean>;
+  /** true while the generated hull is shown */
+  readonly generated: boolean;
+  /** hull length in metres (14.4 / 15) */
+  readonly length: number;
+  /** escort options (before the first raise of `escort`): count 1…6 (default 4), spread 0.5…3 (default 1) */
+  configureEscort(opts: { count?: number; spread?: number; length?: number }): void;
+  /** the escort craft, in the craft's own frame (empty until `escort` is first raised) — for cameras and audio */
+  escortCraft(): THREE.Object3D[];
 }
 
 /**
