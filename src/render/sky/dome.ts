@@ -33,13 +33,13 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite,
     uRedDir: shared.uRedDir, uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir,
     uWoundR: { value: 0.1 }, uWoundVis: { value: 0 }, uWoundLens: { value: 0.55 }, uWoundDebris: { value: 1 },
-    uWoundHalo: { value: 1 }, uActivity: { value: 0.3 }, uClosed: { value: 0 },
+    uWoundHalo: { value: 1 }, uWoundThroat: { value: 0 }, uActivity: { value: 0.3 }, uClosed: { value: 0 },
     uRedR: { value: 0.07 }, uRedVis: { value: 0 }, uWhiteR: { value: 0.003 }, uWhiteVis: { value: 0 },
     uStars: { value: 1 }, uNebula: { value: 0.6 },
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
     uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall, uGround: { value: 0 }, uGain: { value: 1 },
     uSat: { value: 1 }, uNebTint: { value: new THREE.Color(1, 1, 1) }, uStarDens: { value: 1 }, uRedGain: { value: 1 },
-    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uCoreTint: { value: new THREE.Color(1, 1, 1) }, uTint: { value: new THREE.Color(1, 1, 1) },
+    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uCoreTint: { value: new THREE.Color(1, 1, 1) }, uMatterTint: { value: new THREE.Color(1, 1, 1) }, uTint: { value: new THREE.Color(1, 1, 1) },
   };
   // one program per quality tier, sharing every uniform; variants are created the first time they are needed
   const variants: Array<THREE.ShaderMaterial | null> = [null, null, null];
@@ -85,6 +85,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uWoundLens.value = s.woundLens;
       uniforms.uWoundDebris.value = s.woundDebris;
       uniforms.uWoundHalo.value = s.woundHalo;
+      uniforms.uWoundThroat.value = s.woundThroat;
       uniforms.uActivity.value = activity;
       uniforms.uClosed.value = closed;
       uniforms.uRedR.value = Math.max(s.redRadius, 1e-3);
@@ -107,6 +108,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uSwirl.value = s.swirl;
       uniforms.uWoundCore.value = s.woundCore;
       uniforms.uCoreTint.value.copy(s.coreTint);
+      uniforms.uMatterTint.value.copy(s.matterTint);
       uniforms.uTint.value.copy(s.tint);
       uniforms.uWoundScale.value = woundScale(activity);
     },
