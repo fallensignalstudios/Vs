@@ -11,7 +11,7 @@
  * the driver never changes). A model that cannot be loaded leaves the procedural figure in place for good.
  */
 import * as THREE from 'three';
-import type { ActionInfo, AnimAction, CharacterCreateOpts, Game, HumanoidArchetype, HumanoidLoadout, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
+import type { ActionInfo, AnimAction, CharacterCreateOpts, CorruptionOpts, FrozenOpts, Game, HumanoidArchetype, HumanoidLoadout, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
 import { createHumanoid } from '../humanoid';
 import { HumanoidVisualImpl, type HumanoidRetargetAccess } from '../humanoid/visual';
 import { ARCHETYPES } from '../humanoid/archetypes';
@@ -26,6 +26,10 @@ import { createGlbMaterial, createSharedUniforms, type GlbMaterial, type SharedU
 import { generatedProp, proceduralProp, satchel, type PropRig } from './props';
 import { Retargeter } from './retarget';
 import { flashStrength } from '@/chars/flash';
+import { corruptionCode, frostCode } from '@/chars/regions';
+
+/** eye centre above the head joint / in front of it, in skull lengths (the `eye` socket uses the same) */
+const FACE_EYE_Y = 0.47, FACE_EYE_Z = 0.42;
 import type { RigInfo } from './analyze';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -108,7 +112,9 @@ export class GlbHumanoidVisual implements HumanoidVisual {
 
   constructor(private readonly game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
     this.archetype = archetype;
-    this.headLook = bareHeadFor(cfg, opts.bareHead);
+    // a linkbound whose face is half human needs a face: it is drawn bare-headed
+    const halfHuman = opts.halfHuman === true && archetype === 'linkbound';
+    this.headLook = bareHeadFor(cfg, opts.bareHead || halfHuman);
     this.seed = Number.isFinite(opts.seed) ? Math.floor(opts.seed as number) : 0;
     this.variant = Number.isFinite(opts.variant) ? Math.floor(opts.variant as number) : 0;
     const jitter = cfg.vary ? 1 + (hash01(this.seed * 1.31 + 2.7) - 0.5) * 0.06 : 1;
@@ -128,7 +134,8 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const rim = this.acc.fig.rim;
     _col.set(rim.color);
     this.shared.uRim.value.set(_col.r, _col.g, _col.b, clamp01(rim.amount) * 1.6);
-    if (opts.corruption !== undefined) this.setCorruption(opts.corruption);
+    if (halfHuman) this.setCorruption(opts.corruption ?? 1, { mode: 'halfFace', side: 'right' });
+    else if (opts.corruption !== undefined) this.setCorruption(opts.corruption);
     if (ready) this.attach();
   }
 
@@ -246,6 +253,8 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     make('back', rt.chestRole, new THREE.Vector3(chest.x, chest.y + 0.02 * g, neck.z + (rig.metrics.backDepth + 0.03) * g));
     make('head', 'head', new THREE.Vector3(head.x, head.y + skull * 0.45, head.z));
     make('eye', 'head', new THREE.Vector3(head.x, head.y + skull * 0.47, head.z - skull * 0.42));
+    // the face, in the shader's rest space (scale 1), for face-only and half-face corruption (regions.ts)
+    for (const m of body.materials) m.own.uFace.value.set(head.x / g, (head.y + skull * FACE_EYE_Y) / g, (head.z - skull * FACE_EYE_Z) / g, skull / g);
     make('handL', 'handL', rig.hands.L.grip.clone().multiplyScalar(g));
     make('handR', 'handR', rig.hands.R.grip.clone().multiplyScalar(g));
   }
@@ -371,19 +380,23 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     this.eachFallback((f) => { f.fm.uniforms.uFlash.value.copy(this.shared.uFlash.value); });
   }
 
-  setFrozen(amount: number): void {
+  setFrozen(amount: number, opts?: FrozenOpts): void {
     const a = clamp01(amount);
     this.shared.uFrozen.value = a;
-    // always forwarded: the driver's clocks slow with it
-    this.driver.setFrozen(a);
-    this.eachFallback((f) => { f.fm.uniforms.uFrozen.value = a; });
+    this.shared.uLocal.value.x = frostCode(opts?.region);
+    // always forwarded: the driver's clocks slow with it (not for a locked boot: the figure is not arrested)
+    this.driver.setFrozen(a, opts);
+    this.eachFallback((f) => { f.fm.uniforms.uFrozen.value = a; f.fm.uniforms.uLocal.value.x = this.shared.uLocal.value.x; });
   }
 
-  setCorruption(amount: number): void {
+  setCorruption(amount: number, opts?: CorruptionOpts): void {
     const a = clamp01(amount);
     this.shared.uCorruption.value = a;
-    if (!this.body) this.driver.setCorruption(a);
-    this.eachFallback((f) => { f.fm.uniforms.uCorruption.value = a; });
+    const L = this.shared.uLocal.value;
+    if (opts?.mode !== undefined) L.y = corruptionCode(opts.mode);
+    if (opts?.side !== undefined) L.z = opts.side === 'left' ? -1 : 1;
+    if (!this.body) this.driver.setCorruption(a, opts);
+    this.eachFallback((f) => { f.fm.uniforms.uCorruption.value = a; f.fm.uniforms.uLocal.value.copy(L); });
   }
 
   setDissolve(amount: number, color?: number): void {
@@ -452,6 +465,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const b = this.body;
     if (!b) return;
     this.shared.uTime.value += dt;
+    this.shared.uFlare.value = this.driver.bladeFlare;
     if (this.flashLeft > 0) {
       this.flashLeft -= dt;
       this.shared.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur) * this.flashPeak;

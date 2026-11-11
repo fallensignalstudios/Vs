@@ -26,6 +26,7 @@ const BOX = 0.3;
 const FULL = 0.78;
 
 const SHEET_VERT = /* glsl */ `
+#include <clipping_planes_pars_vertex>
 attribute vec2 aSheet;
 varying vec3 vWorld;
 varying vec3 vNormalW;
@@ -35,10 +36,13 @@ void main() {
   vWorld = wp.xyz;
   vNormalW = normalize( mat3( modelMatrix ) * normal );
   vSheet = aSheet;
-  gl_Position = projectionMatrix * viewMatrix * wp;
+  vec4 mvPosition = viewMatrix * wp;
+  #include <clipping_planes_vertex>
+  gl_Position = projectionMatrix * mvPosition;
 }`;
 
 const SHEET_FRAG = /* glsl */ `
+#include <clipping_planes_pars_fragment>
 varying vec3 vWorld;
 varying vec3 vNormalW;
 varying vec2 vSheet;
@@ -53,6 +57,7 @@ float noise( vec2 p ) {
   return mix( mix( hash( i ), hash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( hash( i + vec2( 0.0, 1.0 ) ), hash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
 }
 void main() {
+  #include <clipping_planes_fragment>
   vec3 toCam = cameraPosition - vWorld;
   float dist = length( toCam );
   // a sheet seen face-on glows, seen edge-on it vanishes: no hard lines; it thins out as it falls
@@ -324,6 +329,8 @@ function lightSheets(ctx: KitCtx, part: Part, seams: Seam[], at: (t: number, off
   const m = new THREE.ShaderMaterial({
     vertexShader: SHEET_VERT, fragmentShader: SHEET_FRAG, uniforms, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: true,
+    // cut by the renderer's global clipping planes like the built-in materials (debug planView)
+    clipping: true,
   });
   m.name = 'kit-vault-sheets';
   const mesh = new THREE.Mesh(ctx.own(g), ctx.own(m));

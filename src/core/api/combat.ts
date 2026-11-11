@@ -491,6 +491,16 @@ export interface PlayerController {
    * three frames — call it every tick while lining up a shot or a throw. No-op while not in follow mode.
    */
   aimAt(point: Vec3Like): void;
+  /**
+   * ADDED (polish 3). Settle the protagonist at once, where it stands and as it faces: the swing / heavy charge /
+   * dodge / deflect / counter / ability in progress is dropped (its clip fades out in 0.15 s; its hit never lands),
+   * guard and aim are let go, the lock-on is released and the body stops. Cooldowns, ammo, Echo and held scripted
+   * poses are untouched; a stagger plays out. Call it when a scene takes over the figure (before setting its yaw)
+   * so the facing it sets holds from the first frame. Independently of this, while `enabled` is false nothing in
+   * the controller turns the body (an unfinished wind-up, counter step or lock-on no longer writes the yaw).
+   * Optional so hand-built controllers stay valid; the real one always has it.
+   */
+  cancelAction?(): void;
 }
 
 /** ADDED. See PlayerController.action. */

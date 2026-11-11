@@ -89,22 +89,28 @@ export const ANCIENT_PROPS: PropTable = {
   // ---- story pieces -----------------------------------------------------------------------------------
   fireControlStation: {
     build(p) {
-      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
-      // dais with an inlaid border
-      wg.tbox(3.2, 0.16, 2.2, 0.04);
+      const trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
+      // polish 3: the station is lower-terminal work — polished black stone and gold, with only the lectern heads in
+      // pale aged stone — so it models under its spot instead of reading as a stack of white blocks in a dark room
+      const stone = p.g('blackStone');
+      // dais: a dark bronze toe, the black slab with a gold edge and an inlaid border
+      dk.tbox(3.26, 0.05, 2.26, 0.015);
+      stone.tbox(3.2, 0.16, 2.2, 0.04);
+      trim.box(3.21, 0.02, 2.21, 0, 0.115, 0);
       ch.ribbon([[-1.4, 0.167, -0.9], [1.4, 0.167, -0.9], [1.4, 0.167, 0.9], [-1.4, 0.167, 0.9]], 0.05, [0, 1, 0], true);
       // three-part console: centre desk and two wings turned toward the operator (who stands at +Z, facing −Z)
       for (const [x, ry, w] of [[0, 0, 1.2], [-1.05, 0.45, 0.95], [1.05, -0.45, 0.95]] as const) {
         const z = x === 0 ? -0.5 : -0.3;
-        wg.push().move(x, 0.16, z).rotY(ry).taperOn(w * 0.8, 0.5, w * 0.7, 0.36, 0.8, 0, 0, 0, true).pop();
-        trim.push().move(x, 0.16, z).rotY(ry).box(w * 0.72, 0.035, 0.38, 0, 0.78, 0).pop();
+        stone.push().move(x, 0.16, z).rotY(ry).taperOn(w * 0.8, 0.5, w * 0.7, 0.36, 0.8, 0, 0, 0, true).pop();
+        trim.push().move(x, 0.16, z).rotY(ry).box(w * 0.72, 0.035, 0.38, 0, 0.78, 0).box(w * 0.82, 0.03, 0.52, 0, 0.03, 0)
+          // a gold frame on the operator's face of the desk
+          .box(w * 0.6, 0.02, 0.02, 0, 0.62, 0.2).box(w * 0.6, 0.02, 0.02, 0, 0.2, 0.236).pop();
         lectern(p, w, x, 0.96, z, ry + Math.PI);
       }
-      // flanking pylons with channel lights (polish 3: a dark stepped foot, two gold collars and dark inlays on the
-      // faces break the tall white obelisks up into carved stone)
+      // flanking pylons with channel lights: dark stone obelisks on a stepped foot, gold collars and dark inlays
       for (const s of [-1, 1]) {
         dk.tbox(0.52, 0.12, 0.52, 0.03, s * 1.42, 0.16, -0.85);
-        wg.taperOn(0.4, 0.4, 0.28, 0.28, 2.1, s * 1.42, 0.16, -0.85, true);
+        stone.taperOn(0.4, 0.4, 0.28, 0.28, 2.1, s * 1.42, 0.16, -0.85, true);
         trim.taperOn(0.32, 0.32, 0.1, 0.1, 0.2, s * 1.42, 2.26, -0.85);
         for (const [y, k] of [[0.95, 0.375], [1.75, 0.322]] as const) trim.box(k + 0.035, 0.05, k + 0.035, s * 1.42, y, -0.85);
         for (const f of [-1, 1]) {

@@ -14,20 +14,34 @@ import { AudioEngine } from '../engine';
 import { MUSIC } from '../music/defs';
 import { FakeBuffer, FakeContext } from '../testing/fake-context';
 import { AssetLibrary, voiceGain, type FetchResult } from './library';
+import { audioProblem, mpegDuration } from './sniff';
 import { TRACKS, type TrackMeta, type TrackName } from './mapping';
 import { TrackPlayer } from './player';
+import { voiceChannel } from './voice';
 import { voLineId } from './voiceId';
 
 const MANIFEST = JSON.parse(MANIFEST_JSON) as Record<TrackName, TrackMeta>;
 
 // ---------------------------------------------------------------------------------------------------------
 
-const ok = (body: unknown, type = 'audio/mpeg'): FetchResult => ({
+const ok = (body: unknown, type = 'audio/mpeg', bytes: () => ArrayBuffer = () => new ArrayBuffer(4096)): FetchResult => ({
   ok: true,
   headers: { get: (n) => (n === 'content-type' ? type : null) },
-  arrayBuffer: async () => new ArrayBuffer(4096),
+  arrayBuffer: async () => bytes(),
   json: async () => body,
 });
+
+/** A minimal but valid MP3 stream (MPEG-1 layer III, 128 kbit/s, 44.1 kHz, silent frames) of about `seconds`. */
+function fakeMp3(seconds: number, id3 = false): ArrayBuffer {
+  const frames = Math.max(2, Math.round((seconds * 44100) / 1152));
+  const tag = id3 ? 10 + 32 : 0;
+  const b = new Uint8Array(tag + frames * 417);
+  if (id3) b.set([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 32]);
+  for (let f = 0; f < frames; f++) b.set([0xff, 0xfb, 0x90, 0x00], tag + f * 417);
+  return b.buffer;
+}
+/** a voice file response: a real-looking MP3 of `seconds` */
+const mp3 = (seconds: number): (() => FetchResult) => () => ok(null, 'audio/mpeg', () => fakeMp3(seconds));
 
 /** A library over a fake network: `files` maps a path under audio/ to a response (absent = 404). */
 function fakeLibrary(ctx: FakeContext | null, files: Record<string, () => FetchResult | Promise<FetchResult>>, seconds = 20): { lib: AssetLibrary; fetched: string[]; fetcher: (url: string) => Promise<FetchResult> } {
@@ -35,7 +49,7 @@ function fakeLibrary(ctx: FakeContext | null, files: Record<string, () => FetchR
   const decoding = ctx as unknown as { decodeAudioData?: (b: ArrayBuffer) => Promise<FakeBuffer> } | null;
   if (decoding) {
     decoding.decodeAudioData = async (b: ArrayBuffer): Promise<FakeBuffer> => {
-      if (b.byteLength !== 4096) throw new Error('not audio');
+      if (b.byteLength !== 4096 && !(mpegDuration(b) > 0)) throw new Error('not audio');
       const buf = new FakeBuffer(1, Math.round(seconds * 44100), 44100);
       buf.getChannelData(0).fill(0.05);
       return buf;
@@ -142,7 +156,7 @@ describe('asset library', () => {
     const id = voLineId('Tarrik', 'Hold the line.');
     const { lib, fetched } = fakeLibrary(new FakeContext(), {
       'vo/manifest.json': () => ok({ [id]: { file: `${id}.mp3`, seconds: 1.5 }, broken: { file: 'broken.mp3' } }, 'application/json'),
-      [`vo/${id}.mp3`]: () => ok(null),
+      [`vo/${id}.mp3`]: mp3(1.5),
     }, 1.5);
     expect(lib.voiceMeta(id)).toBeNull();
     expect(lib.voicesKnown).toBe(false);
@@ -156,6 +170,25 @@ describe('asset library', () => {
     expect(lib.clip(id)).toBe(clip);
     await expect(lib.requestClip('selene_ffffffff')).resolves.toBeNull();
     expect(fetched.filter((p) => p.includes('ffffffff'))).toEqual([]); // not in the manifest: never asked for
+  });
+
+  it('checks a voice file is an intact audio stream before anything decodes it', () => {
+    expect(mpegDuration(fakeMp3(2))).toBeCloseTo(2, 1);
+    expect(mpegDuration(fakeMp3(1.2, true))).toBeCloseTo(1.2, 1); // past an ID3v2 tag
+    expect(audioProblem(fakeMp3(2), 2)).toBeNull();
+    expect(audioProblem(fakeMp3(2, true), 2.1)).toBeNull();
+    expect(audioProblem(fakeMp3(0.6), 2)).toMatch(/cut off/);
+    expect(audioProblem(null)).toBe('empty file');
+    expect(audioProblem(new ArrayBuffer(64))).toBe('empty file');
+    expect(audioProblem(new ArrayBuffer(4096))).toBe('not an audio stream');
+    expect(audioProblem(new TextEncoder().encode(' {"error":"nope"}'.padEnd(300)).buffer as ArrayBuffer)).toMatch(/not audio/);
+    const ogg = new Uint8Array(300);
+    ogg.set([0x4f, 0x67, 0x67, 0x53]);
+    expect(audioProblem(ogg.buffer)).toBeNull();
+    // a frame stream that loses sync after its first frame is no stream
+    const bad = new Uint8Array(fakeMp3(1));
+    bad.fill(7, 417);
+    expect(mpegDuration(bad.buffer)).toBe(-1);
   });
 
   it('levels speech by its sounding frames, within ±12 dB and under the peak ceiling', () => {
@@ -289,7 +322,7 @@ describe('score director and voice-over on the engine', () => {
     const ctx = new FakeContext();
     const files = musicFiles(tracks, seconds);
     files['vo/manifest.json'] = () => ok(Object.fromEntries(Object.entries(vo).map(([id, seconds]) => [id, { file: `${id}.mp3`, seconds }])), 'application/json');
-    for (const id of Object.keys(vo)) files[`vo/${id}.mp3`] = () => ok(null);
+    for (const [id, s] of Object.entries(vo)) files[`vo/${id}.mp3`] = mp3(s);
     const { lib } = fakeLibrary(ctx, files, seconds);
     await lib.loadMusic();
     await lib.loadVoices();
@@ -404,12 +437,18 @@ describe('score director and voice-over on the engine', () => {
     expect(engine.voice('Tarrik', 'No recording for this.')).toBe(0);
     expect(engine.vo.speaking).toBeNull();
     await lib.requestClip(id);
+    // clips started since span `n` (a radio line also keys a short squelch, a span of its own)
+    const clipsSince = (n: number): number => ctx.spans.slice(n).filter((x) => x.kind === 'buffer' && x.stop - x.start > 5).length;
     const before = ctx.spans.length;
-    for (const channel of ['voice', 'radio', 'system', 'narration'] as const) {
+    expect(engine.voice('Selene', 'Hold the plane.', { channel: 'system' })).toBe(0); // display text is never voiced
+    expect(ctx.spans.length).toBe(before);
+    let said = 0;
+    for (const channel of ['voice', 'radio', 'narration', 'voice'] as const) {
       const n = ctx.spans.length;
       expect(engine.voice('Selene', 'Hold the plane.', { channel, pos: { x: 4, y: 0, z: -2 } })).toBeCloseTo(20, 6);
       expect(engine.voice('SELENE', 'hold the plane')).toBeCloseTo(20, 6); // the dialogue event announcing the same line
-      expect(ctx.spans.length).toBe(n + 1);
+      expect(clipsSince(n)).toBe(1);
+      said++;
       expect(engine.vo.speaking).toBe(id);
       run(ctx, engine, 1);
     }
@@ -417,30 +456,60 @@ describe('score director and voice-over on the engine', () => {
     expect(engine.vo.speaking).toBeNull();
     run(ctx, engine, 1);
     expect(ctx.maxPolyphony(ctx.currentTime, Infinity)).toBe(0);
-    expect(ctx.spans.length).toBe(before + 4);
+    expect(said).toBe(4);
     engine.stopVoice();
     expect(ctx.problems).toEqual([]);
   });
 
-  it('starts a listed line as soon as its clip decodes, and gives up on one that takes too long', async () => {
+  it('voices a listed line only once its file is here: decoded as it is spoken, and never dropped as late', async () => {
     const id = voLineId('Lyessa', 'On your left.');
-    const { ctx, engine } = await world([], { [id]: 20 });
+    const { ctx, lib, engine } = await world([], { [id]: 20 });
     const n = ctx.spans.length;
-    expect(engine.voice('Lyessa', 'On your left.')).toBe(20); // the manifest's length, before the clip is here
-    expect(ctx.spans.length).toBe(n);
+    // not fetched yet: a subtitle this time (0 → reading time + comm tick), and the file is fetched for next time
+    expect(engine.voice('Lyessa', 'On your left.')).toBe(0);
+    expect(engine.vo.speaking).toBeNull();
     await settle();
-    expect(ctx.spans.length).toBe(n + 1);
+    expect(lib.clipBytesReady(id)).toBe(true);
+    expect(lib.clip(id)).toBeNull(); // fetched, not decoded
+    ctx.currentTime += 3;
+    expect(engine.voice('Lyessa', 'On your left.')).toBe(20); // the manifest's length, before the decode
+    expect(ctx.spans.length).toBe(n);
+    ctx.currentTime += 2; // however long the decode takes …
+    await settle();
+    expect(ctx.spans.length).toBe(n + 1); // … the line still starts
+    expect(engine.vo.speaking).toBe(id);
     engine.stopVoice(0.05);
     run(ctx, engine, 1);
+    expect(ctx.problems).toEqual([]);
+  });
 
-    const slow = voLineId('Malik', 'Still here.');
-    const w = await world([], { [slow]: 20 });
-    w.engine.voice('Malik', 'Still here.');
-    w.ctx.currentTime += 2; // the clip lands two seconds late
-    const m = w.ctx.spans.length;
-    await settle();
-    expect(w.ctx.spans.length).toBe(m);
-    expect(w.engine.vo.speaking).toBeNull();
+  it('prefetches the compressed files of a zone and the next on request, keeps them, and decodes only a few', async () => {
+    const ids = Array.from({ length: 20 }, (_, i) => voLineId('Selene', `Line number ${i}.`));
+    const ctx = new FakeContext();
+    const zoneOf = (i: number): string | undefined => (i < 8 ? 'Z03' : i < 14 ? 'Z04' : i < 18 ? 'Z05' : undefined);
+    const files: Record<string, () => FetchResult> = {
+      'vo/manifest.json': () => ok(Object.fromEntries(ids.map((id, i) => [id, { file: `${id}.mp3`, seconds: 2, ...(zoneOf(i) ? { zone: zoneOf(i) } : {}) }])), 'application/json'),
+    };
+    for (const id of ids) files[`vo/${id}.mp3`] = mp3(2);
+    const { lib, fetched } = fakeLibrary(ctx, files, 2);
+    await lib.prefetchVoices(['Z03', 'Z04']);
+    const got = (): string[] => fetched.filter((p) => p.endsWith('.mp3')).map((p) => p.slice(3, -4));
+    // Z03, Z04, then the zone-less lines — not Z05
+    expect(new Set(got())).toEqual(new Set([...ids.slice(0, 14), ...ids.slice(18)]));
+    expect(lib.voiceMeta(ids[3])).toEqual({ file: `${ids[3]}.mp3`, seconds: 2, zone: 'Z03' });
+    expect(lib.voiceMeta(ids[19])).toEqual({ file: `${ids[19]}.mp3`, seconds: 2 }); // no zone: still a line
+    await lib.prefetchVoices(['Z04', 'Z05']);
+    expect(got().length).toBe(20); // Z04 is not fetched again, Z05 now is
+    expect(lib.voiceStats()).toMatchObject({ listed: 20, fetched: 20, decoded: 0, broken: [] });
+    for (const id of ids) expect(await lib.requestClip(id)).not.toBeNull();
+    const st = lib.voiceStats();
+    expect(st.decoded).toBeLessThanOrEqual(12); // a small decoded LRU …
+    expect(st.fetched).toBe(20); // … over every compressed file
+    expect(got().length).toBe(20); // a dropped clip decodes again without the network
+    expect(lib.clip(ids[19])).not.toBeNull();
+    expect(lib.clip(ids[0])).toBeNull();
+    expect(await lib.requestClip(ids[0])).not.toBeNull();
+    expect(got().length).toBe(20);
   });
 
   it('holds the spoken line while the game is paused and picks it up a moment earlier', async () => {
@@ -470,18 +539,85 @@ describe('score director and voice-over on the engine', () => {
     expect(ctx.problems).toEqual([]);
   });
 
-  it('treats a line whose listed file is gone as unrecorded from then on', async () => {
+  it('a listed but missing or broken file is never voiced, and is reported once', async () => {
     const ctx = new FakeContext();
-    const id = voLineId('Cross', 'Door is sealed.');
-    const { lib } = fakeLibrary(ctx, { 'vo/manifest.json': () => ok({ [id]: { file: `${id}.mp3`, seconds: 2 } }, 'application/json') });
-    await lib.loadVoices();
+    const say = { gone: ['Cross', 'Door is sealed.'], html: ['Sol', 'Hold position.'], json: ['Tharne', 'Two planes.'], short: ['Lyric', 'I hear it.'], good: ['Selene', 'Anchor.'] } as const;
+    const id = (k: keyof typeof say): string => voLineId(say[k][0], say[k][1]);
+    const warned: string[] = [];
+    const files: Record<string, () => FetchResult> = {
+      'vo/manifest.json': () => ok(Object.fromEntries((Object.keys(say) as Array<keyof typeof say>).map((k) => [id(k), { file: `${id(k)}.mp3`, seconds: 3, zone: 'Z10' }])), 'application/json'),
+      [`vo/${id('html')}.mp3`]: () => ok(null, 'audio/mpeg', () => new TextEncoder().encode('<!doctype html><title>404</title>'.padEnd(400, ' ')).buffer as ArrayBuffer),
+      [`vo/${id('json')}.mp3`]: () => ok(null, 'audio/mpeg', () => new TextEncoder().encode('{"detail":{"status":"quota_exceeded"}}'.padEnd(400, ' ')).buffer as ArrayBuffer),
+      [`vo/${id('short')}.mp3`]: () => ok(null, 'audio/mpeg', () => fakeMp3(0.5)), // a cut-off download
+      [`vo/${id('good')}.mp3`]: mp3(3),
+    };
+    const { lib } = fakeLibrary(ctx, files, 3);
+    (lib as unknown as { warn: (m: string) => void }).warn = (m) => warned.push(m);
+    await lib.prefetchVoices(['Z10']);
     const engine = new AudioEngine(ctx.asContext(), { seed: 3, assets: lib });
-    expect(engine.voice('Cross', 'Door is sealed.')).toBe(2); // listed: believed until the file answers
+    for (const k of ['gone', 'html', 'json', 'short'] as const) {
+      expect(engine.voice(say[k][0], say[k][1], { channel: 'radio' })).toBe(0); // reading time + comm tick
+      expect(engine.voice(say[k][0], say[k][1])).toBe(0);
+      expect(lib.clipMissing(id(k))).toBe(true);
+    }
+    expect(warned).toHaveLength(4);
+    expect(warned.join('\n')).toMatch(/not found/);
+    expect(warned.join('\n')).toMatch(/cut off/);
+    expect(lib.voiceStats().broken.sort()).toEqual([id('gone'), id('html'), id('json'), id('short')].sort());
+    expect(engine.voice('Selene', 'Anchor.')).toBe(3);
     await settle();
+    expect(engine.vo.speaking).toBe(id('good'));
+    expect(ctx.spans.filter((s) => s.kind === 'buffer' && s.stop - s.start > 2.5)).toHaveLength(1);
+    expect(warned).toHaveLength(4);
+  });
+
+  it('never voices display text: the system channel and the display speakers', async () => {
+    const lines = [['Command strip', 'UNAUTHORIZED FRIENDLY FIRE'], ['Terminal', 'Access granted.'], ['Tharne', 'Status nominal.']] as const;
+    const vo: Record<string, number> = {};
+    for (const [sp, t] of lines) vo[voLineId(sp, t)] = 2;
+    const { ctx, lib, engine } = await world([], vo, 2);
+    await lib.prefetchVoices(['Z00']);
+    const n = ctx.spans.length;
+    expect(engine.voice('Command strip', 'UNAUTHORIZED FRIENDLY FIRE', { channel: 'system' })).toBe(0);
+    expect(engine.voice('Command strip', 'UNAUTHORIZED FRIENDLY FIRE')).toBe(0);
+    expect(engine.voice('Terminal', 'Access granted.')).toBe(0);
+    expect(engine.voice('Tharne', 'Status nominal.', { channel: 'system' })).toBe(0);
+    await settle();
+    expect(ctx.spans.length).toBe(n);
     expect(engine.vo.speaking).toBeNull();
-    ctx.currentTime += 1;
-    expect(engine.voice('Cross', 'Door is sealed.')).toBe(0); // now known to be missing: the caller ticks instead
-    expect(ctx.spans.filter((s) => s.kind === 'buffer' && s.stop - s.start > 1.5)).toEqual([]);
+    expect(engine.voice('Tharne', 'Status nominal.', { channel: 'radio' })).toBe(2);
+  });
+
+  it('puts comm voices on the radio chain and keys the squelch around them', async () => {
+    expect(voiceChannel('Cross', {})).toBe('radio');
+    expect(voiceChannel('Sol', { channel: 'voice' })).toBe('radio');
+    expect(voiceChannel('Cross', { pos: { x: 1, y: 0, z: 0 } })).toBe('voice'); // standing in the scene
+    expect(voiceChannel('Cross', { pos: { x: 1, y: 0, z: 0 }, offscreen: true })).toBe('radio');
+    expect(voiceChannel('Selene', {})).toBe('voice');
+    expect(voiceChannel('Tharne', { channel: 'radio' })).toBe('radio');
+    expect(voiceChannel('Narrator', { channel: 'narration' })).toBe('narration');
+    const id = voLineId('Tharne', 'Two planes. Count them.');
+    const { ctx, lib, engine } = await world([], { [id]: 3 }, 3);
+    await lib.requestClip(id);
+    const cues: string[] = [];
+    const v = engine.voices as unknown as { play: (id: string) => unknown };
+    const play = v.play.bind(v);
+    v.play = (x: string): unknown => {
+      cues.push(x);
+      return play(x);
+    };
+    expect(engine.voice('Tharne', 'Two planes. Count them.', { channel: 'radio' })).toBeCloseTo(3, 6);
+    expect(cues).toEqual(['commOpen']);
+    run(ctx, engine, 3.5);
+    expect(cues).toEqual(['commOpen', 'commClose']);
+    expect(engine.vo.speaking).toBeNull();
+    // a line cut short does not close the squelch on top of the next one
+    engine.voice('Tharne', 'Two planes. Count them.', { channel: 'radio' });
+    run(ctx, engine, 1);
+    engine.stopVoice(0.05);
+    run(ctx, engine, 3);
+    expect(cues).toEqual(['commOpen', 'commClose', 'commOpen']);
+    expect(ctx.problems).toEqual([]);
   });
 
   it('has nothing to say and nothing recorded without a library', () => {
@@ -563,6 +699,37 @@ describe('the AudioSystem façade', () => {
       await expect(audio.preloadVoices([['Tarrik', 'Hold the line.']])).resolves.toBeUndefined();
       expect(asked.length).toBe(2);
       expect(ctx.problems).toEqual([]);
+      audio.dispose();
+    } finally {
+      g.AudioContext = saved.ctx;
+      g.fetch = saved.fetch;
+    }
+  });
+
+  it('reads the voice manifest at boot (even headless) and fetches a zone\'s voice-over and the next one\'s on zone:loading', async () => {
+    const g = globalThis as unknown as { AudioContext?: unknown; fetch?: unknown };
+    const saved = { ctx: g.AudioContext, fetch: g.fetch };
+    g.AudioContext = class extends FakeContext {};
+    const a = voLineId('Tharne', 'Hold.');
+    const b = voLineId('Cross', 'Report.');
+    const c = voLineId('Lyric', 'Later.');
+    const manifest = { [a]: { file: `${a}.mp3`, seconds: 1, zone: 'Z03' }, [b]: { file: `${b}.mp3`, seconds: 1, zone: 'Z04' }, [c]: { file: `${c}.mp3`, seconds: 1, zone: 'Z09' } };
+    const asked: string[] = [];
+    g.fetch = async (url: string): Promise<FetchResult> => {
+      asked.push(url.replace(/^.*audio\//, ''));
+      if (url.endsWith('vo/manifest.json')) return ok(manifest, 'application/json');
+      if (url.endsWith('.mp3')) return ok(null, 'audio/mpeg', () => fakeMp3(1));
+      throw new TypeError('offline');
+    };
+    try {
+      const game = fakeGame({ manual: true });
+      const audio = createAudioSystem(game);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(asked).toEqual(['vo/manifest.json']); // the score waits until asked for; the voice manifest does not
+      game.events.emit('zone:loading', { zone: 'Z03' });
+      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+      expect(asked.filter((u) => u.endsWith('.mp3')).sort()).toEqual([`vo/${a}.mp3`, `vo/${b}.mp3`].sort());
+      expect(audio.debugInfo().voiceOver).toEqual({ listed: 3, fetched: 2, decoded: 0, broken: [] });
       audio.dispose();
     } finally {
       g.AudioContext = saved.ctx;

@@ -5,7 +5,8 @@
  * animation DRIVER for another body, e.g. a generated GLB.
  */
 import * as THREE from 'three';
-import type { ActionInfo, AnimAction, HumanoidArchetype, HumanoidLoadout, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
+import type { ActionInfo, AnimAction, CorruptionOpts, FrozenOpts, HumanoidArchetype, HumanoidLoadout, HumanoidVisual, PlayOpts, SocketName, Vec3Like } from '@/core/api';
+import { corruptionCode, frostCode } from '@/chars/regions';
 import { ZONE } from './geo/builder';
 import { instantiateRig, type RigInstance } from './rig';
 import { createFigureMaterial, type FigureUniforms } from './material';
@@ -54,6 +55,9 @@ export interface HumanoidRetargetAccess {
   readonly fig: FigureDef;
 }
 
+/** how long Verity's blades flare after `play('igniteBlades')` (s) */
+const IGNITE_SECONDS = 1.1;
+
 export class HumanoidVisualImpl implements HumanoidVisual {
   readonly archetype: HumanoidArchetype;
   readonly root = new THREE.Group();
@@ -83,6 +87,8 @@ export class HumanoidVisualImpl implements HumanoidVisual {
   private flashDur = 0.12;
   private flashPeak = 1;
   private frozen = 0;
+  /** ignite-blades flare left, 1 → 0 over IGNITE_SECONDS */
+  private flare = 0;
   private glow = 1;
   private time = 0;
   private lastYaw = 0;
@@ -128,6 +134,18 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     }
     this.model.add(this.rig.bones[0]);
     if (fig.geometry) this.lod = this.buildMeshes();
+    // the face in model space (face-only / half-face corruption, regions.ts): the eyes are where the lids slide
+    {
+      const R = fig.spec.rest, I = fig.spec.index;
+      const hi = I.head, li = I.lids;
+      if (hi !== undefined) {
+        const top = fig.spec.prop.height / fig.spec.scale;
+        const skull = Math.max(0.08, top - R[hi * 3 + 1]);
+        const ey = li !== undefined ? R[li * 3 + 1] : R[hi * 3 + 1] + skull * 0.47;
+        const ez = li !== undefined ? R[li * 3 + 2] : R[hi * 3 + 2] - skull * 0.42;
+        this.uniforms.uFace.value.set(0, ey, ez, skull);
+      }
+    }
 
     this.animator = new Animator(fig.spec, { resolve: (name) => resolveClip(fig.moveset, name), has: (name) => hasClip(fig.moveset, name) });
     this.animator.headBias.set(fig.headBias[0] * DEG, fig.headBias[1] * DEG, fig.headBias[2] * DEG);
@@ -265,7 +283,17 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     const name = typeof action === 'string' && action ? action : 'idle';
     if (name === 'frozen') { this.animator.paused = true; return { duration: 0, hitTimes: [], loop: true }; }
     if (name === 'idle') { this.animator.stop(undefined, opts?.fade); this.animator.paused = false; return { duration: 0, hitTimes: [], loop: true }; }
+    // Verity's blades flare as they ignite (the clip draws the hilt and snaps them out)
+    if (name === 'igniteBlades' && this.fig.items.melee?.blades) {
+      this.flare = 1;
+      this.setLoadout({ melee: true, ranged: false });
+    }
     return this.animator.play(name, opts);
+  }
+
+  /** 0..1 strength of the ignite-blades flare right now (a generated body mirrors it on its own blades) */
+  get bladeFlare(): number {
+    return this.uniforms.uFlare.value;
   }
 
   stop(action?: AnimAction, fade?: number): void {
@@ -313,12 +341,21 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     this.flashLeft = this.flashDur;
   }
 
-  setFrozen(amount: number): void {
-    this.frozen = clamp01(amount);
-    this.uniforms.uFrozen.value = this.frozen;
+  setFrozen(amount: number, opts?: FrozenOpts): void {
+    const a = clamp01(amount);
+    const region = frostCode(opts?.region);
+    this.uniforms.uLocal.value.x = region;
+    this.uniforms.uFrozen.value = a;
+    // the whole figure is arrested (its clocks slow); a boot locked in ice leaves the figure free
+    this.frozen = region === 0 ? a : 0;
   }
 
-  setCorruption(amount: number): void { this.uniforms.uCorruption.value = clamp01(amount); }
+  setCorruption(amount: number, opts?: CorruptionOpts): void {
+    this.uniforms.uCorruption.value = clamp01(amount);
+    const L = this.uniforms.uLocal.value;
+    if (opts?.mode !== undefined) L.y = corruptionCode(opts.mode);
+    if (opts?.side !== undefined) L.z = opts.side === 'left' ? -1 : 1;
+  }
 
   setDissolve(amount: number, color?: number): void {
     const a = clamp01(amount);
@@ -409,6 +446,11 @@ export class HumanoidVisualImpl implements HumanoidVisual {
       this.flashLeft -= dt;
       this.uniforms.uFlash.value.w = Math.max(0, this.flashLeft / this.flashDur) * this.flashPeak;
     }
+    // ignited blades: a flare that blooms fast and settles over the cue
+    if (this.flare > 0) {
+      this.flare = Math.max(0, this.flare - dt / IGNITE_SECONDS);
+      this.uniforms.uFlare.value = Math.sin(Math.min(1, (1 - this.flare) * 5) * Math.PI * 0.5) * this.flare;
+    }
 
     // look target → model space
     if (this.lookWorld) {
@@ -417,7 +459,7 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     } else an.setLook(null);
 
     // equipment follows the action (two-handed work sheathes the weapon, a dying hand lets go)
-    if (this.equip.sync(an.emptyHands, an.dropped, an.stow)) { this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey); this.syncOverlays(); }
+    if (this.equip.sync(an.emptyHands, an.dropped, an.stow, an.collapse)) { this.stance = resolveStance(this.fig.moveset, this.equip.stanceKey); this.syncOverlays(); }
     const lf = an.loco.flags;
     an.setAuto(lf.guarding ? 'guard' : lf.aiming && this.equip.rangedHeld ? 'aim' : null);
 

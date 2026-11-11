@@ -184,6 +184,20 @@ describe('hero props', () => {
 });
 
 describe('polish 3 additions', () => {
+  it('effect shaders are cut by the global clipping planes (debug planView)', () => {
+    const cage = createHeroProps(null).containmentCage('dominion');
+    let n = 0;
+    cage.object.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+      if (!m || Array.isArray(m) || !m.isShaderMaterial) return;
+      n++;
+      expect(m.clipping).toBe(true);
+      expect(m.vertexShader).toContain('#include <clipping_planes_vertex>');
+      expect(m.fragmentShader).toContain('#include <clipping_planes_fragment>');
+    });
+    expect(n).toBeGreaterThan(0);
+  });
+
   it('hologram pools hold the long headers and labels (40 / 32 characters)', () => {
     for (const k of HOLO) {
       const h = createHeroProps(null).hologram(k);

@@ -75,7 +75,8 @@ export class AudioEngine {
     this.music = new MusicEngine(ac, this.res, this.mixer, seed ^ 0x51ed, opts.norm?.music ?? MUSIC_NORM, this.samples);
     this.ambience = new AmbienceEngine(ac, this.res, this.mixer, this.voices, seed ^ 0x2c1b, opts.norm?.amb ?? AMB_NORM);
     this.score = new RecordedScore(ac, this.mixer, this.music, opts.assets ?? null);
-    this.vo = new VoicePlayer(ac, this.mixer, opts.assets ?? null);
+    // a comm line is keyed open and shut with the radio squelch (the same click the comm tick starts with)
+    this.vo = new VoicePlayer(ac, this.mixer, opts.assets ?? null, (id) => void this.voices.play(id));
   }
 
   /**

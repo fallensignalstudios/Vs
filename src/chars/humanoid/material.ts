@@ -8,6 +8,7 @@
  */
 import * as THREE from 'three';
 import { HIT_FLASH_GLSL } from '@/chars/flash';
+import { BOOT_TOP, FACE_REGION_GLSL, FROST_REGION_GLSL } from '@/chars/regions';
 
 export interface FigureUniforms {
   uTime: { value: number };
@@ -27,6 +28,12 @@ export interface FigureUniforms {
   uSeed: { value: THREE.Vector3 };
   /** per-instance albedo tint of armour / cloth (squad variation on shared geometry) */
   uTint: { value: THREE.Color };
+  /** where frost and corruption act (src/chars/regions.ts): frost region, corruption mode, half side, boot top */
+  uLocal: { value: THREE.Vector4 };
+  /** eye centre in model metres and skull size (w = 0: no face) */
+  uFace: { value: THREE.Vector4 };
+  /** 0..1 energy-blade flare (Verity igniting): weapon light blooms */
+  uFlare: { value: number };
 }
 
 export interface FigureMaterial {
@@ -45,6 +52,8 @@ varying vec3 vRestN;
 varying vec3 vMatv;
 flat varying float vCode;
 uniform float uFrozen;
+uniform vec4 uLocal;
+${FROST_REGION_GLSL}
 `;
 
 const VERT_BEGIN = /* glsl */ `
@@ -53,7 +62,7 @@ vRest = position;
 vRestN = normal;
 vMatv = aMat.xyw;
 vCode = aMat.z;
-vec3 transformed = vec3( position ) + normal * ( uFrozen * 0.004 );
+vec3 transformed = vec3( position ) + normal * ( uFrozen * ( uLocal.x > 0.5 ? 0.012 * aurFrostRegion( position, uLocal ) : 0.004 ) );
 `;
 
 const NOISE = /* glsl */ `
@@ -97,8 +106,13 @@ uniform vec2 uExposed;
 uniform float uLuminous;
 uniform vec3 uSeed;
 uniform vec3 uTint;
+uniform vec4 uLocal;
+uniform vec4 uFace;
+uniform float uFlare;
 ${NOISE}
 ${HIT_FLASH_GLSL}
+${FROST_REGION_GLSL}
+${FACE_REGION_GLSL}
 vec3 hHash3( vec3 p ) {
   p = vec3( dot( p, vec3( 127.1, 311.7, 74.7 ) ), dot( p, vec3( 269.5, 183.3, 246.1 ) ), dot( p, vec3( 113.5, 271.9, 124.6 ) ) );
   return fract( sin( p ) * 43758.5453 );
@@ -126,6 +140,8 @@ vec3 fgFacet;
 float fgCorr;
 float fgVein;
 float fgEdge;
+float fgFz;
+float fgIris;
 `;
 
 /** after <color_fragment>: albedo detail, dissolve, frost + corruption tint */
@@ -168,27 +184,46 @@ fgPart = vCode - fgZone * 16.0;
   }
 
   // frost: crystals seed in creases and on upward faces, then grow cell by cell
-  fgFrost = 0.0; fgRidge = 0.0; fgCell = 0.0; fgFacet = vec3( 0.0 );
+  fgFrost = 0.0; fgRidge = 0.0; fgCell = 0.0; fgFacet = vec3( 0.0 ); fgFz = 0.0;
   if ( uFrozen > 0.001 ) {
-    vec3 cell = hCells( ( vRest + uSeed * 0.37 ) * vec3( 36.0, 17.0, 36.0 ) );
+    // whole figure, or one boot (regions.ts)
+    float local = step( 0.5, uLocal.x );
+    float fm = aurFrostRegion( vRest + vec3( 0.0, ( hNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal );
+    fgFz = uFrozen * fm;
+    vec3 cell = hCells( ( vRest + uSeed * 0.37 ) * mix( vec3( 36.0, 17.0, 36.0 ), vec3( 48.0, 30.0, 48.0 ), local ) );
     float grow = hFbm( vRest * 5.0 + uSeed );
     float up = clamp( vRestN.y * 0.5 + 0.5, 0.0, 1.0 );
     float seedv = cell.z * 0.34 + grow * 0.5 + up * 0.28 + ( 1.0 - ao ) * 0.45;
-    float th = mix( 0.98, 0.38, uFrozen );
-    fgFrost = smoothstep( th, th + 0.14, seedv );
+    float th = mix( 0.98, 0.38, fgFz ) - local * 0.55 * fgFz;
+    fgFrost = smoothstep( th, th + 0.14, seedv ) * mix( 1.0, smoothstep( 0.05, 0.4, fm ), local );
     fgRidge = fgFrost * smoothstep( 0.1, 0.0, cell.y );
     fgCell = cell.z;
     fgFacet = ( hHash3( vec3( cell.z * 91.7, cell.z * 13.3, 4.1 ) ) - 0.5 ) * fgFrost;
     float l = dot( diffuseColor.rgb, vec3( 0.3, 0.55, 0.15 ) );
     // arrested: colour drains toward a cold grey, but the faction hue survives underneath
-    diffuseColor.rgb = mix( diffuseColor.rgb, mix( vec3( l ), diffuseColor.rgb, 0.45 ) * vec3( 0.82, 0.93, 1.06 ), uFrozen * 0.8 );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.27, 0.41, 0.56 ) + cell.z * 0.14, fgFrost * 0.72 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, mix( vec3( l ), diffuseColor.rgb, 0.45 ) * vec3( 0.82, 0.93, 1.06 ), fgFz * 0.8 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.27, 0.41, 0.56 ) + cell.z * 0.14, fgFrost * mix( 0.72, 0.86, local ) );
   }
 
   // Eclipse corruption: it climbs from ONE flank (which one differs per body), darkens what it takes and runs
   // its light along seams and its own advancing edge; clean plate survives beside it
-  fgCorr = 0.0; fgVein = 0.0;
-  if ( uCorruption > 0.001 ) {
+  fgCorr = 0.0; fgVein = 0.0; fgIris = 0.0;
+  vec3 fd = vRest - uFace.xyz;
+  float fs = max( uFace.w, 0.05 ) / 0.21;
+  if ( uCorruption > 0.001 && uLocal.y > 0.5 && uLocal.y < 1.5 ) {
+    // FACE ONLY (regions.ts): violet irises, thin veins at the temples and the neck
+    if ( uFace.w > 0.0 ) {
+      float a = uCorruption;
+      fgIris = aurIris( fd, vRestN, fs ) * smoothstep( 0.0, 0.3, a );
+      float region = aurFaceVeinRegion( fd, fs );
+      float w1 = abs( hNoise( vRest * 46.0 + uSeed * 3.0 ) - 0.5 );
+      float reach = smoothstep( 1.0 - a, 1.25 - a, region + hNoise( vRest * 19.0 ) * 0.25 );
+      fgVein = clamp( smoothstep( 0.024, 0.004, w1 ) * reach * region, 0.0, 1.0 );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), fgVein * 0.82 );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.32, 0.1, 0.62 ), fgIris * 0.9 );
+      fgVein *= 0.3;
+    }
+  } else if ( uCorruption > 0.001 ) {
     vec3 cp = vRest + uSeed * 1.7;
     float m = hFbm( cp * 3.6 + 11.0 );
     float ca = uSeed.x * 6.2832;
@@ -196,6 +231,11 @@ fgPart = vCode - fgZone * 16.0;
     float dir = clamp( 0.5 + dot( vRest - vec3( 0.0, 1.0, 0.0 ), cdir ) * 1.5, 0.0, 1.0 );
     float reach = uCorruption * 0.78;
     fgCorr = smoothstep( 1.0 - reach, 1.14 - reach, m * 0.45 + dir * 0.55 );
+    if ( uLocal.y > 1.5 && uFace.w > 0.0 ) {
+      // HALF FACE: on the head one half is taken, split by a ragged line
+      float edge = fd.x * uLocal.z + ( hNoise( vRest * 55.0 + uSeed ) - 0.5 ) * 0.014 * fs + ( hNoise( vRest * 13.0 ) - 0.5 ) * 0.024 * fs;
+      fgCorr = mix( fgCorr, smoothstep( -0.003, 0.005, edge ) * smoothstep( 0.0, 0.35, uCorruption ), aurHead( fd, fs ) );
+    }
     float seam = smoothstep( 0.95, 0.62, ao );
     float front = smoothstep( 0.0, 0.25, fgCorr ) * smoothstep( 0.8, 0.3, fgCorr );
     float v1 = abs( hNoise( cp * 17.0 + vec3( 0.0, uTime * 0.05, 0.0 ) ) - 0.5 );
@@ -263,7 +303,7 @@ const FRAG_EMISSIVE = /* glsl */ `
   float fres = pow( 1.0 - ndv, 3.0 );
   // authored emissive (weapon edges shimmer like embers / ice)
   float shimmer = 1.0;
-  if ( fgPart > 7.5 && fgPart < 8.5 ) shimmer = 0.82 + 0.3 * hNoise( vec3( vRest.xz * 28.0, uTime * 2.2 ) );
+  if ( fgPart > 7.5 && fgPart < 8.5 ) shimmer = ( 0.82 + 0.3 * hNoise( vec3( vRest.xz * 28.0, uTime * 2.2 ) ) ) * ( 1.0 + uFlare * 3.5 );
   totalEmissiveRadiance = vEmis * uGlow * shimmer + diffuseColor.rgb * uLuminous;
   // rim: brightest on upper, grazing surfaces
   float up = 0.55 + 0.45 * clamp( normal.y * 0.8 + 0.4, 0.0, 1.0 );
@@ -273,12 +313,13 @@ const FRAG_EMISSIVE = /* glsl */ `
   // skin: cheap warm wrap
   if ( fgPart > 1.5 && fgPart < 2.5 ) totalEmissiveRadiance += vec3( 0.2, 0.05, 0.025 ) * diffuseColor.rgb * ( 0.1 + fres * 0.7 );
   // frost: a cold shell that reads without lighting the scene (stays under ~0.6)
-  totalEmissiveRadiance *= 1.0 - uFrozen * 0.55;
-  totalEmissiveRadiance += vec3( 0.5, 0.78, 1.0 ) * ( fgFrost * ( 0.035 + fres * 0.3 ) + fgRidge * 0.2 + uFrozen * fres * 0.1 );
+  totalEmissiveRadiance *= 1.0 - fgFz * 0.55;
+  totalEmissiveRadiance += vec3( 0.5, 0.78, 1.0 ) * ( fgFrost * ( 0.035 + fres * 0.3 ) + fgRidge * 0.2 + fgFz * fres * 0.1 );
   // corruption: light lives in the seams and pulses slowly
   float pulse = 0.65 + 0.35 * sin( uTime * 3.1 + vRest.y * 9.0 );
   totalEmissiveRadiance *= 1.0 - fgCorr * 0.35;
   totalEmissiveRadiance += vec3( 0.48, 0.2, 1.0 ) * ( fgVein * pulse * 3.4 + fgCorr * fres * 0.35 );
+  totalEmissiveRadiance += vec3( 0.5, 0.2, 1.0 ) * fgIris * ( 0.9 + 0.3 * pulse );
   // telegraph (about to act)
   float tp = 0.7 + 0.3 * sin( uTime * 18.0 );
   totalEmissiveRadiance += uTelegraph.rgb * uTelegraph.a * tp * ( 0.06 + fres * 1.3 );
@@ -335,6 +376,9 @@ export function createFigureMaterial(opts: FigureMaterialOpts = {}): FigureMater
     uLuminous: { value: opts.luminous ?? 0 },
     uSeed: { value: new THREE.Vector3(fractHash(seed + 0.37), fractHash(seed * 1.7 + 4.1), fractHash(seed * 2.3 + 9.2)) },
     uTint: { value: new THREE.Color(1, 1, 1) },
+    uLocal: { value: new THREE.Vector4(0, 0, 1, BOOT_TOP) },
+    uFace: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uFlare: { value: 0 },
   };
   const material = new THREE.MeshStandardMaterial({
     color: 0xffffff, roughness: 1, metalness: 1, vertexColors: true,
@@ -354,7 +398,7 @@ export function createFigureMaterial(opts: FigureMaterialOpts = {}): FigureMater
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE + FRAG_ALPHA);
   };
-  material.customProgramCacheKey = () => 'aurelion-humanoid-4' + (opts.ghost ? '-ghost' : '');
+  material.customProgramCacheKey = () => 'aurelion-humanoid-5' + (opts.ghost ? '-ghost' : '');
 
   // shadow pass: same skinning, same dissolve
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });

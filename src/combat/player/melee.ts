@@ -176,8 +176,9 @@ export class Melee {
     s.t += dt;
     p.move.brake(dt, 60);
 
-    // wind-up: turn onto the target (or the stick direction), then the blow is committed
-    if (s.t < first) {
+    // wind-up: turn onto the target (or the stick direction), then the blow is committed. Not while input is
+    // off: a scene that has just taken over sets the facing, and an unfinished swing must not turn it back.
+    if (s.t < first && p.enabled) {
       const t = s.target;
       if (t && t.alive) a.face(t.pos, M.windupTurn * dt);
       else a.yaw = turnToward(a.yaw, s.wantYaw, M.windupTurn * dt);

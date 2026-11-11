@@ -6,11 +6,17 @@
  *  - Concurrent requests for one asset share one load. A missing asset is not asked for again.
  *  - Decoded music is large (a 95 s stereo track is ~35 MB of float samples), so tracks that nobody has
  *    pinned for a while are dropped; their compressed bytes are kept (1.5 MB each), so coming back to one
- *    costs a decode and no network. Decoded voice clips are kept up to a total length, least recent first out.
+ *    costs a decode and no network.
+ *  - Voice-over is fetched AHEAD and decoded LATE: `prefetchVoices(zones)` (on `zone:loading`) brings in the
+ *    compressed files of those zones' lines (~20 KB a line, ~13 MB for the whole game — all of it is kept),
+ *    and checks each one is really an intact audio stream (sniff.ts). A clip is decoded when its line is
+ *    spoken; a small LRU of decoded clips is kept. A listed file that is gone or broken is reported once and
+ *    the line counts as unrecorded from then on.
  *  - Decoding needs a context but not a running one: before the first user gesture the façade lends an
  *    OfflineAudioContext, so the title theme can be ready before the click that unlocks audio.
  */
 import type { MusicManifest, TrackMeta, VoiceMeta } from './mapping';
+import { audioProblem } from './sniff';
 
 /** The slice of `Response` the library uses (tests pass plain objects). */
 export interface FetchResult {
@@ -27,6 +33,8 @@ export interface LibraryOpts {
   fetcher?: (url: string) => Promise<FetchResult>;
   /** a context that can decode right now, or null when there is none (headless) */
   decoder: () => BaseAudioContext | null;
+  /** where "this listed voice file is unusable" goes (default console.warn) — once per file */
+  warn?: (message: string) => void;
 }
 
 export type AssetState = 'unknown' | 'loading' | 'ready' | 'missing';
@@ -44,14 +52,22 @@ interface Entry<T> {
   bytes: ArrayBuffer | null;
   promise: Promise<T | null> | null;
   lastUsed: number;
+  /** voice clips: the fetch (and check) of the compressed file in flight */
+  fetching?: Promise<boolean> | null;
 }
 
 /** decoded tracks kept at most (the one playing, the one fading or warming, one spare) */
 const MAX_TRACKS = 3;
 /** seconds a decoded track may sit unpinned before it is dropped */
 const TRACK_IDLE = 75;
-/** total seconds of decoded voice clips kept */
-const MAX_VOICE_SECONDS = 240;
+/** decoded voice clips kept (least recently used out; the compressed bytes stay) … */
+const MAX_VOICE_CLIPS = 12;
+/** … and at most this many seconds of them */
+const MAX_VOICE_SECONDS = 90;
+/** compressed voice files fetched at once by a prefetch */
+const PREFETCH_PARALLEL = 4;
+/** individual warnings about broken voice files before they are only counted */
+const MAX_VOICE_WARNINGS = 12;
 /** speech level the clips are brought to: dBFS RMS over the frames that carry speech */
 const VOICE_TARGET_DB = -20;
 const VOICE_PEAK = 0.84;
@@ -126,11 +142,17 @@ export class AssetLibrary {
   private voiceLoad: Promise<Readonly<Record<string, VoiceMeta>> | null> | null = null;
   private clock = 0;
   private sweepAt = 0;
+  private readonly warn: (message: string) => void;
+  private warnings = 0;
+  /** zones whose voice files have been asked for (and whether the zone-less ones have been) */
+  private readonly prefetched = new Set<string>();
+  private readonly brokenVoices: string[] = [];
 
   constructor(opts: LibraryOpts) {
     const b = opts.baseUrl ?? '/';
     this.base = b.endsWith('/') ? b : `${b}/`;
     this.decoder = opts.decoder;
+    this.warn = opts.warn ?? ((m) => console.warn(m));
     this.fetcher = opts.fetcher ?? ((url) => {
       const f = (globalThis as { fetch?: (u: string) => Promise<FetchResult> }).fetch;
       return typeof f === 'function' ? f(url) : Promise.reject(new Error('no fetch'));
@@ -190,7 +212,8 @@ export class AssetLibrary {
     this.voiceLoad ??= this.manifest('vo/manifest.json').then((j) => {
       const out: Record<string, VoiceMeta> = {};
       for (const [id, v] of Object.entries(j ?? {})) {
-        if (isRecord(v) && typeof v.file === 'string' && typeof v.seconds === 'number' && v.seconds > 0) out[id] = { file: v.file, seconds: v.seconds };
+        if (!isRecord(v) || typeof v.file !== 'string' || typeof v.seconds !== 'number' || !(v.seconds > 0)) continue;
+        out[id] = typeof v.zone === 'string' && v.zone ? { file: v.file, seconds: v.seconds, zone: v.zone } : { file: v.file, seconds: v.seconds };
       }
       this.voices = out;
       return j ? out : null;
@@ -326,6 +349,12 @@ export class AssetLibrary {
     return this.clips.get(id)?.state === 'missing';
   }
 
+  /** True when the compressed file of a listed line is here and checked: it can be decoded without the network. */
+  clipBytesReady(id: string): boolean {
+    const e = this.clips.get(id);
+    return !!e && e.state !== 'missing' && (e.state === 'ready' || e.bytes !== null);
+  }
+
   /** The decoded clip, if it is in memory right now. */
   clip(id: string): VoiceClip | null {
     const e = this.clips.get(id);
@@ -334,35 +363,129 @@ export class AssetLibrary {
     return e.value;
   }
 
-  /** Fetch and decode a voice clip (shared between callers). Resolves null when there is no such line. */
+  /** A listed file proved unusable: the line is unrecorded from now on, and that is said once. */
+  private voiceBroken(id: string, e: Entry<VoiceClip>, why: string): void {
+    e.state = 'missing';
+    e.value = null;
+    e.bytes = null;
+    if (this.brokenVoices.includes(id)) return;
+    this.brokenVoices.push(id);
+    this.warnings++;
+    const file = this.voices?.[id]?.file ?? `${id}.mp3`;
+    if (this.warnings <= MAX_VOICE_WARNINGS) this.warn(`[audio] voice-over "${file}" is listed but unusable (${why}) — that line is subtitled only`);
+    else if (this.warnings === MAX_VOICE_WARNINGS + 1) this.warn('[audio] more voice-over files are unusable; see audio.debugInfo().voiceOver.broken');
+  }
+
+  /**
+   * Fetch and check the compressed file of a listed line (shared between callers; nothing if it is here
+   * already). Resolves true when the line can be decoded without the network, false when it has no usable file.
+   */
+  fetchClip(id: string): Promise<boolean> {
+    const meta = this.voices?.[id];
+    if (!meta) return this.voices ? Promise.resolve(false) : this.loadVoices().then((m) => (m?.[id] ? this.fetchClip(id) : false));
+    const e = this.entry(this.clips, id);
+    if (e.state === 'missing') return Promise.resolve(false);
+    if (e.state === 'ready' || e.bytes) return Promise.resolve(true);
+    e.fetching ??= (async (): Promise<boolean> => {
+      const r = await this.get(`vo/${meta.file}`);
+      let bytes: ArrayBuffer | null = null;
+      try {
+        bytes = r ? await r.arrayBuffer() : null;
+      } catch {
+        bytes = null;
+      }
+      const why = r ? audioProblem(bytes, meta.seconds) : 'not found';
+      if (why) {
+        this.voiceBroken(id, e, why);
+        return false;
+      }
+      e.bytes = bytes;
+      return true;
+    })().catch(() => false).then((ok) => {
+      e.fetching = null;
+      return ok;
+    });
+    return e.fetching;
+  }
+
+  /**
+   * Fetch (compressed, not decoded) the voice files of the lines first spoken in these zones, in manifest
+   * order and a few at a time; after the first call the files of lines without a zone follow, once. Zones
+   * asked for before are not fetched again. Resolves when done; never rejects.
+   */
+  async prefetchVoices(zones: ReadonlyArray<string | null | undefined>): Promise<void> {
+    const manifest = this.voices ?? (await this.loadVoices());
+    if (!manifest) return;
+    const want: string[] = [];
+    for (const z of zones) {
+      if (typeof z !== 'string' || !z || this.prefetched.has(z)) continue;
+      this.prefetched.add(z);
+      for (const [id, m] of Object.entries(manifest)) if (m.zone === z) want.push(id);
+    }
+    if (!this.prefetched.has('')) {
+      this.prefetched.add('');
+      for (const [id, m] of Object.entries(manifest)) if (!m.zone) want.push(id);
+    }
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (next < want.length) await this.fetchClip(want[next++]);
+    };
+    const workers: Array<Promise<void>> = [];
+    for (let k = 0; k < Math.min(PREFETCH_PARALLEL, want.length); k++) workers.push(worker());
+    await Promise.all(workers).catch(() => undefined);
+  }
+
+  /** Fetch (unless prefetched) and decode a voice clip. Resolves null when there is no such line or no usable file. */
   async requestClip(id: string): Promise<VoiceClip | null> {
     const manifest = this.voices ?? (await this.loadVoices());
     const meta = manifest?.[id];
     if (!meta) return null;
-    const clip = await this.load(this.entry(this.clips, id), `vo/${meta.file}`, false, (buffer) => {
+    const e = this.entry(this.clips, id);
+    if (e.state === 'ready') {
+      e.lastUsed = this.clock;
+      return e.value;
+    }
+    if (!(await this.fetchClip(id))) return null;
+    const clip = await this.load(e, `vo/${meta.file}`, true, (buffer) => {
       const chans: Float32Array[] = [];
       for (let c = 0; c < buffer.numberOfChannels; c++) chans.push(buffer.getChannelData(c));
       return { buffer, gain: voiceGain(chans, buffer.sampleRate) };
     });
     if (clip) this.trimClips(id);
+    // (a decoder that refused checked bytes: the same verdict as a broken file — unless there was no decoder yet)
+    else if (e.state === 'missing') this.voiceBroken(id, e, 'could not be decoded');
     return clip;
   }
 
+  /** Keep the decoded LRU small: the compressed bytes stay, so a dropped clip costs only a decode next time. */
   private trimClips(keep: string): void {
     let total = 0;
-    const ready: Array<[string, Entry<VoiceClip>]> = [];
+    const ready: Array<Entry<VoiceClip>> = [];
     for (const [id, e] of this.clips) {
       if (e.state !== 'ready' || !e.value) continue;
       total += e.value.buffer.duration;
-      if (id !== keep) ready.push([id, e]);
+      if (id !== keep) ready.push(e);
     }
-    ready.sort((a, b) => a[1].lastUsed - b[1].lastUsed);
-    for (const [id] of ready) {
-      if (total <= MAX_VOICE_SECONDS) break;
-      const e = this.clips.get(id);
-      total -= e?.value?.buffer.duration ?? 0;
-      this.clips.delete(id);
+    ready.sort((a, b) => a.lastUsed - b.lastUsed);
+    let count = ready.length + 1;
+    for (const e of ready) {
+      if (total <= MAX_VOICE_SECONDS && count <= MAX_VOICE_CLIPS) break;
+      total -= e.value?.buffer.duration ?? 0;
+      count--;
+      e.value = null;
+      e.state = 'unknown';
     }
+  }
+
+  /** Voice-over bookkeeping (debug overlays, tests). */
+  voiceStats(): { listed: number; fetched: number; decoded: number; broken: string[] } {
+    let fetched = 0;
+    let decoded = 0;
+    for (const e of this.clips.values()) {
+      if (e.state === 'ready') decoded++;
+      if (e.state !== 'missing' && (e.bytes || e.state === 'ready')) fetched++;
+    }
+    return { listed: this.voices ? Object.keys(this.voices).length : 0, fetched, decoded, broken: [...this.brokenVoices] };
   }
 
   /** What is in memory (debug overlays, the sandbox). */

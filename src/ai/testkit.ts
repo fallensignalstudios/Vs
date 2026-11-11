@@ -32,7 +32,7 @@ export function makeAiWorld(): AiTestWorld {
   };
   for (const t of [
     'encounter:started', 'encounter:wave', 'encounter:cleared', 'link:created', 'link:severed', 'device:disabled',
-    'scan:detected', 'actor:hit', 'actor:died', 'caption', 'player:echo',
+    'scan:detected', 'actor:hit', 'actor:died', 'caption', 'player:echo', 'ai:telegraph',
   ] as const) record(t);
   w.run = (seconds: number) => {
     const n = Math.max(1, Math.round(seconds * 60));

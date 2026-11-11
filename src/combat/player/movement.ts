@@ -39,6 +39,14 @@ export class Movement {
     this.sprinting = false;
   }
 
+  /** stop where it stands (a dodge in progress ends; its cooldown is kept) */
+  settle(): void {
+    this.vx = this.vz = 0;
+    this.ix = this.iz = this.imag = 0;
+    this.dodgeT = 0;
+    this.sprinting = false;
+  }
+
   /** read the move intent in world space (autoplay's moveWorld wins over the camera basis) */
   readIntent(active: boolean): void {
     this.ix = this.iz = this.imag = 0;
@@ -153,7 +161,8 @@ export class Movement {
     // facing
     const speed = Math.hypot(this.vx, this.vz);
     if (mode === 'aim') a.yaw = turnToward(a.yaw, this.cameraYaw(true), M.strafeTurnRate * dt);
-    else if (lock && lock.alive && !this.sprinting) a.face(lock.pos, M.strafeTurnRate * dt);
+    // (input off — a cinematic, a menu — the lock no longer turns the body: the scene owns the facing)
+    else if (lock && lock.alive && !this.sprinting && mode !== 'none') a.face(lock.pos, M.strafeTurnRate * dt);
     else if (mode === 'guard' || mode === 'charge') a.yaw = turnToward(a.yaw, this.cameraYaw(false), (mode === 'charge' ? 5 : M.strafeTurnRate) * dt);
     else if (mag > 0.05 && speed > 0.2) a.yaw = turnToward(a.yaw, yawTo(0, 0, this.ix, this.iz), M.turnRate * dt);
   }

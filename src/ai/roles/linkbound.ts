@@ -179,7 +179,7 @@ export class LinkboundBrain extends Brain {
 
   private startWindup(a: Actor): void {
     this.state = 'windup';
-    this.beginTelegraph(a, this.teleTime(AI.linkbound.telegraph), VIOLET);
+    this.beginTelegraph(a, this.teleTime(AI.linkbound.telegraph), VIOLET, 'strike');
     this.game.audio.play('eclipseBreath', { pos: a.pos, volume: 0.8 });
     // a freed body's beat is heard stumbling; linked bodies tick together through the link system's clock
     if (this.freed) this.game.audio.cadenceTick(a.pos, true);

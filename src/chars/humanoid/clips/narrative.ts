@@ -301,8 +301,24 @@ const walkAway: ClipSpec = {
 /** Linked cadence sway shared by coerced bodies (overridden by the Linkbound moveset). */
 const frozenHold: ClipSpec = { duration: 1, loop: true, keys: [{ t: 0 }] };
 
+/**
+ * One deep, visible breath (polish 3): the chest fills and the shoulders rise, held a moment, then let go a little
+ * lower than before. Upper body only, so it plays over standing, sitting or kneeling; the arms keep their pose.
+ */
+const breath: ClipSpec = {
+  duration: 3.2, upperOnly: true, fadeIn: 0.25, fadeOut: 0.5,
+  keys: [
+    { t: 0 },
+    { t: 0.4, ease: 'inOut', spine: [-2, 0, 0], chest: [-5, 0, 0], neck: [-2, 0, 0], head: [-6, 0, 0] },
+    { t: 0.52, ease: 'inOut', spine: [-2, 0, 0], chest: [-5.5, 0, 0], neck: [-2, 0, 0], head: [-6, 0, 0] },
+    { t: 0.86, ease: 'inOut', spine: [2, 0, 0], chest: [4, 0, 0], neck: [2, 0, 0], head: [6, 0, 0] },
+    { t: 1, ease: 'inOut', spine: [1, 0, 0], chest: [2, 0, 0], neck: [1, 0, 0], head: [3, 0, 0] },
+  ],
+  events: [[0.4, 'hit'], [0.86, 'release']],
+};
+
 export const NARRATIVE: Record<string, ClipSpec> = {
   talk, listen, nod, point, salute, lookAround, interact, holdConsole, holdPlane: holdConsole, assent, handOver, receive,
   kneel, kneelTend, sit, sitTalk, sitInjured, lieInjured, trapped, liftPlate, carryStretcher, cower, limp, distress, grounding,
-  turnAway, walkAway, frozenHold,
+  turnAway, walkAway, frozenHold, breath,
 };

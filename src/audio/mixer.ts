@@ -138,6 +138,7 @@ export class Mixer {
   private sideGain = 1;
   private duckUntil = 0;
   private duckDepth = 0;
+  private duckRelease = 0.35;
 
   constructor(readonly ac: BaseAudioContext, res: Shared, destination?: AudioNode) {
     const t0 = ac.currentTime;
@@ -452,18 +453,24 @@ export class Mixer {
     this.muffle.Q.setTargetAtTime(-3 + m * 6, now, Math.max(0.01, f) / 3);
   }
 
-  /** Lower music + ambience by `amount` (0..1) for `seconds`, then recover. Overlapping ducks extend. */
-  duck(amount: number, seconds: number): void {
+  /**
+   * Lower music + ambience by `amount` (0..1) for `seconds`, then recover with time constant `release`
+   * (default 0.35 s; the voice-over uses a slower one). Overlapping ducks extend; the slowest release wins.
+   */
+  duck(amount: number, seconds: number, release = 0.35): void {
     const now = this.ac.currentTime;
     const depth = clamp(Number.isFinite(amount) ? amount : 0, 0, 0.95);
     const until = now + clamp(Number.isFinite(seconds) ? seconds : 0, 0, 120);
     if (now < this.duckUntil && depth < this.duckDepth && until <= this.duckUntil) return;
-    this.duckDepth = Math.max(depth, now < this.duckUntil ? this.duckDepth : 0);
+    const active = now < this.duckUntil;
+    this.duckDepth = Math.max(depth, active ? this.duckDepth : 0);
     this.duckUntil = Math.max(until, this.duckUntil);
+    const r = clamp(Number.isFinite(release) ? release : 0.35, 0.05, 3);
+    this.duckRelease = active ? Math.max(this.duckRelease, r) : r;
     for (const [p, k] of [[this.musicDuck.gain, 1], [this.ambDuck.gain, 0.6]] as Array<[AudioParam, number]>) {
       p.cancelScheduledValues(now);
       p.setTargetAtTime(1 - this.duckDepth * k, now, 0.07);
-      p.setTargetAtTime(1, this.duckUntil, 0.35);
+      p.setTargetAtTime(1, this.duckUntil, this.duckRelease);
     }
   }
 

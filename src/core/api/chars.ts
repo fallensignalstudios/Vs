@@ -57,6 +57,8 @@ export type AnimAction =
   | 'trapped' | 'liftPlate' | 'interact' | 'holdConsole' | 'holdPlane' | 'assent' | 'handOver' | 'receive'
   | 'salute' | 'nod' | 'lookAround' | 'cower' | 'carryStretcher' | 'limp' | 'distress' | 'grounding'
   | 'lowerWeapon' | 'raiseWeapon' | 'floorStrike' | 'tetherStop' | 'turnAway' | 'walkAway'
+  // ADDED (polish 3) — see ACTION RULES (humanoids)
+  | 'breath' | 'verityCollapsed' | 'igniteBlades'
   | (string & {});
 
 export interface PlayOpts {
@@ -140,12 +142,20 @@ export interface CharacterVisual {
    * figure's design stays readable at the peak; it is never a flat fill. `seconds` default 0.12 (linear decay).
    * ADDED: `strength` 0..1.5, default 1 (a punchy enemy confirm). Use ~0.5 on the protagonist (a hurt flash
    * must not read as a damage state or hide the character), ~0.4–0.6 for block/charge cues.
+   * Polish 3: up to 0.6 a flash is a thin RIM only (no colour on the body at all); the albedo lift and the wider
+   * band fade in between 0.6 and 1.
    */
   flash(color: number, seconds?: number, strength?: number): void;
-  /** 0..1 frozen/arrested look (frost shell, desaturate, pose hold) */
-  setFrozen(amount: number): void;
-  /** 0..1 Eclipse corruption overlay amount */
-  setCorruption(amount: number): void;
+  /**
+   * 0..1 frozen/arrested look (frost shell, desaturate, pose hold). ADDED (polish 3, humanoids): `opts.region`
+   * localizes it — see FrozenOpts. Creatures ignore `opts`.
+   */
+  setFrozen(amount: number, opts?: FrozenOpts): void;
+  /**
+   * 0..1 Eclipse corruption overlay amount. ADDED (polish 3, humanoids): `opts.mode` 'face' / 'halfFace' — see
+   * CorruptionOpts. The mode is remembered until another call passes one. Creatures ignore `opts`.
+   */
+  setCorruption(amount: number, opts?: CorruptionOpts): void;
   /** 0..1 dissolve (1 = gone); used for deaths/spawns */
   setDissolve(amount: number, color?: number): void;
   /** emissive accents intensity multiplier (weapons, eyes, armour lines) */
@@ -161,6 +171,35 @@ export interface CharacterVisual {
   /** Advance animation. dt in scaled seconds. */
   update(dt: number): void;
   dispose(): void;
+}
+
+/**
+ * ADDED (polish 3). Where setFrozen's frost goes (humanoids; procedural and generated bodies alike).
+ *  - 'body' (default): the whole figure — the classic arrest: frost shell, colour drained, animation slowed by
+ *    (1 − amount).
+ *  - 'lead' (= 'footL', the forward foot of a right-handed guard), 'footR', 'feet': ice locked round that boot
+ *    only, up to its top — a thick, solid shell with a ragged crystalline edge. Nothing else changes: no colour
+ *    drain, no slowing, the figure keeps acting (Z05: "she locks ice round his lead boot; he walks out of it").
+ *    Use amount 1 for a fully encased boot, ~0.5 for a crust.
+ * The region stays until the next setFrozen call (which sets it again, 'body' when omitted).
+ */
+export interface FrozenOpts {
+  region?: 'body' | 'lead' | 'footL' | 'footR' | 'feet';
+}
+
+/**
+ * ADDED (polish 3). How setCorruption's corruption is shown (humanoids).
+ *  - 'body' (default): it climbs over the figure from one flank.
+ *  - 'face': the face only — violet in the irises, thin dark veins at the temples and down the neck that reach
+ *    further as the amount rises (Lyric, "the black patterns in her iris, at her neck"). Nothing else is touched.
+ *  - 'halfFace': the body as 'body', and on the head exactly one half is taken, split by a ragged line — the other
+ *    half stays human. `side` picks the taken half (default 'right', the figure's right). Needs a face: see
+ *    CharacterCreateOpts.halfHuman for the linkbound.
+ * The mode (and side) are remembered until a later call passes another.
+ */
+export interface CorruptionOpts {
+  mode?: 'body' | 'face' | 'halfFace';
+  side?: 'left' | 'right';
 }
 
 export interface CharacterCreateOpts {
@@ -187,6 +226,17 @@ export interface CharacterCreateOpts {
    * loaded the procedural figure stands in, as for any generated body.
    */
   bareHead?: boolean;
+  /**
+   * ADDED (polish 3). `linkbound` only: "half the face remains human". The figure is drawn bare-headed (a human
+   * head grafted on, as `bareHead`) and starts with corruption 1 in 'halfFace' mode, so the right half of the face
+   * is taken and the left half is a man's. Change the amount or the side later with
+   * `setCorruption(a, { mode: 'halfFace', side })`. Ignored by other archetypes.
+   */
+  halfHuman?: boolean;
+  /**
+   * ADDED (polish 3). `kingWitness` only: false = without the King's halo (Vesryn, Witness V). Default true.
+   */
+  halo?: boolean;
 }
 
 export interface CharacterFactory {
@@ -275,6 +325,15 @@ export const HUMANOID_SOCKETS = [
  *    sheathed while they play and return afterwards.
  *  - Blades never go through the floor or the wielder: a stroke that reaches the ground stops on it ('impact'
  *    marks the moment), and Verity's energy blades shorten where they would otherwise cut their owner.
+ *  - ADDED (polish 3):
+ *    · `breath` — one deep, visible breath (≈ 3.2 s): the chest fills, the shoulders rise, it is let go. Upper body
+ *      only, so it plays over standing, sitting or kneeling. Every humanoid.
+ *    · `verityCollapsed` (Selene) — Verity collapsed in her hand: the hilt ring held low at the right hip with the
+ *      blades drawn in, whatever the loadout says. A held upper-body pose: stop('verityCollapsed') ends it (the
+ *      blades come back out if Verity is drawn, otherwise it goes back to the hip).
+ *    · `igniteBlades` (Selene) — the hilt comes up, the blades snap out and FLARE cold-white for ≈ 1 s, then she
+ *      settles into her guard. Draws Verity (setLoadout({ melee: true })) if it was put away. Play it out of
+ *      `verityCollapsed` after stop('verityCollapsed'). 'hit' marks the ignition.
  *  - Unknown action names play a small generic gesture and warn once.
  * Locomotion: the stride follows the distance the root really moved (feet do not slide on starts, stops, turns or
  * against walls), planted feet stay put in world space, and a figure turned on the spot takes turn steps. Report
@@ -334,4 +393,5 @@ export const HUMANOID_ACTIONS: readonly AnimAction[] = [
   'trapped', 'liftPlate', 'interact', 'holdConsole', 'holdPlane', 'assent', 'handOver', 'receive',
   'salute', 'nod', 'lookAround', 'cower', 'carryStretcher', 'limp', 'distress', 'grounding',
   'lowerWeapon', 'raiseWeapon', 'floorStrike', 'tetherStop', 'turnAway', 'walkAway',
+  'breath', 'verityCollapsed', 'igniteBlades',
 ];

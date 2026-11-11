@@ -297,12 +297,40 @@ const raiseWeapon: ClipSpec = {
   keys: [{ t: 0 }, { t: 1, ease: 'inOut', ...S_READY }],
 };
 
+/**
+ * Verity collapsed in her hand (polish 3): the hilt ring held low at the right hip, blades drawn in — not drawn
+ * for a fight, not put away. Held upper-body pose (legs keep locomotion); stop('verityCollapsed') ends it.
+ */
+const verityCollapsed: ClipSpec = {
+  duration: 0.8, hold: true, upperOnly: true, collapse: true, fadeIn: 0.35,
+  keys: [
+    { t: 0 },
+    { t: 1, ease: 'inOut', spine: [2, 0, 0], chest: [1, -2, 0], neck: [2, 0, 0], head: [5, 0, 0],
+      armR: { p: [0.25, -0.47, 0.05], blade: [-0.04, -0.5, 0.86], pole: [0.75, -0.5, -0.45] }, armL: { sh: [2, 6, 0], el: 14 } },
+  ],
+};
+
+/**
+ * Verity's blades ignite (polish 3): the hilt comes up before the chest, the blades snap out and flare cold-white,
+ * and it settles into her guard. Draws Verity if it was put away. 'hit' marks the ignition.
+ */
+const igniteBlades: ClipSpec = {
+  duration: 1.15, upperOnly: true, fadeIn: 0.15, fadeOut: 0.3,
+  keys: [
+    { t: 0 },
+    { t: 0.24, ease: 'out', chest: [0, -6, 0], neck: [0, -2, 0], head: [-2, -6, 0], armR: { p: [0.2, -0.2, 0.28], blade: [-0.2, 0.95, 0.24], pole: [0.75, -0.5, -0.45] } },
+    { t: 0.42, ease: 'out', chest: [2, -2, 0], armR: { p: [0.3, -0.17, 0.34], blade: [-0.45, 0.35, 0.82], pole: [0.75, -0.5, -0.45] } },
+    { t: 1, ease: 'inOut', chest: S_READY.chest, neck: S_READY.neck, head: S_READY.head, armR: S_READY.armR, armL: S_READY.armL },
+  ],
+  events: [[0.24, 'hit']],
+};
+
 export const SELENE_MOVES: Moveset = {
   name: 'selene',
   parent: GENERIC,
   clips: {
     attackLight1: light1, attackLight2: light2, attackLight3: light3, attackLight4: light4, attackHeavy: heavy, attackHeavyCharge: heavyCharge,
-    deflect, guard, counter, dispatch, throw: throwClip, dodge, tetherStop, holdPlane, lowerWeapon, raiseWeapon,
+    deflect, guard, counter, dispatch, throw: throwClip, dodge, tetherStop, holdPlane, lowerWeapon, raiseWeapon, verityCollapsed, igniteBlades,
     // side-steps carry Verity upright in her guard, out of the way of the reaching leg
     ...dodgeVariants(S_READY, { armR: DODGE_ARM, armL: { sh: [20, 20, 10], el: 70 } }, { armR: GUARD_ARM, armL: { sh: [-10, 26, 0], el: 50 } }),
   },

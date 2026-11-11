@@ -4,12 +4,12 @@
  * telegraph bookkeeping and melee tokens. Roles implement `think()` as a small state machine.
  */
 import * as THREE from 'three';
-import type { Actor, ActorController, EnemyRole, HitInfo, HitResult, LinkHandle, SpawnOpts, VfxHandle } from '@/core/api';
+import type { Actor, ActorController, EnemyRole, HitInfo, HitResult, LinkHandle, SpawnOpts, TelegraphKind, Vec3Like, VfxHandle } from '@/core/api';
 import type { AiCore } from './core';
 import type { EncounterImpl } from './encounter';
 import { NavFollower } from './steer';
 import { AI } from './tune';
-import { fin, live, nowOf, playerActor, telegraphScale } from './util';
+import { fin, live, nowOf, playerActor, telegraphScale, warnOnce } from './util';
 
 interface Entrance {
   kind: 'aperture' | 'ceiling' | 'breach' | 'march';
@@ -263,14 +263,30 @@ export abstract class Brain implements ActorController {
     return Math.max(AI.minTelegraph, base) * telegraphScale(this.game);
   }
 
-  /** start a telegraph of exactly `seconds` (already scaled) */
-  protected beginTelegraph(a: Actor, seconds: number, color?: number): void {
+  /**
+   * start a telegraph of exactly `seconds` (already scaled). With `kind` it is announced as `ai:telegraph`
+   * (`target`: who it is aimed at, default the brain's target; `pos`: where an area attack lands).
+   */
+  protected beginTelegraph(a: Actor, seconds: number, color?: number, kind?: TelegraphKind, target?: Actor | null, pos?: Vec3Like): void {
     this.teleLeft = this.teleTotal = Math.max(0.05, seconds);
     this.teleColor = color;
     this.lastAttackAt = this.now;
     this.core.noteTelegraph(seconds);
     this.core.noteAttack();
     a.visual?.setTelegraph(0.05, color);
+    if (kind) this.announce(a, kind, seconds, target === undefined ? this.target : target, pos);
+  }
+
+  /** `ai:telegraph` — what zones listen to instead of caption text */
+  protected announce(a: Actor, kind: TelegraphKind, seconds: number, target: Actor | null, pos?: Vec3Like): void {
+    try {
+      this.game.events.emit('ai:telegraph', {
+        actor: a, kind, seconds: Math.max(0, seconds), target: target ?? null,
+        ...(pos ? { pos: { x: pos.x, y: pos.y, z: pos.z } } : {}),
+      });
+    } catch (err) {
+      warnOnce('telegraph:emit', `[ai] an ai:telegraph listener threw: ${String(err)}`);
+    }
   }
 
   /** advance the telegraph; true when it has run out */

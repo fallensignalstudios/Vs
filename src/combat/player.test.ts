@@ -647,3 +647,56 @@ describe('lock-on, scan, context actions, pickups, death', () => {
     expect(d.hp).toBe(5000 - 22);
   });
 });
+
+describe('handing the figure to a scene', () => {
+  it('with input off, an unfinished wind-up or the lock-on no longer turns the body', () => {
+    const w = start('tarrik');
+    const d = target(w, -2.4);
+    d.pos.x = 1.6; // off to the right: the wind-up would turn onto it
+    w.player.lockTarget = d;
+    w.input.press('attack');
+    w.step(1 / 60);
+    expect(w.player.action).toBe('attack');
+    // a scene takes over in the middle of the wind-up and sets the facing
+    w.player.enabled = false;
+    w.player.actor.yaw = 2.5;
+    w.step(0.5);
+    expect(w.player.actor.yaw).toBeCloseTo(2.5, 6);
+    // the swing itself still plays out (the contract: input stops, an action in progress finishes)
+    w.step(1.5);
+    expect(w.player.action).toBe('free');
+    expect(w.player.actor.yaw).toBeCloseTo(2.5, 6);
+    // with input back the lock-on turns the body again
+    w.player.enabled = true;
+    w.step(0.5);
+    expect(Math.abs(w.player.actor.yaw - 2.5)).toBeGreaterThan(0.2);
+  });
+
+  it('cancelAction(): drops the action in progress at once — no hit lands, nothing moves the body, cooldowns stay', () => {
+    const w = start('tarrik');
+    const d = target(w);
+    const got = drops(w, d);
+    w.player.lockTarget = d;
+    w.input.press('heavy');
+    w.step(0.1);
+    expect(['attack', 'charge']).toContain(w.player.action);
+    const v = w.player.actor.visual as unknown as FakeVisual;
+    w.player.enabled = false;
+    w.player.cancelAction!();
+    expect(w.player.action).toBe('free');
+    expect(w.player.lockTarget).toBeNull();
+    expect(v.stopped).toContain(v.played.at(-1));
+    const pos = { x: w.player.actor.pos.x, z: w.player.actor.pos.z };
+    w.player.actor.yaw = -1;
+    w.step(2);
+    expect(got).toEqual([]);
+    expect(w.player.actor.yaw).toBeCloseTo(-1, 6);
+    expect(Math.hypot(w.player.actor.pos.x - pos.x, w.player.actor.pos.z - pos.z)).toBeLessThan(1e-6);
+    // harmless when idle, before a protagonist exists, and twice
+    expect(() => {
+      w.player.cancelAction!();
+      w.player.cancelAction!();
+      makeWorld().player.cancelAction!();
+    }).not.toThrow();
+  });
+});

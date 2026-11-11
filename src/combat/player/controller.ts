@@ -34,6 +34,8 @@ interface Saved {
 
 export class PlayerControllerImpl implements PlayerController {
   enabled = true;
+  /** the clip of the action last started through playAction (cancelAction fades it out) */
+  private actionClip: string | null = null;
   godMode = false;
   threat = 0;
 
@@ -200,6 +202,7 @@ export class PlayerControllerImpl implements PlayerController {
 
   /** play an action on the figure and return timings that are always usable (fallbacks for stubs / no figure) */
   playAction(action: string, duration: number, hitAt: number): { duration: number; hitTimes: number[] } {
+    this.actionClip = action;
     const v = this.visual;
     let info: ActionInfo | null = null;
     if (v) {
@@ -312,6 +315,43 @@ export class PlayerControllerImpl implements PlayerController {
     const s = this.saved[this._protagonist];
     s.ammo = this.ranged.ammo;
     s.reserve = this.ranged.reserve;
+  }
+
+  /**
+   * ADDED (polish 3). Settle the protagonist at once, where it stands and facing as it faces: the swing, heavy
+   * charge, dodge, deflect, counter or ability in progress is dropped (its clip fades out in 0.15 s, its hit never
+   * lands), guard and aim are let go, the lock-on is released and the body stops. Cooldowns, ammo, Echo and held
+   * scripted poses are untouched. For a scene taking over the figure: with this, the yaw (and position) it sets
+   * from its first frame holds. While `enabled` is false nothing in the controller turns the body anyway — but
+   * an action still in progress would otherwise go on moving it.
+   */
+  cancelAction(): void {
+    if (!this.spawned) return;
+    const a = this._actor;
+    const was = this.state;
+    if (was === 'attack' || was === 'charge') this.melee.end();
+    this.melee.reset();
+    this.guard.drop();
+    this.guard.reset();
+    if (this.ranged.aiming) this.ranged.setAim(false);
+    this.abilities.cancelRunning();
+    this.move.settle();
+    this.lock.set(null);
+    this.bufKind = null;
+    a.vel.set(0, 0, 0);
+    a.desiredVel.set(0, 0, 0);
+    a.carryVel.set(0, 0, 0);
+    a.impulse.set(0, 0, 0);
+    a.superArmorUntil = 0;
+    if (was !== 'free' && was !== 'dead' && was !== 'stagger' && this.actionClip && this.visual) {
+      try {
+        this.visual.stop(this.actionClip, 0.15);
+      } catch (err) {
+        warnOnce('cancel:stop', `visual.stop() threw: ${String(err)}`);
+      }
+    }
+    this.actionClip = null;
+    if (a.alive && was !== 'stagger') this.state = 'free';
   }
 
   /** drop every transient state (protagonist switch, teleport, checkpoint restore, death) */

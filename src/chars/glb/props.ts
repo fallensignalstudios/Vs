@@ -63,6 +63,9 @@ export function proceduralProp(slot: ItemSlot, item: ItemDef, driverScale: numbe
  * Mount the generated prop `name` for `slot`. Returns null when the model is not loaded (the caller falls back
  * to proceduralProp). `figureScale` is the character's uniform scale (props grow with the figure).
  */
+/** thickness of a generated ring hilt (Verity) through its hole axis, relative to the file (polish 3: was 1) */
+const RING_SLIM = 0.5;
+
 export function generatedProp(lib: ModelLibrary, name: string, slot: ItemSlot, shared: SharedUniforms, figureScale: number): PropRig | null {
   const inst = lib.instantiate(name);
   if (!inst) return null;
@@ -82,6 +85,8 @@ export function generatedProp(lib: ModelLibrary, name: string, slot: ItemSlot, s
   inst.root.scale.setScalar(k);
   // a chunky generated greatsword reads better slimmed across its flat
   if (slot === 'melee' && !ring) inst.root.scale.x = k * 0.62;
+  // … and a generated ring hilt is far too thick through its hole axis (raw X): a slim band, not a disc
+  if (ring) inst.root.scale.x = k * RING_SLIM;
   inst.root.position.copy(grip).multiply(inst.root.scale).negate();
   if (ring) fix.rotation.z = Math.PI / 2;                      // ring hole axis X → Y: the forearm passes through it
   if (slot === 'shield') {

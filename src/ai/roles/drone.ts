@@ -283,6 +283,7 @@ export class DroneBrain extends Brain {
             // … then commits: from here the line does not move
             this.locked = true;
             this.laser?.setIntensity(1);
+            this.announce(a, 'laneLock', 0, t);
           }
         }
         this.placeLaser(a);
@@ -338,7 +339,7 @@ export class DroneBrain extends Brain {
     const seconds = this.teleTime(this.stat.telegraph);
     this.state = 'telegraph';
     this.locked = false;
-    this.beginTelegraph(a, seconds, this.contaminated ? VIOLET : 0xff5a3a);
+    this.beginTelegraph(a, seconds, this.contaminated ? VIOLET : 0xff5a3a, 'lane', t);
     socketPos(a, 'muzzle', _from);
     this.aimDir.copy(t.aimPoint(_aim)).sub(_from).normalize();
     this.laser = this.game.vfx.beam(_from.clone(), _aim.clone(), 'laser', this.contaminated ? { color: VIOLET } : undefined);

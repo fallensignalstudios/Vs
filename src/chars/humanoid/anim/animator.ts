@@ -152,6 +152,8 @@ export class Animator {
   /** a clip that must play in real time is active (death / knockdown ignore stasis) */
   get thawing(): boolean { return (!!this.shot && this.shot.clip.thaw) || (!!this.base && this.base.clip.thaw && !this.base.ended); }
   /** an active clip needs both hands free */
+  /** a ring hilt is held with its blades in: the one-shot playing decides, else the held poses */
+  get collapse(): boolean { return this.shot ? this.shot.clip.collapse : (!!this.base && this.base.clip.collapse) || (!!this.over && this.over.clip.collapse); }
   get emptyHands(): boolean { return (!!this.shot && this.shot.clip.emptyHands) || (!!this.base && this.base.clip.emptyHands) || (!!this.over && this.over.clip.emptyHands); }
   /** the held weapon has been let go (dead on the floor) */
   get dropped(): boolean {

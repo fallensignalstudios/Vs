@@ -7,6 +7,7 @@
  * (node, old browsers) or `?mute`, it stays silent forever and never throws.
  */
 import { clamp01 } from '@/core/mathx';
+import { ZONE_ORDER } from '@/core/api/common';
 import { isStub } from '@/core/stub';
 import type {
   AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like, VoiceOpts,
@@ -137,10 +138,11 @@ class AudioSystemImpl implements AudioSystem {
 
   constructor(private readonly game: Game) {
     this.library = game.flags.mute || !contextCtor() ? null : new AssetLibrary({ baseUrl: baseUrl(), decoder: () => this.decoder() });
-    // (not in manual/headless mode: nothing is fetched there until something actually asks for a sound)
-    if (this.library && !game.flags.manual) {
-      void this.library.loadMusic();
+    // The voice manifest is read at boot, always: a line spoken before it has loaded could not be voiced.
+    // (The score is not fetched in manual/headless mode until something actually asks for it.)
+    if (this.library) {
       void this.library.loadVoices();
+      if (!game.flags.manual) void this.library.loadMusic();
     }
     this.cleanup.push(...wireEvents(game, this));
     // Browsers only allow audio after a gesture: the first key or pointer press anywhere unlocks, so the title
@@ -404,6 +406,17 @@ class AudioSystemImpl implements AudioSystem {
     return preloadLines(this.library, lines);
   }
 
+  /**
+   * `zone:loading`: fetch the compressed voice-over of this zone and the next one (lines without a zone follow
+   * once). Decoding happens line by line as they are spoken. Never rejects; nothing when muted.
+   */
+  prefetchZoneVoices(zone: string): Promise<void> {
+    if (!this.library || this.disposed || typeof zone !== 'string') return Promise.resolve();
+    const i = (ZONE_ORDER as readonly string[]).indexOf(zone);
+    const next = i >= 0 && i + 1 < ZONE_ORDER.length ? ZONE_ORDER[i + 1] : null;
+    return this.library.prefetchVoices([zone, next]).catch(() => undefined);
+  }
+
   duck(amount: number, seconds: number): void {
     this.run('duck', (e) => e.duck(amount, seconds));
   }
@@ -547,6 +560,7 @@ class AudioSystemImpl implements AudioSystem {
       samples: e ? e.samples.registeredCount : this.pendingSamples.length,
       recordedTrack: e ? e.score.track : null,
       voiceLine: e ? e.vo.speaking : null,
+      voiceOver: this.library ? this.library.voiceStats() : { listed: 0, fetched: 0, decoded: 0, broken: [] },
     };
   }
 }

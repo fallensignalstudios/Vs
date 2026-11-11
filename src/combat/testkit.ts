@@ -83,7 +83,11 @@ export class FakeVisual {
   setFrozen(n: number): void {
     this.frozen = n;
   }
-  stop(): void {}
+  /** stop() calls, by action name ('*' = everything) */
+  readonly stopped: string[] = [];
+  stop(action?: string): void {
+    this.stopped.push(action ?? '*');
+  }
   isPlaying(): boolean {
     return false;
   }

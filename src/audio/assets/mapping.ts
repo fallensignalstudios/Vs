@@ -47,6 +47,11 @@ export type MusicManifest = Readonly<Partial<Record<string, TrackMeta>>>;
 export interface VoiceMeta {
   file: string;
   seconds: number;
+  /**
+   * Zone the line is first spoken in ('Z07'). Clips of the zone being loaded and of the next one are fetched
+   * (compressed) on `zone:loading`; entries without a zone are fetched after those, once. Optional.
+   */
+  zone?: string;
 }
 
 /** Seconds at the end of each track that cross-fade (equal power) under the start of the next pass. */

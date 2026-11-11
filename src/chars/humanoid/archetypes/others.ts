@@ -125,6 +125,9 @@ export const linkbound: ArchetypeDef = {
 };
 
 // ---------------------------------------------------------------------------------------------------------
+/** kingWitness variant drawn without the King's halo (Vesryn, Witness V) — CharacterCreateOpts.halo false */
+export const WITNESS_NO_HALO = 1;
+
 export const kingWitness: ArchetypeDef = {
   proportions: () => ({ height: 2.08, shoulder: 0.186, hip: 0.094, bulk: 0.94, fem: 0.3 }),
   build(ctx) {
@@ -139,7 +142,8 @@ export const kingWitness: ArchetypeDef = {
       b.translate(hp[0], hp[1], hp[2]);
       b.skin(rig.i('head')).surf({ ...light, zone: ZONE.head });
       loft(b, skullSecs(0.92).map((s) => ({ ...s, n: 2 })), { seg: 22, smooth: 4, capB: { dome: 0.014, k: 2 } });
-      // five-point crown: not worn, held in the air behind the head
+      // five-point crown: not worn, held in the air behind the head — the King's alone (variant 1: Vesryn)
+      if (ctx.variant === WITNESS_NO_HALO) return;
       b.surf({ ...core, zone: ZONE.head });
       b.scope(() => { b.at(0, 0.13, 0.11, 90, 0, 0); torus(b, 0.17, 0.004, { seg: 32, tubeSeg: 4 }); });
       for (let i = 0; i < 5; i++) {

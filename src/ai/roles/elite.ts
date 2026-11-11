@@ -486,7 +486,7 @@ export class EliteBrain extends Brain implements EliteController {
 
   private startSweep(a: Actor): void {
     this.begin(a, 'sweep', 'sweep', 0.82, 1.75);
-    this.beginTelegraph(a, this.hitAt, RED);
+    this.beginTelegraph(a, this.hitAt, RED, 'sweep');
     this.marks.push(this.game.vfx.telegraph({ kind: 'cone', pos: a.pos, yaw: a.yaw, arc: AI.elite.sweepArc, r: AI.elite.sweepReach }, this.hitAt, RED));
     this.game.audio.play('eclipseBreath', { pos: a.pos, pitch: 0.5, volume: 1.3 });
     this.core.stats.meleeAttacks++;
@@ -495,11 +495,11 @@ export class EliteBrain extends Brain implements EliteController {
   private startSlam(a: Actor, t: Actor): void {
     const E = AI.elite;
     this.begin(a, 'slam', 'groundSlam', 1.62, 3.1);
-    this.beginTelegraph(a, this.hitAt, RED);
     // the strike point: toward the target, never further than the arms reach
     const d = Math.min(3.2, Math.max(1.6, a.distanceTo(t) - 0.5));
     const yaw = yawTo(a.pos.x, a.pos.z, t.pos.x, t.pos.z);
     this.center.set(a.pos.x + forwardX(yaw) * d, a.pos.y, a.pos.z + forwardZ(yaw) * d);
+    this.beginTelegraph(a, this.hitAt, RED, 'slam', t, this.center);
     this.marks.push(this.game.vfx.telegraph({ kind: 'circle', pos: this.center, r: E.slamOuter }, this.hitAt, RED));
     this.game.audio.play('eliteRoar', { pos: a.pos, volume: 0.7 });
     this.core.stats.meleeAttacks++;
@@ -524,10 +524,10 @@ export class EliteBrain extends Brain implements EliteController {
     a.face(t.pos);
     this.runFrom = Math.max(AI.minTelegraph * 1.5, this.hitAt * 0.5);
     this.runSpeed = len / Math.max(0.2, this.hitAt - this.runFrom);
-    this.beginTelegraph(a, this.runFrom, RED);
     _end.x = a.pos.x + dx * len;
     _end.y = a.pos.y;
     _end.z = a.pos.z + dz * len;
+    this.beginTelegraph(a, this.runFrom, RED, 'charge', t, _end);
     this.marks.push(this.game.vfx.telegraph({ kind: 'line', from: a.pos, to: _end, width: E.chargeWidth }, this.runFrom, RED));
     this.game.audio.play('eliteRoar', { pos: a.pos });
     caption(this.game, 'It lowers its head — it will charge', 'alert', a.pos);
@@ -537,7 +537,7 @@ export class EliteBrain extends Brain implements EliteController {
   private startPulse(a: Actor): void {
     const E = AI.elite;
     this.begin(a, 'pulse', 'pulse', 1.45, 2.7);
-    this.beginTelegraph(a, this.hitAt, VIOLET);
+    this.beginTelegraph(a, this.hitAt, VIOLET, 'pulse', null, a.pos);
     this.marks.push(this.game.vfx.telegraph({ kind: 'circle', pos: a.pos, r: E.pulseField }, this.hitAt, VIOLET));
     this.game.audio.play('eliteRoar', { pos: a.pos, pitch: 0.8, volume: 0.8 });
     caption(this.game, 'Pressure building — cut a link or leave its field', 'pressure', a.pos);

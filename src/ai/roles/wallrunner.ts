@@ -338,8 +338,8 @@ export class WallrunnerBrain extends Brain {
     const seconds = this.teleTime(W.telegraph);
     this.state = 'telegraph';
     this.landLocked = false;
-    this.beginTelegraph(a, seconds, VIOLET);
     this.predict(t);
+    this.beginTelegraph(a, seconds, VIOLET, 'pounce', t, this.land);
     const hit = fin(a.visual?.info('pounce').hitTimes?.[0], 0.82);
     // seam glow, skitter and a caption first; the floor ring closes exactly when it lands
     this.wisp = this.game.vfx.spawn('violetWisp', a.pos, { duration: seconds, scale: 0.8 });

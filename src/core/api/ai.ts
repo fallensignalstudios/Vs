@@ -27,6 +27,43 @@ import type { Vec3Like } from './common';
 import type { Actor, Team } from './combat';
 import type { HumanoidArchetype } from './chars';
 
+/**
+ * ADDED (polish 3). What an attack telegraph announces — `ai:telegraph` names it, so a zone reacts to the attack
+ * itself instead of matching caption text (captions are presentation and may change).
+ *  - `lane`      security / contaminated drone starts tracking its firing lane;  `laneLock` the lane locks
+ *  - `shieldBash`, `baton`, `sidearm`   Enforcer
+ *  - `strike`    linkbound melee wind-up
+ *  - `pounce`    wall attacker leaving the ceiling (`pos` = where it will land)
+ *  - `channel`   link source starting to form a link (`target` = the body it reaches for);  `bolt` its shot
+ *  - `sweep`, `slam` (`pos` = strike point), `charge` (`pos` = end of the run), `pulse`   the breach organism
+ */
+export type TelegraphKind =
+  | 'lane' | 'laneLock' | 'shieldBash' | 'baton' | 'sidearm' | 'strike' | 'pounce' | 'channel' | 'bolt'
+  | 'sweep' | 'slam' | 'charge' | 'pulse' | (string & {});
+
+/** ADDED (polish 3). Payload of the `ai:telegraph` game event. */
+export interface AiTelegraphEvent {
+  /** the attacker */
+  actor: Actor;
+  kind: TelegraphKind;
+  /** seconds until the attack commits (difficulty already applied); 0 for `laneLock` (it commits now) */
+  seconds: number;
+  /** who it is aimed at, when it is aimed at someone */
+  target: Actor | null;
+  /** where it will land / end, for area attacks (copy it if you keep it) */
+  pos?: Vec3Like;
+}
+
+declare module './common' {
+  interface GameEvents {
+    /**
+     * ADDED (polish 3, owner: ai). An enemy has begun telegraphing an attack (or a drone's lane has locked).
+     * Fired once per attack, when its body telegraph starts. Captions are not a protocol: listen to this.
+     */
+    'ai:telegraph': AiTelegraphEvent;
+  }
+}
+
 export type EnemyRole =
   | 'secDrone'      // Reformation security drone: lane fire, synchronised volleys through a command emitter
   | 'contamDrone'   // contaminated variant: coordinated by relay receivers, hostile to everyone
@@ -299,7 +336,13 @@ export interface Companion {
    */
   follow(leader: Actor | null, offset?: { right: number; back: number }): void;
   holdAt(pos: Vec3Like, yaw?: number): void;
-  face(target: Vec3Like | null): void;
+  /**
+   * Keep the body turned toward `target` (null = no facing target). The head looks there too — at EYE height:
+   * a point below the figure's waist (a marker, `z.player.pos`) is lifted to standing eye height above it, a
+   * raised point is looked at as given. ADDED (polish 3) `opts.gaze`: `false` = turn the body only (the head keeps
+   * whatever `visual.lookAt` last set, e.g. a dialogue gaze); a point = turn toward `target`, look at that point.
+   */
+  face(target: Vec3Like | null, opts?: { gaze?: boolean | Vec3Like | null }): void;
   /**
    * play an animation action on the figure (narrative posing); returns its duration in seconds. Held whole-body
    * poses (sit, kneel, kneelTend, lieInjured, trapped, cower, distress, grounding, liftPlate, holdConsole,
@@ -328,6 +371,11 @@ export interface Companion {
   readonly assisting?: boolean;
   /** ADDED. true while the companion is staggered, frozen or downed (a Resonance window should cancel) */
   readonly disrupted?: boolean;
+  /**
+   * ADDED (polish 3). The facing target last given to face() (the same point, not a copy — do not mutate it),
+   * or null when it has none. Always present on handles from `ai.spawnCompanion` / `ai.spawnNpc`.
+   */
+  readonly facing?: Vec3Like | null;
 }
 
 /**

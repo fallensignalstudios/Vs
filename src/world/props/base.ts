@@ -302,6 +302,7 @@ export interface FxOpts {
 }
 
 const FX_VERTEX = /* glsl */ `
+#include <clipping_planes_pars_vertex>
 varying vec2 vUv;
 varying vec3 vPos;
 varying vec3 vN;
@@ -331,12 +332,15 @@ void main() {
 	vec4 wp = modelMatrix * p;
 	vN = normalize( mat3( modelMatrix ) * n );
 	vV = cameraPosition - wp.xyz;
-	gl_Position = projectionMatrix * viewMatrix * wp;
+	vec4 mvPosition = viewMatrix * wp;
+	#include <clipping_planes_vertex>
+	gl_Position = projectionMatrix * mvPosition;
 }
 `;
 
 /** Inputs available to an effect body: uTime, vUv, vPos (object space), vN / vV (world), vT, vICol, fxHash, fxNoise, fxLine. */
 const FX_FRAGMENT_HEAD = /* glsl */ `
+#include <clipping_planes_pars_fragment>
 uniform float uTime;
 varying vec2 vUv;
 varying vec3 vPos;
@@ -376,11 +380,13 @@ export function fxMaterial(o: FxOpts): THREE.ShaderMaterial {
   const m = new THREE.ShaderMaterial({
     uniforms: { uTime: FX_TIME, ...(o.uniforms ?? {}) },
     vertexShader: FX_VERTEX,
-    fragmentShader: `${FX_FRAGMENT_HEAD}${decl}\nvoid main() {\n\tvec3 col = vec3( 0.0 );\n\tfloat alpha = 1.0;\n${o.body}\n\tgl_FragColor = vec4( col, alpha );\n\t#include <tonemapping_fragment>\n\t#include <colorspace_fragment>\n}\n`,
+    fragmentShader: `${FX_FRAGMENT_HEAD}${decl}\nvoid main() {\n\t#include <clipping_planes_fragment>\n\tvec3 col = vec3( 0.0 );\n\tfloat alpha = 1.0;\n${o.body}\n\tgl_FragColor = vec4( col, alpha );\n\t#include <tonemapping_fragment>\n\t#include <colorspace_fragment>\n}\n`,
     transparent: blend !== 'opaque',
     depthWrite: blend === 'opaque',
     blending: blend === 'add' ? THREE.AdditiveBlending : THREE.NormalBlending,
     side: o.side ?? (blend === 'opaque' ? THREE.FrontSide : THREE.DoubleSide),
+    // cut by the renderer's global clipping planes like the built-in materials (debug planView)
+    clipping: true,
   });
   if (o.reveal) m.defines = { FX_AT: '' };
   if (blend === 'opaque') { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -6; }

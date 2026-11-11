@@ -110,6 +110,11 @@ export interface ClipSpec {
   thaw?: boolean;
   /** both hands are needed: held weapons are sheathed while this clip is active */
   emptyHands?: boolean;
+  /**
+   * a ring-hilted weapon (Verity) is held in the right hand with its blades drawn IN while this clip is active,
+   * whatever the loadout says (polish 3: the collapsed-in-hand pose)
+   */
+  collapse?: boolean;
   /** fraction at which the held weapon is let go and falls to the floor (death) */
   dropAt?: number;
   /** the pelvis rests on a seat this high (reference metres; ~0 = the floor): cloth drapes over it */
@@ -134,6 +139,7 @@ export interface Clip {
   sticky: boolean;
   thaw: boolean;
   emptyHands: boolean;
+  collapse: boolean;
   /** seconds; −1 = none */
   releaseAt: number;
   dropAt: number;
@@ -336,7 +342,7 @@ export function compileClip(name: string, spec: ClipSpec): Clip {
     rootSpace: [spec.space?.L === 'root', spec.space?.R === 'root'],
     events,
     hitTimes: events.filter((e) => e.name === 'hit' || e.name === 'release').map((e) => e.t),
-    transient: !!spec.transient, sticky: !!spec.sticky, thaw: !!spec.thaw, emptyHands: !!spec.emptyHands,
+    transient: !!spec.transient, sticky: !!spec.sticky, thaw: !!spec.thaw, emptyHands: !!spec.emptyHands, collapse: !!spec.collapse,
     releaseAt: spec.releaseAt !== undefined ? spec.releaseAt * spec.duration : -1,
     dropAt: spec.dropAt !== undefined ? spec.dropAt * spec.duration : -1,
     seat: spec.seat ?? -1,

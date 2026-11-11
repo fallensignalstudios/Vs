@@ -33,6 +33,22 @@ interface Order {
   stop: number;
 }
 
+const _gaze = new THREE.Vector3();
+
+/**
+ * Where a figure told to face a point looks: zones pass floor positions (a marker, `z.player.pos`), and a gaze at
+ * the feet reads as staring at the floor — so a point below the figure's own waist (relative to its feet) is
+ * lifted to standing eye height (0.93 × its height) above that point. A raised point (a console, a face, a
+ * seated figure's eye socket) is looked at as given.
+ */
+export function gazeAt(target: Vec3Like, self: Actor | null | undefined, out: THREE.Vector3): THREE.Vector3 {
+  out.set(target.x, target.y, target.z);
+  const h = self && Number.isFinite(self.height) && self.height > 0.5 ? self.height : 1.8;
+  const feet = self ? self.pos.y : target.y;
+  if (target.y < feet + h * 0.5) out.y = target.y + h * 0.93;
+  return out;
+}
+
 export class CompanionImpl implements Companion, ActorController {
   actor!: Actor;
   private _mode: CompanionMode;
@@ -120,6 +136,10 @@ export class CompanionImpl implements Companion, ActorController {
   get downed(): boolean {
     return this.downedUntil > 0;
   }
+  /** the facing target set with face() (read-only view; null = none) */
+  get facing(): Vec3Like | null {
+    return this.faceTo;
+  }
   get assisting(): boolean {
     return this.assistRun.pending;
   }
@@ -170,9 +190,16 @@ export class CompanionImpl implements Companion, ActorController {
     this.returning = true;
   }
 
-  face(target: Vec3Like | null): void {
+  face(target: Vec3Like | null, opts?: { gaze?: boolean | Vec3Like | null }): void {
     this.faceTo = target && Number.isFinite(target.x + target.y + target.z) ? new THREE.Vector3(target.x, target.y, target.z) : null;
-    this.actor?.visual?.lookAt(this.faceTo);
+    const g = opts?.gaze;
+    const v = this.actor?.visual;
+    if (!v || g === false) return; // turn only: the head keeps whatever it was told to look at
+    if (g && typeof g === 'object') {
+      v.lookAt(Number.isFinite(g.x + g.y + g.z) ? g : null);
+      return;
+    }
+    v.lookAt(this.faceTo ? gazeAt(this.faceTo, this.actor, _gaze) : null);
   }
 
   play(action: string, opts?: { loop?: boolean }): number {

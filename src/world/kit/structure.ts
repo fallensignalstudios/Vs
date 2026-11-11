@@ -98,10 +98,25 @@ export function railRun(part: Part, ax: number, az: number, bx_: number, bz_: nu
   const pose = part.frame(ax, y, az, ry);
   const posts = Math.max(1, Math.round(len / 3));
   if (style === 'glass') {
-    part.g('glass').box(len, height - 0.2, 0.03, len / 2, height / 2 + 0.02, 0);
-    part.g('goldTrim').box(len, 0.05, 0.09, len / 2, height - 0.025, 0);
-    part.g('goldDark').boxOn(len, 0.1, 0.12, len / 2, 0, 0);
-    for (let i = 0; i <= posts; i++) part.g('goldDark').boxOn(0.07, height - 0.05, 0.07, (len * i) / posts, 0, 0);
+    // polish 3: a dark-stone balustrade framing a CLEAR screen (the overlook paintings: black stone, a gold line,
+    // lit posts). The pane is nearly invisible face-on and only glints at grazing angles, so the view beyond keeps
+    // its own colour instead of being washed blue by the sky's reflection. Same footprint and collider as before.
+    const stone = part.g('blackStone'), trim = part.g('goldTrim');
+    const kerb = 0.22, capH = 0.09, capY = height - capH;
+    stone.tbox(len, kerb, 0.2, 0.025, len / 2, 0, 0);
+    trim.box(len, 0.018, 0.204, len / 2, kerb - 0.035, 0);
+    part.g(ctx.variant('glass', { color: 0xffffff, opacity: 0.035, envMapIntensity: 0.4, rim: 0.16 }))
+      .box(len, capY - kerb + 0.02, 0.02, len / 2, (kerb + capY) / 2, 0);
+    stone.tbox(len, capH, 0.15, 0.03, len / 2, capY, 0);
+    trim.box(len, 0.014, 0.154, len / 2, capY + 0.012, 0);
+    const lit = part.g(ctx.seam(true));
+    for (let i = 0; i <= posts; i++) {
+      const px = (len * i) / posts;
+      stone.vbox(0.13, height + 0.05, 0.22, 0.025, px, 0, 0);
+      trim.boxOn(0.15, 0.025, 0.24, px, height + 0.05, 0);
+      // a short warm slot high on each face of the post: the paintings' small lanterns, emissive only
+      for (const sd of [-1, 1]) lit.ribbon([[px, height - 0.5, sd * 0.112], [px, height - 0.16, sd * 0.112]], 0.03, [0, 0, sd]);
+    }
   } else {
     const body = part.g(fam.frame);
     body.boxOn(len, 0.16, 0.3, len / 2, 0, 0).boxOn(len, height - 0.3, 0.14, len / 2, 0.16, 0);

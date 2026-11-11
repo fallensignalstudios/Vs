@@ -49,6 +49,8 @@ export class Equipment {
   private readonly barrelV = new THREE.Vector3();
   private readonly tipPool = [new THREE.Vector3(), new THREE.Vector3()];
   private emptyHands = false;
+  /** a clip holds the ring hilt in the hand with its blades in (Verity collapsed in hand) */
+  private collapse = false;
   private stow = false;
   private drop: Drop | null = null;
   private bladeExt = 1;
@@ -80,9 +82,11 @@ export class Equipment {
    * are set aside: a greatsword on the back does not fit a chair or the floor). Returns true when the carry
    * stance changed.
    */
-  sync(emptyHands: boolean, dropped: boolean, stow: boolean): boolean {
+  sync(emptyHands: boolean, dropped: boolean, stow: boolean, collapse = false): boolean {
     let changed = false;
-    if (emptyHands !== this.emptyHands || stow !== this.stow) { this.emptyHands = emptyHands; this.stow = stow; if (!this.drop) { this.apply(false); changed = true; } }
+    // (collapse only means something for a ring hilt with energy blades)
+    const c = collapse && !!this.fig.items.melee?.blades;
+    if (emptyHands !== this.emptyHands || stow !== this.stow || c !== this.collapse) { this.emptyHands = emptyHands; this.stow = stow; this.collapse = c; if (!this.drop) { this.apply(false); changed = true; } }
     if (dropped && !this.drop) changed = this.startDrop() || changed;
     else if (!dropped && this.drop) { this.drop = null; this.apply(true); changed = true; }
     return changed;
@@ -109,14 +113,14 @@ export class Equipment {
     const free = !this.emptyHands;
     const rifleProp = lo.prop === 'rifle' && !!it.ranged?.rifle;
     const rangedHeld = (lo.ranged || rifleProp) && !!it.ranged && free;
-    const meleeHeld = lo.melee && !!it.melee && !rangedHeld && free;
+    const meleeHeld = (lo.melee || this.collapse) && !!it.melee && !rangedHeld && free;
     // a bladed hilt goes to its sheath only once the blades are in (see update)
     this.sheathing = !snap && !meleeHeld && this.meleeHeld && !!it.melee?.blades && this.bladeExt > 0.1;
     if (!this.sheathing) this.place(it.melee, meleeHeld, !it.melee?.blades);
     this.place(it.ranged, rangedHeld, !!it.ranged?.rifle);
     this.place(it.shield, lo.shield);
     this.place(it.case, lo.prop === 'case');
-    this.bladeTarget = meleeHeld ? 1 : 0;
+    this.bladeTarget = meleeHeld && !this.collapse ? 1 : 0;
     if (snap) this.bladeExt = this.bladeTarget;
 
     this.rangedHeld = rangedHeld;

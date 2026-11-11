@@ -75,6 +75,11 @@ export class Abilities {
     for (const s of this.states) s.cooldownLeft = 0;
   }
 
+  /** drop the ability being performed (cooldowns stay as they are) */
+  cancelRunning(): void {
+    this.running = null;
+  }
+
   /** remove grenades and fields in flight (zone unload) */
   clearWorld(): void {
     for (const g of this.grenades) this.retire(g);
@@ -511,7 +516,8 @@ export class Abilities {
     }
     a.pos.copy(land);
     a.vel.set(0, 0, 0);
-    a.face(t.pos);
+    // (with input off a scene owns the facing)
+    if (p.enabled) a.face(t.pos);
     p.game.vfx.spawn('frostBurst', a.aimPoint(_a), { scale: 0.6 });
     p.game.camera.fovPunch(4, 0.3);
   }
@@ -521,7 +527,7 @@ export class Abilities {
     const a = p.actor;
     const D = TUNING.abilities.dispatch;
     if (!t.alive) return;
-    a.face(t.pos);
+    if (p.enabled) a.face(t.pos);
     const exposed = t.frozen || t.staggered || p.actors.weakPointPosition(t, _b) !== null;
     let mult = exposed ? D.bonus : 1;
     // the resolver already scales frozen targets: keep the total at the authored bonus

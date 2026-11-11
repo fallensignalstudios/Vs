@@ -11,6 +11,8 @@ import type { AudioSystem, Game, GameEvents } from '@/core/api';
 export interface WiredAudio extends AudioSystem {
   setPaused(paused: boolean): void;
   setLead(id: 'tarrik' | 'selene'): void;
+  /** fetch (compressed) the voice-over of this zone and the next */
+  prefetchZoneVoices?(zone: string): Promise<void>;
 }
 
 const VOLUME_KEYS = new Set(['masterVolume', 'musicVolume', 'sfxVolume']);
@@ -50,7 +52,10 @@ export function wireEvents(game: Game, audio: WiredAudio): Array<() => void> {
 
   ev.on('player:protagonist', ({ id }) => audio.setLead(id));
   ev.on('handoff', ({ to }) => audio.setLead(to));
-  ev.on('zone:loading', () => audio.clear());
+  ev.on('zone:loading', ({ zone }) => {
+    audio.clear();
+    void audio.prefetchZoneVoices?.(zone);
+  });
   ev.on('zone:ready', () => {
     // a reload can land before or after the Meridian beat: follow the saved story state
     const mission = game.mission;
@@ -62,7 +67,7 @@ export function wireEvents(game: Game, audio: WiredAudio): Array<() => void> {
   ev.on('dialogue:line', ({ line }) => {
     // the recorded line when there is one (if the mission has just started it, this is the same utterance,
     // not a second one); the comm tick otherwise
-    const voiced = audio.voice(line.speaker, line.text, { channel: line.channel });
+    const voiced = audio.voice(line.speaker, line.text, { channel: line.channel, offscreen: line.offscreen });
     if (!(voiced > 0)) audio.speak(line.speaker, line.channel ?? 'voice');
     const seconds = line.duration ?? clamp(1.2 + (line.text?.length ?? 0) * 0.055, 1.5, 9);
     audio.duck(DIALOGUE_DUCK, seconds);

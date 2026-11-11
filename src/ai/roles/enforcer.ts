@@ -333,12 +333,12 @@ export class EnforcerBrain extends Brain {
         if (grounded && dist < E.bashRange + t.radius && facing < E.attackArc * 0.5 && this.meleeCd <= 0 && this.acquireSlot(a)) {
           this.attack = dist < 1.9 + t.radius || this.rand(0, 1) < 0.5 ? 'bash' : 'baton';
           this.state = 'windup';
-          this.beginTelegraph(a, this.teleTime(E.telegraph), AMBER);
+          this.beginTelegraph(a, this.teleTime(E.telegraph), AMBER, this.attack === 'bash' ? 'shieldBash' : 'baton', t);
           this.game.audio.play('shieldUp', { pos: a.pos });
         } else if (this.shootCd <= 0 && (this.shot = this.shotTarget(a, t, dist, facing)) !== null) {
           this.state = 'aim';
           a.visual?.setLoadout({ shield: true, ranged: true });
-          this.beginTelegraph(a, this.teleTime(E.sidearmTelegraph), AMBER);
+          this.beginTelegraph(a, this.teleTime(E.sidearmTelegraph), AMBER, 'sidearm', t);
           this.game.audio.play('armorRattle', { pos: a.pos });
         }
         break;

@@ -10,6 +10,7 @@ import { Geo } from './geo';
 import { KitCtx, Part } from './core';
 
 const SHAFT_VERT = /* glsl */ `
+#include <clipping_planes_pars_vertex>
 varying vec3 vWorld;
 varying vec3 vNormalW;
 varying float vAxial;
@@ -19,10 +20,13 @@ void main() {
   vWorld = wp.xyz;
   vNormalW = normalize( mat3( modelMatrix ) * normal );
   vAxial = clamp( -position.y / uLength, 0.0, 1.0 );
-  gl_Position = projectionMatrix * viewMatrix * wp;
+  vec4 mvPosition = viewMatrix * wp;
+  #include <clipping_planes_vertex>
+  gl_Position = projectionMatrix * mvPosition;
 }`;
 
 const SHAFT_FRAG = /* glsl */ `
+#include <clipping_planes_pars_fragment>
 varying vec3 vWorld;
 varying vec3 vNormalW;
 varying float vAxial;
@@ -38,6 +42,7 @@ float noise( vec2 p ) {
   return mix( mix( hash( i ), hash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( hash( i + vec2( 0.0, 1.0 ) ), hash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
 }
 void main() {
+  #include <clipping_planes_fragment>
   vec3 toCam = cameraPosition - vWorld;
   float dist = length( toCam );
   // silhouettes of the cone fade out, the core stays; fade along the beam and close to the lens
@@ -64,6 +69,8 @@ function buildShaft(ctx: KitCtx, light: THREE.SpotLight, color: number, length: 
   const mat = new THREE.ShaderMaterial({
     vertexShader: SHAFT_VERT, fragmentShader: SHAFT_FRAG, uniforms, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: true,
+    // cut by the renderer's global clipping planes like the built-in materials (debug planView)
+    clipping: true,
   });
   mat.name = 'kit-shaft';
   const mesh = new THREE.Mesh(ctx.own(geo), ctx.own(mat));

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import type { Game, ZoneBuilder } from '@/core/api';
+import type { Game, Look, ZoneBuilder } from '@/core/api';
+import { LOOKS } from '@/render/looks';
 import { ScriptRunnerImpl } from '@/core/script';
 import { nullObject } from '@/core/stub';
 import { createMaterialLibrary } from '@/world/materials';
@@ -468,6 +469,56 @@ describe('polish 3', () => {
     expect(dense).toBeGreaterThan(def);
     expect(none).toBeLessThan(def);
     expect(none).toBeGreaterThan(0);
+  });
+
+  it('custom kit shaders (light shafts, vault light sheets) are cut by the global clipping planes', () => {
+    const { b, root } = builder();
+    b.floor({ x: 28, n: 13, w: 56, d: 26 });
+    b.spot({ x: 10, n: 10, h: 8, target: [10, 10, 0], shaft: true });
+    b.ceiling({ x: 28, n: 13, w: 56, d: 26, h: 10, style: 'vaultClosed', rise: 6.6, bay: 8 });
+    b.finalize();
+    const shaders: THREE.ShaderMaterial[] = [];
+    root.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+      if (m && !Array.isArray(m) && m.isShaderMaterial) shaders.push(m);
+    });
+    expect(shaders.map((m) => m.name)).toEqual(expect.arrayContaining(['kit-shaft', 'kit-vault-sheets']));
+    for (const m of shaders) {
+      expect(m.clipping, m.name).toBe(true);
+      expect(m.vertexShader, m.name).toContain('#include <clipping_planes_vertex>');
+      expect(m.fragmentShader, m.name).toContain('#include <clipping_planes_fragment>');
+    }
+  });
+
+  it('glass rails: a clear pane in a dark stone frame, the same solid footprint, sight still passes', () => {
+    const { b, root } = builder();
+    b.floor({ x: 0, n: 0, w: 20, d: 20 });
+    b.rail({ from: [-6, 2], to: [6, 2], height: 1.1, style: 'glass' });
+    b.finalize();
+    const mats = new Map<string, THREE.Material>();
+    root.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if (m && !Array.isArray(m)) mats.set(m.name, m); });
+    const glass = [...mats.values()].find((m) => m.name.includes('glass'));
+    expect(glass).toBeTruthy();
+    expect(glass!.opacity).toBeLessThanOrEqual(0.05);
+    expect([...mats.keys()].some((n) => n.startsWith('blackStone'))).toBe(true);
+    // solid: a walker stops 0.1 m (the collider's half thickness) plus its radius short of the rail line
+    expect(-walk(b, b.P(0, -2, 0), b.P(0, 6, 0)).z).toBeLessThan(2 - 0.1 - 0.35);
+    expect(b.physics.lineOfSight({ x: 0, y: 0.6, z: 0 }, { x: 0, y: 0.6, z: -6 })).toBe(true);
+  });
+
+  it('the looks neutral, core, crucible and observation are graded apart', () => {
+    const v = (l: Look): number[] => {
+      const c = (hex: number): number[] => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((x) => x / 255);
+      return [l.exposure, l.grade.saturation, l.grade.contrast, l.grade.lift * 20, ...c(l.grade.tint), ...c(l.grade.shadowsTint), ...c(l.grade.highlightsTint), l.ambient.intensity];
+    };
+    const names = ['neutral', 'core', 'crucible', 'observation'] as const;
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const a = v(LOOKS[names[i]]), c = v(LOOKS[names[j]]);
+        const d = Math.hypot(...a.map((x, k) => x - c[k]));
+        expect(d, `${names[i]} vs ${names[j]}`).toBeGreaterThan(0.25);
+      }
+    }
   });
 
   it('fixture lights share or drop down to the light budget; placed lights are kept', () => {

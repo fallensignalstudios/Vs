@@ -112,6 +112,12 @@ export class Kit {
     return this.grid > 0 ? Math.max(1, Math.round(hz / this.grid)) * this.grid : hz;
   }
 
+  /** Absolute start time of a layer `at` seconds in; a hair before zero (grid rounding in a loop bake) is zero. */
+  private when(at: number | undefined): number {
+    const t = this.t + (at ?? 0);
+    return t < 0 && t > -1e-3 ? 0 : t;
+  }
+
   /**
    * The first render-quantum boundary at or after `t`, for sources that modulate one another at audio rate.
    * Chromium renders a modulator → carrier pair that starts part-way through a quantum with the two a fraction
@@ -145,7 +151,9 @@ export class Kit {
   // -------------------------------------------------------------------------------------------
 
   /** Schedule a Sweep on a param starting at absolute time `t0`. `len` is the default glide length. */
-  sweep(p: AudioParam, s: Sweep, t0: number, len: number, mul = 1): void {
+  sweep(p: AudioParam, s: Sweep, t: number, len: number, mul = 1): void {
+    // (a time a rounding error put a hair before zero — seen when a loop is baked on its grid — is zero)
+    const t0 = t < 0 && t > -1e-3 ? 0 : t;
     if (typeof s === 'number') {
       p.setValueAtTime(s * mul, t0);
       return;
@@ -240,7 +248,7 @@ export class Kit {
 
   /** Enveloped oscillator. */
   osc(type: OscillatorType, f: Sweep, env: Env, o?: SrcOpts): OscillatorNode {
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.when(o?.at);
     const len = this.envLen(env);
     const mul = o?.fixed ? 1 : this.pitch;
     const osc = this.ac.createOscillator();
@@ -260,7 +268,7 @@ export class Kit {
 
   /** Enveloped looping noise (random phase per play). `rate` scales playback (darker/slower when < 1). */
   noise(color: NoiseColor, env: Env, o?: SrcOpts & { rate?: number }): AudioBufferSourceNode {
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.when(o?.at);
     const len = this.envLen(env);
     const buf = this.res.noise[color];
     const src = this.ac.createBufferSource();
@@ -289,7 +297,7 @@ export class Kit {
       const g = env.g ?? 1;
       return ENSEMBLES[name].map((v) => this.osc(v.type, f * v.ratio, { ...env, g: g * v.g }, { ...o, detune: v.cents, pan: v.pan }));
     }
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.when(o?.at);
     const len = this.envLen(env);
     const fin = Number.isFinite(len) ? len : 1;
     const src = this.ac.createBufferSource();
@@ -314,7 +322,7 @@ export class Kit {
    * The kit pitch becomes the playback rate.
    */
   sample(buf: AudioBuffer, o?: { at?: number; g?: number; rate?: number; to?: AudioNode; pan?: number; loop?: boolean; offset?: number; fadeIn?: number }): AudioBufferSourceNode {
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.when(o?.at);
     const src = this.ac.createBufferSource();
     src.buffer = buf;
     const rate = clamp((o?.rate ?? 1) * this.pitch, 0.25, 4);
@@ -355,7 +363,7 @@ export class Kit {
    * (bright → mellow when it falls). Bells, metal, servos, screeches.
    */
   fm(f: Sweep, ratio: number, index: Sweep, env: Env, o?: SrcOpts & { type?: OscillatorType }): OscillatorNode {
-    const t0 = this.onQuantum(this.t + (o?.at ?? 0));
+    const t0 = this.onQuantum(this.when(o?.at));
     const len = this.envLen(env);
     const fin = Number.isFinite(len) ? len : 1;
     const mul = o?.fixed ? 1 : this.pitch;
@@ -405,7 +413,7 @@ export class Kit {
 
   /** Low-frequency oscillator into a param. `dur` omitted = lives until the voice ends. */
   lfo(rate: number, depth: number, target: AudioParam, o?: { type?: OscillatorType; at?: number; dur?: number }): OscillatorNode {
-    const t0 = this.t + (o?.at ?? 0);
+    const t0 = this.when(o?.at);
     const osc = this.ac.createOscillator();
     osc.type = o?.type ?? 'sine';
     const free = o?.dur === undefined;
@@ -437,7 +445,7 @@ export class Kit {
     n.type = type;
     setQ(n, q);
     if (o?.gain !== undefined) n.gain.value = o.gain;
-    this.sweep(n.frequency, f, this.t + (o?.at ?? 0), o?.len ?? 0.3, o?.fixed ? 1 : this.pitch);
+    this.sweep(n.frequency, f, this.when(o?.at), o?.len ?? 0.3, o?.fixed ? 1 : this.pitch);
     n.connect(o?.to ?? this.out);
     return n;
   }

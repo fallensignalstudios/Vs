@@ -18,10 +18,10 @@
  *  - `settings:changed` (master/music/sfx volume) → applySettings()
  *  - `game:paused` → world bus gated, music dropped back; UI sounds stay audible
  *  - `game:phase` dead → heavy muffle until the phase leaves `dead`; title → loops cleared, muffle 0
- *  - `zone:loading` → clear() (all loops stop)
+ *  - `zone:loading` → clear() (all loops stop); the voice-over files of that zone and the next are fetched
  *  - `zone:ready` → setMeridianResolved(mission.state.flags.meridianComplete)
  *  - `dialogue:line` → voice(line.speaker, line.text) when the line has a recording, else speak(); + duck()
- *    for the line's duration
+ *    for the line's duration. `channel: 'system'` lines (displays, the terminal) are never voiced.
  *  - `checkpoint:saved` → stinger('checkpoint');  `encounter:started` / `encounter:cleared` → the matching stinger
  *  - `link:severed` → stinger('sever') (Eclipse cadence turns irregular);  `link:created` → cadence re-locks
  *  - `player:protagonist` / `handoff` → encounter stingers take the current lead's instrumentation
@@ -153,8 +153,17 @@ export interface LoopHandle {
 export interface VoiceOpts {
   /** where the speaker stands: the line pans gently toward it (never below 70 % level). Omit for comm lines. */
   pos?: Vec3Like;
-  /** 'radio' / 'system' get a comm treatment (band-pass + light distortion); 'narration' is dry and centred */
+  /**
+   * 'radio' gets the comm treatment (300 Hz–3.4 kHz band, light saturation, squelch at both ends); 'narration' is
+   * dry and centred. 'system' is display text (status boards, alerts, the terminal): it is NEVER voiced —
+   * voice() returns 0 for it, as it does for the display speakers ('Terminal', 'Command strip', 'Record', …).
+   */
   channel?: 'voice' | 'radio' | 'system' | 'narration';
+  /**
+   * ADDED (polish 3). The speaker is not in the scene. A comm voice (Cross, Sol, Caelus, the Commands) then gets
+   * the radio treatment even on the 'voice' channel — as it does whenever no `pos` is given.
+   */
+  offscreen?: boolean;
 }
 
 /** Options for AudioSystem.registerSample. */
@@ -275,8 +284,11 @@ export interface AudioSystem {
   /** Cut the line being spoken, fading over `fadeSeconds` (default 0.15). No-op when nothing is playing. */
   stopVoice(fadeSeconds?: number): void;
   /**
-   * Fetch and decode the recordings of these `[speaker, text]` lines ahead of time (zone load). Lines
-   * without a recording are skipped. Works before unlock(). The promise always resolves, never rejects.
+   * Fetch the recordings of these `[speaker, text]` lines ahead of time (compressed; each is decoded as it is
+   * spoken). Lines without a recording are skipped. Works before unlock(). The promise always resolves.
+   * Normally not needed: `zone:loading` already fetches the voice-over of that zone and the next one (by the
+   * manifest's `zone`), and the manifest itself is read at boot. A line whose file is not here yet when it is
+   * spoken is subtitled with its reading time (and fetched for next time) rather than started late.
    */
   preloadVoices(lines: ReadonlyArray<readonly [string, string]>): Promise<void>;
 }
@@ -307,4 +319,9 @@ export interface AudioDebugInfo {
   recordedTrack: string | null;
   /** `voLineId` of the voice-over line being spoken, or null */
   voiceLine: string | null;
+  /**
+   * ADDED (polish 3). Voice-over files: listed in the manifest, fetched (compressed, checked), decoded right now
+   * (a small LRU), and the ids of listed files found missing or broken (those lines are subtitled only).
+   */
+  voiceOver: { listed: number; fetched: number; decoded: number; broken: string[] };
 }

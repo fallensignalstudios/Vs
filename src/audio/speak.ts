@@ -83,6 +83,15 @@ export const SPEAK_SFX: RecipeTable = {
     pure(k, 587.33, { a: 0.004, d: 0.5, g: 0.9 });
     pure(k, 880, { a: 0.004, d: 0.4, g: 0.4 }, { at: 0.05 });
   }),
+  // a recorded comm line is bracketed by the radio's squelch alone: the key-up as it starts, the release after
+  commOpen: sfx(-31, { ...TICK, send: 0.1 }, (k) => {
+    k.noise('white', { a: 0.002, d: 0.05, g: 0.5 }, { bp: 2600, q: 1.2, fixed: true });
+    k.osc('square', 1250, { a: 0.001, h: 0.012, d: 0.02, g: 0.12 }, { at: 0.004 });
+  }),
+  commClose: sfx(-32, { ...TICK, send: 0.1 }, (k) => {
+    k.noise('white', { a: 0.002, d: 0.075, g: 0.45 }, { bp: 2300, q: 1.1, fixed: true });
+    k.osc('square', [[0, 1050], [0.03, 820]], { a: 0.001, h: 0.01, d: 0.025, g: 0.1 }, { at: 0.01 });
+  }),
   speakNarration: sfx(-32, { ...TICK, send: 0.4 }, (k) => {
     k.osc('sine', 146.83, { a: 0.08, d: 0.5, g: 0.8 });
     k.noise('pink', { a: 0.1, d: 0.4, g: 0.15 }, { bp: 900, q: 1 });

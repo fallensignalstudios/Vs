@@ -122,6 +122,32 @@ describe('brains', () => {
     expect(finite(w)).toBe(true);
   });
 
+  it('announces every attack as ai:telegraph (kind, target, lead time, landing point); captions name no role', () => {
+    const w = makeAiWorld();
+    w.arena();
+    const hero = w.hero('tarrik', 20, 0);
+    w.actors.setHostile('player', 'reformation', true);
+    const drone = w.ai.spawnEnemy('secDrone', { pos: { x: 20, y: 0, z: -12 } });
+    const wr = w.ai.spawnEnemy('wallrunner', { pos: { x: 14, y: 0, z: 6 } });
+    w.run(25);
+    const tele = w.seen['ai:telegraph'] ?? [];
+    const of = (a: unknown, kind: string): typeof tele => tele.filter((e) => e.actor === a && e.kind === kind);
+    expect(of(drone, 'lane').length).toBeGreaterThanOrEqual(2);
+    expect(of(drone, 'laneLock').length).toBeGreaterThanOrEqual(2);
+    const lane = of(drone, 'lane')[0]!;
+    expect(lane.target).toBe(hero);
+    expect(lane.seconds).toBeGreaterThanOrEqual(0.45);
+    expect(of(drone, 'laneLock')[0]!.seconds).toBe(0);
+    const pounce = of(wr, 'pounce');
+    expect(pounce.length).toBe(w.ai.stats.pounces);
+    expect(pounce[0]!.target).toBe(hero);
+    expect(Math.hypot(pounce[0]!.pos!.x - hero.pos.x, pounce[0]!.pos!.z - hero.pos.z)).toBeLessThan(4);
+    // every telegraph the AI counted was announced
+    expect(tele.filter((e) => e.kind !== 'laneLock').length).toBeGreaterThanOrEqual(w.ai.stats.volleys + w.ai.stats.pounces);
+    // on-screen text never names an enemy's role (STORY rule)
+    for (const c of w.seen['caption'] ?? []) expect(c.text).not.toMatch(/weaver|linkbound|wall-?runner|elite|enforcer/i);
+  });
+
   it('wallrunner: perches, announces, pounces, lies open on the ground, returns to a wall', () => {
     const w = makeAiWorld();
     w.arena();
@@ -292,6 +318,41 @@ describe('brains', () => {
     selene.remove();
     expect(w.ai.companions.length).toBe(2);
     expect(finite(w)).toBe(true);
+  });
+
+  it('companion face(): reports its facing; turns the body; looks at eye height, or keeps the gaze', () => {
+    const w = makeAiWorld();
+    w.arena();
+    const hero = w.hero('selene', 0, 0);
+    const c = w.ai.spawnCompanion('lyessa', { pos: { x: 4, y: 0, z: 0 }, mode: 'scripted' });
+    const looks: Array<{ x: number; y: number; z: number } | null> = [];
+    const v = c.actor.visual!;
+    const orig = v.lookAt.bind(v);
+    v.lookAt = (p) => {
+      looks.push(p ? { x: p.x, y: p.y, z: p.z } : null);
+      orig(p);
+    };
+    expect(c.facing).toBeNull();
+    // a floor position (a marker, the lead's feet): the body turns to it, the eyes meet a standing head
+    c.face(hero.pos);
+    expect(c.facing).toEqual({ x: hero.pos.x, y: hero.pos.y, z: hero.pos.z });
+    expect(looks.at(-1)!.y).toBeCloseTo(hero.pos.y + c.actor.height * 0.93, 3);
+    w.run(1.5);
+    expect(Math.abs(Math.atan2(-(hero.pos.x - c.actor.pos.x), -(hero.pos.z - c.actor.pos.z)) - c.actor.yaw) % (2 * Math.PI)).toBeLessThan(0.15);
+    // a raised point is looked at as given
+    c.face({ x: 0, y: 1.3, z: -3 });
+    expect(looks.at(-1)).toEqual({ x: 0, y: 1.3, z: -3 });
+    // turn only: the gaze another system set is kept
+    const n = looks.length;
+    c.face({ x: 9, y: 0, z: 9 }, { gaze: false });
+    expect(looks.length).toBe(n);
+    expect(c.facing).toEqual({ x: 9, y: 0, z: 9 });
+    // turn one way, look at a given point
+    c.face({ x: -9, y: 0, z: 0 }, { gaze: { x: 1, y: 1.6, z: 1 } });
+    expect(looks.at(-1)).toEqual({ x: 1, y: 1.6, z: 1 });
+    c.face(null);
+    expect(c.facing).toBeNull();
+    expect(looks.at(-1)).toBeNull();
   });
 
   it('companion orders: hold, teleport, suppress, cinderStrike, bad input', () => {

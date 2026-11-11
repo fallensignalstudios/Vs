@@ -81,7 +81,7 @@ export class WeaverBrain extends Brain {
     if (wp) wp.exposed = true;
     a.visual?.setExposed('core', 1);
     this.game.actors.stagger(a, W.allSeveredStagger, by);
-    caption(this.game, 'Links severed — the Weaver falters', 'link', a.pos);
+    caption(this.game, 'Links severed — it falters', 'link', a.pos);
   }
 
   private setWeaving(a: Actor, on: boolean): void {
@@ -198,7 +198,7 @@ export class WeaverBrain extends Brain {
           if (c) {
             this.candidate = c;
             this.state = 'channel';
-            this.beginTelegraph(a, this.teleTime(W.channel), VIOLET);
+            this.beginTelegraph(a, this.teleTime(W.channel), VIOLET, 'channel', c);
             this.setWeaving(a, true);
             break;
           }
@@ -214,7 +214,7 @@ export class WeaverBrain extends Brain {
           this.released = false;
           this.weaving = false;
           this.state = 'bolt';
-          this.beginTelegraph(a, this.releaseAt, VIOLET);
+          this.beginTelegraph(a, this.releaseAt, VIOLET, 'bolt', t);
           this.game.audio.play('eclipseBreath', { pos: a.pos, pitch: 1.3 });
         }
         break;

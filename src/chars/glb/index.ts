@@ -31,7 +31,7 @@ export function createGlbCharacters(game: Game | null): GlbCharacters {
       const cfg = GLB_ARCHETYPES[archetype];
       if (!cfg || opts?.driverOnly || !library.enabled || library.unavailable(cfg.model)) return null;
       // body or props may be only partly loaded (archetypes share bodies but not props): ask for whatever is missing
-      const missing = modelsFor(archetype, opts?.bareHead).filter((n) => !library.has(n) && !library.unavailable(n));
+      const missing = modelsFor(archetype, opts?.bareHead || (opts?.halfHuman === true && archetype === 'linkbound')).filter((n) => !library.has(n) && !library.unavailable(n));
       if (missing.length) void library.preload(missing);
       try {
         return new GlbHumanoidVisual(game, archetype, cfg, library, opts);

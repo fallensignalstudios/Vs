@@ -4,6 +4,7 @@
  */
 import type { CharacterCreateOpts, Game, HumanoidArchetype, HumanoidVisual } from '@/core/api';
 import { ARCHETYPES, FALLBACK_ARCHETYPE } from './archetypes';
+import { WITNESS_NO_HALO } from './archetypes/others';
 import { getFigure } from './figure';
 import { GENERIC } from './clips/generic';
 import { HumanoidVisualImpl } from './visual';
@@ -21,12 +22,15 @@ export function createHumanoid(_game: Game | null, archetype: HumanoidArchetype,
     def = FALLBACK_ARCHETYPE;
   }
   const seed = Number.isFinite(opts?.seed) ? Math.floor(opts!.seed as number) : 0;
-  const variant = Number.isFinite(opts?.variant) ? Math.floor(opts!.variant as number) : 0;
+  let variant = Number.isFinite(opts?.variant) ? Math.floor(opts!.variant as number) : 0;
+  // the Witness without the King's halo (Vesryn) is the archetype's variant 1
+  if (archetype === 'kingWitness' && opts?.halo === false) variant = WITNESS_NO_HALO;
   const scale = opts?.scale && opts.scale > 0 ? opts.scale : 1;
   const mask = opts?.driverOnly ? new Set<string>(Array.isArray(opts.keep) ? opts.keep : []) : null;
   const fig = getFigure(archetype, def, GENERIC, seed, variant, mask);
   const v = new HumanoidVisualImpl(fig, { scale, seed, vary: (def.seedBuckets ?? 1) > 1 });
-  if (opts?.corruption !== undefined) v.setCorruption(opts.corruption);
+  if (archetype === 'linkbound' && opts?.halfHuman === true) v.setCorruption(opts.corruption ?? 1, { mode: 'halfFace', side: 'right' });
+  else if (opts?.corruption !== undefined) v.setCorruption(opts.corruption);
   return v;
 }
 

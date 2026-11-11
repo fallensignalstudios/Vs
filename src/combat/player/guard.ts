@@ -216,8 +216,8 @@ export class Guard {
     this.counterT += dt;
     p.move.brake(dt, 60);
     if (!this.counterDone && t && t.alive && dt > 1e-6) {
-      // step in so the guaranteed blow visibly connects
-      a.face(t.pos);
+      // step in so the guaranteed blow visibly connects (facing only while input is on: a scene owns it otherwise)
+      if (p.enabled) a.face(t.pos);
       const gap = a.distanceTo(t) - t.radius - a.radius - 0.7;
       if (gap > 0) {
         const step = Math.min(gap, 14 * dt);

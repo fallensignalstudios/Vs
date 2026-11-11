@@ -12,6 +12,7 @@
 import * as THREE from 'three';
 import type { GlowMask } from './config';
 import { HIT_FLASH_GLSL } from '@/chars/flash';
+import { BOOT_TOP, FACE_REGION_GLSL, FROST_REGION_GLSL } from '@/chars/regions';
 
 /** State shared by every material of one character (body and props). */
 export interface SharedUniforms {
@@ -25,6 +26,10 @@ export interface SharedUniforms {
   uTelegraph: { value: THREE.Vector4 };
   uRim: { value: THREE.Vector4 };
   uSeed: { value: THREE.Vector3 };
+  /** where frost and corruption act (src/chars/regions.ts): frost region, corruption mode, half side, boot top */
+  uLocal: { value: THREE.Vector4 };
+  /** 0..1 energy-blade flare (Verity igniting) */
+  uFlare: { value: number };
 }
 
 /** Per-material parameters. */
@@ -47,6 +52,8 @@ export interface OwnUniforms {
    * their own shading; w = amount (0 = off)
    */
   uHair: { value: THREE.Vector4 };
+  /** eye centre in rest metres and skull size (w = 0: this surface has no face — props) */
+  uFace: { value: THREE.Vector4 };
 }
 
 export interface GlbMaterial {
@@ -84,13 +91,17 @@ varying vec3 vRestN;
 uniform float uFrozen;
 uniform mat4 uRest;
 uniform float uRestUnit;
+uniform vec4 uLocal;
+${FROST_REGION_GLSL}
 `;
 
 /** replaces <begin_vertex>: bind-pose position / normal for the effects, and the frost shell's slight swell */
 const VERT_BEGIN = /* glsl */ `
 vRest = ( uRest * vec4( position, 1.0 ) ).xyz;
 vRestN = normalize( mat3( uRest ) * normal );
-vec3 transformed = vec3( position ) + normalize( normal ) * ( uFrozen * 0.004 * uRestUnit );
+// the frost shell swells the surface a little (a boot locked in ice: three times as much, there only)
+float frostSwell = uFrozen * ( uLocal.x > 0.5 ? 0.012 * aurFrostRegion( vRest, uLocal ) : 0.004 );
+vec3 transformed = vec3( position ) + normalize( normal ) * ( frostSwell * uRestUnit );
 `;
 
 const FRAG_HEAD = /* glsl */ `
@@ -112,8 +123,13 @@ uniform vec3 uTint;
 uniform vec2 uExposed;
 uniform vec4 uBlade;
 uniform vec4 uHair;
+uniform vec4 uLocal;
+uniform vec4 uFace;
+uniform float uFlare;
 ${NOISE}
 ${HIT_FLASH_GLSL}
+${FROST_REGION_GLSL}
+${FACE_REGION_GLSL}
 vec3 gHash3( vec3 p ) {
   p = vec3( dot( p, vec3( 127.1, 311.7, 74.7 ) ), dot( p, vec3( 269.5, 183.3, 246.1 ) ), dot( p, vec3( 113.5, 271.9, 124.6 ) ) );
   return fract( sin( p ) * 43758.5453 );
@@ -147,6 +163,8 @@ float ggEdge;
 float ggBlade;
 float ggBladeBody;
 float ggHair;
+float ggFz;
+float ggIris;
 `;
 
 /** after <color_fragment>: painted-light mask, albedo cap, dissolve, frost and corruption tint */
@@ -196,40 +214,72 @@ const FRAG_COLOR = /* glsl */ `
   }
 
   // frost: crystals seed on upward faces and in a slow pattern, then grow cell by cell
-  ggFrost = 0.0; ggRidge = 0.0; ggCell = 0.0; ggFacet = vec3( 0.0 );
+  ggFrost = 0.0; ggRidge = 0.0; ggCell = 0.0; ggFacet = vec3( 0.0 ); ggFz = 0.0;
   if ( uFrozen > 0.001 ) {
-    vec3 cell = gCells( ( vRest + uSeed * 0.37 ) * vec3( 36.0, 17.0, 36.0 ) );
+    // whole figure, or one boot (regions.ts): ggFz is how frozen THIS point is
+    float local = step( 0.5, uLocal.x );
+    float fm = aurFrostRegion( vRest + vec3( 0.0, ( gNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal );
+    ggFz = uFrozen * fm;
+    vec3 cell = gCells( ( vRest + uSeed * 0.37 ) * mix( vec3( 36.0, 17.0, 36.0 ), vec3( 48.0, 30.0, 48.0 ), local ) );
     float grow = gFbm( vRest * 5.0 + uSeed );
     float up = clamp( vRestN.y * 0.5 + 0.5, 0.0, 1.0 );
     float seedv = cell.z * 0.34 + grow * 0.5 + up * 0.28 + gNoise( vRest * 23.0 ) * 0.2;
-    float th = mix( 0.98, 0.38, uFrozen );
-    ggFrost = smoothstep( th, th + 0.14, seedv );
+    // a locked boot is encased: the ice is solid where the region is, crystalline only at its ragged top
+    float th = mix( 0.98, 0.38, ggFz ) - local * 0.55 * ggFz;
+    ggFrost = smoothstep( th, th + 0.14, seedv ) * mix( 1.0, smoothstep( 0.05, 0.4, fm ), local );
     ggRidge = ggFrost * smoothstep( 0.1, 0.0, cell.y );
     ggCell = cell.z;
     ggFacet = ( gHash3( vec3( cell.z * 91.7, cell.z * 13.3, 4.1 ) ) - 0.5 ) * ggFrost;
     float l = dot( diffuseColor.rgb, vec3( 0.3, 0.55, 0.15 ) );
     // arrested: colour drains toward a cold grey, but the faction hue survives underneath
-    diffuseColor.rgb = mix( diffuseColor.rgb, mix( vec3( l ), diffuseColor.rgb, 0.45 ) * vec3( 0.82, 0.93, 1.06 ), uFrozen * 0.8 );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.27, 0.41, 0.56 ) + cell.z * 0.14, ggFrost * 0.72 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, mix( vec3( l ), diffuseColor.rgb, 0.45 ) * vec3( 0.82, 0.93, 1.06 ), ggFz * 0.8 );
+    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.27, 0.41, 0.56 ) + cell.z * 0.14, ggFrost * mix( 0.72, 0.86, local ) );
   }
 
   // Eclipse corruption: climbs from one flank, darkens what it takes, light in veins and along its edge
-  ggCorr = 0.0; ggVein = 0.0;
+  ggCorr = 0.0; ggVein = 0.0; ggIris = 0.0;
   if ( uCorruption > 0.001 ) {
     vec3 cp = vRest + uSeed * 1.7;
-    float m = gFbm( cp * 3.6 + 11.0 );
-    float ca = uSeed.x * 6.2832;
-    vec3 cdir = normalize( vec3( cos( ca ), 0.35, sin( ca ) ) );
-    float dir = clamp( 0.5 + dot( vRest - vec3( 0.0, 1.0, 0.0 ), cdir ) * 1.5, 0.0, 1.0 );
-    float reach = uCorruption * 0.78;
-    ggCorr = smoothstep( 1.0 - reach, 1.14 - reach, m * 0.45 + dir * 0.55 );
-    float front = smoothstep( 0.0, 0.25, ggCorr ) * smoothstep( 0.8, 0.3, ggCorr );
     float v1 = abs( gNoise( cp * 17.0 + vec3( 0.0, uTime * 0.05, 0.0 ) ) - 0.5 );
     float v2 = abs( gNoise( cp * 37.0 + 5.0 ) - 0.5 );
-    float lines = smoothstep( 0.03, 0.0, v1 ) + 0.45 * smoothstep( 0.018, 0.0, v2 );
-    ggVein = ggCorr * lines * clamp( 0.45 + front * 0.8, 0.0, 1.0 );
-    diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.045, 0.03, 0.07 ), ggCorr * 0.74 );
-    ggLamp *= 1.0 - ggCorr * 0.6;
+    vec3 fd = vRest - uFace.xyz;
+    float fs = max( uFace.w, 0.05 ) / 0.21;
+    if ( uLocal.y > 0.5 && uLocal.y < 1.5 ) {
+      // FACE ONLY (regions.ts): violet irises, thin veins at the temples and the neck; nothing else is touched
+      if ( uFace.w > 0.0 ) {
+        float a = uCorruption;
+        ggIris = aurIris( fd, vRestN, fs ) * smoothstep( 0.0, 0.3, a );
+        float region = aurFaceVeinRegion( fd, fs );
+        float w1 = abs( gNoise( vRest * 46.0 + uSeed * 3.0 ) - 0.5 );
+        float w2 = abs( gNoise( vRest * 95.0 + 7.0 ) - 0.5 );
+        // the veins reach further from their roots as the amount rises
+        float reach = smoothstep( 1.0 - a, 1.25 - a, region + gNoise( vRest * 19.0 ) * 0.25 );
+        float thin = smoothstep( 0.024, 0.004, w1 ) + 0.45 * smoothstep( 0.012, 0.0, w2 );
+        ggVein = clamp( thin * reach * region, 0.0, 1.0 );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), ggVein * 0.82 );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.32, 0.1, 0.62 ), ggIris * 0.9 );
+        ggVein *= 0.3;
+      }
+    } else {
+      float m = gFbm( cp * 3.6 + 11.0 );
+      float ca = uSeed.x * 6.2832;
+      vec3 cdir = normalize( vec3( cos( ca ), 0.35, sin( ca ) ) );
+      float dir = clamp( 0.5 + dot( vRest - vec3( 0.0, 1.0, 0.0 ), cdir ) * 1.5, 0.0, 1.0 );
+      float reach = uCorruption * 0.78;
+      ggCorr = smoothstep( 1.0 - reach, 1.14 - reach, m * 0.45 + dir * 0.55 );
+      if ( uLocal.y > 1.5 && uFace.w > 0.0 ) {
+        // HALF FACE: on the head one half is taken (split by a ragged line), the other stays human
+        float head = aurHead( fd, fs );
+        float edge = fd.x * uLocal.z + ( gNoise( vRest * 55.0 + uSeed ) - 0.5 ) * 0.014 * fs + ( gNoise( vRest * 13.0 ) - 0.5 ) * 0.024 * fs;
+        float halfMask = smoothstep( -0.003, 0.005, edge ) * smoothstep( 0.0, 0.35, uCorruption );
+        ggCorr = mix( ggCorr, halfMask, head );
+      }
+      float front = smoothstep( 0.0, 0.25, ggCorr ) * smoothstep( 0.8, 0.3, ggCorr );
+      float lines = smoothstep( 0.03, 0.0, v1 ) + 0.45 * smoothstep( 0.018, 0.0, v2 );
+      ggVein = ggCorr * lines * clamp( 0.45 + front * 0.8, 0.0, 1.0 );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.045, 0.03, 0.07 ), ggCorr * 0.74 );
+      ggLamp *= 1.0 - ggCorr * 0.6;
+    }
   }
 }
 `;
@@ -261,11 +311,13 @@ const FRAG_EMISSIVE = /* glsl */ `
   float up = 0.55 + 0.45 * clamp( normal.y * 0.8 + 0.4, 0.0, 1.0 );
   totalEmissiveRadiance += uRim.rgb * ( uRim.a * fres * up );
   // frost: a cold shell that reads without lighting the scene
-  totalEmissiveRadiance *= 1.0 - uFrozen * 0.55;
-  totalEmissiveRadiance += vec3( 0.5, 0.78, 1.0 ) * ( ggFrost * ( 0.035 + fres * 0.3 ) + ggRidge * 0.2 + uFrozen * fres * 0.1 );
+  totalEmissiveRadiance *= 1.0 - ggFz * 0.55;
+  totalEmissiveRadiance += vec3( 0.5, 0.78, 1.0 ) * ( ggFrost * ( 0.035 + fres * 0.3 ) + ggRidge * 0.2 + ggFz * fres * 0.1 );
   // corruption: light lives in the veins and pulses slowly
   float pulse = 0.65 + 0.35 * sin( uTime * 3.1 + vRest.y * 9.0 );
   totalEmissiveRadiance += vec3( 0.48, 0.2, 1.0 ) * ( ggVein * pulse * 3.4 + ggCorr * fres * 0.35 );
+  // a taken iris holds a low violet light of its own
+  totalEmissiveRadiance += vec3( 0.5, 0.2, 1.0 ) * ggIris * ( 0.9 + 0.3 * pulse );
   // telegraph (about to act)
   float tp = 0.7 + 0.3 * sin( uTime * 18.0 );
   totalEmissiveRadiance += uTelegraph.rgb * uTelegraph.a * tp * ( 0.06 + fres * 1.3 );
@@ -275,8 +327,10 @@ const FRAG_EMISSIVE = /* glsl */ `
     totalEmissiveRadiance += vec3( 1.0, 0.72, 0.4 ) * uParams.w * band * ( 0.6 + 0.4 * sin( uTime * 9.0 ) ) * ( 0.14 + fres * 1.2 );
   }
   // energy blades: a cold inner light that gathers at the edges and the cut end
-  totalEmissiveRadiance += vec3( 0.55, 0.82, 1.0 ) * ggBladeBody * ( 0.3 + fres * 1.9 ) * uGlow * shimmer;
-  totalEmissiveRadiance += vec3( 0.62, 0.86, 1.0 ) * ggBlade * 4.0 * uGlow;
+  // (igniting: the whole blade flares white-cold, then settles)
+  float flare = 1.0 + uFlare * 4.0;
+  totalEmissiveRadiance += mix( vec3( 0.55, 0.82, 1.0 ), vec3( 0.85, 0.95, 1.0 ), uFlare ) * ggBladeBody * ( 0.3 + fres * 1.9 ) * uGlow * shimmer * flare;
+  totalEmissiveRadiance += vec3( 0.62, 0.86, 1.0 ) * ggBlade * 4.0 * uGlow * flare;
   totalEmissiveRadiance += uDissolveColor * ggEdge * 5.0;
   // hit flash: edge tint + albedo lift (src/chars/flash.ts), never a flat fill over the author's design
   totalEmissiveRadiance += aurHitFlash( uFlash, diffuseColor.rgb, fres );
@@ -297,6 +351,8 @@ export function createSharedUniforms(seed: number): SharedUniforms {
     uTelegraph: { value: new THREE.Vector4(1, 0.3, 0.1, 0) },
     uRim: { value: new THREE.Vector4(0.6, 0.72, 1, 0) },
     uSeed: { value: new THREE.Vector3(fractHash(seed + 0.37), fractHash(seed * 1.7 + 4.1), fractHash(seed * 2.3 + 9.2)) },
+    uLocal: { value: new THREE.Vector4(0, 0, 1, BOOT_TOP) },
+    uFlare: { value: 0 },
   };
 }
 
@@ -326,6 +382,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
     uExposed: { value: new THREE.Vector2(0, 0) },
     uBlade: { value: new THREE.Vector4(0, 0, 0, 0) },
     uHair: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uFace: { value: new THREE.Vector4(0, 0, 0, 0) },
   };
   const unit = Math.cbrt(Math.abs(own.uRest.value.determinant()));
   own.uRestUnit.value = unit > 1e-9 ? 1 / unit : 1;
@@ -344,7 +401,7 @@ export function createGlbMaterial(source: THREE.MeshStandardMaterial, shared: Sh
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + FRAG_NORMAL)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + FRAG_EMISSIVE);
   };
-  material.customProgramCacheKey = () => 'aurelion-glb-6';
+  material.customProgramCacheKey = () => 'aurelion-glb-7';
 
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   depth.onBeforeCompile = (shader) => {
