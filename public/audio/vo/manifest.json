@@ -1,1 +1,3217 @@
-{}
+{
+ "caelus_71fe4d34": {
+  "file": "caelus_71fe4d34.mp3",
+  "seconds": 3.144,
+  "zone": "Z00"
+ },
+ "sol_c778d4d7": {
+  "file": "sol_c778d4d7.mp3",
+  "seconds": 1.488,
+  "zone": "Z00"
+ },
+ "tharne_895d5f4f": {
+  "file": "tharne_895d5f4f.mp3",
+  "seconds": 3.36,
+  "zone": "Z00"
+ },
+ "tharne_0243eeed": {
+  "file": "tharne_0243eeed.mp3",
+  "seconds": 2.928,
+  "zone": "Z00"
+ },
+ "tharne_8c966983": {
+  "file": "tharne_8c966983.mp3",
+  "seconds": 2.832,
+  "zone": "Z00"
+ },
+ "selene_4760fcf7": {
+  "file": "selene_4760fcf7.mp3",
+  "seconds": 4.272,
+  "zone": "Z00"
+ },
+ "narrator_22d65b1c": {
+  "file": "narrator_22d65b1c.mp3",
+  "seconds": 9.312,
+  "zone": "Z00"
+ },
+ "tarrik_4d1b19a1": {
+  "file": "tarrik_4d1b19a1.mp3",
+  "seconds": 0.648,
+  "zone": "Z00"
+ },
+ "lyessa_74dc9f17": {
+  "file": "lyessa_74dc9f17.mp3",
+  "seconds": 1.944,
+  "zone": "Z00"
+ },
+ "tarrik_335a7e02": {
+  "file": "tarrik_335a7e02.mp3",
+  "seconds": 1.032,
+  "zone": "Z00"
+ },
+ "lyessa_f9d5c92e": {
+  "file": "lyessa_f9d5c92e.mp3",
+  "seconds": 2.784,
+  "zone": "Z00"
+ },
+ "tarrik_91c679f1": {
+  "file": "tarrik_91c679f1.mp3",
+  "seconds": 0.96,
+  "zone": "Z00"
+ },
+ "dominion_soldier_2c9b5471": {
+  "file": "dominion_soldier_2c9b5471.mp3",
+  "seconds": 1.536,
+  "zone": "Z00"
+ },
+ "dominion_soldier_1194ea92": {
+  "file": "dominion_soldier_1194ea92.mp3",
+  "seconds": 4.152,
+  "zone": "Z00"
+ },
+ "dominion_soldier_6a68c1e6": {
+  "file": "dominion_soldier_6a68c1e6.mp3",
+  "seconds": 1.224,
+  "zone": "Z00"
+ },
+ "tarrik_a18e0ee3": {
+  "file": "tarrik_a18e0ee3.mp3",
+  "seconds": 0.816,
+  "zone": "Z00"
+ },
+ "dominion_soldier_67794ddd": {
+  "file": "dominion_soldier_67794ddd.mp3",
+  "seconds": 1.104,
+  "zone": "Z00"
+ },
+ "lyessa_1eb5dcb3": {
+  "file": "lyessa_1eb5dcb3.mp3",
+  "seconds": 1.56,
+  "zone": "Z00"
+ },
+ "lyessa_92f3eef4": {
+  "file": "lyessa_92f3eef4.mp3",
+  "seconds": 1.464,
+  "zone": "Z00"
+ },
+ "lyessa_7f89905a": {
+  "file": "lyessa_7f89905a.mp3",
+  "seconds": 1.248,
+  "zone": "Z01"
+ },
+ "tarrik_3540a96e": {
+  "file": "tarrik_3540a96e.mp3",
+  "seconds": 1.632,
+  "zone": "Z01"
+ },
+ "lyessa_94fafa3b": {
+  "file": "lyessa_94fafa3b.mp3",
+  "seconds": 0.84,
+  "zone": "Z01"
+ },
+ "lyessa_baf84c7f": {
+  "file": "lyessa_baf84c7f.mp3",
+  "seconds": 1.872,
+  "zone": "Z01"
+ },
+ "lyessa_5f961f8d": {
+  "file": "lyessa_5f961f8d.mp3",
+  "seconds": 2.568,
+  "zone": "Z01"
+ },
+ "lyessa_8a0ba24a": {
+  "file": "lyessa_8a0ba24a.mp3",
+  "seconds": 1.968,
+  "zone": "Z01"
+ },
+ "lyessa_87f9dd45": {
+  "file": "lyessa_87f9dd45.mp3",
+  "seconds": 1.56,
+  "zone": "Z01"
+ },
+ "soldier_83238b64": {
+  "file": "soldier_83238b64.mp3",
+  "seconds": 1.44,
+  "zone": "Z01"
+ },
+ "soldier_2e990475": {
+  "file": "soldier_2e990475.mp3",
+  "seconds": 2.04,
+  "zone": "Z01"
+ },
+ "soldier_75a47f2e": {
+  "file": "soldier_75a47f2e.mp3",
+  "seconds": 1.824,
+  "zone": "Z01"
+ },
+ "soldier_443cf89a": {
+  "file": "soldier_443cf89a.mp3",
+  "seconds": 2.184,
+  "zone": "Z01"
+ },
+ "soldier_2622c1c3": {
+  "file": "soldier_2622c1c3.mp3",
+  "seconds": 2.016,
+  "zone": "Z01"
+ },
+ "lyessa_1d6b6329": {
+  "file": "lyessa_1d6b6329.mp3",
+  "seconds": 1.344,
+  "zone": "Z01"
+ },
+ "soldier_a3c800ec": {
+  "file": "soldier_a3c800ec.mp3",
+  "seconds": 1.152,
+  "zone": "Z01"
+ },
+ "tarrik_c61ac4f7": {
+  "file": "tarrik_c61ac4f7.mp3",
+  "seconds": 0.624,
+  "zone": "Z02"
+ },
+ "dominion_soldier_93819886": {
+  "file": "dominion_soldier_93819886.mp3",
+  "seconds": 0.408,
+  "zone": "Z02"
+ },
+ "tarrik_eab294de": {
+  "file": "tarrik_eab294de.mp3",
+  "seconds": 1.2,
+  "zone": "Z02"
+ },
+ "dominion_soldier_77156b63": {
+  "file": "dominion_soldier_77156b63.mp3",
+  "seconds": 0.456,
+  "zone": "Z02"
+ },
+ "tarrik_0a741c64": {
+  "file": "tarrik_0a741c64.mp3",
+  "seconds": 0.648,
+  "zone": "Z02"
+ },
+ "tarrik_cff76d95": {
+  "file": "tarrik_cff76d95.mp3",
+  "seconds": 0.672,
+  "zone": "Z02"
+ },
+ "dominion_soldier_ddff335e": {
+  "file": "dominion_soldier_ddff335e.mp3",
+  "seconds": 0.672,
+  "zone": "Z02"
+ },
+ "tarrik_055259ce": {
+  "file": "tarrik_055259ce.mp3",
+  "seconds": 0.936,
+  "zone": "Z02"
+ },
+ "varo_6439f158": {
+  "file": "varo_6439f158.mp3",
+  "seconds": 2.04,
+  "zone": "Z02"
+ },
+ "tarrik_31b3993d": {
+  "file": "tarrik_31b3993d.mp3",
+  "seconds": 1.152,
+  "zone": "Z02"
+ },
+ "varo_74b8f2e7": {
+  "file": "varo_74b8f2e7.mp3",
+  "seconds": 0.936,
+  "zone": "Z02"
+ },
+ "tarrik_5b7b793e": {
+  "file": "tarrik_5b7b793e.mp3",
+  "seconds": 2.808,
+  "zone": "Z02"
+ },
+ "lyessa_43e806b3": {
+  "file": "lyessa_43e806b3.mp3",
+  "seconds": 1.776,
+  "zone": "Z02"
+ },
+ "tarrik_32328a40": {
+  "file": "tarrik_32328a40.mp3",
+  "seconds": 1.488,
+  "zone": "Z02"
+ },
+ "cross_61dcc917": {
+  "file": "cross_61dcc917.mp3",
+  "seconds": 3.816,
+  "zone": "Z02"
+ },
+ "tarrik_05a211d8": {
+  "file": "tarrik_05a211d8.mp3",
+  "seconds": 0.768,
+  "zone": "Z02"
+ },
+ "cross_79d265b0": {
+  "file": "cross_79d265b0.mp3",
+  "seconds": 5.832,
+  "zone": "Z02"
+ },
+ "tarrik_a2954461": {
+  "file": "tarrik_a2954461.mp3",
+  "seconds": 1.488,
+  "zone": "Z02"
+ },
+ "cross_e8add299": {
+  "file": "cross_e8add299.mp3",
+  "seconds": 1.44,
+  "zone": "Z02"
+ },
+ "tarrik_52f7b381": {
+  "file": "tarrik_52f7b381.mp3",
+  "seconds": 6.912,
+  "zone": "Z02"
+ },
+ "cross_607093be": {
+  "file": "cross_607093be.mp3",
+  "seconds": 4.392,
+  "zone": "Z02"
+ },
+ "cross_70b4f514": {
+  "file": "cross_70b4f514.mp3",
+  "seconds": 3.72,
+  "zone": "Z02"
+ },
+ "tarrik_506b4247": {
+  "file": "tarrik_506b4247.mp3",
+  "seconds": 1.512,
+  "zone": "Z02"
+ },
+ "tarrik_fc68049e": {
+  "file": "tarrik_fc68049e.mp3",
+  "seconds": 2.112,
+  "zone": "Z02"
+ },
+ "cross_746e4433": {
+  "file": "cross_746e4433.mp3",
+  "seconds": 2.208,
+  "zone": "Z02"
+ },
+ "tarrik_1938ecf7": {
+  "file": "tarrik_1938ecf7.mp3",
+  "seconds": 1.632,
+  "zone": "Z02"
+ },
+ "tarrik_0f186e29": {
+  "file": "tarrik_0f186e29.mp3",
+  "seconds": 1.56,
+  "zone": "Z02"
+ },
+ "tarrik_751ffb90": {
+  "file": "tarrik_751ffb90.mp3",
+  "seconds": 1.8,
+  "zone": "Z02"
+ },
+ "lyessa_69c23515": {
+  "file": "lyessa_69c23515.mp3",
+  "seconds": 1.344,
+  "zone": "Z02"
+ },
+ "lyessa_dcda5d02": {
+  "file": "lyessa_dcda5d02.mp3",
+  "seconds": 1.728,
+  "zone": "Z02"
+ },
+ "tarrik_3336b686": {
+  "file": "tarrik_3336b686.mp3",
+  "seconds": 1.536,
+  "zone": "Z02"
+ },
+ "lyessa_d1350c22": {
+  "file": "lyessa_d1350c22.mp3",
+  "seconds": 1.656,
+  "zone": "Z02"
+ },
+ "lyessa_d0affb49": {
+  "file": "lyessa_d0affb49.mp3",
+  "seconds": 1.392,
+  "zone": "Z02"
+ },
+ "tarrik_8edd9d16": {
+  "file": "tarrik_8edd9d16.mp3",
+  "seconds": 4.392,
+  "zone": "Z02"
+ },
+ "lyessa_ee3a463f": {
+  "file": "lyessa_ee3a463f.mp3",
+  "seconds": 1.344,
+  "zone": "Z02"
+ },
+ "lyessa_ee3cdf08": {
+  "file": "lyessa_ee3cdf08.mp3",
+  "seconds": 1.176,
+  "zone": "Z02"
+ },
+ "lyessa_234dab7d": {
+  "file": "lyessa_234dab7d.mp3",
+  "seconds": 0.744,
+  "zone": "Z02"
+ },
+ "tarrik_a77a6b0f": {
+  "file": "tarrik_a77a6b0f.mp3",
+  "seconds": 1.752,
+  "zone": "Z02"
+ },
+ "lyessa_9a8b93bf": {
+  "file": "lyessa_9a8b93bf.mp3",
+  "seconds": 3.096,
+  "zone": "Z02"
+ },
+ "tarrik_40f896c3": {
+  "file": "tarrik_40f896c3.mp3",
+  "seconds": 0.864,
+  "zone": "Z02"
+ },
+ "tharne_b0701d6e": {
+  "file": "tharne_b0701d6e.mp3",
+  "seconds": 3.816,
+  "zone": "Z03"
+ },
+ "selene_a9ae4af2": {
+  "file": "selene_a9ae4af2.mp3",
+  "seconds": 0.696,
+  "zone": "Z03"
+ },
+ "tharne_bad2ce64": {
+  "file": "tharne_bad2ce64.mp3",
+  "seconds": 0.744,
+  "zone": "Z03"
+ },
+ "lyric_99263ce7": {
+  "file": "lyric_99263ce7.mp3",
+  "seconds": 1.872,
+  "zone": "Z03"
+ },
+ "tharne_4b9b8056": {
+  "file": "tharne_4b9b8056.mp3",
+  "seconds": 0.936,
+  "zone": "Z03"
+ },
+ "lyric_9ed8618e": {
+  "file": "lyric_9ed8618e.mp3",
+  "seconds": 2.112,
+  "zone": "Z03"
+ },
+ "selene_575da019": {
+  "file": "selene_575da019.mp3",
+  "seconds": 0.72,
+  "zone": "Z03"
+ },
+ "lyric_6351ca41": {
+  "file": "lyric_6351ca41.mp3",
+  "seconds": 2.064,
+  "zone": "Z03"
+ },
+ "tharne_2b17defe": {
+  "file": "tharne_2b17defe.mp3",
+  "seconds": 0.696,
+  "zone": "Z03"
+ },
+ "tharne_f27a2a31": {
+  "file": "tharne_f27a2a31.mp3",
+  "seconds": 4.392,
+  "zone": "Z03"
+ },
+ "tharne_6eaeef9b": {
+  "file": "tharne_6eaeef9b.mp3",
+  "seconds": 4.44,
+  "zone": "Z03"
+ },
+ "tharne_ddea3f98": {
+  "file": "tharne_ddea3f98.mp3",
+  "seconds": 4.416,
+  "zone": "Z03"
+ },
+ "tharne_2e3d46b4": {
+  "file": "tharne_2e3d46b4.mp3",
+  "seconds": 4.704,
+  "zone": "Z03"
+ },
+ "tharne_9c7f23d7": {
+  "file": "tharne_9c7f23d7.mp3",
+  "seconds": 3.624,
+  "zone": "Z03"
+ },
+ "tharne_9fd9e51e": {
+  "file": "tharne_9fd9e51e.mp3",
+  "seconds": 0.888,
+  "zone": "Z03"
+ },
+ "selene_6bf11a90": {
+  "file": "selene_6bf11a90.mp3",
+  "seconds": 0.648,
+  "zone": "Z03"
+ },
+ "lyric_43dae9a7": {
+  "file": "lyric_43dae9a7.mp3",
+  "seconds": 2.136,
+  "zone": "Z03"
+ },
+ "tharne_03eb467e": {
+  "file": "tharne_03eb467e.mp3",
+  "seconds": 0.984,
+  "zone": "Z03"
+ },
+ "selene_c8c84d47": {
+  "file": "selene_c8c84d47.mp3",
+  "seconds": 0.864,
+  "zone": "Z03"
+ },
+ "tharne_48b0bf06": {
+  "file": "tharne_48b0bf06.mp3",
+  "seconds": 1.416,
+  "zone": "Z03"
+ },
+ "selene_d369c410": {
+  "file": "selene_d369c410.mp3",
+  "seconds": 1.944,
+  "zone": "Z03"
+ },
+ "tharne_3b3ecdf5": {
+  "file": "tharne_3b3ecdf5.mp3",
+  "seconds": 1.416,
+  "zone": "Z03"
+ },
+ "tharne_dd3b35d1": {
+  "file": "tharne_dd3b35d1.mp3",
+  "seconds": 3.312,
+  "zone": "Z03"
+ },
+ "selene_5a577393": {
+  "file": "selene_5a577393.mp3",
+  "seconds": 1.104,
+  "zone": "Z03"
+ },
+ "lyric_856b675c": {
+  "file": "lyric_856b675c.mp3",
+  "seconds": 0.768,
+  "zone": "Z03"
+ },
+ "selene_5471dc01": {
+  "file": "selene_5471dc01.mp3",
+  "seconds": 0.504,
+  "zone": "Z03"
+ },
+ "lyric_b8ddbedd": {
+  "file": "lyric_b8ddbedd.mp3",
+  "seconds": 0.84,
+  "zone": "Z03"
+ },
+ "selene_c83a905e": {
+  "file": "selene_c83a905e.mp3",
+  "seconds": 1.344,
+  "zone": "Z03"
+ },
+ "lyric_5c50331b": {
+  "file": "lyric_5c50331b.mp3",
+  "seconds": 1.176,
+  "zone": "Z03"
+ },
+ "tharne_b1cf42f3": {
+  "file": "tharne_b1cf42f3.mp3",
+  "seconds": 2.28,
+  "zone": "Z03"
+ },
+ "tharne_043079b2": {
+  "file": "tharne_043079b2.mp3",
+  "seconds": 2.232,
+  "zone": "Z03"
+ },
+ "tharne_dee69068": {
+  "file": "tharne_dee69068.mp3",
+  "seconds": 1.704,
+  "zone": "Z03"
+ },
+ "sol_1ac56396": {
+  "file": "sol_1ac56396.mp3",
+  "seconds": 1.104,
+  "zone": "Z03"
+ },
+ "selene_a1619a9f": {
+  "file": "selene_a1619a9f.mp3",
+  "seconds": 1.56,
+  "zone": "Z03"
+ },
+ "sol_51ec28e1": {
+  "file": "sol_51ec28e1.mp3",
+  "seconds": 1.632,
+  "zone": "Z03"
+ },
+ "selene_bc1ccd98": {
+  "file": "selene_bc1ccd98.mp3",
+  "seconds": 1.536,
+  "zone": "Z03"
+ },
+ "sol_eae9938b": {
+  "file": "sol_eae9938b.mp3",
+  "seconds": 4.344,
+  "zone": "Z03"
+ },
+ "lyric_30304d58": {
+  "file": "lyric_30304d58.mp3",
+  "seconds": 2.592,
+  "zone": "Z03"
+ },
+ "selene_6fed5aab": {
+  "file": "selene_6fed5aab.mp3",
+  "seconds": 3.984,
+  "zone": "Z03"
+ },
+ "sol_42db6503": {
+  "file": "sol_42db6503.mp3",
+  "seconds": 4.488,
+  "zone": "Z03"
+ },
+ "selene_51ebc6dc": {
+  "file": "selene_51ebc6dc.mp3",
+  "seconds": 1.416,
+  "zone": "Z03"
+ },
+ "sol_f7879f06": {
+  "file": "sol_f7879f06.mp3",
+  "seconds": 2.064,
+  "zone": "Z03"
+ },
+ "selene_184e6d5c": {
+  "file": "selene_184e6d5c.mp3",
+  "seconds": 2.568,
+  "zone": "Z03"
+ },
+ "sol_8d8c61a5": {
+  "file": "sol_8d8c61a5.mp3",
+  "seconds": 2.04,
+  "zone": "Z03"
+ },
+ "selene_d47d8f17": {
+  "file": "selene_d47d8f17.mp3",
+  "seconds": 2.016,
+  "zone": "Z03"
+ },
+ "tharne_16f596c6": {
+  "file": "tharne_16f596c6.mp3",
+  "seconds": 2.016,
+  "zone": "Z03"
+ },
+ "selene_08920b0e": {
+  "file": "selene_08920b0e.mp3",
+  "seconds": 0.696,
+  "zone": "Z03"
+ },
+ "lyric_9b0165f3": {
+  "file": "lyric_9b0165f3.mp3",
+  "seconds": 1.08,
+  "zone": "Z03"
+ },
+ "selene_6c5ffe8f": {
+  "file": "selene_6c5ffe8f.mp3",
+  "seconds": 0.672,
+  "zone": "Z03"
+ },
+ "enforcer_efa89147": {
+  "file": "enforcer_efa89147.mp3",
+  "seconds": 2.52,
+  "zone": "Z04"
+ },
+ "tharne_59827753": {
+  "file": "tharne_59827753.mp3",
+  "seconds": 4.728,
+  "zone": "Z04"
+ },
+ "tharne_cb5acce7": {
+  "file": "tharne_cb5acce7.mp3",
+  "seconds": 4.2,
+  "zone": "Z04"
+ },
+ "lyric_504a9c03": {
+  "file": "lyric_504a9c03.mp3",
+  "seconds": 3.024,
+  "zone": "Z04"
+ },
+ "selene_51785e71": {
+  "file": "selene_51785e71.mp3",
+  "seconds": 1.224,
+  "zone": "Z04"
+ },
+ "tharne_ef8593cb": {
+  "file": "tharne_ef8593cb.mp3",
+  "seconds": 3.36,
+  "zone": "Z04"
+ },
+ "selene_23a332c6": {
+  "file": "selene_23a332c6.mp3",
+  "seconds": 1.104,
+  "zone": "Z04"
+ },
+ "tharne_dc570220": {
+  "file": "tharne_dc570220.mp3",
+  "seconds": 2.64,
+  "zone": "Z04"
+ },
+ "tharne_82a59695": {
+  "file": "tharne_82a59695.mp3",
+  "seconds": 2.664,
+  "zone": "Z04"
+ },
+ "enforcer_ff638af6": {
+  "file": "enforcer_ff638af6.mp3",
+  "seconds": 1.344,
+  "zone": "Z04"
+ },
+ "tharne_a118a9b6": {
+  "file": "tharne_a118a9b6.mp3",
+  "seconds": 0.816,
+  "zone": "Z04"
+ },
+ "enforcer_45f71221": {
+  "file": "enforcer_45f71221.mp3",
+  "seconds": 1.848,
+  "zone": "Z04"
+ },
+ "tharne_7fb0b17d": {
+  "file": "tharne_7fb0b17d.mp3",
+  "seconds": 1.152,
+  "zone": "Z04"
+ },
+ "tharne_2245660c": {
+  "file": "tharne_2245660c.mp3",
+  "seconds": 1.56,
+  "zone": "Z04"
+ },
+ "enforcer_f4d9c0e3": {
+  "file": "enforcer_f4d9c0e3.mp3",
+  "seconds": 1.992,
+  "zone": "Z04"
+ },
+ "tharne_eacb542f": {
+  "file": "tharne_eacb542f.mp3",
+  "seconds": 2.28,
+  "zone": "Z04"
+ },
+ "tharne_4969c38e": {
+  "file": "tharne_4969c38e.mp3",
+  "seconds": 3.528,
+  "zone": "Z04"
+ },
+ "tharne_1d294dc9": {
+  "file": "tharne_1d294dc9.mp3",
+  "seconds": 2.304,
+  "zone": "Z04"
+ },
+ "selene_91d9fbc4": {
+  "file": "selene_91d9fbc4.mp3",
+  "seconds": 2.256,
+  "zone": "Z04"
+ },
+ "tharne_3a600fc7": {
+  "file": "tharne_3a600fc7.mp3",
+  "seconds": 4.2,
+  "zone": "Z04"
+ },
+ "tharne_faa39e7b": {
+  "file": "tharne_faa39e7b.mp3",
+  "seconds": 2.376,
+  "zone": "Z04"
+ },
+ "lyric_2179e0a4": {
+  "file": "lyric_2179e0a4.mp3",
+  "seconds": 1.896,
+  "zone": "Z04"
+ },
+ "selene_0dd93476": {
+  "file": "selene_0dd93476.mp3",
+  "seconds": 1.752,
+  "zone": "Z04"
+ },
+ "lyric_478281d9": {
+  "file": "lyric_478281d9.mp3",
+  "seconds": 0.72,
+  "zone": "Z04"
+ },
+ "tarrik_6db5d323": {
+  "file": "tarrik_6db5d323.mp3",
+  "seconds": 0.768,
+  "zone": "Z05"
+ },
+ "selene_1b670dc9": {
+  "file": "selene_1b670dc9.mp3",
+  "seconds": 0.552,
+  "zone": "Z05"
+ },
+ "tarrik_241a3c79": {
+  "file": "tarrik_241a3c79.mp3",
+  "seconds": 0.84,
+  "zone": "Z05"
+ },
+ "tarrik_62613bf9": {
+  "file": "tarrik_62613bf9.mp3",
+  "seconds": 1.584,
+  "zone": "Z05"
+ },
+ "selene_4c07ab6c": {
+  "file": "selene_4c07ab6c.mp3",
+  "seconds": 1.872,
+  "zone": "Z05"
+ },
+ "lyric_7a1d389a": {
+  "file": "lyric_7a1d389a.mp3",
+  "seconds": 3.192,
+  "zone": "Z05"
+ },
+ "tarrik_56e162bb": {
+  "file": "tarrik_56e162bb.mp3",
+  "seconds": 0.864,
+  "zone": "Z05"
+ },
+ "selene_95b46ecd": {
+  "file": "selene_95b46ecd.mp3",
+  "seconds": 2.184,
+  "zone": "Z05"
+ },
+ "tarrik_eeecd366": {
+  "file": "tarrik_eeecd366.mp3",
+  "seconds": 0.96,
+  "zone": "Z05"
+ },
+ "selene_23d9785c": {
+  "file": "selene_23d9785c.mp3",
+  "seconds": 1.44,
+  "zone": "Z05"
+ },
+ "tarrik_1d97a478": {
+  "file": "tarrik_1d97a478.mp3",
+  "seconds": 1.44,
+  "zone": "Z05"
+ },
+ "tarrik_c7a70139": {
+  "file": "tarrik_c7a70139.mp3",
+  "seconds": 2.28,
+  "zone": "Z05"
+ },
+ "selene_73a387ff": {
+  "file": "selene_73a387ff.mp3",
+  "seconds": 0.864,
+  "zone": "Z05"
+ },
+ "tarrik_5a325263": {
+  "file": "tarrik_5a325263.mp3",
+  "seconds": 1.44,
+  "zone": "Z05"
+ },
+ "selene_ae3a756d": {
+  "file": "selene_ae3a756d.mp3",
+  "seconds": 1.968,
+  "zone": "Z05"
+ },
+ "tarrik_2a0eed6d": {
+  "file": "tarrik_2a0eed6d.mp3",
+  "seconds": 1.248,
+  "zone": "Z05"
+ },
+ "selene_99eb0d93": {
+  "file": "selene_99eb0d93.mp3",
+  "seconds": 0.984,
+  "zone": "Z05"
+ },
+ "tharne_41e0006d": {
+  "file": "tharne_41e0006d.mp3",
+  "seconds": 0.864,
+  "zone": "Z05"
+ },
+ "selene_60948e00": {
+  "file": "selene_60948e00.mp3",
+  "seconds": 0.864,
+  "zone": "Z05"
+ },
+ "selene_672fa725": {
+  "file": "selene_672fa725.mp3",
+  "seconds": 0.84,
+  "zone": "Z05"
+ },
+ "tharne_8ce1f0d9": {
+  "file": "tharne_8ce1f0d9.mp3",
+  "seconds": 0.744,
+  "zone": "Z05"
+ },
+ "selene_7630b44a": {
+  "file": "selene_7630b44a.mp3",
+  "seconds": 1.848,
+  "zone": "Z05"
+ },
+ "tharne_84bf7064": {
+  "file": "tharne_84bf7064.mp3",
+  "seconds": 1.752,
+  "zone": "Z05"
+ },
+ "selene_59470324": {
+  "file": "selene_59470324.mp3",
+  "seconds": 1.272,
+  "zone": "Z05"
+ },
+ "tharne_f789c056": {
+  "file": "tharne_f789c056.mp3",
+  "seconds": 2.136,
+  "zone": "Z05"
+ },
+ "selene_23f11d02": {
+  "file": "selene_23f11d02.mp3",
+  "seconds": 3.144,
+  "zone": "Z05"
+ },
+ "tharne_7caa175a": {
+  "file": "tharne_7caa175a.mp3",
+  "seconds": 0.672,
+  "zone": "Z05"
+ },
+ "lyessa_087f71c4": {
+  "file": "lyessa_087f71c4.mp3",
+  "seconds": 1.296,
+  "zone": "Z06"
+ },
+ "eclipse_body_2e7af389": {
+  "file": "eclipse_body_2e7af389.mp3",
+  "seconds": 1.128,
+  "zone": "Z06"
+ },
+ "soldier_9af6eb7d": {
+  "file": "soldier_9af6eb7d.mp3",
+  "seconds": 2.04,
+  "zone": "Z06"
+ },
+ "selene_74ea1b0c": {
+  "file": "selene_74ea1b0c.mp3",
+  "seconds": 0.864,
+  "zone": "Z06"
+ },
+ "selene_66af4c13": {
+  "file": "selene_66af4c13.mp3",
+  "seconds": 2.304,
+  "zone": "Z06"
+ },
+ "selene_1a30cbeb": {
+  "file": "selene_1a30cbeb.mp3",
+  "seconds": 2.784,
+  "zone": "Z06"
+ },
+ "selene_e22b28a7": {
+  "file": "selene_e22b28a7.mp3",
+  "seconds": 2.04,
+  "zone": "Z06"
+ },
+ "lyessa_f5660140": {
+  "file": "lyessa_f5660140.mp3",
+  "seconds": 1.032,
+  "zone": "Z06"
+ },
+ "lyessa_6569327a": {
+  "file": "lyessa_6569327a.mp3",
+  "seconds": 2.712,
+  "zone": "Z06"
+ },
+ "lyessa_85780ce6": {
+  "file": "lyessa_85780ce6.mp3",
+  "seconds": 1.896,
+  "zone": "Z06"
+ },
+ "lyric_b69e7ef5": {
+  "file": "lyric_b69e7ef5.mp3",
+  "seconds": 1.56,
+  "zone": "Z06"
+ },
+ "lyessa_f207cde2": {
+  "file": "lyessa_f207cde2.mp3",
+  "seconds": 1.104,
+  "zone": "Z06"
+ },
+ "lyric_498bc340": {
+  "file": "lyric_498bc340.mp3",
+  "seconds": 1.392,
+  "zone": "Z06"
+ },
+ "tharne_9bfa1da2": {
+  "file": "tharne_9bfa1da2.mp3",
+  "seconds": 0.648,
+  "zone": "Z06"
+ },
+ "selene_3917e271": {
+  "file": "selene_3917e271.mp3",
+  "seconds": 0.672,
+  "zone": "Z06"
+ },
+ "lyric_a9154a09": {
+  "file": "lyric_a9154a09.mp3",
+  "seconds": 1.728,
+  "zone": "Z06"
+ },
+ "tharne_77588f06": {
+  "file": "tharne_77588f06.mp3",
+  "seconds": 1.152,
+  "zone": "Z06"
+ },
+ "lyric_a839f51f": {
+  "file": "lyric_a839f51f.mp3",
+  "seconds": 0.984,
+  "zone": "Z06"
+ },
+ "selene_782f2121": {
+  "file": "selene_782f2121.mp3",
+  "seconds": 0.696,
+  "zone": "Z06"
+ },
+ "lyric_8748e110": {
+  "file": "lyric_8748e110.mp3",
+  "seconds": 1.464,
+  "zone": "Z06"
+ },
+ "lyric_10286718": {
+  "file": "lyric_10286718.mp3",
+  "seconds": 1.56,
+  "zone": "Z06"
+ },
+ "tharne_4df4d5b0": {
+  "file": "tharne_4df4d5b0.mp3",
+  "seconds": 0.624,
+  "zone": "Z06"
+ },
+ "tharne_cef35017": {
+  "file": "tharne_cef35017.mp3",
+  "seconds": 2.16,
+  "zone": "Z06"
+ },
+ "lyric_f319328e": {
+  "file": "lyric_f319328e.mp3",
+  "seconds": 1.008,
+  "zone": "Z06"
+ },
+ "lyric_a80f3e01": {
+  "file": "lyric_a80f3e01.mp3",
+  "seconds": 0.816,
+  "zone": "Z06"
+ },
+ "tharne_ebfd881b": {
+  "file": "tharne_ebfd881b.mp3",
+  "seconds": 0.624,
+  "zone": "Z06"
+ },
+ "lyric_992fb2d6": {
+  "file": "lyric_992fb2d6.mp3",
+  "seconds": 1.704,
+  "zone": "Z06"
+ },
+ "tarrik_6aae8906": {
+  "file": "tarrik_6aae8906.mp3",
+  "seconds": 0.696,
+  "zone": "Z07"
+ },
+ "selene_b1ddccad": {
+  "file": "selene_b1ddccad.mp3",
+  "seconds": 2.28,
+  "zone": "Z07"
+ },
+ "lyric_71587296": {
+  "file": "lyric_71587296.mp3",
+  "seconds": 0.792,
+  "zone": "Z07"
+ },
+ "selene_f63b7af5": {
+  "file": "selene_f63b7af5.mp3",
+  "seconds": 1.104,
+  "zone": "Z07"
+ },
+ "lyric_cb4cf80a": {
+  "file": "lyric_cb4cf80a.mp3",
+  "seconds": 1.104,
+  "zone": "Z07"
+ },
+ "tharne_a25cb630": {
+  "file": "tharne_a25cb630.mp3",
+  "seconds": 1.272,
+  "zone": "Z07"
+ },
+ "lyric_fb434666": {
+  "file": "lyric_fb434666.mp3",
+  "seconds": 2.184,
+  "zone": "Z07"
+ },
+ "tarrik_055a7bef": {
+  "file": "tarrik_055a7bef.mp3",
+  "seconds": 1.392,
+  "zone": "Z07"
+ },
+ "cross_4bcfd5e4": {
+  "file": "cross_4bcfd5e4.mp3",
+  "seconds": 0.84,
+  "zone": "Z07"
+ },
+ "tarrik_355ac7b6": {
+  "file": "tarrik_355ac7b6.mp3",
+  "seconds": 2.28,
+  "zone": "Z07"
+ },
+ "cross_338bc712": {
+  "file": "cross_338bc712.mp3",
+  "seconds": 2.16,
+  "zone": "Z07"
+ },
+ "tarrik_765b10b0": {
+  "file": "tarrik_765b10b0.mp3",
+  "seconds": 0.6,
+  "zone": "Z07"
+ },
+ "cross_dd36b7c0": {
+  "file": "cross_dd36b7c0.mp3",
+  "seconds": 0.696,
+  "zone": "Z07"
+ },
+ "tarrik_35819535": {
+  "file": "tarrik_35819535.mp3",
+  "seconds": 0.624,
+  "zone": "Z07"
+ },
+ "cross_ddc060bd": {
+  "file": "cross_ddc060bd.mp3",
+  "seconds": 5.952,
+  "zone": "Z07"
+ },
+ "tarrik_c43ec61a": {
+  "file": "tarrik_c43ec61a.mp3",
+  "seconds": 0.768,
+  "zone": "Z07"
+ },
+ "cross_6b3acf4f": {
+  "file": "cross_6b3acf4f.mp3",
+  "seconds": 0.72,
+  "zone": "Z07"
+ },
+ "sol_3e4531d5": {
+  "file": "sol_3e4531d5.mp3",
+  "seconds": 1.8,
+  "zone": "Z07"
+ },
+ "selene_b4e40adf": {
+  "file": "selene_b4e40adf.mp3",
+  "seconds": 3.624,
+  "zone": "Z07"
+ },
+ "sol_41476d1f": {
+  "file": "sol_41476d1f.mp3",
+  "seconds": 1.272,
+  "zone": "Z07"
+ },
+ "selene_207c0271": {
+  "file": "selene_207c0271.mp3",
+  "seconds": 2.88,
+  "zone": "Z07"
+ },
+ "sol_b4ce5c4e": {
+  "file": "sol_b4ce5c4e.mp3",
+  "seconds": 0.792,
+  "zone": "Z07"
+ },
+ "lyric_524ad30a": {
+  "file": "lyric_524ad30a.mp3",
+  "seconds": 0.816,
+  "zone": "Z07"
+ },
+ "tharne_6f7c2af9": {
+  "file": "tharne_6f7c2af9.mp3",
+  "seconds": 2.28,
+  "zone": "Z07"
+ },
+ "selene_0e575f7b": {
+  "file": "selene_0e575f7b.mp3",
+  "seconds": 1.2,
+  "zone": "Z07"
+ },
+ "tharne_26d77d8f": {
+  "file": "tharne_26d77d8f.mp3",
+  "seconds": 4.464,
+  "zone": "Z07"
+ },
+ "selene_a58a6dff": {
+  "file": "selene_a58a6dff.mp3",
+  "seconds": 0.816,
+  "zone": "Z07"
+ },
+ "medic_f0f34efc": {
+  "file": "medic_f0f34efc.mp3",
+  "seconds": 1.968,
+  "zone": "Z07"
+ },
+ "survivor_dae23388": {
+  "file": "survivor_dae23388.mp3",
+  "seconds": 3.024,
+  "zone": "Z07"
+ },
+ "lyessa_525fff3e": {
+  "file": "lyessa_525fff3e.mp3",
+  "seconds": 3.336,
+  "zone": "Z07"
+ },
+ "lyessa_8daf1db2": {
+  "file": "lyessa_8daf1db2.mp3",
+  "seconds": 4.056,
+  "zone": "Z07"
+ },
+ "tharne_2b73ff04": {
+  "file": "tharne_2b73ff04.mp3",
+  "seconds": 3.504,
+  "zone": "Z07"
+ },
+ "selene_3e8926d6": {
+  "file": "selene_3e8926d6.mp3",
+  "seconds": 0.648,
+  "zone": "Z07"
+ },
+ "selene_b59f0a4c": {
+  "file": "selene_b59f0a4c.mp3",
+  "seconds": 0.696,
+  "zone": "Z07"
+ },
+ "tharne_6abc8c17": {
+  "file": "tharne_6abc8c17.mp3",
+  "seconds": 2.664,
+  "zone": "Z07"
+ },
+ "lyric_e22e59e4": {
+  "file": "lyric_e22e59e4.mp3",
+  "seconds": 1.848,
+  "zone": "Z07"
+ },
+ "selene_3641a89d": {
+  "file": "selene_3641a89d.mp3",
+  "seconds": 2.208,
+  "zone": "Z07"
+ },
+ "lyessa_4f8721ff": {
+  "file": "lyessa_4f8721ff.mp3",
+  "seconds": 2.616,
+  "zone": "Z08"
+ },
+ "lyessa_d8157819": {
+  "file": "lyessa_d8157819.mp3",
+  "seconds": 2.352,
+  "zone": "Z08"
+ },
+ "lyessa_bb15a251": {
+  "file": "lyessa_bb15a251.mp3",
+  "seconds": 2.256,
+  "zone": "Z08"
+ },
+ "survivor_f2859059": {
+  "file": "survivor_f2859059.mp3",
+  "seconds": 1.608,
+  "zone": "Z08"
+ },
+ "lyessa_29ea0c9d": {
+  "file": "lyessa_29ea0c9d.mp3",
+  "seconds": 1.392,
+  "zone": "Z08"
+ },
+ "tarrik_b2329d17": {
+  "file": "tarrik_b2329d17.mp3",
+  "seconds": 0.792,
+  "zone": "Z08"
+ },
+ "lyessa_8f85f05f": {
+  "file": "lyessa_8f85f05f.mp3",
+  "seconds": 1.824,
+  "zone": "Z08"
+ },
+ "lyessa_295df171": {
+  "file": "lyessa_295df171.mp3",
+  "seconds": 0.72,
+  "zone": "Z08"
+ },
+ "selene_b9bd160a": {
+  "file": "selene_b9bd160a.mp3",
+  "seconds": 1.152,
+  "zone": "Z08"
+ },
+ "selene_634c522d": {
+  "file": "selene_634c522d.mp3",
+  "seconds": 1.392,
+  "zone": "Z08"
+ },
+ "tarrik_96ffe965": {
+  "file": "tarrik_96ffe965.mp3",
+  "seconds": 0.648,
+  "zone": "Z08"
+ },
+ "selene_57806843": {
+  "file": "selene_57806843.mp3",
+  "seconds": 1.032,
+  "zone": "Z08"
+ },
+ "selene_8b95ec53": {
+  "file": "selene_8b95ec53.mp3",
+  "seconds": 0.792,
+  "zone": "Z08"
+ },
+ "tarrik_3ba489ae": {
+  "file": "tarrik_3ba489ae.mp3",
+  "seconds": 0.72,
+  "zone": "Z08"
+ },
+ "dominion_officer_53cce77e": {
+  "file": "dominion_officer_53cce77e.mp3",
+  "seconds": 0.696,
+  "zone": "Z08"
+ },
+ "medic_3e9c2977": {
+  "file": "medic_3e9c2977.mp3",
+  "seconds": 3.864,
+  "zone": "Z08"
+ },
+ "survivor_d26db67c": {
+  "file": "survivor_d26db67c.mp3",
+  "seconds": 3.048,
+  "zone": "Z08"
+ },
+ "survivor_b8732187": {
+  "file": "survivor_b8732187.mp3",
+  "seconds": 3.144,
+  "zone": "Z08"
+ },
+ "survivor_0be4d6a6": {
+  "file": "survivor_0be4d6a6.mp3",
+  "seconds": 3.0,
+  "zone": "Z08"
+ },
+ "soldier_2347b01e": {
+  "file": "soldier_2347b01e.mp3",
+  "seconds": 1.104,
+  "zone": "Z08"
+ },
+ "medic_d19667ed": {
+  "file": "medic_d19667ed.mp3",
+  "seconds": 2.832,
+  "zone": "Z08"
+ },
+ "lyessa_778e4a51": {
+  "file": "lyessa_778e4a51.mp3",
+  "seconds": 1.128,
+  "zone": "Z08"
+ },
+ "tarrik_9c44c50d": {
+  "file": "tarrik_9c44c50d.mp3",
+  "seconds": 0.864,
+  "zone": "Z08"
+ },
+ "tharne_de61e7d4": {
+  "file": "tharne_de61e7d4.mp3",
+  "seconds": 1.032,
+  "zone": "Z08"
+ },
+ "selene_8cefd0f3": {
+  "file": "selene_8cefd0f3.mp3",
+  "seconds": 0.84,
+  "zone": "Z08"
+ },
+ "tharne_a950290d": {
+  "file": "tharne_a950290d.mp3",
+  "seconds": 0.648,
+  "zone": "Z08"
+ },
+ "selene_6ff47a25": {
+  "file": "selene_6ff47a25.mp3",
+  "seconds": 2.016,
+  "zone": "Z08"
+ },
+ "tharne_7de60608": {
+  "file": "tharne_7de60608.mp3",
+  "seconds": 0.816,
+  "zone": "Z08"
+ },
+ "tarrik_cc62f0a3": {
+  "file": "tarrik_cc62f0a3.mp3",
+  "seconds": 2.352,
+  "zone": "Z08"
+ },
+ "selene_33660c6d": {
+  "file": "selene_33660c6d.mp3",
+  "seconds": 1.632,
+  "zone": "Z08"
+ },
+ "tarrik_1e51d98f": {
+  "file": "tarrik_1e51d98f.mp3",
+  "seconds": 0.624,
+  "zone": "Z08"
+ },
+ "tarrik_cb0604d4": {
+  "file": "tarrik_cb0604d4.mp3",
+  "seconds": 0.84,
+  "zone": "Z08"
+ },
+ "selene_928ad249": {
+  "file": "selene_928ad249.mp3",
+  "seconds": 0.672,
+  "zone": "Z08"
+ },
+ "tarrik_ecd27493": {
+  "file": "tarrik_ecd27493.mp3",
+  "seconds": 1.176,
+  "zone": "Z08"
+ },
+ "selene_32b4753b": {
+  "file": "selene_32b4753b.mp3",
+  "seconds": 0.792,
+  "zone": "Z08"
+ },
+ "selene_9ad16de8": {
+  "file": "selene_9ad16de8.mp3",
+  "seconds": 1.104,
+  "zone": "Z09"
+ },
+ "tarrik_db7a00b3": {
+  "file": "tarrik_db7a00b3.mp3",
+  "seconds": 0.672,
+  "zone": "Z09"
+ },
+ "selene_8bf49caa": {
+  "file": "selene_8bf49caa.mp3",
+  "seconds": 3.36,
+  "zone": "Z09"
+ },
+ "selene_af2a7e1b": {
+  "file": "selene_af2a7e1b.mp3",
+  "seconds": 0.84,
+  "zone": "Z09"
+ },
+ "tarrik_79192841": {
+  "file": "tarrik_79192841.mp3",
+  "seconds": 0.912,
+  "zone": "Z09"
+ },
+ "selene_72ad921c": {
+  "file": "selene_72ad921c.mp3",
+  "seconds": 3.432,
+  "zone": "Z09"
+ },
+ "selene_ebf11dbc": {
+  "file": "selene_ebf11dbc.mp3",
+  "seconds": 4.416,
+  "zone": "Z09"
+ },
+ "tarrik_8f541717": {
+  "file": "tarrik_8f541717.mp3",
+  "seconds": 2.208,
+  "zone": "Z09"
+ },
+ "selene_a4f99ec0": {
+  "file": "selene_a4f99ec0.mp3",
+  "seconds": 1.416,
+  "zone": "Z09"
+ },
+ "tarrik_6356b6c7": {
+  "file": "tarrik_6356b6c7.mp3",
+  "seconds": 1.8,
+  "zone": "Z09"
+ },
+ "selene_7f850ef6": {
+  "file": "selene_7f850ef6.mp3",
+  "seconds": 3.0,
+  "zone": "Z09"
+ },
+ "tarrik_13fb79d6": {
+  "file": "tarrik_13fb79d6.mp3",
+  "seconds": 1.56,
+  "zone": "Z09"
+ },
+ "selene_a3c41ed0": {
+  "file": "selene_a3c41ed0.mp3",
+  "seconds": 0.624,
+  "zone": "Z09"
+ },
+ "tarrik_28f0810f": {
+  "file": "tarrik_28f0810f.mp3",
+  "seconds": 0.648,
+  "zone": "Z09"
+ },
+ "selene_d2e44343": {
+  "file": "selene_d2e44343.mp3",
+  "seconds": 1.224,
+  "zone": "Z09"
+ },
+ "tarrik_c94e7db4": {
+  "file": "tarrik_c94e7db4.mp3",
+  "seconds": 2.016,
+  "zone": "Z09"
+ },
+ "selene_e715daa2": {
+  "file": "selene_e715daa2.mp3",
+  "seconds": 1.152,
+  "zone": "Z09"
+ },
+ "tarrik_af8d917c": {
+  "file": "tarrik_af8d917c.mp3",
+  "seconds": 1.392,
+  "zone": "Z09"
+ },
+ "selene_807d48a4": {
+  "file": "selene_807d48a4.mp3",
+  "seconds": 0.744,
+  "zone": "Z10"
+ },
+ "tarrik_804f1741": {
+  "file": "tarrik_804f1741.mp3",
+  "seconds": 0.6,
+  "zone": "Z10"
+ },
+ "selene_5daffe68": {
+  "file": "selene_5daffe68.mp3",
+  "seconds": 5.304,
+  "zone": "Z10"
+ },
+ "tarrik_7369c28f": {
+  "file": "tarrik_7369c28f.mp3",
+  "seconds": 1.944,
+  "zone": "Z10"
+ },
+ "tarrik_selene_5e4fa233": {
+  "file": "tarrik_selene_5e4fa233.mp3",
+  "seconds": 0.96,
+  "zone": "Z10"
+ },
+ "tarrik_02b12332": {
+  "file": "tarrik_02b12332.mp3",
+  "seconds": 1.344,
+  "zone": "Z10"
+ },
+ "selene_6bc61df2": {
+  "file": "selene_6bc61df2.mp3",
+  "seconds": 0.6,
+  "zone": "Z10"
+ },
+ "selene_a95bfcff": {
+  "file": "selene_a95bfcff.mp3",
+  "seconds": 2.736,
+  "zone": "Z10"
+ },
+ "selene_fdcd772a": {
+  "file": "selene_fdcd772a.mp3",
+  "seconds": 5.328,
+  "zone": "Z10"
+ },
+ "tarrik_675adb31": {
+  "file": "tarrik_675adb31.mp3",
+  "seconds": 2.016,
+  "zone": "Z10"
+ },
+ "selene_2c45638a": {
+  "file": "selene_2c45638a.mp3",
+  "seconds": 2.592,
+  "zone": "Z10"
+ },
+ "tarrik_041da034": {
+  "file": "tarrik_041da034.mp3",
+  "seconds": 5.952,
+  "zone": "Z10"
+ },
+ "cross_55179eba": {
+  "file": "cross_55179eba.mp3",
+  "seconds": 4.656,
+  "zone": "Z10"
+ },
+ "cross_febba55e": {
+  "file": "cross_febba55e.mp3",
+  "seconds": 1.584,
+  "zone": "Z10"
+ },
+ "tarrik_2cc375a5": {
+  "file": "tarrik_2cc375a5.mp3",
+  "seconds": 0.6,
+  "zone": "Z10"
+ },
+ "tarrik_65b949ae": {
+  "file": "tarrik_65b949ae.mp3",
+  "seconds": 1.44,
+  "zone": "Z10"
+ },
+ "cross_9e17eadf": {
+  "file": "cross_9e17eadf.mp3",
+  "seconds": 2.52,
+  "zone": "Z10"
+ },
+ "tarrik_d90b7f48": {
+  "file": "tarrik_d90b7f48.mp3",
+  "seconds": 2.736,
+  "zone": "Z10"
+ },
+ "selene_628a151d": {
+  "file": "selene_628a151d.mp3",
+  "seconds": 0.84,
+  "zone": "Z10"
+ },
+ "tharne_e67507da": {
+  "file": "tharne_e67507da.mp3",
+  "seconds": 0.744,
+  "zone": "Z10"
+ },
+ "lyric_318c7d26": {
+  "file": "lyric_318c7d26.mp3",
+  "seconds": 0.816,
+  "zone": "Z10"
+ },
+ "selene_ebfae31d": {
+  "file": "selene_ebfae31d.mp3",
+  "seconds": 0.648,
+  "zone": "Z10"
+ },
+ "lyric_ea8c5eb8": {
+  "file": "lyric_ea8c5eb8.mp3",
+  "seconds": 1.632,
+  "zone": "Z10"
+ },
+ "selene_b095f85a": {
+  "file": "selene_b095f85a.mp3",
+  "seconds": 2.136,
+  "zone": "Z10"
+ },
+ "tharne_e65e8e38": {
+  "file": "tharne_e65e8e38.mp3",
+  "seconds": 0.96,
+  "zone": "Z10"
+ },
+ "lyric_c1633987": {
+  "file": "lyric_c1633987.mp3",
+  "seconds": 1.32,
+  "zone": "Z10"
+ },
+ "tarrik_dfe074e2": {
+  "file": "tarrik_dfe074e2.mp3",
+  "seconds": 1.632,
+  "zone": "Z10"
+ },
+ "tarrik_f99bf2b3": {
+  "file": "tarrik_f99bf2b3.mp3",
+  "seconds": 1.968,
+  "zone": "Z10"
+ },
+ "tarrik_f46287de": {
+  "file": "tarrik_f46287de.mp3",
+  "seconds": 4.56,
+  "zone": "Z10"
+ },
+ "selene_bda78b95": {
+  "file": "selene_bda78b95.mp3",
+  "seconds": 4.608,
+  "zone": "Z10"
+ },
+ "tarrik_5e78404c": {
+  "file": "tarrik_5e78404c.mp3",
+  "seconds": 1.248,
+  "zone": "Z10"
+ },
+ "selene_adc99050": {
+  "file": "selene_adc99050.mp3",
+  "seconds": 1.584,
+  "zone": "Z10"
+ },
+ "tarrik_a8dbc90c": {
+  "file": "tarrik_a8dbc90c.mp3",
+  "seconds": 0.984,
+  "zone": "Z10"
+ },
+ "selene_623568a9": {
+  "file": "selene_623568a9.mp3",
+  "seconds": 2.184,
+  "zone": "Z10"
+ },
+ "tarrik_13852667": {
+  "file": "tarrik_13852667.mp3",
+  "seconds": 1.632,
+  "zone": "Z10"
+ },
+ "tarrik_d87801b5": {
+  "file": "tarrik_d87801b5.mp3",
+  "seconds": 1.08,
+  "zone": "Z10"
+ },
+ "selene_1e15ccb3": {
+  "file": "selene_1e15ccb3.mp3",
+  "seconds": 0.864,
+  "zone": "Z10"
+ },
+ "selene_8bf08117": {
+  "file": "selene_8bf08117.mp3",
+  "seconds": 1.032,
+  "zone": "Z10"
+ },
+ "tarrik_968a60b4": {
+  "file": "tarrik_968a60b4.mp3",
+  "seconds": 6.84,
+  "zone": "Z10"
+ },
+ "selene_c262f7ab": {
+  "file": "selene_c262f7ab.mp3",
+  "seconds": 1.488,
+  "zone": "Z10"
+ },
+ "selene_0d5f7577": {
+  "file": "selene_0d5f7577.mp3",
+  "seconds": 4.296,
+  "zone": "Z10"
+ },
+ "tarrik_a7b4129a": {
+  "file": "tarrik_a7b4129a.mp3",
+  "seconds": 3.144,
+  "zone": "Z10"
+ },
+ "tarrik_d64a3bad": {
+  "file": "tarrik_d64a3bad.mp3",
+  "seconds": 0.936,
+  "zone": "Z10"
+ },
+ "selene_4c8f4340": {
+  "file": "selene_4c8f4340.mp3",
+  "seconds": 1.008,
+  "zone": "Z10"
+ },
+ "tarrik_cb2f1a4c": {
+  "file": "tarrik_cb2f1a4c.mp3",
+  "seconds": 0.648,
+  "zone": "Z10"
+ },
+ "selene_abef71f7": {
+  "file": "selene_abef71f7.mp3",
+  "seconds": 0.888,
+  "zone": "Z10"
+ },
+ "tarrik_2d8dc252": {
+  "file": "tarrik_2d8dc252.mp3",
+  "seconds": 0.912,
+  "zone": "Z10"
+ },
+ "chronicler_95d88088": {
+  "file": "chronicler_95d88088.mp3",
+  "seconds": 5.376,
+  "zone": "Z10"
+ },
+ "king_b146b161": {
+  "file": "king_b146b161.mp3",
+  "seconds": 0.744,
+  "zone": "Z10"
+ },
+ "chronicler_37900342": {
+  "file": "chronicler_37900342.mp3",
+  "seconds": 3.408,
+  "zone": "Z10"
+ },
+ "king_0f96a50c": {
+  "file": "king_0f96a50c.mp3",
+  "seconds": 0.816,
+  "zone": "Z10"
+ },
+ "chronicler_6336b123": {
+  "file": "chronicler_6336b123.mp3",
+  "seconds": 4.824,
+  "zone": "Z10"
+ },
+ "king_05c10356": {
+  "file": "king_05c10356.mp3",
+  "seconds": 3.528,
+  "zone": "Z10"
+ },
+ "chronicler_bd8b2948": {
+  "file": "chronicler_bd8b2948.mp3",
+  "seconds": 2.496,
+  "zone": "Z10"
+ },
+ "chronicler_aa8468e2": {
+  "file": "chronicler_aa8468e2.mp3",
+  "seconds": 2.592,
+  "zone": "Z10"
+ },
+ "king_231e4745": {
+  "file": "king_231e4745.mp3",
+  "seconds": 0.6,
+  "zone": "Z10"
+ },
+ "king_005f09dd": {
+  "file": "king_005f09dd.mp3",
+  "seconds": 0.888,
+  "zone": "Z10"
+ },
+ "vesryn_a7a08881": {
+  "file": "vesryn_a7a08881.mp3",
+  "seconds": 4.704,
+  "zone": "Z10"
+ },
+ "king_ec08e504": {
+  "file": "king_ec08e504.mp3",
+  "seconds": 2.424,
+  "zone": "Z10"
+ },
+ "vesryn_a53062da": {
+  "file": "vesryn_a53062da.mp3",
+  "seconds": 2.568,
+  "zone": "Z10"
+ },
+ "king_a8c9daaa": {
+  "file": "king_a8c9daaa.mp3",
+  "seconds": 0.576,
+  "zone": "Z10"
+ },
+ "vesryn_88491f02": {
+  "file": "vesryn_88491f02.mp3",
+  "seconds": 2.856,
+  "zone": "Z10"
+ },
+ "king_489e4d81": {
+  "file": "king_489e4d81.mp3",
+  "seconds": 10.056,
+  "zone": "Z10"
+ },
+ "vesryn_e7a886bd": {
+  "file": "vesryn_e7a886bd.mp3",
+  "seconds": 8.736,
+  "zone": "Z10"
+ },
+ "vesryn_0bf6dd0f": {
+  "file": "vesryn_0bf6dd0f.mp3",
+  "seconds": 1.512,
+  "zone": "Z10"
+ },
+ "vesryn_dc7f35ef": {
+  "file": "vesryn_dc7f35ef.mp3",
+  "seconds": 1.56,
+  "zone": "Z10"
+ },
+ "vesryn_a0b4e470": {
+  "file": "vesryn_a0b4e470.mp3",
+  "seconds": 0.696,
+  "zone": "Z10"
+ },
+ "king_7d26024d": {
+  "file": "king_7d26024d.mp3",
+  "seconds": 2.352,
+  "zone": "Z10"
+ },
+ "king_b4913d18": {
+  "file": "king_b4913d18.mp3",
+  "seconds": 2.376,
+  "zone": "Z10"
+ },
+ "king_a24a0cdf": {
+  "file": "king_a24a0cdf.mp3",
+  "seconds": 4.344,
+  "zone": "Z10"
+ },
+ "engineer_e8da32d8": {
+  "file": "engineer_e8da32d8.mp3",
+  "seconds": 1.32,
+  "zone": "Z10"
+ },
+ "king_7a8cb6e5": {
+  "file": "king_7a8cb6e5.mp3",
+  "seconds": 1.776,
+  "zone": "Z10"
+ },
+ "engineer_15865aa3": {
+  "file": "engineer_15865aa3.mp3",
+  "seconds": 2.256,
+  "zone": "Z10"
+ },
+ "king_1aca1b81": {
+  "file": "king_1aca1b81.mp3",
+  "seconds": 1.728,
+  "zone": "Z10"
+ },
+ "king_4b63a9af": {
+  "file": "king_4b63a9af.mp3",
+  "seconds": 4.536,
+  "zone": "Z10"
+ },
+ "king_752a0936": {
+  "file": "king_752a0936.mp3",
+  "seconds": 3.072,
+  "zone": "Z10"
+ },
+ "king_fa09eddf": {
+  "file": "king_fa09eddf.mp3",
+  "seconds": 1.344,
+  "zone": "Z10"
+ },
+ "king_fa49a576": {
+  "file": "king_fa49a576.mp3",
+  "seconds": 1.704,
+  "zone": "Z10"
+ },
+ "vesryn_a229c103": {
+  "file": "vesryn_a229c103.mp3",
+  "seconds": 0.744,
+  "zone": "Z10"
+ },
+ "tarrik_9f120699": {
+  "file": "tarrik_9f120699.mp3",
+  "seconds": 1.176,
+  "zone": "Z10"
+ },
+ "selene_176f570c": {
+  "file": "selene_176f570c.mp3",
+  "seconds": 0.768,
+  "zone": "Z10"
+ },
+ "selene_818b9e86": {
+  "file": "selene_818b9e86.mp3",
+  "seconds": 3.144,
+  "zone": "Z10"
+ },
+ "tarrik_04f1b817": {
+  "file": "tarrik_04f1b817.mp3",
+  "seconds": 1.8,
+  "zone": "Z10"
+ },
+ "tarrik_5b0b7b4e": {
+  "file": "tarrik_5b0b7b4e.mp3",
+  "seconds": 1.56,
+  "zone": "Z10"
+ },
+ "selene_184c7759": {
+  "file": "selene_184c7759.mp3",
+  "seconds": 2.04,
+  "zone": "Z10"
+ },
+ "tarrik_e4ba2438": {
+  "file": "tarrik_e4ba2438.mp3",
+  "seconds": 0.624,
+  "zone": "Z10"
+ },
+ "tarrik_0b31c1e0": {
+  "file": "tarrik_0b31c1e0.mp3",
+  "seconds": 1.392,
+  "zone": "Z10"
+ },
+ "selene_de505da2": {
+  "file": "selene_de505da2.mp3",
+  "seconds": 3.48,
+  "zone": "Z10"
+ },
+ "tarrik_f1131dd6": {
+  "file": "tarrik_f1131dd6.mp3",
+  "seconds": 1.92,
+  "zone": "Z10"
+ },
+ "tarrik_07851336": {
+  "file": "tarrik_07851336.mp3",
+  "seconds": 0.672,
+  "zone": "Z10"
+ },
+ "selene_05fed72d": {
+  "file": "selene_05fed72d.mp3",
+  "seconds": 6.672,
+  "zone": "Z10"
+ },
+ "tarrik_59ad197e": {
+  "file": "tarrik_59ad197e.mp3",
+  "seconds": 2.544,
+  "zone": "Z10"
+ },
+ "selene_ae533cd1": {
+  "file": "selene_ae533cd1.mp3",
+  "seconds": 1.8,
+  "zone": "Z10"
+ },
+ "selene_f7a8cf46": {
+  "file": "selene_f7a8cf46.mp3",
+  "seconds": 0.624,
+  "zone": "Z11"
+ },
+ "lyric_a34a8981": {
+  "file": "lyric_a34a8981.mp3",
+  "seconds": 1.704,
+  "zone": "Z11"
+ },
+ "selene_31ed0f20": {
+  "file": "selene_31ed0f20.mp3",
+  "seconds": 0.744,
+  "zone": "Z11"
+ },
+ "lyric_2d83b549": {
+  "file": "lyric_2d83b549.mp3",
+  "seconds": 1.152,
+  "zone": "Z11"
+ },
+ "selene_c72d0b8c": {
+  "file": "selene_c72d0b8c.mp3",
+  "seconds": 0.96,
+  "zone": "Z11"
+ },
+ "tharne_58efd0d1": {
+  "file": "tharne_58efd0d1.mp3",
+  "seconds": 1.608,
+  "zone": "Z11"
+ },
+ "selene_b7a2b6f5": {
+  "file": "selene_b7a2b6f5.mp3",
+  "seconds": 2.328,
+  "zone": "Z11"
+ },
+ "lyric_7d111f73": {
+  "file": "lyric_7d111f73.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "lyric_fc66ac29": {
+  "file": "lyric_fc66ac29.mp3",
+  "seconds": 2.256,
+  "zone": "Z11"
+ },
+ "selene_44852796": {
+  "file": "selene_44852796.mp3",
+  "seconds": 1.224,
+  "zone": "Z11"
+ },
+ "tarrik_26f89fdf": {
+  "file": "tarrik_26f89fdf.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "selene_3450682b": {
+  "file": "selene_3450682b.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "tarrik_8d0e220f": {
+  "file": "tarrik_8d0e220f.mp3",
+  "seconds": 1.176,
+  "zone": "Z11"
+ },
+ "lyessa_537cf10e": {
+  "file": "lyessa_537cf10e.mp3",
+  "seconds": 1.872,
+  "zone": "Z11"
+ },
+ "lyessa_489c746e": {
+  "file": "lyessa_489c746e.mp3",
+  "seconds": 2.904,
+  "zone": "Z11"
+ },
+ "tarrik_74d37edf": {
+  "file": "tarrik_74d37edf.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "tarrik_a536a713": {
+  "file": "tarrik_a536a713.mp3",
+  "seconds": 4.344,
+  "zone": "Z11"
+ },
+ "lyessa_f471e3c9": {
+  "file": "lyessa_f471e3c9.mp3",
+  "seconds": 1.104,
+  "zone": "Z11"
+ },
+ "lyessa_02bc8022": {
+  "file": "lyessa_02bc8022.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "tarrik_78b3596f": {
+  "file": "tarrik_78b3596f.mp3",
+  "seconds": 3.456,
+  "zone": "Z11"
+ },
+ "lyessa_0c90edad": {
+  "file": "lyessa_0c90edad.mp3",
+  "seconds": 2.376,
+  "zone": "Z11"
+ },
+ "lyessa_a51686ff": {
+  "file": "lyessa_a51686ff.mp3",
+  "seconds": 1.056,
+  "zone": "Z11"
+ },
+ "survivor_0a4bf427": {
+  "file": "survivor_0a4bf427.mp3",
+  "seconds": 3.84,
+  "zone": "Z11"
+ },
+ "medic_ef20d4b1": {
+  "file": "medic_ef20d4b1.mp3",
+  "seconds": 2.568,
+  "zone": "Z11"
+ },
+ "tarrik_e3622323": {
+  "file": "tarrik_e3622323.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "tarrik_070e3d76": {
+  "file": "tarrik_070e3d76.mp3",
+  "seconds": 2.28,
+  "zone": "Z11"
+ },
+ "selene_19f09a8f": {
+  "file": "selene_19f09a8f.mp3",
+  "seconds": 1.488,
+  "zone": "Z11"
+ },
+ "tarrik_d17c9bf7": {
+  "file": "tarrik_d17c9bf7.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "tarrik_b6ac2ebc": {
+  "file": "tarrik_b6ac2ebc.mp3",
+  "seconds": 2.472,
+  "zone": "Z11"
+ },
+ "selene_269a3031": {
+  "file": "selene_269a3031.mp3",
+  "seconds": 2.328,
+  "zone": "Z11"
+ },
+ "tarrik_fbd19677": {
+  "file": "tarrik_fbd19677.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "selene_4f496022": {
+  "file": "selene_4f496022.mp3",
+  "seconds": 0.744,
+  "zone": "Z11"
+ },
+ "tarrik_4c3c0e1f": {
+  "file": "tarrik_4c3c0e1f.mp3",
+  "seconds": 2.232,
+  "zone": "Z11"
+ },
+ "tarrik_55b1295b": {
+  "file": "tarrik_55b1295b.mp3",
+  "seconds": 2.688,
+  "zone": "Z11"
+ },
+ "selene_d02d7568": {
+  "file": "selene_d02d7568.mp3",
+  "seconds": 5.592,
+  "zone": "Z11"
+ },
+ "tarrik_eea63b6c": {
+  "file": "tarrik_eea63b6c.mp3",
+  "seconds": 0.864,
+  "zone": "Z11"
+ },
+ "selene_5453ce10": {
+  "file": "selene_5453ce10.mp3",
+  "seconds": 4.08,
+  "zone": "Z11"
+ },
+ "tarrik_cea77aeb": {
+  "file": "tarrik_cea77aeb.mp3",
+  "seconds": 0.912,
+  "zone": "Z11"
+ },
+ "tarrik_9af7647d": {
+  "file": "tarrik_9af7647d.mp3",
+  "seconds": 1.536,
+  "zone": "Z11"
+ },
+ "selene_4e538df9": {
+  "file": "selene_4e538df9.mp3",
+  "seconds": 0.768,
+  "zone": "Z11"
+ },
+ "tarrik_bdd9bb3e": {
+  "file": "tarrik_bdd9bb3e.mp3",
+  "seconds": 2.016,
+  "zone": "Z11"
+ },
+ "selene_17eda857": {
+  "file": "selene_17eda857.mp3",
+  "seconds": 1.032,
+  "zone": "Z11"
+ },
+ "tarrik_7da2a100": {
+  "file": "tarrik_7da2a100.mp3",
+  "seconds": 2.616,
+  "zone": "Z11"
+ },
+ "tarrik_90915729": {
+  "file": "tarrik_90915729.mp3",
+  "seconds": 2.352,
+  "zone": "Z11"
+ },
+ "selene_9a869d9d": {
+  "file": "selene_9a869d9d.mp3",
+  "seconds": 6.504,
+  "zone": "Z11"
+ },
+ "tarrik_81d0bd48": {
+  "file": "tarrik_81d0bd48.mp3",
+  "seconds": 0.576,
+  "zone": "Z11"
+ },
+ "selene_6e6d9c3b": {
+  "file": "selene_6e6d9c3b.mp3",
+  "seconds": 2.424,
+  "zone": "Z11"
+ },
+ "tarrik_aff461b8": {
+  "file": "tarrik_aff461b8.mp3",
+  "seconds": 1.2,
+  "zone": "Z11"
+ },
+ "selene_f74dd3b2": {
+  "file": "selene_f74dd3b2.mp3",
+  "seconds": 2.808,
+  "zone": "Z11"
+ },
+ "selene_0d621899": {
+  "file": "selene_0d621899.mp3",
+  "seconds": 2.832,
+  "zone": "Z11"
+ },
+ "tarrik_189a2cfd": {
+  "file": "tarrik_189a2cfd.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "selene_089a0fdf": {
+  "file": "selene_089a0fdf.mp3",
+  "seconds": 2.688,
+  "zone": "Z11"
+ },
+ "selene_780a6d3e": {
+  "file": "selene_780a6d3e.mp3",
+  "seconds": 3.6,
+  "zone": "Z11"
+ },
+ "selene_2500751c": {
+  "file": "selene_2500751c.mp3",
+  "seconds": 0.792,
+  "zone": "Z11"
+ },
+ "tarrik_18f3cc77": {
+  "file": "tarrik_18f3cc77.mp3",
+  "seconds": 1.152,
+  "zone": "Z11"
+ },
+ "selene_0597cd12": {
+  "file": "selene_0597cd12.mp3",
+  "seconds": 1.392,
+  "zone": "Z11"
+ },
+ "tarrik_28a08cb9": {
+  "file": "tarrik_28a08cb9.mp3",
+  "seconds": 0.6,
+  "zone": "Z11"
+ },
+ "tarrik_d8051c2a": {
+  "file": "tarrik_d8051c2a.mp3",
+  "seconds": 3.48,
+  "zone": "Z11"
+ },
+ "tarrik_d14b161a": {
+  "file": "tarrik_d14b161a.mp3",
+  "seconds": 1.56,
+  "zone": "Z11"
+ },
+ "selene_8a782eb7": {
+  "file": "selene_8a782eb7.mp3",
+  "seconds": 2.112,
+  "zone": "Z11"
+ },
+ "tarrik_041e77be": {
+  "file": "tarrik_041e77be.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "selene_26ab0a3d": {
+  "file": "selene_26ab0a3d.mp3",
+  "seconds": 1.368,
+  "zone": "Z11"
+ },
+ "tarrik_4c03afdb": {
+  "file": "tarrik_4c03afdb.mp3",
+  "seconds": 1.416,
+  "zone": "Z11"
+ },
+ "selene_ac5cdbc0": {
+  "file": "selene_ac5cdbc0.mp3",
+  "seconds": 0.84,
+  "zone": "Z11"
+ },
+ "tarrik_875f351c": {
+  "file": "tarrik_875f351c.mp3",
+  "seconds": 0.456,
+  "zone": "Z11"
+ },
+ "selene_e6af1d13": {
+  "file": "selene_e6af1d13.mp3",
+  "seconds": 1.224,
+  "zone": "Z11"
+ },
+ "selene_80469928": {
+  "file": "selene_80469928.mp3",
+  "seconds": 1.968,
+  "zone": "Z11"
+ },
+ "tarrik_1894a048": {
+  "file": "tarrik_1894a048.mp3",
+  "seconds": 1.632,
+  "zone": "Z11"
+ },
+ "selene_2c35ee68": {
+  "file": "selene_2c35ee68.mp3",
+  "seconds": 1.104,
+  "zone": "Z11"
+ },
+ "selene_48cff7f7": {
+  "file": "selene_48cff7f7.mp3",
+  "seconds": 4.224,
+  "zone": "Z11"
+ },
+ "tarrik_a091d8e9": {
+  "file": "tarrik_a091d8e9.mp3",
+  "seconds": 1.968,
+  "zone": "Z11"
+ },
+ "tarrik_af19a671": {
+  "file": "tarrik_af19a671.mp3",
+  "seconds": 2.016,
+  "zone": "Z11"
+ },
+ "tarrik_06d60a16": {
+  "file": "tarrik_06d60a16.mp3",
+  "seconds": 1.872,
+  "zone": "Z11"
+ },
+ "tarrik_3912e934": {
+  "file": "tarrik_3912e934.mp3",
+  "seconds": 0.912,
+  "zone": "Z11"
+ },
+ "selene_f940dfb9": {
+  "file": "selene_f940dfb9.mp3",
+  "seconds": 2.784,
+  "zone": "Z11"
+ },
+ "tarrik_0e1be600": {
+  "file": "tarrik_0e1be600.mp3",
+  "seconds": 1.968,
+  "zone": "Z11"
+ },
+ "selene_3ae271e7": {
+  "file": "selene_3ae271e7.mp3",
+  "seconds": 0.696,
+  "zone": "Z11"
+ },
+ "selene_98f76f4a": {
+  "file": "selene_98f76f4a.mp3",
+  "seconds": 1.2,
+  "zone": "Z11"
+ },
+ "tarrik_5ecb6dfc": {
+  "file": "tarrik_5ecb6dfc.mp3",
+  "seconds": 1.632,
+  "zone": "Z11"
+ },
+ "selene_71a1621c": {
+  "file": "selene_71a1621c.mp3",
+  "seconds": 4.68,
+  "zone": "Z11"
+ },
+ "selene_0dee5c1b": {
+  "file": "selene_0dee5c1b.mp3",
+  "seconds": 2.64,
+  "zone": "Z11"
+ },
+ "tarrik_a860b2c1": {
+  "file": "tarrik_a860b2c1.mp3",
+  "seconds": 1.488,
+  "zone": "Z11"
+ },
+ "selene_c634ae5a": {
+  "file": "selene_c634ae5a.mp3",
+  "seconds": 1.272,
+  "zone": "Z11"
+ },
+ "tarrik_c111b70c": {
+  "file": "tarrik_c111b70c.mp3",
+  "seconds": 1.728,
+  "zone": "Z11"
+ },
+ "selene_7bdbd502": {
+  "file": "selene_7bdbd502.mp3",
+  "seconds": 1.824,
+  "zone": "Z11"
+ },
+ "selene_317618b2": {
+  "file": "selene_317618b2.mp3",
+  "seconds": 7.08,
+  "zone": "Z11"
+ },
+ "selene_c5951460": {
+  "file": "selene_c5951460.mp3",
+  "seconds": 5.424,
+  "zone": "Z11"
+ },
+ "tarrik_7d6a715f": {
+  "file": "tarrik_7d6a715f.mp3",
+  "seconds": 4.608,
+  "zone": "Z11"
+ },
+ "selene_34e55e7c": {
+  "file": "selene_34e55e7c.mp3",
+  "seconds": 0.768,
+  "zone": "Z11"
+ },
+ "tarrik_2353eb32": {
+  "file": "tarrik_2353eb32.mp3",
+  "seconds": 1.872,
+  "zone": "Z11"
+ },
+ "tarrik_80fea9ff": {
+  "file": "tarrik_80fea9ff.mp3",
+  "seconds": 7.032,
+  "zone": "Z11"
+ },
+ "tarrik_17e6c22a": {
+  "file": "tarrik_17e6c22a.mp3",
+  "seconds": 4.608,
+  "zone": "Z11"
+ },
+ "selene_270a8c3b": {
+  "file": "selene_270a8c3b.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "selene_222f8f24": {
+  "file": "selene_222f8f24.mp3",
+  "seconds": 5.376,
+  "zone": "Z11"
+ },
+ "tarrik_9df30b9b": {
+  "file": "tarrik_9df30b9b.mp3",
+  "seconds": 0.936,
+  "zone": "Z11"
+ },
+ "selene_104018d9": {
+  "file": "selene_104018d9.mp3",
+  "seconds": 1.464,
+  "zone": "Z11"
+ },
+ "tarrik_95a695ee": {
+  "file": "tarrik_95a695ee.mp3",
+  "seconds": 1.464,
+  "zone": "Z11"
+ },
+ "tarrik_231e30ac": {
+  "file": "tarrik_231e30ac.mp3",
+  "seconds": 0.648,
+  "zone": "Z11"
+ },
+ "tarrik_61b5be77": {
+  "file": "tarrik_61b5be77.mp3",
+  "seconds": 1.968,
+  "zone": "Z11"
+ },
+ "selene_e0cccec8": {
+  "file": "selene_e0cccec8.mp3",
+  "seconds": 2.976,
+  "zone": "Z11"
+ },
+ "tarrik_ab81022a": {
+  "file": "tarrik_ab81022a.mp3",
+  "seconds": 2.064,
+  "zone": "Z11"
+ },
+ "selene_56593544": {
+  "file": "selene_56593544.mp3",
+  "seconds": 3.48,
+  "zone": "Z11"
+ },
+ "tarrik_6a00c50a": {
+  "file": "tarrik_6a00c50a.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "selene_dac9dacd": {
+  "file": "selene_dac9dacd.mp3",
+  "seconds": 1.368,
+  "zone": "Z11"
+ },
+ "tarrik_60c834aa": {
+  "file": "tarrik_60c834aa.mp3",
+  "seconds": 0.744,
+  "zone": "Z11"
+ },
+ "selene_64e3f58f": {
+  "file": "selene_64e3f58f.mp3",
+  "seconds": 1.224,
+  "zone": "Z11"
+ },
+ "tarrik_d6541a48": {
+  "file": "tarrik_d6541a48.mp3",
+  "seconds": 0.984,
+  "zone": "Z11"
+ },
+ "selene_725f9f04": {
+  "file": "selene_725f9f04.mp3",
+  "seconds": 5.04,
+  "zone": "Z11"
+ },
+ "tarrik_7885b3be": {
+  "file": "tarrik_7885b3be.mp3",
+  "seconds": 4.872,
+  "zone": "Z11"
+ },
+ "selene_5c730b22": {
+  "file": "selene_5c730b22.mp3",
+  "seconds": 2.112,
+  "zone": "Z11"
+ },
+ "tarrik_fd8dc235": {
+  "file": "tarrik_fd8dc235.mp3",
+  "seconds": 0.84,
+  "zone": "Z11"
+ },
+ "selene_45cd2f90": {
+  "file": "selene_45cd2f90.mp3",
+  "seconds": 1.104,
+  "zone": "Z11"
+ },
+ "tarrik_92024dc0": {
+  "file": "tarrik_92024dc0.mp3",
+  "seconds": 1.344,
+  "zone": "Z11"
+ },
+ "selene_05288f8a": {
+  "file": "selene_05288f8a.mp3",
+  "seconds": 1.632,
+  "zone": "Z11"
+ },
+ "selene_5912600f": {
+  "file": "selene_5912600f.mp3",
+  "seconds": 1.656,
+  "zone": "Z11"
+ },
+ "tarrik_5be5123a": {
+  "file": "tarrik_5be5123a.mp3",
+  "seconds": 1.392,
+  "zone": "Z11"
+ },
+ "selene_7de48673": {
+  "file": "selene_7de48673.mp3",
+  "seconds": 2.736,
+  "zone": "Z11"
+ },
+ "tarrik_680e2e07": {
+  "file": "tarrik_680e2e07.mp3",
+  "seconds": 2.424,
+  "zone": "Z11"
+ },
+ "tarrik_61ce00d5": {
+  "file": "tarrik_61ce00d5.mp3",
+  "seconds": 4.608,
+  "zone": "Z11"
+ },
+ "tarrik_aa9f3a67": {
+  "file": "tarrik_aa9f3a67.mp3",
+  "seconds": 1.752,
+  "zone": "Z11"
+ },
+ "tarrik_0ec33d44": {
+  "file": "tarrik_0ec33d44.mp3",
+  "seconds": 4.584,
+  "zone": "Z11"
+ },
+ "tarrik_cef47e30": {
+  "file": "tarrik_cef47e30.mp3",
+  "seconds": 3.384,
+  "zone": "Z11"
+ },
+ "selene_6b1c3976": {
+  "file": "selene_6b1c3976.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "tarrik_558199f8": {
+  "file": "tarrik_558199f8.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "tarrik_c407b5c4": {
+  "file": "tarrik_c407b5c4.mp3",
+  "seconds": 6.192,
+  "zone": "Z11"
+ },
+ "tarrik_376487ba": {
+  "file": "tarrik_376487ba.mp3",
+  "seconds": 5.16,
+  "zone": "Z11"
+ },
+ "tarrik_7afdccc8": {
+  "file": "tarrik_7afdccc8.mp3",
+  "seconds": 2.64,
+  "zone": "Z11"
+ },
+ "selene_fcf46ba2": {
+  "file": "selene_fcf46ba2.mp3",
+  "seconds": 0.912,
+  "zone": "Z11"
+ },
+ "tarrik_f8d200b8": {
+  "file": "tarrik_f8d200b8.mp3",
+  "seconds": 1.44,
+  "zone": "Z11"
+ },
+ "tarrik_f850abab": {
+  "file": "tarrik_f850abab.mp3",
+  "seconds": 1.392,
+  "zone": "Z11"
+ },
+ "tarrik_10234503": {
+  "file": "tarrik_10234503.mp3",
+  "seconds": 2.688,
+  "zone": "Z11"
+ },
+ "tarrik_3593178e": {
+  "file": "tarrik_3593178e.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "selene_ec78884a": {
+  "file": "selene_ec78884a.mp3",
+  "seconds": 1.464,
+  "zone": "Z11"
+ },
+ "selene_70f9ce5a": {
+  "file": "selene_70f9ce5a.mp3",
+  "seconds": 0.984,
+  "zone": "Z11"
+ },
+ "tarrik_03002ff8": {
+  "file": "tarrik_03002ff8.mp3",
+  "seconds": 2.352,
+  "zone": "Z11"
+ },
+ "selene_17b0a0e7": {
+  "file": "selene_17b0a0e7.mp3",
+  "seconds": 2.232,
+  "zone": "Z11"
+ },
+ "selene_b052a022": {
+  "file": "selene_b052a022.mp3",
+  "seconds": 4.488,
+  "zone": "Z11"
+ },
+ "selene_7db2d673": {
+  "file": "selene_7db2d673.mp3",
+  "seconds": 2.952,
+  "zone": "Z11"
+ },
+ "tarrik_84fabc85": {
+  "file": "tarrik_84fabc85.mp3",
+  "seconds": 2.376,
+  "zone": "Z11"
+ },
+ "selene_37f7cfa0": {
+  "file": "selene_37f7cfa0.mp3",
+  "seconds": 2.112,
+  "zone": "Z11"
+ },
+ "selene_01950705": {
+  "file": "selene_01950705.mp3",
+  "seconds": 2.352,
+  "zone": "Z11"
+ },
+ "selene_d6a4643a": {
+  "file": "selene_d6a4643a.mp3",
+  "seconds": 2.616,
+  "zone": "Z11"
+ },
+ "selene_d8c119a2": {
+  "file": "selene_d8c119a2.mp3",
+  "seconds": 5.016,
+  "zone": "Z11"
+ },
+ "selene_50b4dcfd": {
+  "file": "selene_50b4dcfd.mp3",
+  "seconds": 4.368,
+  "zone": "Z11"
+ },
+ "selene_56d30ed8": {
+  "file": "selene_56d30ed8.mp3",
+  "seconds": 2.064,
+  "zone": "Z11"
+ },
+ "tarrik_612050fe": {
+  "file": "tarrik_612050fe.mp3",
+  "seconds": 1.032,
+  "zone": "Z11"
+ },
+ "selene_4d1ebb59": {
+  "file": "selene_4d1ebb59.mp3",
+  "seconds": 1.056,
+  "zone": "Z11"
+ },
+ "tarrik_4986ce27": {
+  "file": "tarrik_4986ce27.mp3",
+  "seconds": 2.184,
+  "zone": "Z11"
+ },
+ "selene_92b76731": {
+  "file": "selene_92b76731.mp3",
+  "seconds": 1.56,
+  "zone": "Z11"
+ },
+ "tarrik_41fe078f": {
+  "file": "tarrik_41fe078f.mp3",
+  "seconds": 3.48,
+  "zone": "Z11"
+ },
+ "selene_d864e928": {
+  "file": "selene_d864e928.mp3",
+  "seconds": 1.56,
+  "zone": "Z11"
+ },
+ "tarrik_d639a05a": {
+  "file": "tarrik_d639a05a.mp3",
+  "seconds": 2.304,
+  "zone": "Z11"
+ },
+ "selene_925fa243": {
+  "file": "selene_925fa243.mp3",
+  "seconds": 3.576,
+  "zone": "Z11"
+ },
+ "selene_55717652": {
+  "file": "selene_55717652.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "tarrik_9d2ef4a6": {
+  "file": "tarrik_9d2ef4a6.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "selene_51cd100c": {
+  "file": "selene_51cd100c.mp3",
+  "seconds": 1.464,
+  "zone": "Z11"
+ },
+ "tarrik_39f6f4ef": {
+  "file": "tarrik_39f6f4ef.mp3",
+  "seconds": 2.28,
+  "zone": "Z11"
+ },
+ "selene_30d211e0": {
+  "file": "selene_30d211e0.mp3",
+  "seconds": 0.84,
+  "zone": "Z11"
+ },
+ "selene_1f1474df": {
+  "file": "selene_1f1474df.mp3",
+  "seconds": 1.128,
+  "zone": "Z11"
+ },
+ "selene_355b059c": {
+  "file": "selene_355b059c.mp3",
+  "seconds": 0.936,
+  "zone": "Z11"
+ },
+ "tarrik_24460a80": {
+  "file": "tarrik_24460a80.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "selene_72a24e01": {
+  "file": "selene_72a24e01.mp3",
+  "seconds": 1.44,
+  "zone": "Z11"
+ },
+ "selene_d9bcf56d": {
+  "file": "selene_d9bcf56d.mp3",
+  "seconds": 4.872,
+  "zone": "Z11"
+ },
+ "tarrik_5af815ba": {
+  "file": "tarrik_5af815ba.mp3",
+  "seconds": 3.744,
+  "zone": "Z11"
+ },
+ "selene_a14c7586": {
+  "file": "selene_a14c7586.mp3",
+  "seconds": 6.264,
+  "zone": "Z11"
+ },
+ "selene_8f855bb4": {
+  "file": "selene_8f855bb4.mp3",
+  "seconds": 3.312,
+  "zone": "Z11"
+ },
+ "tarrik_3f15dc18": {
+  "file": "tarrik_3f15dc18.mp3",
+  "seconds": 0.6,
+  "zone": "Z11"
+ },
+ "tarrik_53f0fccb": {
+  "file": "tarrik_53f0fccb.mp3",
+  "seconds": 1.56,
+  "zone": "Z11"
+ },
+ "selene_f41f0b11": {
+  "file": "selene_f41f0b11.mp3",
+  "seconds": 4.536,
+  "zone": "Z11"
+ },
+ "selene_580e388f": {
+  "file": "selene_580e388f.mp3",
+  "seconds": 0.936,
+  "zone": "Z11"
+ },
+ "tarrik_e5dfb30c": {
+  "file": "tarrik_e5dfb30c.mp3",
+  "seconds": 0.864,
+  "zone": "Z11"
+ },
+ "selene_ba10defc": {
+  "file": "selene_ba10defc.mp3",
+  "seconds": 1.488,
+  "zone": "Z11"
+ },
+ "tarrik_4769320c": {
+  "file": "tarrik_4769320c.mp3",
+  "seconds": 0.912,
+  "zone": "Z11"
+ },
+ "tarrik_5229573b": {
+  "file": "tarrik_5229573b.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "selene_105cb5e4": {
+  "file": "selene_105cb5e4.mp3",
+  "seconds": 1.056,
+  "zone": "Z11"
+ },
+ "tarrik_77215a41": {
+  "file": "tarrik_77215a41.mp3",
+  "seconds": 2.688,
+  "zone": "Z11"
+ },
+ "selene_86343346": {
+  "file": "selene_86343346.mp3",
+  "seconds": 3.96,
+  "zone": "Z11"
+ },
+ "selene_4fad1dba": {
+  "file": "selene_4fad1dba.mp3",
+  "seconds": 2.376,
+  "zone": "Z11"
+ },
+ "selene_964a27d7": {
+  "file": "selene_964a27d7.mp3",
+  "seconds": 1.8,
+  "zone": "Z11"
+ },
+ "tarrik_b68c25b3": {
+  "file": "tarrik_b68c25b3.mp3",
+  "seconds": 3.672,
+  "zone": "Z11"
+ },
+ "selene_d505d800": {
+  "file": "selene_d505d800.mp3",
+  "seconds": 1.032,
+  "zone": "Z11"
+ },
+ "selene_f4b083ae": {
+  "file": "selene_f4b083ae.mp3",
+  "seconds": 0.96,
+  "zone": "Z11"
+ },
+ "tarrik_703b831a": {
+  "file": "tarrik_703b831a.mp3",
+  "seconds": 1.008,
+  "zone": "Z11"
+ },
+ "selene_90644500": {
+  "file": "selene_90644500.mp3",
+  "seconds": 0.72,
+  "zone": "Z11"
+ },
+ "selene_3deb1c94": {
+  "file": "selene_3deb1c94.mp3",
+  "seconds": 0.792,
+  "zone": "Z11"
+ },
+ "selene_5db88c40": {
+  "file": "selene_5db88c40.mp3",
+  "seconds": 4.008,
+  "zone": "Z11"
+ },
+ "tarrik_07575423": {
+  "file": "tarrik_07575423.mp3",
+  "seconds": 1.056,
+  "zone": "Z11"
+ },
+ "selene_3bf7428a": {
+  "file": "selene_3bf7428a.mp3",
+  "seconds": 2.88,
+  "zone": "Z11"
+ },
+ "tarrik_66a79b1d": {
+  "file": "tarrik_66a79b1d.mp3",
+  "seconds": 1.488,
+  "zone": "Z11"
+ },
+ "tarrik_578ad0c7": {
+  "file": "tarrik_578ad0c7.mp3",
+  "seconds": 1.368,
+  "zone": "Z11"
+ },
+ "selene_f3d55c5e": {
+  "file": "selene_f3d55c5e.mp3",
+  "seconds": 2.592,
+  "zone": "Z11"
+ },
+ "selene_4c451568": {
+  "file": "selene_4c451568.mp3",
+  "seconds": 5.472,
+  "zone": "Z11"
+ },
+ "selene_99230bf9": {
+  "file": "selene_99230bf9.mp3",
+  "seconds": 3.384,
+  "zone": "Z11"
+ },
+ "selene_858042eb": {
+  "file": "selene_858042eb.mp3",
+  "seconds": 4.032,
+  "zone": "Z11"
+ },
+ "selene_a66e27b0": {
+  "file": "selene_a66e27b0.mp3",
+  "seconds": 3.216,
+  "zone": "Z11"
+ },
+ "tarrik_9b25e2ec": {
+  "file": "tarrik_9b25e2ec.mp3",
+  "seconds": 0.96,
+  "zone": "Z11"
+ },
+ "selene_86f80817": {
+  "file": "selene_86f80817.mp3",
+  "seconds": 3.12,
+  "zone": "Z11"
+ },
+ "tarrik_9d0271fb": {
+  "file": "tarrik_9d0271fb.mp3",
+  "seconds": 5.112,
+  "zone": "Z11"
+ },
+ "tarrik_ace65b59": {
+  "file": "tarrik_ace65b59.mp3",
+  "seconds": 1.08,
+  "zone": "Z11"
+ },
+ "selene_e17566ab": {
+  "file": "selene_e17566ab.mp3",
+  "seconds": 1.248,
+  "zone": "Z11"
+ },
+ "selene_31d2f8d9": {
+  "file": "selene_31d2f8d9.mp3",
+  "seconds": 1.224,
+  "zone": "Z11"
+ },
+ "tarrik_248fb285": {
+  "file": "tarrik_248fb285.mp3",
+  "seconds": 0.816,
+  "zone": "Z11"
+ },
+ "selene_b003364a": {
+  "file": "selene_b003364a.mp3",
+  "seconds": 0.912,
+  "zone": "Z11"
+ },
+ "tarrik_b64fed20": {
+  "file": "tarrik_b64fed20.mp3",
+  "seconds": 1.392,
+  "zone": "Z11"
+ },
+ "selene_39906778": {
+  "file": "selene_39906778.mp3",
+  "seconds": 0.936,
+  "zone": "Z11"
+ },
+ "tarrik_a57229d4": {
+  "file": "tarrik_a57229d4.mp3",
+  "seconds": 0.96,
+  "zone": "Z11"
+ },
+ "selene_e8957572": {
+  "file": "selene_e8957572.mp3",
+  "seconds": 1.656,
+  "zone": "Z11"
+ },
+ "tarrik_fc61d02e": {
+  "file": "tarrik_fc61d02e.mp3",
+  "seconds": 1.104,
+  "zone": "Z11"
+ },
+ "selene_8037779f": {
+  "file": "selene_8037779f.mp3",
+  "seconds": 1.992,
+  "zone": "Z11"
+ },
+ "tarrik_ca01a6ff": {
+  "file": "tarrik_ca01a6ff.mp3",
+  "seconds": 0.6,
+  "zone": "Z11"
+ },
+ "selene_9e29d688": {
+  "file": "selene_9e29d688.mp3",
+  "seconds": 2.88,
+  "zone": "Z11"
+ },
+ "selene_f2189a1f": {
+  "file": "selene_f2189a1f.mp3",
+  "seconds": 2.712,
+  "zone": "Z11"
+ },
+ "tarrik_c7974daf": {
+  "file": "tarrik_c7974daf.mp3",
+  "seconds": 1.92,
+  "zone": "Z11"
+ },
+ "selene_2f2ccacc": {
+  "file": "selene_2f2ccacc.mp3",
+  "seconds": 1.608,
+  "zone": "Z11"
+ },
+ "tarrik_7ff81d23": {
+  "file": "tarrik_7ff81d23.mp3",
+  "seconds": 0.696,
+  "zone": "Z11"
+ },
+ "selene_df161984": {
+  "file": "selene_df161984.mp3",
+  "seconds": 1.152,
+  "zone": "Z11"
+ },
+ "tarrik_d65f237b": {
+  "file": "tarrik_d65f237b.mp3",
+  "seconds": 0.672,
+  "zone": "Z11"
+ },
+ "tarrik_8750bac8": {
+  "file": "tarrik_8750bac8.mp3",
+  "seconds": 2.448,
+  "zone": "Z11"
+ },
+ "tarrik_5af83afc": {
+  "file": "tarrik_5af83afc.mp3",
+  "seconds": 1.32,
+  "zone": "Z11"
+ },
+ "selene_bd8709bb": {
+  "file": "selene_bd8709bb.mp3",
+  "seconds": 4.776,
+  "zone": "Z11"
+ },
+ "tarrik_d6854244": {
+  "file": "tarrik_d6854244.mp3",
+  "seconds": 1.152,
+  "zone": "Z11"
+ },
+ "tarrik_19a62dca": {
+  "file": "tarrik_19a62dca.mp3",
+  "seconds": 1.464,
+  "zone": "Z11"
+ },
+ "lyessa_a1963105": {
+  "file": "lyessa_a1963105.mp3",
+  "seconds": 1.152,
+  "zone": "Z12"
+ },
+ "lyessa_3dfde85c": {
+  "file": "lyessa_3dfde85c.mp3",
+  "seconds": 1.248,
+  "zone": "Z12"
+ },
+ "selene_ecbb22c3": {
+  "file": "selene_ecbb22c3.mp3",
+  "seconds": 0.888,
+  "zone": "Z12"
+ },
+ "selene_c1c30d76": {
+  "file": "selene_c1c30d76.mp3",
+  "seconds": 2.52,
+  "zone": "Z12"
+ },
+ "selene_d73facd5": {
+  "file": "selene_d73facd5.mp3",
+  "seconds": 2.712,
+  "zone": "Z12"
+ },
+ "lyessa_f345a182": {
+  "file": "lyessa_f345a182.mp3",
+  "seconds": 0.984,
+  "zone": "Z12"
+ },
+ "selene_d72d3786": {
+  "file": "selene_d72d3786.mp3",
+  "seconds": 1.152,
+  "zone": "Z12"
+ },
+ "lyric_6e0466ca": {
+  "file": "lyric_6e0466ca.mp3",
+  "seconds": 0.912,
+  "zone": "Z12"
+ },
+ "lyric_3eeb24c5": {
+  "file": "lyric_3eeb24c5.mp3",
+  "seconds": 1.056,
+  "zone": "Z12"
+ },
+ "tharne_5d978666": {
+  "file": "tharne_5d978666.mp3",
+  "seconds": 0.816,
+  "zone": "Z12"
+ },
+ "tarrik_4d376115": {
+  "file": "tarrik_4d376115.mp3",
+  "seconds": 1.56,
+  "zone": "Z12"
+ },
+ "lyessa_9277f010": {
+  "file": "lyessa_9277f010.mp3",
+  "seconds": 1.392,
+  "zone": "Z12"
+ },
+ "lyessa_792893a7": {
+  "file": "lyessa_792893a7.mp3",
+  "seconds": 1.176,
+  "zone": "Z12"
+ },
+ "tharne_9826057a": {
+  "file": "tharne_9826057a.mp3",
+  "seconds": 3.0,
+  "zone": "Z12"
+ },
+ "selene_c1c013da": {
+  "file": "selene_c1c013da.mp3",
+  "seconds": 0.864,
+  "zone": "Z12"
+ },
+ "tharne_5bd3ed8c": {
+  "file": "tharne_5bd3ed8c.mp3",
+  "seconds": 0.576,
+  "zone": "Z12"
+ },
+ "tharne_9363a853": {
+  "file": "tharne_9363a853.mp3",
+  "seconds": 4.272,
+  "zone": "Z12"
+ },
+ "tharne_c3f343a8": {
+  "file": "tharne_c3f343a8.mp3",
+  "seconds": 3.936,
+  "zone": "Z12"
+ },
+ "tharne_ba5c391e": {
+  "file": "tharne_ba5c391e.mp3",
+  "seconds": 4.056,
+  "zone": "Z12"
+ },
+ "lyric_4ccc130f": {
+  "file": "lyric_4ccc130f.mp3",
+  "seconds": 0.912,
+  "zone": "Z12"
+ },
+ "lyric_eac33afc": {
+  "file": "lyric_eac33afc.mp3",
+  "seconds": 2.712,
+  "zone": "Z12"
+ },
+ "selene_7ec2f201": {
+  "file": "selene_7ec2f201.mp3",
+  "seconds": 1.08,
+  "zone": "Z12"
+ },
+ "selene_06dfe958": {
+  "file": "selene_06dfe958.mp3",
+  "seconds": 2.496,
+  "zone": "Z12"
+ },
+ "selene_ab4c6f28": {
+  "file": "selene_ab4c6f28.mp3",
+  "seconds": 2.016,
+  "zone": "Z12"
+ },
+ "tarrik_fe612d4d": {
+  "file": "tarrik_fe612d4d.mp3",
+  "seconds": 1.32,
+  "zone": "Z12"
+ },
+ "selene_60b5cf0b": {
+  "file": "selene_60b5cf0b.mp3",
+  "seconds": 2.184,
+  "zone": "Z12"
+ },
+ "selene_b9ed685a": {
+  "file": "selene_b9ed685a.mp3",
+  "seconds": 1.56,
+  "zone": "Z12"
+ },
+ "tarrik_68c1293c": {
+  "file": "tarrik_68c1293c.mp3",
+  "seconds": 1.056,
+  "zone": "Z12"
+ },
+ "selene_d65d120b": {
+  "file": "selene_d65d120b.mp3",
+  "seconds": 1.224,
+  "zone": "Z12"
+ },
+ "tarrik_5bdbbed7": {
+  "file": "tarrik_5bdbbed7.mp3",
+  "seconds": 2.304,
+  "zone": "Z12"
+ },
+ "selene_ea9ccea6": {
+  "file": "selene_ea9ccea6.mp3",
+  "seconds": 1.704,
+  "zone": "Z12"
+ },
+ "tarrik_dd2b67b4": {
+  "file": "tarrik_dd2b67b4.mp3",
+  "seconds": 0.648,
+  "zone": "Z12"
+ },
+ "selene_0d24eaee": {
+  "file": "selene_0d24eaee.mp3",
+  "seconds": 0.768,
+  "zone": "Z12"
+ },
+ "selene_8186e29a": {
+  "file": "selene_8186e29a.mp3",
+  "seconds": 1.584,
+  "zone": "Z12"
+ },
+ "tarrik_cef31df8": {
+  "file": "tarrik_cef31df8.mp3",
+  "seconds": 1.992,
+  "zone": "Z12"
+ },
+ "selene_91cd872c": {
+  "file": "selene_91cd872c.mp3",
+  "seconds": 1.848,
+  "zone": "Z12"
+ },
+ "selene_7ccc6d0b": {
+  "file": "selene_7ccc6d0b.mp3",
+  "seconds": 1.248,
+  "zone": "Z12"
+ },
+ "selene_a4aab003": {
+  "file": "selene_a4aab003.mp3",
+  "seconds": 2.64,
+  "zone": "Z12"
+ }
+}
