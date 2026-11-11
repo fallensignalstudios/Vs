@@ -5,14 +5,16 @@ import type { SkyState } from './presets';
 import { SKY_ORDER, viewportTracker, type SharedUniforms } from './shared';
 
 /**
- * The Wound breathes with its activity: drawn back (activity → 0) it contracts to 86 % of its authored radius,
+ * The Wound breathes with its activity: drawn back (activity → 0) it contracts to 80 % of its authored radius,
  * at the default 0.3 it is exactly the authored size, and at full activity it swells by 3 %.
  */
 export function woundScale(activity: number): number {
   const a = Math.min(Math.max(Number.isFinite(activity) ? activity : 0.3, 0), 1);
   const s1 = (t: number): number => t * t * (3 - 2 * t);
-  return 0.86 + 0.14 * s1(Math.min(a / 0.3, 1)) + 0.03 * s1(Math.max(0, (a - 0.3) / 0.7));
+  return WOUND_SCALE_MIN + (1 - WOUND_SCALE_MIN) * s1(Math.min(a / 0.3, 1)) + 0.03 * s1(Math.max(0, (a - 0.3) / 0.7));
 }
+/** how far the Wound contracts when its activity is drawn right back to 0 */
+export const WOUND_SCALE_MIN = 0.8;
 
 export interface SkyDome {
   readonly mesh: THREE.Mesh;
@@ -37,7 +39,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
     uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall, uGround: { value: 0 }, uGain: { value: 1 },
     uSat: { value: 1 }, uNebTint: { value: new THREE.Color(1, 1, 1) }, uStarDens: { value: 1 }, uRedGain: { value: 1 },
-    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) },
+    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uCoreTint: { value: new THREE.Color(1, 1, 1) }, uTint: { value: new THREE.Color(1, 1, 1) },
   };
   // one program per quality tier, sharing every uniform; variants are created the first time they are needed
   const variants: Array<THREE.ShaderMaterial | null> = [null, null, null];
@@ -104,6 +106,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uVeil.value = s.veil;
       uniforms.uSwirl.value = s.swirl;
       uniforms.uWoundCore.value = s.woundCore;
+      uniforms.uCoreTint.value.copy(s.coreTint);
       uniforms.uTint.value.copy(s.tint);
       uniforms.uWoundScale.value = woundScale(activity);
     },
