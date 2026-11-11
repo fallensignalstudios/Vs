@@ -55,7 +55,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
     tharne.play('kneel', { loop: true });
     lyric.play('kneel', { loop: true });
   }
-  lyric.actor.visual?.setCorruption(after ? LYRIC_CORRUPTION.after : LYRIC_CORRUPTION.arrive);
+  // face-only (the book: the black patterns in her iris, at her neck) — never the whole figure
+  lyric.actor.visual?.setCorruption(after ? LYRIC_CORRUPTION.after : LYRIC_CORRUPTION.arrive, { mode: 'face' });
   // a Dominion soldier sheltering on the refuge with them; the marine under the plate (or out of it)
   z.npc('dominionSoldier', 'soldierRefuge', 'sitInjured', 'soldier');
   z.npc('reformationMarine', after ? 'marineSafe' : 'marine', after ? 'sitInjured' : 'trapped', 'marine');
@@ -131,7 +132,9 @@ const Z06_DEF: ZoneDef = {
   id: 'Z06',
   title: 'Breach Rescue',
   art: 'quarantine-cooperation',
-  cast: ['linkbound', 'wallrunner', 'weaver', 'weaverAnchor', 'reformationMarine', 'dominionSoldier', 'selene', 'lyessa', 'tharne', 'lyric'],
+  // 'survivor' is preloaded for the first body's grafted human head (chars `halfHuman`: «Half the face remains
+  // human»), so «King?» never shows the procedural stand-in
+  cast: ['linkbound', 'wallrunner', 'weaver', 'weaverAnchor', 'reformationMarine', 'dominionSoldier', 'selene', 'lyessa', 'tharne', 'lyric', 'survivor'],
   build,
   beats,
   /** per-frame zone animation on the sim clock: the seam's light, the plate following the hold */

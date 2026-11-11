@@ -202,8 +202,9 @@ function* firstCeiling(z: ZoneRuntime, enc: Encounter): Routine {
   const wr = S.wallrunner;
   if (!wr) return;
   let announced = false;
-  onZoneEvent(z, 'caption', (e) => {
-    if (e.kind === 'breach' && e.text === 'Skittering overhead' && e.pos && wr.alive && wr.pos.distanceTo(_v.set(e.pos.x, e.pos.y, e.pos.z)) < 3) announced = true;
+  // the AI announces the pounce it starts winding up (`ai:telegraph`, never the caption text)
+  onZoneEvent(z, 'ai:telegraph', (e) => {
+    if (e.actor === wr && e.kind === 'pounce' && wr.alive) announced = true;
   });
   // the announcement (or, failing it, a few seconds on the wall)
   let perchedFor = 0;

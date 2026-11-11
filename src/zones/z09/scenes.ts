@@ -98,6 +98,9 @@ export function disposeRelics(R: Relics): void {
 // `overlook`
 // =====================================================================================================================
 
+/** the painting's framing (plan x, n, height above the low floor): from behind the pair along the parapet */
+const RAIL_CAM = { pos: [28.0, 7.2, 1.75], to: [28.5, 8.0, 1.75], look: [34.5, 40, 5.0], fov: 60 } as const;
+
 /**
  * “The Crownmark.” — Selene stops at the edge of the circular gallery and looks back along the path they have
  * taken; the camera finds what she sees: they have been walking along one arm of a Crownmark large enough to
@@ -109,6 +112,8 @@ export function* overlookScene(z: ZoneRuntime): Routine {
   const sky = game.sky;
   const selene = z.cast('selene');
   yield* z.cinematic('z09-overlook', function* (c: CineCtx): Routine {
+    // the score of the reveal: a giant slow heartbeat under a low drone (wound_vista loops its full section)
+    game.audio.setMusic('woundVista', 2);
     selene?.stopAction();
     walkTo(z, selene, 'seleneRail');
     game.player.teleport(z.m('tarrikRail').setZ(z.m('tarrikRail').z + 2.2), z.myaw('tarrikRail'));
@@ -130,14 +135,16 @@ export function* overlookScene(z: ZoneRuntime): Routine {
     c.twoShot(s, z.player.pos, { side: 1, distance: 2.0, fov: 36 });
     yield* z.say('Selene', 'I suspect subtlety was not among the design requirements.', { actor: selene });
 
-    // “They are walking along one arm of a Crownmark large enough to contain cities.” — the long view
+    // “They are walking along one arm of a Crownmark large enough to contain cities.” — the long view, framed as the
+    // wound-overlook painting: along the parapet at eye level, the Wound over the canyon city, the white remnant
+    // right, the two of them small at the rail (the rail-framing camera; it replaces a view tilted up at the sky)
     selene?.face(z.m('overlookLook'));
-    c.cut({ pos: z.P(OVERLOOK.x + 1.2, OVERLOOK.n + 1.6, LOW + 1.4), look: z.P(OVERLOOK.x - 4, OVERLOOK.n + 160, LOW + 26), fov: 60 });
-    c.moveAsync({ pos: z.P(OVERLOOK.x + 0.8, OVERLOOK.n + 2.6, LOW + 1.5), look: z.P(OVERLOOK.x - 6, OVERLOOK.n + 160, LOW + 34), fov: 56 }, 7.5, 'inOut');
+    c.cut({ pos: z.P(RAIL_CAM.pos[0], RAIL_CAM.pos[1], LOW + RAIL_CAM.pos[2]), look: z.P(RAIL_CAM.look[0], RAIL_CAM.look[1], LOW + RAIL_CAM.look[2]), fov: RAIL_CAM.fov });
+    c.moveAsync({ pos: z.P(RAIL_CAM.to[0], RAIL_CAM.to[1], LOW + RAIL_CAM.to[2]), look: z.P(RAIL_CAM.look[0], RAIL_CAM.look[1], LOW + RAIL_CAM.look[2] + 0.5), fov: RAIL_CAM.fov - 2 }, 7.5, 'inOut');
     // “Far within it, violet light moves. Something enormous shifts behind layers of folded space, then disappears.”
     if (!z.skipping) sky.setWoundActivity(0.95);
     yield 4.2;
-    sky.setWoundActivity(0.3);
+    sky.setWoundActivity(0.3, { snap: z.skipping });
     yield 2.4;
     // “Tarrik’s hand closes around Velkorran. Selene notices.”
     const hand = z.player.visual?.socket('handR');
@@ -149,7 +156,7 @@ export function* overlookScene(z: ZoneRuntime): Routine {
     c.shot(s, { yawDeg: 160, distance: 2.2, height: 1.6, lookHeight: 1.6, fov: 32 });
     yield 2.2;
     // end state — identical watched or skipped
-    sky.setWoundActivity(0.3);
+    sky.setWoundActivity(0.3, { snap: z.skipping });
     selene?.face(null);
     if (selene) {
       selene.teleport(z.m('seleneRail'), z.myaw('seleneRail'));

@@ -61,6 +61,9 @@ export interface Z08State {
   officerRig: THREE.Group | null;
   /** the core's violet light on his face (built dark, so the light count never changes) */
   officerGlow: THREE.PointLight | null;
+  // --- dressing ---
+  /** materials the zone made itself (the crystal growth): released with the state */
+  owned: THREE.Material[];
 }
 
 export let S: Z08State = blank();
@@ -71,11 +74,12 @@ export function blank(): Z08State {
     barrierW: null, barrierS: null, barrierE: null, barrierExit: null, seams: [],
     enc: null, elite: null, ctl: null, weaver: null, anchor: null, frost: null,
     stage: 'A', fractured: false, finishDue: false, vignette: false, announced: false, flankOpen: false, pressureWas: false,
-    litters: [], officer: null, officerRig: null, officerGlow: null,
+    litters: [], officer: null, officerRig: null, officerGlow: null, owned: [],
   };
 }
 
 /** forget every per-load object (build() and ZoneDef.dispose()) */
 export function resetState(): void {
+  for (const m of S.owned) m.dispose();
   S = blank();
 }

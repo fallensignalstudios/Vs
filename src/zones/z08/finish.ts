@@ -63,9 +63,9 @@ function holder(): THREE.Group | null {
 
 /** the officer's figure inside a fresh rig (rig → holder → figure root), added to the zone */
 function makeOfficer(z: ZoneRuntime): { rig: THREE.Group; hold: THREE.Group; fig: CharacterVisual } {
-  // a bare face (the book: “his face protruding from the creature’s chest”) on a Dominion soldier's body: the
-  // generated infantry model without its helmet (chars `bareHead`), its own matte collar and plate still on him
-  const fig = z.game.chars.create('dominionSoldier', { seed: 8080, bareHead: true });
+  // the book: “his face protruding from the creature’s chest” — the generated officer (gaunt, pale, black-bronze
+  // plate with a high gorget), his own face; the infection stays a tint on him (setCorruption)
+  const fig = z.game.chars.create('officer', { seed: 8080 });
   const rig = new THREE.Group();
   rig.name = 'z08-officer';
   const hold = new THREE.Group();

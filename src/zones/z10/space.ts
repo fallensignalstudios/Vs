@@ -56,34 +56,36 @@ function buildFloor(b: ZoneBuilder): void {
     const t = (a * Math.PI) / 180;
     b.column({ x: C.x + Math.sin(t) * (R + 0.1), n: C.n + Math.cos(t) * (R + 0.1), r: 0.22, height: 1.6, style: 'pylon', mat: 'blackStone', lit: true });
   }
-  // immense pylons rising out of the dark round the platform: a hard scale cue for the tiny figures
+  // immense pylons rising out of the dark round the platform: a hard scale cue for the tiny figures — silver-white
+  // marble with gold seams (white-gold is the cool silver stone now), the painting's pale towers against the dark
   for (let i = 0; i < 10; i++) {
     const t = ((i + 0.5) / 10) * Math.PI * 2;
-    b.column({ x: C.x + Math.sin(t) * 38, n: C.n + Math.cos(t) * 38, h: -60, r: 2.6, height: 150, style: 'pylon', mat: 'blackStone', lit: true });
+    b.column({ x: C.x + Math.sin(t) * 38, n: C.n + Math.cos(t) * 38, h: -60, r: 2.4, height: 150, style: 'faceted', lit: true });
   }
 }
 
 function buildEntry(b: ZoneBuilder): void {
   b.floor({ x: C.x, n: (WALK.n0 + 0.6) / 2, w: WALK.x1 - WALK.x0, d: 0.6 - WALK.n0, mat: 'blackStoneFloor', inlay: 'channels', reflective: true });
-  b.wall({ from: [WALK.x0, WALK.n0], to: [WALK.x0, -0.4], height: 6, mat: 'blackStone', style: 'ribbed' });
-  b.wall({ from: [WALK.x1, WALK.n0], to: [WALK.x1, -0.4], height: 6, mat: 'blackStone', style: 'ribbed' });
-  b.wall({ from: [WALK.x0, WALK.n0], to: [WALK.x1, WALK.n0], height: 6, mat: 'blackStone', style: 'plain', doors: [{ at: (WALK.x1 - WALK.x0) / 2, width: 3.6, height: 4.6 }] });
+  // the walkway: silver-white stone over the black mirror floor (the painting's palette)
+  b.wall({ from: [WALK.x0, WALK.n0], to: [WALK.x0, -0.4], height: 6, style: 'ribbed' });
+  b.wall({ from: [WALK.x1, WALK.n0], to: [WALK.x1, -0.4], height: 6, style: 'ribbed' });
+  b.wall({ from: [WALK.x0, WALK.n0], to: [WALK.x1, WALK.n0], height: 6, style: 'plain', doors: [{ at: (WALK.x1 - WALK.x0) / 2, width: 3.6, height: 4.6 }] });
   b.door({ x: C.x, n: WALK.n0, width: 3.6, height: 4.6, style: 'threshold' }).setState('sealed');
-  b.ceiling({ x: C.x, n: (WALK.n0 - 0.4) / 2, w: WALK.x1 - WALK.x0, d: -0.4 - WALK.n0, h: 6, style: 'vaultClosed', rise: 2.2, bay: 3.8, glow: 1.2, mat: 'blackStone' });
-  b.column({ x: WALK.x0 - 0.3, n: -0.2, height: 9, style: 'pylon', mat: 'blackStone', lit: true });
-  b.column({ x: WALK.x1 + 0.3, n: -0.2, height: 9, style: 'pylon', mat: 'blackStone', lit: true });
+  b.ceiling({ x: C.x, n: (WALK.n0 - 0.4) / 2, w: WALK.x1 - WALK.x0, d: -0.4 - WALK.n0, h: 6, style: 'vaultClosed', rise: 2.2, bay: 3.8, glow: 1.2 });
+  b.column({ x: WALK.x0 - 0.3, n: -0.2, height: 9, style: 'pylon', lit: true });
+  b.column({ x: WALK.x1 + 0.3, n: -0.2, height: 9, style: 'pylon', lit: true });
 }
 
 function buildLift(b: ZoneBuilder): void {
   b.floor({ x: LIFT.x, n: LIFT.n - 0.6, w: 5, d: 5.4, mat: 'blackStoneFloor', inlay: 'none' });
   b.disc({ x: LIFT.x, n: LIFT.n, r: 1.7, h: 0.03, mat: 'whiteGoldFloor', inlay: 'radial', noSurface: true });
-  b.wall({ from: [LIFT.x - 2.5, LIFT.n - 3], to: [LIFT.x - 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone' });
-  b.wall({ from: [LIFT.x + 2.5, LIFT.n - 3], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone' });
-  b.wall({ from: [LIFT.x - 2.5, LIFT.n + 2.2], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5, mat: 'blackStone', style: 'panelled' });
-  b.ceiling({ x: LIFT.x, n: LIFT.n - 0.4, w: 5, d: 5.2, h: 6.5, style: 'flat', mat: 'blackStone' });
+  b.wall({ from: [LIFT.x - 2.5, LIFT.n - 3], to: [LIFT.x - 2.5, LIFT.n + 2.2], height: 6.5 });
+  b.wall({ from: [LIFT.x + 2.5, LIFT.n - 3], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5 });
+  b.wall({ from: [LIFT.x - 2.5, LIFT.n + 2.2], to: [LIFT.x + 2.5, LIFT.n + 2.2], height: 6.5, style: 'panelled' });
+  b.ceiling({ x: LIFT.x, n: LIFT.n - 0.4, w: 5, d: 5.2, h: 6.5, style: 'flat' });
   b.whitePoint({ x: LIFT.x, n: LIFT.n + 1.7, h: 4.6, intensity: 1.8 });
-  b.column({ x: LIFT.x - 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', mat: 'blackStone', lit: true });
-  b.column({ x: LIFT.x + 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', mat: 'blackStone', lit: true });
+  b.column({ x: LIFT.x - 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', lit: true });
+  b.column({ x: LIFT.x + 3.2, n: LIFT.n - 2.6, height: 8, style: 'pylon', lit: true });
 }
 
 /** register a hero prop's footprint colliders at its placement (formula from api/kit.ts HeroProp.colliders) */
@@ -116,6 +118,7 @@ function buildHeroProps(b: ZoneBuilder): void {
   rings.params.energy = 0.45;
   rings.params.spin = 1;
   b.add(rings.object);
+  polishRings(rings.object);
   S.rings = rings;
   // the two assent interfaces: independent, one each side; sunk until the protocol raises them
   placePad(b, S.padT, props.assentInterface('tarrik'), C.x - PAD.dx, C.n + PAD.dn, PAD.yawT);
@@ -151,6 +154,29 @@ function buildHeroProps(b: ZoneBuilder): void {
     S.lights.push(m);
   }
   S.disposers.push(() => geo.dispose());
+}
+
+/**
+ * The painting's rings are polished silver-white metal with luminous edges, where the prop's own body reads as
+ * matte pale stone (its white-gold clone wears the stone set now). A zone-level finish on the prop's own material
+ * (owned and disposed by the prop): smoother, part metallic, a brighter cool self-light; its energy-driven emissive
+ * intensity is left to the prop.
+ */
+const RING_FINISH = { color: 0xcfd8e6, roughness: 0.18, metalness: 0.55, emissive: [1.6, 1.74, 1.98], env: 1.8 } as const;
+function polishRings(root: THREE.Object3D): void {
+  const done = new Set<THREE.Material>();
+  root.traverse((o) => {
+    if (!(o instanceof THREE.InstancedMesh) || !o.name.endsWith('.body')) return;
+    const m = o.material;
+    if (!(m instanceof THREE.MeshStandardMaterial) || done.has(m)) return;
+    done.add(m);
+    m.color.setHex(RING_FINISH.color);
+    m.roughness = RING_FINISH.roughness;
+    m.metalness = RING_FINISH.metalness;
+    // above 1: the prop drives emissiveIntensity (0.07 + 0.16 × energy), so the self-light still follows the story
+    m.emissive.setRGB(RING_FINISH.emissive[0], RING_FINISH.emissive[1], RING_FINISH.emissive[2]);
+    m.envMapIntensity = RING_FINISH.env;
+  });
 }
 
 function placePad(b: ZoneBuilder, st: PadState, prop: HeroProp<{ active: number; assent: number }>, x: number, n: number, yawDeg: number): void {
@@ -231,6 +257,10 @@ export function buildScenic(b: ZoneBuilder): void {
   back.position.copy(b.P(C.x, C.n - 120, -120));
   back.rotation.y = Math.PI;
   b.add(back);
+  // beyond the rings, the painting's immense pale arches curve up on both sides of the Crownmark
+  const ahead = game.sky.scenic.megaRibs({ count: 2, span: 210, height: 280, spacing: 130, seed: 5 });
+  ahead.position.copy(b.P(C.x, C.n + 95, -110));
+  b.add(ahead);
   game.vfx.ambient('goldMotes', b.P(C.x, C.n, 4), { x: 24, y: 10, z: 24 }, 0.4);
   game.vfx.ambient('dust', b.P(C.x, C.n, 6), { x: 50, y: 12, z: 50 }, 0.3);
 }

@@ -17,8 +17,12 @@ import { S } from './state';
 
 /** the speaker tag SCRIPT_SOURCE gives the first body */
 const BODY = 'Eclipse body';
-/** Lyric's corruption: as she arrives, at the peak of the episode, and once the presence has gone (never cured) */
-export const LYRIC_CORRUPTION = { arrive: 0.26, episode: 0.34, scream: 0.44, peak: 0.55, after: 0.3 } as const;
+/**
+ * Lyric's corruption: as she arrives, at the peak of the episode, and once the presence has gone (never cured).
+ * Face-only (chars 'face' mode: violet irises, dark veins at the temples and down the neck that reach further as
+ * the amount rises), so the amounts can climb high enough to read at conversation distance.
+ */
+export const LYRIC_CORRUPTION = { arrive: 0.38, episode: 0.6, scream: 0.8, peak: 1.0, after: 0.45 } as const;
 
 const _v = new THREE.Vector3();
 
@@ -29,7 +33,10 @@ const _v = new THREE.Vector3();
 /** the first body, standing just inside the junction (idempotent; a free-standing actor outside E3) */
 function spawnKing(z: ZoneRuntime): Actor {
   if (S.king) return S.king;
-  S.king = z.game.ai.spawnEnemy('linkbound', { pos: z.m('kingAt'), yaw: z.myaw('kingAt'), dormant: true, tags: ['z06King'], seed: 11 });
+  // «Half the face remains human»: a man's head grafted on, one half of it taken (chars `halfHuman`)
+  S.king = z.game.ai.spawnEnemy('linkbound', {
+    pos: z.m('kingAt'), yaw: z.myaw('kingAt'), dormant: true, tags: ['z06King'], seed: 11, look: { halfHuman: true },
+  });
   return S.king;
 }
 
@@ -58,7 +65,8 @@ export function* kingScene(z: ZoneRuntime): Routine {
     king.face(tp);
     c.twoShot(kp, tp, { side: 1, distance: 1.9, fov: 38 });
     yield 1.2;
-    // half of it is still a man; one eye fixes on him — close over his shoulder
+    // half of it is still a man; one eye fixes on him — close over his shoulder (a soft light on the human half)
+    if (S.kingLight) S.kingLight.intensity = 3.2;
     c.twoShot(kp, tp, { side: -1, distance: 0.9, height: 1.72, fov: 30 });
     c.dof(2.6, 0.5);
     yield 0.5;
@@ -70,6 +78,7 @@ export function* kingScene(z: ZoneRuntime): Routine {
     yield 1.2;
 
     // and the creature lunges; he kills it
+    if (S.kingLight) S.kingLight.intensity = 0;
     c.cut({ pos: z.P(7.6, 19.2, 1.35), look: z.P(7.7, 21.5, 1.15), fov: 46 });
     king.visual?.play('lunge');
     if (!z.skipping) game.audio.play('eclipseLunge', { pos: kp });
@@ -98,6 +107,7 @@ export function* kingScene(z: ZoneRuntime): Routine {
     lyessa?.actor.visual?.lookAt(null);
     // end state — identical watched or skipped
     if (king.alive) game.actors.kill(king, null);
+    if (S.kingLight) S.kingLight.intensity = 0;
     z.setFlag('z06King', true);
   }, { blendOut: 0.5 });
 }
@@ -233,7 +243,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
   const SK = z.m('gSelene');
   const TH = z.m('gTharne');
   const TB = z.m('gTharneBlock');
-  const fig = (amount: number): void => lyric?.actor.visual?.setCorruption(amount);
+  const fig = (amount: number): void => lyric?.actor.visual?.setCorruption(amount, { mode: 'face' });
 
   yield* z.cinematic('z06-grounding', function* (c: CineCtx): Routine {
     game.audio.setMusic('silence', 2);

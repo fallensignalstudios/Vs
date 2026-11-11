@@ -202,11 +202,14 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   portal.visible = false;
   group.add(portal);
 
-  // --- the King and the chronicler: two luminous Witness figures; the chronicler plainer and a little smaller ---
+  // --- the King and his chronicler, remembered: two Witness figures lit from within ---
+  // The King (the generated `king` body, 1.76 m) as the book has him: “armor broken along one shoulder. Blood runs
+  // beneath one eye” — `wounded`; no halo: a real, exhausted man, not an icon. Vesryn (the `vesryn` body, 1.74 m)
+  // is plainer and dimmer — his own archetype never has a halo.
   const king: Figure = { visual: null, target: null, speed: 1.0, yaw: 0 };
   const vesryn: Figure = { visual: null, target: null, speed: 1.0, yaw: 0 };
-  const kv = game.chars.create('kingWitness', { seed: 1 });
-  const vv = game.chars.create('kingWitness', { seed: 2, scale: 0.94 });
+  const kv = game.chars.create('kingWitness', { seed: 1, wounded: true, halo: false });
+  const vv = game.chars.create('vesryn', { seed: 2 });
   if (isHumanoidVisual(kv)) king.visual = kv;
   if (isHumanoidVisual(vv)) vesryn.visual = vv;
   kv.setGlow(1.4);

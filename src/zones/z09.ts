@@ -91,6 +91,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   S.front = stage === 'start' ? 0 : 1e4;
   ensureRelics(z, S.relics);
   z.game.audio.setMuffle(0.15, 0.5);
+  // after the reveal the overlook's score carries on (`recognition` switches it when the terminal answers)
+  if (stage !== 'start') z.game.audio.setMusic('woundVista', 0.5);
 }
 
 // =====================================================================================================================

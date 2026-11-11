@@ -13,9 +13,11 @@
  * glass over a dark sky — the battle outside goes on in amber, blue-white and violet. Violet only at the breach
  * and at the Weaver's anchor (the real sources).
  */
+import * as THREE from 'three';
 import type { MissionState, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
+import { buildDressing } from './dressing';
 import { S, resetState } from './state';
 
 // =====================================================================================================================
@@ -59,7 +61,9 @@ export function build(b: ZoneBuilder, state: MissionState): void {
   resetState();
   const west = state.rescuePriority !== 'EastWalkers';
   b.setEnv({
-    sky: 'breachDeep', look: LOOKS.crucible, ambience: 'crucible', music: 'elite',
+    sky: 'breachDeep', ambience: 'crucible', music: 'elite',
+    // the crucible grade with a little more daylight fill: the quarantine painting's walls are bright in shadow too
+    look: { ...LOOKS.crucible, exposure: 1.2, ambient: { ...LOOKS.crucible.ambient, sky: 0xb4b8c0, intensity: 0.6 } },
     // high, from the south-west: long rib shadows fall north-east across the court; steep for the mirror floor
     key: { dirFrom: [-22, -30, 54], intensity: 2.1, color: 0xfff0dc },
   });
@@ -70,6 +74,7 @@ export function build(b: ZoneBuilder, state: MissionState): void {
   buildCourt(b);
   buildBarriers(b);
   buildGear(b, west);
+  buildDressing(b);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -208,7 +213,12 @@ function buildCourt(b: ZoneBuilder): void {
     pts.push([CLEAN_ANCHOR.x + Math.cos(a) * 1.7, CLEAN_ANCHOR.n + Math.sin(a) * 1.7]);
   }
   b.channel(pts, { width: 0.09, intensity: 3.2, color: GOLD });
-  b.panelLight({ x: CLEAN_ANCHOR.x, n: CLEAN_ANCHOR.n, w: 1.1, d: 1.1, h: 0.02, facing: 'up', intensity: 1.4 });
+  // a soft gold pool inside the ring, not a lamp: the old up-facing light panel bloomed into a white slab on the
+  // mirror floor in every southern view (integration wave)
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(1.25, 32).rotateX(-Math.PI / 2), b.mats.emissive(GOLD, 0.55));
+  pool.position.copy(b.P(CLEAN_ANCHOR.x, CLEAN_ANCHOR.n, 0.012));
+  pool.name = 'z08-clean-anchor';
+  b.add(pool);
 }
 
 /**

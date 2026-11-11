@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import type { ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
+import { buildDressing } from './dressing';
 import { S, resetState } from './state';
 
 // =====================================================================================================================
@@ -60,7 +61,16 @@ const BREACH_H = 5.6;
 export function build(b: ZoneBuilder): void {
   resetState();
   b.setEnv({
-    sky: 'breachDeep', look: LOOKS.breach, ambience: 'breach', music: 'breach',
+    sky: 'breachDeep', ambience: 'breach', music: 'breach',
+    // integration wave (quarantine painting, which sets the Z06–Z08 interiors): the breach grade lifted out of its
+    // night-blue — brighter cool daylight haze on silver-white stone, steel (not blue) shadows, the warmth left
+    // to the gold; still darker and hazier than the crucible
+    look: {
+      ...LOOKS.breach, exposure: 1.06, envIntensity: 0.95,
+      fog: { color: 0x30343c, density: 0.017 },
+      grade: { ...LOOKS.breach.grade, saturation: 0.9, shadowsTint: 0xb8c0d4, highlightsTint: 0xffe2b0 },
+      ambient: { sky: 0x8a90a0, ground: 0x1a1816, intensity: 0.46 },
+    },
     // high, from the south-west: the plate's protected face is lit, long shadows fall toward the breaches
     key: { dirFrom: [-20, -24, 50], intensity: 2.3, color: 0xfff0dc },
   });
@@ -73,6 +83,7 @@ export function build(b: ZoneBuilder): void {
   buildCover(b);
   buildPlate(b);
   buildGear(b);
+  buildDressing(b);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -288,7 +299,8 @@ function buildGear(b: ZoneBuilder): void {
 /**
  * Lights: the key (setEnv), two shafts, a cool fill so figures separate from the stone, faction accents. With the
  * white point, the exit panel, the corruption patches, the breach glows and the marines' lamp: 16 point / spot
- * lights in all (the kit's guidance is about a dozen; the four corruption patches are the contamination itself).
+ * lights in all (the kit's guidance is about a dozen; the four corruption patches are the contamination itself),
+ * plus the face light of «King?», dark outside that close-up.
  */
 function buildLight(b: ZoneBuilder): void {
   // a pale shaft on the plate (the focal point) and one down the left lane
@@ -300,6 +312,9 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: 3, n: 6, h: REFUGE.h + 2.2, color: 0xffb060, intensity: 14, distance: 8 });
   // the marines' post is lit by its own lamp (refLamp); the trapped man's suit lamp under the plate's edge
   b.point({ x: PLATE.x - 1.5, n: PLATE.n - 1.5, h: 0.35, color: BLUE, intensity: 5, distance: 3.2 });
+  // dark until «King?»: a soft light on the human half of the first body's face (its south side, toward the
+  // camera over Tarrik's shoulder), built dark so the light count never changes
+  S.kingLight = b.point({ x: 7.95, n: ENTRY_N - 1.45, h: 1.85, color: 0xffe6c8, intensity: 0, distance: 2.6 });
 }
 
 function buildMarkers(b: ZoneBuilder): void {

@@ -20,12 +20,11 @@
  */
 import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api/chars';
-import { LOOKS } from '@/render/looks';
 import { palm, confirmYes, meridianScene, placePalm, protocolScene, selenePalmScene, tarrikPalmScene } from './z10/assent';
 import { consequenceScene } from './z10/consequence';
 import { arrivalScene, diagnosticScene } from './z10/diagnostic';
 import { buildScenic, buildSpace } from './z10/space';
-import { S, resetState, setLights, setRise, updateShared } from './z10/state';
+import { S, Z10_LOOK, resetState, setLights, setRise, updateShared } from './z10/state';
 import { showWitness, witnessScene } from './z10/witness';
 import { buildWitnessSet, disposeWitnessSet, updateWitnessSet } from './z10/witness-set';
 
@@ -37,7 +36,7 @@ function build(b: ZoneBuilder): void {
   resetState();
   b.game.sky.reset();
   b.setEnv({
-    sky: 'coreChamber', look: LOOKS.core, ambience: 'coreChamber', music: 'core',
+    sky: 'coreChamber', look: Z10_LOOK, ambience: 'coreChamber', music: 'core',
     // nearly overhead (the preset's key): the mirror floor keeps its glint out of the usual view
     key: { dirFrom: [8, -10, 46], intensity: 1.1, color: 0xffe9c4 },
   });
@@ -86,8 +85,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   }
   // the chamber
   const sky = game.sky;
-  sky.setWoundActivity(meridian ? 0.05 : 0.3);
-  sky.setBoundaryClosed(stage === 'after', 0);
+  sky.setWoundActivity(meridian ? 0.05 : 0.3, { snap: true });
+  sky.setBoundaryClosed(stage === 'after', 0, { snap: true });
   setRise(assentT ? 1 : 0, true);
   if (S.padT.prop) S.padT.prop.params.active = assentT ? 1 : 0;
   if (S.padS.prop) S.padS.prop.params.active = meridian ? 1 : 0;
@@ -188,7 +187,8 @@ const Z10_DEF: ZoneDef = {
   id: 'Z10',
   title: 'Fifth Crownmark Chamber',
   art: 'crownmark-chamber',
-  cast: ['kingWitness'],
+  // the two Witness V bodies (generated `king` and `vesryn`) are preloaded with the zone
+  cast: ['kingWitness', 'vesryn'],
   build,
   beats,
   update(z: ZoneRuntime, dt: number) {

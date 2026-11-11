@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { CineCtx, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { C, DAIS_H, S, terminal } from './state';
+import { C, DAIS_H, S, Z10_LOOK, terminal, under } from './state';
 import { placeFigure, walkFigure, type WitnessSet } from './witness-set';
 
 const OFF: SayOpts = { offscreen: true };
@@ -78,15 +78,15 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     yield* z.fadeIn(z.skipping ? 0 : 1.4);
     c.moveAsync({ pos: z.P(C.x + 0.1, C.n - 5.6, DAIS_H + 1.7), look: z.P(C.x + 0.8, C.n + 40, DAIS_H + 8), fov: 56 }, 6, 'inOut');
     if (!z.skipping) game.vfx.spawn('witnessMote', z.P(C.x, C.n + 2, DAIS_H + 1.5), { duration: 90 });
-    yield 3.6;
+    yield 3.0;
 
     // ---- part one: the bridge and the trap -------------------------------------------------------------------
     // the chronicler steps up beside the King. “Tarrik goes rigid.”
     if (W) walkFigure(z, W.vesryn, 0.2, 7.0, 0.9);
-    c.shot(king(), { yawDeg: 200, distance: 5.2, height: 1.7, lookHeight: 1.7, fov: 36 });
-    yield 2.6;
+    c.shot(king(), { yawDeg: 200, distance: 5.2, height: 1.62, lookHeight: 1.55, fov: 36 });
+    yield 2.0;
     c.shot(tar(), { yawDeg: 160, distance: 1.9, height: 1.65, lookHeight: 1.62, fov: 30 });
-    yield 0.6;
+    yield 0.5;
     yield* z.say('Tarrik', 'Him.', { actor: tarrik });
     c.twoShot(sel(), tar(), { side: 1, distance: 1.7, fov: 34 });
     yield* z.say('Selene', 'You know him.', { actor: z.player });
@@ -118,15 +118,14 @@ export function* witnessScene(z: ZoneRuntime): Routine {
       walkFigure(z, W.king, 0.9, 10.6, 0.8);
       walkFigure(z, W.vesryn, -0.5, 9.9, 0.8);
     }
-    c.shot(king(), { yawDeg: 190, distance: 7.0, height: 1.8, lookHeight: 2.2, fov: 40 });
-    yield 2.6;
+    c.shot(king(), { yawDeg: 190, distance: 7.0, height: 1.7, lookHeight: 1.75, fov: 40 });
+    yield 2.2;
     yield* z.say('King', 'Vesryn.');
     // “Tarrik closes his eyes.” — the man who has spoken through impossible fragments finally possesses a name
     c.shot(tar(), { yawDeg: 170, distance: 1.6, height: 1.65, lookHeight: 1.64, fov: 28 });
-    yield 2.4;
-    terminal(z, [['ECLIPSE CONVERGENCE: 97%', 'warn']], true);
+    yield 1.7;
     c.cut({ pos: z.P(C.x - 0.6, C.n + 6.4, DAIS_H + 1.7), look: z.P(C.x + 0.4, C.n + 40, DAIS_H + 9), fov: 48 });
-    yield 2.0;
+    yield* under(z, [['ECLIPSE CONVERGENCE: 97%', 'warn']], 1.2);
     yield* z.say('Vesryn', 'They will call you King, but you will die a beggar.');
     c.twoShot(king(), ves(), { side: -1, distance: 2.2, fov: 34 });
     yield* z.say('King', 'Then let them bury me without a crown.');
@@ -138,16 +137,17 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     if (W) {
       W.tgt.blade = 1;
       W.king.visual?.setGlow(2.2);
-      const hand = king().add(new THREE.Vector3(0.25, 2.55, -0.35));
+      // the raised arm at full reach for the 1.76 m King
+      const hand = king().add(new THREE.Vector3(0.25, 2.15, -0.35));
       W.king.visual?.setHandTarget('R', hand, 1);
     }
-    c.shot(king(), { yawDeg: 160, distance: 4.0, height: 1.3, lookHeight: 2.1, fov: 40 });
-    yield 2.4;
+    c.shot(king(), { yawDeg: 160, distance: 4.0, height: 1.2, lookHeight: 1.8, fov: 40 });
+    yield 2.0;
     // “A line of force enters the star.” “Nothing happens for half a second.”
     const tip = W?.blade.getWorldPosition(new THREE.Vector3()) ?? king().setY(king().y + 3);
     const force = !z.skipping ? game.vfx.beam(tip, W ? W.star.position : tip, 'gold', { width: 0.5 }) : null;
     c.cut({ pos: z.P(C.x - 1.2, C.n - 3.0, DAIS_H + 1.3), look: z.P(C.x + 0.4, C.n + 40, DAIS_H + 9), fov: 62 });
-    yield 1.6;
+    yield 1.1;
     // “Then Aurelion tears apart.” — “a pressure beneath hearing, a vibration carried through bone.”
     if (W) {
       W.tgt.sunder = 1;
@@ -159,7 +159,7 @@ export function* witnessScene(z: ZoneRuntime): Routine {
       game.camera.shake(0.5, 3);
       sky.impact({ strength: 1, color: 0xffffff });
     }
-    yield 2.4;
+    yield 2.1;
     // “Eclipse and human vessels become light together”. “The King watches friendly ships disappear. He does not
     // look away.”
     sky.setPreset('observation', { blendSeconds: z.skipping ? 0 : 5 });
@@ -167,13 +167,13 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     if (!z.skipping) {
       for (let i = 0; i < 5; i++) sky.impact({ strength: 0.6, color: i % 2 ? 0xbfe0ff : 0xffc890 });
     }
+    yield 1.9;
+    c.shot(king(), { yawDeg: 175, distance: 2.3, height: 1.66, lookHeight: 1.6, fov: 30 });
     yield 2.2;
-    c.shot(king(), { yawDeg: 175, distance: 2.3, height: 1.9, lookHeight: 1.95, fov: 30 });
-    yield 2.6;
     // “Space between the remnants folds inward, and the Wound forms.” “It is not emptiness. It is containment.”
     c.cut({ pos: z.P(C.x + 0.4, C.n - 6.6, DAIS_H + 1.4), look: z.P(C.x, C.n + 40, DAIS_H + 7.5), fov: 64 });
-    game.ui.card('It is not emptiness. It is containment.', { style: 'witness', seconds: 4.6 });
-    yield 4.4;
+    game.ui.card('It is not emptiness. It is containment.', { style: 'witness', seconds: 4.2 });
+    yield 3.8;
     if (W) {
       W.tgt.blade = 0;
       W.king.visual?.setHandTarget('R', null);
@@ -181,12 +181,12 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     }
 
     // ---- part three: the terminal anchor ---------------------------------------------------------------------
-    terminal(z, ['REMOTE ANCHOR I: SEALED', 'REMOTE ANCHOR II: SEALED', 'REMOTE ANCHOR III: SEALED', 'REMOTE ANCHOR IV: SEALED'], true);
-    c.cut({ pos: z.P(C.x - 1.6, C.n + 5.2, DAIS_H + 1.75), look: king().setY(DAIS_H + 1.6), fov: 38 });
-    yield 2.8;
+    // six strings beside the two figures: the side column keeps both faces clear
+    c.cut({ pos: z.P(C.x - 1.6, C.n + 5.2, DAIS_H + 1.75), look: king().setY(DAIS_H + 1.5), fov: 38 });
+    yield* under(z, ['REMOTE ANCHOR I: SEALED', 'REMOTE ANCHOR II: SEALED', 'REMOTE ANCHOR III: SEALED', 'REMOTE ANCHOR IV: SEALED'], 1.8, 'side');
     terminal(z, ['REMOTE ANCHOR I: SEALED', 'REMOTE ANCHOR II: SEALED', 'REMOTE ANCHOR III: SEALED', 'REMOTE ANCHOR IV: SEALED',
-      ['TERMINAL ANCHOR: PENDING', 'warn'], ['SOVEREIGN REFERENCE REQUIRED BEYOND BOUNDARY', 'warn']]);
-    yield 2.6;
+      ['TERMINAL ANCHOR: PENDING', 'warn'], ['SOVEREIGN REFERENCE REQUIRED BEYOND BOUNDARY', 'warn']], false, 'side');
+    yield 1.6;
     c.twoShot(ves(), king(), { side: 1, distance: 2.2, fov: 34 });
     yield* z.say('Vesryn', 'Then send someone else.');
     c.twoShot(king(), ves(), { side: -1, distance: 2.2, fov: 34 });
@@ -203,7 +203,7 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     tarrik?.face(sel());
     game.player.playScripted('idle', { faceTo: tar() });
     c.cut({ pos: tar().lerp(sel(), 0.5).add(new THREE.Vector3(0, 1.55, -2.6)), look: tar().lerp(sel(), 0.5).setY(DAIS_H + 1.55), fov: 36 });
-    yield 2.6;
+    yield 1.8;
     tarrik?.face(null);
     c.twoShot(ves(), king(), { side: 1, distance: 2.2, fov: 34 });
     yield* z.say('Vesryn', 'I can tell you what I saw.');
@@ -231,7 +231,7 @@ export function* witnessScene(z: ZoneRuntime): Routine {
       game.vfx.spawn('witnessMote', z.P(C.x + 3.4, C.n + 9.2, DAIS_H + 2.2), { duration: 6 });
     }
     c.cut({ pos: z.P(C.x + 0.4, C.n + 2.2, DAIS_H + 1.6), look: z.P(C.x + 3.4, C.n + 9.2, DAIS_H + 2.3), fov: 44 });
-    yield 2.6;
+    yield 1.7;
     // “Vesryn takes one step forward.”
     if (W) walkFigure(z, W.vesryn, 0.2, 9.0, 0.7);
     c.twoShot(king(), ves(), { side: -1, distance: 2.6, fov: 36 });
@@ -241,28 +241,28 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     yield* z.say('Vesryn', 'I will.');
     // “The King crosses the threshold. White-gold light surrounds him, and for one second Selene can still see his
     // silhouette moving within the dark.”
-    if (W) walkFigure(z, W.king, 3.6, 10.6, 0.9);
-    c.cut({ pos: z.P(C.x + 1.4, C.n + 1.0, DAIS_H + 1.6), look: z.P(C.x + 3.4, C.n + 9.4, DAIS_H + 2.1), fov: 40 });
-    yield 3.6;
+    if (W) walkFigure(z, W.king, 3.6, 10.6, 1.0);
+    c.cut({ pos: z.P(C.x + 1.4, C.n + 1.0, DAIS_H + 1.6), look: z.P(C.x + 3.4, C.n + 9.4, DAIS_H + 2.0), fov: 40 });
+    yield 3.3;
     if (W) {
       W.king.visual?.setVisible(false);
       W.tgt.portal = 0;
     }
-    yield 1.6;
+    yield 1.1;
     // “Then the boundary seals.” “Crownmark Five ignites.”
     if (!z.skipping) {
       game.vfx.spawn('boundaryClose', z.P(C.x + 3.4, C.n + 9.2, DAIS_H + 2.3), { dir: { x: 0, y: 0, z: 1 } });
       game.audio.play('boundaryClose');
     }
     terminal(z, ['TERMINAL ANCHOR: SEALED'], true);
-    yield 2.6;
+    yield 2.0;
     // “The Witness ends.”
     yield* z.fadeOut(z.skipping ? 0 : 0.8, 'white');
     game.ui.statusBoard(null);
     showWitness(z, false);
     sky.setPreset('coreChamber');
     sky.setHeading(0);
-    render.setLook(LOOKS.core, 0);
+    render.setLook(Z10_LOOK, 0);
     game.audio.setMusic('consequence', 2);
     // back where they stood, at their interfaces
     game.player.teleport(z.m('standS'), z.myaw('standS'));
@@ -271,6 +271,6 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(C.x - 0.9, C.n - 6.8, 1.2), look: z.P(C.x, C.n, 1.7), fov: 36 });
     yield* z.fadeIn(z.skipping ? 0 : 1.2);
     if (!z.skipping) game.vfx.flash(z.P(C.x, C.n, 1.7), 0xfff4e0, 6, 0.6);
-    yield 1.2;
+    yield 1.0;
   });
 }

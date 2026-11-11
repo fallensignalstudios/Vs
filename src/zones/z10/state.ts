@@ -3,8 +3,22 @@
  * interfaces, the five lights, terminal text on the status board). Reset by build() and ZoneDef.dispose().
  */
 import * as THREE from 'three';
-import type { ColliderHandle, HeroProp, HologramProp, ZoneRuntime } from '@/core/api';
+import type { ColliderHandle, HeroProp, HologramProp, Look, ZoneRuntime } from '@/core/api';
+import { LOOKS } from '@/render/looks';
 import type { WitnessSet } from './witness-set';
+
+/**
+ * The chamber's grade: `LOOKS.core` (silver-cold, gold highlights) opened up toward the crownmark-chamber painting —
+ * a brighter, silver-white volume over the black mirror floor instead of crushed near-black. Every place that
+ * returns the chamber to its own grade (setEnv, the end of the dark, the end of the Witness) uses this one.
+ */
+export const Z10_LOOK: Look = {
+  ...LOOKS.core,
+  exposure: 1.2,
+  grade: { ...LOOKS.core.grade, contrast: 1.16, lift: -0.006 },
+  ambient: { ...LOOKS.core.ambient, sky: 0x70757f, intensity: 0.46 },
+  envIntensity: 1.5,
+};
 
 // =====================================================================================================================
 // Layout (plan coordinates, origin at the south-west corner)
@@ -135,19 +149,37 @@ export function row(text: string, tone: 'ok' | 'warn' | 'neutral' = 'neutral'): 
   return i < 0 ? { label: text, value: '', tone } : { label: text.slice(0, i + 1), value: text.slice(i + 2), tone };
 }
 
+/**
+ * Where the board sits: 'centre' over establishing shots (the empty middle of a wide frame), 'lowerThird' — a
+ * compact strip above the subtitles — when the text stays up UNDER the close-ups and lines that answer it, 'side'
+ * for a long list that must stay readable beside a two-shot.
+ */
+export type BoardPlace = 'centre' | 'lowerThird' | 'side';
+type TermLine = string | readonly [string, 'ok' | 'warn' | 'neutral'];
+
 /** show these terminal strings (a fresh board when `fresh`, otherwise rows are appended / updated in place) */
-export function terminal(z: ZoneRuntime, lines: ReadonlyArray<string | readonly [string, 'ok' | 'warn' | 'neutral']>, fresh = false): void {
+export function terminal(z: ZoneRuntime, lines: ReadonlyArray<TermLine>, fresh = false, placement: BoardPlace = 'centre'): void {
   const ui = z.game.ui;
   if (fresh) ui.statusBoard(null);
-  ui.statusBoard(lines.map((l) => (typeof l === 'string' ? row(l) : row(l[0], l[1]))));
+  ui.statusBoard(lines.map((l) => (typeof l === 'string' ? row(l) : row(l[0], l[1]))), { placement });
 }
 
 /**
- * Show terminal strings for `seconds`, then clear the board (a scene routine: the hold collapses on a skip). The
- * board sits mid-screen, so terminal text is held over establishing shots and gone before the faces.
+ * Show terminal strings for `seconds`, then clear the board (a scene routine: the hold collapses on a skip) —
+ * for text read over an establishing shot with nothing said under it.
  */
-export function* show(z: ZoneRuntime, lines: ReadonlyArray<string | readonly [string, 'ok' | 'warn' | 'neutral']>, seconds: number): Generator<number, void, unknown> {
-  terminal(z, lines, true);
+export function* show(z: ZoneRuntime, lines: ReadonlyArray<TermLine>, seconds: number, placement: BoardPlace = 'centre'): Generator<number, void, unknown> {
+  terminal(z, lines, true, placement);
   yield seconds;
   z.game.ui.statusBoard(null);
+}
+
+/**
+ * Put terminal strings up as a lower third and give them `lead` seconds to land; the board then STAYS under the
+ * lines that answer it (the caller clears it with `z.game.ui.statusBoard(null)` after them). This is how terminal
+ * text sits “under the dialogue” without a dead hold before every close-up.
+ */
+export function* under(z: ZoneRuntime, lines: ReadonlyArray<TermLine>, lead: number, placement: BoardPlace = 'lowerThird'): Generator<number, void, unknown> {
+  terminal(z, lines, true, placement);
+  yield lead;
 }

@@ -263,7 +263,9 @@ export function* tarrikFires(z: ZoneRuntime): Routine {
       c.cut(feed(z, dom, 52, -14, 9, 38));
       c.moveAsync(feed(z, dom, 47, -12, 8, 36), 3, 'out');
       const from = dom.core.clone().add(_a.set(-0.32, 1, 0.22).normalize().multiplyScalar(520));
-      const beam = z.skipping ? null : game.vfx.beam(from, dom.core, 'laser', { color: AMBER, width: 1.8 });
+      // a broad amber lance with a white-hot core, so it reads at the feed's distance (backlog: "thin in the feed")
+      const beam = z.skipping ? null : game.vfx.beam(from, dom.core, 'laser', { color: AMBER, width: 3.4 });
+      const core = z.skipping ? null : game.vfx.beam(from, dom.core, 'laser', { color: 0xfff1d6, width: 1.1 });
       if (!z.skipping) {
         game.audio.play('fireControlFire', { volume: 1.1 });
         game.sky.impact({ dir: dom.core.clone().sub(z.P(17, 20, 1.6)).normalize(), color: AMBER, strength: 0.55 });
@@ -282,6 +284,7 @@ export function* tarrikFires(z: ZoneRuntime): Routine {
       }
       yield 1.2;
       beam?.remove(0.6);
+      core?.remove(0.4);
       yield 1.6;
     }
     z.story('cageDominionDestroyed');

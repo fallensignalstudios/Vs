@@ -118,8 +118,11 @@ function buildDescent(b: ZoneBuilder): void {
 /** C — the apron and the circular overlook: open to the sky on the north, glass rail, black mirror stone */
 function buildApron(b: ZoneBuilder): void {
   const x0 = P2_[0];
-  b.floor({ x: (x0 + APRON_X1) / 2, n: (HALL_N0 + HALL_N1) / 2, w: APRON_X1 - x0, d: HALL_N1 - HALL_N0, h: LOW, mat: 'blackStoneFloor', inlay: 'channels', reflective: true });
-  b.disc({ x: OVERLOOK.x, n: OVERLOOK.n, r: OVERLOOK.r, h: LOW, mat: 'blackStoneFloor', inlay: 'crownmark', reflective: true });
+  // the walkway floor carries only the two flowing route lines and the fine star (the painting's floor: black
+  // mirror marble with thin gold inlay, no glowing lanes)
+  b.floor({ x: (x0 + APRON_X1) / 2, n: (HALL_N0 + HALL_N1) / 2, w: APRON_X1 - x0, d: HALL_N1 - HALL_N0, h: LOW, mat: 'blackStoneFloor', inlay: 'none', reflective: true });
+  b.disc({ x: OVERLOOK.x, n: OVERLOOK.n, r: OVERLOOK.r, h: LOW, mat: 'blackStoneFloor', inlay: 'none', reflective: true });
+  fineStar(b, OVERLOOK.x, OVERLOOK.n, OVERLOOK.r - 0.9, LOW);
   // south boundary: the ramp's right wall turns along the apron's south edge to the threshold hall
   const rEnd = add(P2_, B_RIGHT, CW / 2);
   b.walls([rEnd, [rEnd[0] + 1.1, HALL_N0], [APRON_X1, HALL_N0]], { h: LOW, height: 9, style: 'ribbed' });
@@ -133,8 +136,9 @@ function buildApron(b: ZoneBuilder): void {
   }
   rail.push([OVERLOOK.x + OVERLOOK.r, HALL_N1], [APRON_X1, HALL_N1]);
   for (let i = 0; i < rail.length - 1; i++) b.rail({ from: rail[i], to: rail[i + 1], h: LOW, height: 1.1, style: 'glass' });
-  // a gold channel traces the rail's foot (route light) and the five-pointed inlay's axis toward the threshold
-  b.channel(rail.slice(2, rail.length - 1).map((p) => [p[0] + (OVERLOOK.x - p[0]) * 0.06, p[1] + (OVERLOOK.n - p[1]) * 0.06] as P2), { h: LOW, width: 0.05, intensity: 2.2 });
+  // a gold channel traces the rail's foot (route light) and the five-pointed inlay's axis toward the threshold —
+  // a fine inlaid line, as the painting's floor, not a glowing tube
+  b.channel(rail.slice(2, rail.length - 1).map((p) => [p[0] + (OVERLOOK.x - p[0]) * 0.06, p[1] + (OVERLOOK.n - p[1]) * 0.06] as P2), { h: LOW, width: 0.035, intensity: 1.2 });
   // the white-gold structure on the right: three immense ribs rising out of the south wall and leaning over the
   // walkway (the concept's buttresses) — tiny figures against them
   // (a half rib's foot is its local west end: turned to face west, the foot stands south of the wall and the
@@ -144,6 +148,17 @@ function buildApron(b: ZoneBuilder): void {
     b.column({ x: x - 3, n: HALL_N0 - 0.9, h: LOW, r: 0.95, height: 24, style: 'round', lit: true });
   }
   b.column({ x: x0 + 1.6, n: HALL_N0 + 0.6, h: LOW, r: 0.55, height: 12, style: 'pylon', mat: 'blackStone', lit: true });
+}
+
+/** a fine inlaid five-pointed star in a ring (thin gold lines, as the painting's floor), pointing north */
+function fineStar(b: ZoneBuilder, x: number, n: number, R: number, h: number): void {
+  const tips: P2[] = [];
+  for (let i = 0; i < 5; i++) tips.push([x + Math.sin((i / 5) * Math.PI * 2) * R, n + Math.cos((i / 5) * Math.PI * 2) * R]);
+  const star: P2[] = [];
+  for (let i = 0; i <= 5; i++) star.push(tips[(i * 2) % 5]);
+  b.channel(star, { h, width: 0.028, intensity: 1.1 });
+  const ring = (r: number): P2[] => Array.from({ length: 49 }, (_, i) => [x + Math.sin((i / 48) * Math.PI * 2) * r, n + Math.cos((i / 48) * Math.PI * 2) * r] as P2);
+  b.channel(ring(R * 0.3), { h, width: 0.024, intensity: 0.9 });
 }
 
 /** D — the threshold hall: black stone, the five-depression threshold, the seamless door, the white point */
@@ -318,7 +333,9 @@ export function updateFlow(f: FlowLines, front: number, time: number): void {
     const lit = Math.min(1, Math.max(0, (front - s) / 2.5));
     const ph = ((s - time * 4.2) / 9) % 1;
     const wave = Math.pow(0.5 + 0.5 * Math.cos(ph * Math.PI * 2), 8);
-    const k = lit * (0.9 + 2.6 * wave);
+    // a steady inlaid gold with a brighter pulse travelling down the passage (dimmer than a light strip: the
+    // painting's floor lines are fine and quiet)
+    const k = lit * (0.5 + 1.7 * wave);
     TMP.copy(FLOW_COLOR).multiplyScalar(k);
     f.mesh.setColorAt(i, TMP);
   }

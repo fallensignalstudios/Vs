@@ -52,6 +52,9 @@ function fateRecorded(z: ZoneRuntime): boolean {
 // Cast
 // =====================================================================================================================
 
+/** Lyric's corruption (face-only), as Z07 leaves her */
+const LYRIC_CORRUPTION = 0.45;
+
 type Stage = 'A' | 'B' | 'finish' | 'quarantine';
 
 /**
@@ -79,7 +82,9 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   z.npc('dominionSoldier', west ? 'soldierW2' : 'soldierE2', 'aimRifle', 'soldier2');
   // Tharne and Lyric hold at the staging: rear, protected, silent during E4
   z.npc('tharne', 'tharneStage', 'kneelTend', 'tharne');
-  z.npc('lyric', 'lyricStage', 'sitInjured', 'lyric');
+  const lyric = z.npc('lyric', 'lyricStage', 'sitInjured', 'lyric');
+  // as Z06 / Z07 leave her: the infection in her irises and at her neck only, never cured
+  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face' });
   spawnSurvivors(z, { walkersOut: !west && stage !== 'A' });
   // the east flank: East opens it in phase A, West at the handoff ("sooner" / later)
   const flank = stage !== 'A';
@@ -132,7 +137,8 @@ function* phaseA(z: ZoneRuntime): Routine {
   yield* z.cinematic('z08-arrival', function* (c: CineCtx): Routine {
     // “A larger organism pushes through the breach.” The party small at the south end, the court between
     c.cut({ pos: z.P(39.8, 5.2, 2.5), look: z.P(35, 42, 3.4), fov: 50 });
-    c.moveAsync({ pos: z.P(37.6, 9.5, 2.1), look: z.P(35, 40, 3.0), fov: 42 }, 6.5, 'inOut');
+    // (integration wave: settling low over the mirror floor, the gate centred — the quarantine painting's framing)
+    c.moveAsync({ pos: z.P(37.4, 9.5, 1.45), look: z.P(35, 40, 3.6), fov: 44 }, 6.5, 'inOut');
     yield 3.4;
     // Tarrik takes the court
     walkTo(z, tarrik, 'tarrikCourt', { run: true });
@@ -242,6 +248,8 @@ const Z08_DEF: ZoneDef = {
   cast: [
     'elite', 'weaver', 'linkbound', 'wallrunner', 'weaverAnchor', 'frostAnchor',
     'dominionSoldier', 'reformationSoldier', 'medic', 'survivor', 'lyessa', 'tharne', 'lyric',
+    // the officer revealed inside the organism (generated body, preloaded so the reveal never shows a stand-in)
+    'officer',
   ],
   build,
   beats,

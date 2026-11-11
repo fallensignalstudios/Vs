@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { BeamHandle, CineCtx, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { atPost, waitOr, walkTo } from '../shared';
-import { C, DAIS_H, S, show, snapProps, terminal } from './state';
+import { C, DAIS_H, S, snapProps, terminal, under } from './state';
 
 const RADIO: SayOpts = { offscreen: true, channel: 'radio' };
 
@@ -33,11 +33,11 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(C.x + 3.2, 4.8, 2.6), look: z.P(C.x, C.n, 9), fov: 62 });
     c.moveAsync({ pos: z.P(C.x + 2.2, 7.5, 2.2), look: z.P(C.x, C.n, 11), fov: 58 }, 9, 'inOut');
     if (!z.skipping) game.audio.play('meridianAlign', { volume: 0.5 });
-    yield 3.4;
+    yield 3.2;
     // “Everything focuses on one human-sized object: five points of black-gold metal surrounding a white core.”
     c.cut({ pos: z.P(C.x - 1.4, C.n - 9.5, 1.5), look: z.P(C.x, C.n, 1.7), fov: 34 });
     c.moveAsync({ pos: z.P(C.x - 0.9, C.n - 8.0, 1.55), look: z.P(C.x, C.n, 1.75), fov: 32 }, 5, 'inOut');
-    yield 2.6;
+    yield 2.2;
     game.player.teleport(z.m('arrive'), z.myaw('arrive'));
     if (selene && z.skipping) selene.teleport(z.m('seleneArrive'), z.myaw('seleneArrive'));
     yield waitOr(z, () => z.skipping || atPost(z, selene, 'seleneArrive'), 4);
@@ -83,13 +83,13 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     // the terminal wakes: four of five
     c.cut({ pos: z.P(C.x - 2.8, C.n - 11.2, 2.3), look: z.P(C.x, C.n - 2, 1.6), fov: 44 });
     terminal(z, ['MERIDIAN CONTINUITY: 4 / 5', 'TERMINAL WITNESS: SEALED'], true);
-    yield 3.4;
+    yield 2.4;
     // “A line of white-gold light extends toward Tarrik.” … “A second line reaches Selene. The two paths advance
     // toward one another but stop before touching.”
     c.cut({ pos: z.P(C.x + 4.4, C.n - 10.6, 1.9), look: z.P(C.x - 1, C.n - 5, 1.4), fov: 46 });
     terminal(z, ['MERIDIAN CONTINUITY: 4 / 5', 'TERMINAL WITNESS: SEALED', 'BEARER CONTINUITY A: VERIFIED']);
     if (!z.skipping) yield* lineToTarrik(z, beams);
-    yield 0.8;
+    yield 0.5;
     terminal(z, ['MERIDIAN CONTINUITY: 4 / 5', 'TERMINAL WITNESS: SEALED', 'BEARER CONTINUITY A: VERIFIED', 'BEARER CONTINUITY B: VERIFIED']);
     if (!z.skipping) {
       const core = S.crownmark?.socket('core');
@@ -102,9 +102,9 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
       beams.push(game.vfx.beam(tc, tc.clone().lerp(mid, 0.82), 'gold', { width: 0.045 }));
       beams.push(game.vfx.beam(sc, sc.clone().lerp(mid, 0.82), 'gold', { width: 0.045 }));
     }
-    yield 2.2;
+    yield 1.6;
     terminal(z, ['MERIDIAN CONTINUITY: 4 / 5', 'TERMINAL WITNESS: SEALED', 'BEARER CONTINUITY A: VERIFIED', 'BEARER CONTINUITY B: VERIFIED', 'CONTINUITY RELATION: CONTRARY']);
-    yield 2.6;
+    yield 2.0;
     ui.statusBoard(null);
 
     c.twoShot(s(), t, { side: 1, distance: 2.4, fov: 38 });
@@ -114,15 +114,14 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     for (const bm of beams) bm.remove(0.8);
     beams.length = 0;
 
-    terminal(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION'], true);
     c.cut({ pos: z.P(C.x - 0.4, C.n - 12.4, 1.2), look: z.P(C.x, C.n, 3.6), fov: 48 });
-    yield 2.6;
-    terminal(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION', 'MERIDIAN COMPLETION WILL ENABLE TERMINAL AUTHORITY']);
-    yield 2.8;
-    ui.statusBoard(null);
-    // “It is the fastest agreement they have reached.”
+    yield* under(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION'], 1.8);
+    terminal(z, ['WITNESS V ACCESS REQUIRES MERIDIAN COMPLETION', 'MERIDIAN COMPLETION WILL ENABLE TERMINAL AUTHORITY'], false, 'lowerThird');
+    yield 2.0;
+    // “It is the fastest agreement they have reached.” — the second string still under them
     c.cut({ pos: t.clone().lerp(s(), 0.5).add(new THREE.Vector3(0, 1.5, 3.6)), look: t.clone().lerp(s(), 0.5).setY(t.y + 1.4), fov: 42 });
     yield* z.say('Tarrik + Selene', 'No.', { actor: z.player }); // speaker label NEW (the script's TARRIK + SELENE, together)
+    ui.statusBoard(null);
     // he circles the outer ring, not approaching the Crownmark
     t = place(z, 'tarrikRing1', z.P(C.x, C.n - 10, 1));
     c.shot(t, { yawDeg: 230, distance: 3.4, height: 1.6, lookHeight: 1.45, fov: 40 });
@@ -134,10 +133,11 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     if (S.diag) S.diag.params.progress = 0;
     const holo = S.diag ? S.diag.object.position.clone() : z.P(C.x + 4.4, C.n - 7.1, 1.25);
     c.cut({ pos: holo.clone().add(new THREE.Vector3(-1.6, 0.6, 2.6)), look: holo, fov: 40 });
-    yield* show(z, [['REMOTE ANCHOR LOAD: ASYMMETRIC', 'warn'], ['BOUNDARY DEGRADATION: ACTIVE', 'warn'], ['CONTAINMENT STRESS: RISING', 'warn']], 3.0);
+    yield* under(z, [['REMOTE ANCHOR LOAD: ASYMMETRIC', 'warn'], ['BOUNDARY DEGRADATION: ACTIVE', 'warn'], ['CONTAINMENT STRESS: RISING', 'warn']], 1.8);
     yield* z.say('Selene', 'The system was never meant to remain at four.', { actor: selene });
     c.twoShot(s(), t, { side: 1, distance: 2.8, fov: 34 });
     yield* z.say('Selene', 'The boundary is trying to balance four active references against one closed terminal authority.', { actor: selene });
+    ui.statusBoard(null);
     t = place(z, 'tarrikRing2', s());
     c.shot(t, { yawDeg: 160, distance: 3.0, height: 1.6, lookHeight: 1.5, fov: 38 });
     yield* z.say('Tarrik', 'That’s why the Eclipse is getting through.', { actor: z.player });
@@ -147,7 +147,7 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     // fact two: doing nothing threatens containment — the forecast is a readout, never a clock to race
     if (S.forecast) S.forecast.params.visible = 1;
     c.cut({ pos: z.P(C.x - 5.6, C.n - 11.6, 1.9), look: z.P(C.x - 4.6, C.n - 7.2, 2.1), fov: 42 });
-    yield* show(z, [['BOUNDARY PRESSURE: 138%', 'warn'], ['FORECAST TO CRITICAL FAILURE: 02:11:43', 'warn']], 3.6);
+    yield* under(z, [['BOUNDARY PRESSURE: 138%', 'warn'], ['FORECAST TO CRITICAL FAILURE: 02:11:43', 'warn']], 2.2);
     c.shot(s(), { yawDeg: 180, distance: 2.4, height: 1.55, lookHeight: 1.5, fov: 34 });
     yield* z.say('Selene', 'If we do nothing, the boundary fails.', { actor: selene });
     // fact three, in his words: completing it unlocks the door; leaving it lets the wall fall
@@ -186,7 +186,7 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     yield* z.say('Tharne', 'I don’t know.', RADIO);
     yield* z.say('Lyric', 'Make it quiet.', { ...RADIO, duration: 2.6 });
     if (!z.skipping) game.audio.play('ambCommBlip', { volume: 0.6 });
-    yield 1.2;
+    yield 0.9;
 
     // the decision — they end “almost shoulder to shoulder, neither having noticed when it happened”
     t = place(z, 'tarrikShoulder', z.P(C.x, C.n, 1.4));
@@ -206,7 +206,7 @@ export function* diagnosticScene(z: ZoneRuntime): Routine {
     yield* z.say('Tarrik', 'If this is wrong…', { actor: z.player });
     c.twoShot(s(), t, { side: 1, distance: 1.9, fov: 34 });
     yield* z.say('Selene', 'Then we put our names beside it.', { actor: selene });
-    yield 0.8;
+    yield 0.6;
 
     // end state — identical watched or skipped
     for (const bm of beams) bm.remove(0.5);

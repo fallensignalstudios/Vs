@@ -4,9 +4,9 @@
  *   space (./z07/layout.ts) → cast → beats → ZoneDef;  the cage acts in ./z07/cages.ts;  the bridge, the West /
  *   East choice and O3 in ./z07/choice.ts;  the medics, stretcher cases and walking wounded in ./z07/people.ts
  *
- * SPACE (plan coordinates, origin at the south-west corner, x east, n north): a 34 × 22 m black-stone gallery
- * below grade (authored at local 0). The north wall is glass and looks OUT of the terminal: both containment cages
- * float in vacuum at scenic distance, the Crownwatch resonator dead ahead of the station's sighting ring and the
+ * SPACE (plan coordinates, origin at the south-west corner, x east, n north): a 34 × 22 m white-gold gallery
+ * (black mirror floor, black ceiling) below grade (authored at local 0). The north wall is glass and looks OUT of
+ * the terminal: both containment cages float in vacuum at scenic distance, the Crownwatch resonator dead ahead of the station's sighting ring and the
  * Reformation extraction drone's cold-field envelope to the north-east. At the glass: the external fire-control
  * station and the auxiliary desk (the interoperability display over it); the O3 side console by the west wall.
  * South: the recovery panel beside the exit door to Z08; the two survivor routes leave through the west and east
@@ -31,8 +31,8 @@ import { build } from './z07/layout';
 import { resetPeople, spawnPeople, updatePeople } from './z07/people';
 import { S, resetState } from './z07/state';
 
-/** Lyric's corruption level through Z07 (Z06 leaves her at 0.3; never cured, never explained) */
-const LYRIC_CORRUPTION = 0.3;
+/** Lyric's corruption level through Z07 (face-only; Z06 leaves her at 0.45; never cured, never explained) */
+const LYRIC_CORRUPTION = 0.45;
 /** rim light on each cage at full (candela; the cages are ~150 m out) */
 const RIM = 2600;
 const VIOLET_C = new THREE.Color(VIOLET);
@@ -75,7 +75,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   if (stage !== 'choice') tharne.play('kneel', { loop: true });
   const lyric = z.companion('lyric', 'lyric', 'hold');
   lyric.play('sitInjured', { loop: true });
-  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION);
+  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face' }); // face-only, as Z06 leaves her
   for (const c of [tharne, lyric]) c.actor.protectedNpc = true;
   spawnPeople(z, committed ? priority : 'pending');
 

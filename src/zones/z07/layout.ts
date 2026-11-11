@@ -1,6 +1,7 @@
 /**
- * Z07 — the space (plan coordinates: origin at the south-west corner, x east, n north). A 34 × 22 m black-stone
- * capture-control gallery below grade (authored at local 0): dim, technical, gold channels in a mirror floor.
+ * Z07 — the space (plan coordinates: origin at the south-west corner, x east, n north). A 34 × 22 m
+ * capture-control gallery below grade (authored at local 0): white-gold walls, a black ceiling, gold channels in a
+ * black mirror floor; dim and technical, lit by its glass and its own strips.
  *
  *   north   a 7 m GLASS WALL the whole length of the room — it looks OUT of the terminal. Beyond it, ~120 m out
  *           and in two directions, the two containment cages float in vacuum: the Crownwatch resonator dead ahead
@@ -64,8 +65,12 @@ export function build(b: ZoneBuilder): void {
   sky.setHeading(0);
   b.setEnv({
     sky: 'breachDeep',
-    // the gallery look, with the haze thinned a little: the room looks out into vacuum
-    look: { ...LOOKS.gallery, fog: { color: 0x0b1216, density: 0.012 } },
+    // the gallery look, with the haze thinned a little: the room looks out into vacuum. Integration wave (quarantine
+    // painting): a little more cool fill so the figures read against the walls, the gold staying the only warmth
+    look: {
+      ...LOOKS.gallery, exposure: 1.12, envIntensity: 1.0, fog: { color: 0x101820, density: 0.012 },
+      ambient: { sky: 0x6a7284, ground: 0x16130f, intensity: 0.5 },
+    },
     ambience: 'gallery', music: 'breach',
     // cold exterior light falling steeply through the glass (steep: the mirror floor would glint otherwise)
     key: { dirFrom: [5, 12, 30], intensity: 1.15, color: 0xc8d6f2 },
@@ -83,36 +88,41 @@ export function build(b: ZoneBuilder): void {
   b.finalize();
 }
 
-/** floor, walls, the glass, ceiling, entry and exit */
+/**
+ * floor, walls, the glass, ceiling, entry and exit. Integration wave (quarantine painting, which sets the look of
+ * the Z06–Z08 interiors): white-gold walls (silver stone) and pylons over the black mirror floor, under a black
+ * ceiling — the lower terminal's black stone starts with the Z09 descent (plan p. 12).
+ */
 function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, mat: 'blackStoneFloor', reflective: true, inlay: 'channels' });
   // west: entry from Z06 and the west survivor route
   b.wall({
-    from: [0, 0], to: [0, D], height: WALL_H, mat: 'blackStone', style: 'ribbed',
+    from: [0, 0], to: [0, D], height: WALL_H, style: 'ribbed',
     doors: [{ at: ROUTE_N, width: 3, height: 3.5 }, { at: ENTRY_N, width: 3, height: 3.5 }],
   });
   b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east, style: 'threshold' }).setState('sealed');
   // east: the east survivor route
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, mat: 'blackStone', style: 'ribbed', doors: [{ at: ROUTE_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'ribbed', doors: [{ at: ROUTE_N, width: 3, height: 3.5 }] });
   // south: the exit to Z08
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, mat: 'blackStone', style: 'conduit', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
-  // north: the glass, floor to ceiling, on black-stone pylons
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'conduit', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
+  // north: the glass, floor to ceiling, on white-gold pylons
   b.wall({ from: [0, D], to: [W, D], height: WALL_H, mat: 'blackStone', style: 'glass' });
-  for (const x of PYLONS) b.column({ x, n: PYLON_N, r: 0.5, height: WALL_H, mat: 'blackStone', style: 'pylon', lit: true });
+  // white-gold pylons (silver stone, the painting's pale pillars) frame the glass against the black walls
+  for (const x of PYLONS) b.column({ x, n: PYLON_N, r: 0.5, height: WALL_H, style: 'pylon', lit: true });
   b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, mat: 'blackStone', style: 'flat' });
 
   // exit: door, a short lit vestibule beyond it (the way down), the white point above
   S.exit = b.door({ x: EXIT_X, n: 0, style: 'threshold' });
   S.exit.setState('locked');
   b.floor({ x: EXIT_X, n: -2.6, w: 4.4, d: 5.2, mat: 'blackStoneFloor', inlay: 'none' });
-  b.wall({ from: [EXIT_X - 2.2, 0], to: [EXIT_X - 2.2, -5.2], height: 4.2, mat: 'blackStone' });
-  b.wall({ from: [EXIT_X + 2.2, 0], to: [EXIT_X + 2.2, -5.2], height: 4.2, mat: 'blackStone' });
-  b.wall({ from: [EXIT_X - 2.2, -5.2], to: [EXIT_X + 2.2, -5.2], height: 4.2, mat: 'blackStone', style: 'panelled' });
+  b.wall({ from: [EXIT_X - 2.2, 0], to: [EXIT_X - 2.2, -5.2], height: 4.2 });
+  b.wall({ from: [EXIT_X + 2.2, 0], to: [EXIT_X + 2.2, -5.2], height: 4.2 });
+  b.wall({ from: [EXIT_X - 2.2, -5.2], to: [EXIT_X + 2.2, -5.2], height: 4.2, style: 'panelled' });
   b.ceiling({ x: EXIT_X, n: -2.6, w: 4.4, d: 5.2, h: 4.2, mat: 'blackStone', style: 'flat' });
   b.panelLight({ x: EXIT_X, n: -4.8, w: 2.4, d: 2.6, h: 0.9, facing: 'north', intensity: 2.0 });
   b.whitePoint({ x: EXIT_X, n: 0.9, h: 5.2, intensity: 1.8 });
-  b.column({ x: EXIT_X - 3.2, n: 0.7, height: 6.2, mat: 'blackStone', style: 'pylon', lit: true });
-  b.column({ x: EXIT_X + 3.2, n: 0.7, height: 6.2, mat: 'blackStone', style: 'pylon', lit: true });
+  b.column({ x: EXIT_X - 3.2, n: 0.7, height: 6.2, style: 'pylon', lit: true });
+  b.column({ x: EXIT_X + 3.2, n: 0.7, height: 6.2, style: 'pylon', lit: true });
   // gold route light from the panel to the door
   b.channel([[PANEL[0], 6.0], [PANEL[0] + 1.2, 4.6], [EXIT_X, 4.6], [EXIT_X, 1.2]], { width: 0.07 });
 }
@@ -127,9 +137,9 @@ function buildRoutes(b: ZoneBuilder): void {
     const x1 = x0 + side * ROUTE_LEN;
     const cx = (x0 + x1) / 2;
     b.floor({ x: cx, n: ROUTE_N, w: ROUTE_LEN, d: 3.4, mat: 'blackStoneFloor', inlay: 'none' });
-    b.wall({ from: [x0, ROUTE_N - 1.7], to: [x1, ROUTE_N - 1.7], height: 4, mat: 'blackStone' });
-    b.wall({ from: [x0, ROUTE_N + 1.7], to: [x1, ROUTE_N + 1.7], height: 4, mat: 'blackStone' });
-    b.wall({ from: [x1, ROUTE_N - 1.7], to: [x1, ROUTE_N + 1.7], height: 4, mat: 'blackStone', doors: [{ at: 1.7, width: 2.6, height: 3 }] });
+    b.wall({ from: [x0, ROUTE_N - 1.7], to: [x1, ROUTE_N - 1.7], height: 4 });
+    b.wall({ from: [x0, ROUTE_N + 1.7], to: [x1, ROUTE_N + 1.7], height: 4 });
+    b.wall({ from: [x1, ROUTE_N - 1.7], to: [x1, ROUTE_N + 1.7], height: 4, doors: [{ at: 1.7, width: 2.6, height: 3 }] });
     b.door({ x: x1, n: ROUTE_N, yawDeg: FACE.east, width: 2.6, height: 3, style: 'service' }).setState('ready');
     b.ceiling({ x: cx, n: ROUTE_N, w: ROUTE_LEN, d: 3.4, h: 4, mat: 'blackStone', style: 'flat' });
     b.panelLight({ x: x1 - side * 0.4, n: ROUTE_N, w: 1.6, d: 1.4, h: 2.9, facing: side < 0 ? 'east' : 'west', intensity: 2.2 });
@@ -267,16 +277,13 @@ function buildMarkers(b: ZoneBuilder): void {
 function buildCages(b: ZoneBuilder): void {
   const props = b.game.props;
   const rig = (kind: 'dominion' | 'reformation', o: typeof CAGE_DOM | typeof CAGE_REF, tint: number): CageRig => {
-    const prop = props.containmentCage(kind);
+    // far outside in vacuum, seen through the glass: no room haze on it, and the brighter far-field frame, field
+    // and own light so the silhouette carries at ~120 m (hero-props `distant`)
+    const prop = props.containmentCage(kind, { fog: false, distant: true });
     const base = b.P(o.x, o.n, o.h);
     prop.object.position.copy(base);
     prop.object.rotation.y = b.yaw(o.yawDeg);
     prop.object.scale.setScalar(o.scale);
-    // it is far outside in vacuum: no room haze on it (its own lights carry the silhouette)
-    prop.object.traverse((obj) => {
-      const m = (obj as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-      for (const mat of Array.isArray(m) ? m : m ? [m] : []) if ('fog' in mat) (mat as THREE.MeshStandardMaterial).fog = false;
-    });
     prop.params.charge = 0.35;
     b.add(prop.object);
     b.onUpdate((dt, t) => prop.update(dt, t));
@@ -344,12 +351,15 @@ function buildDisplays(b: ZoneBuilder): void {
   b.add(streams.object);
   b.onUpdate((dt, t) => streams.update(dt, t));
   S.streams = streams;
-  // the plan's three limits, as labels on the display (the hologram's own text stays as it is):
-  // stream nouns from the book (Dominion firing arcs above, Reformation Eclipse tracks below), and the separation
-  // (x: the viewer's right is the display's local −X — it reads from its −Z side)
+  // the plan's three limits on the display: the channel in its header (40 characters now fit), the book's stream
+  // nouns as the two lane names (Dominion firing arcs above, Reformation Eclipse tracks below — hologram slots),
+  // and the separation as a label under it (x: the viewer's right is the display's local −X — it reads from −Z)
+  streams.setText('LOCAL INTEROPERABILITY CHANNEL'); // NEW
+  // (≤ 18 characters keep the lane labels at full size)
+  streams.setLabel('top', 'DOMINION ARCS'); // NEW (the book's noun: firing arcs)
+  streams.setLabel('bottom', 'REFORMATION TRACKS'); // NEW (the book's noun: Eclipse tracks)
+  streams.setLabel('status', 'SHARED TARGETS'); // NEW (plan limit 1: only tracks and arcs are shared)
   const labels: Array<[string[], number, number, number, number]> = [
-    [['FIRING ARCS'], AMBER, 0.95, -0.4, 1.5 + 0.325], // NEW (the book's noun)
-    [['ECLIPSE TRACKS'], BLUE, 0.95, -0.4, 1.5 - 0.105], // NEW (the book's noun)
     [['WEAPONS AUTHORITY: NOT SHARED', 'COMMAND: NOT SHARED'], 0xf2f6ff, 1.5, 0, 1.5 - 0.72], // NEW (plan limit 2)
   ];
   for (const [lines, color, width, x, y] of labels) {
@@ -367,7 +377,7 @@ function buildDisplays(b: ZoneBuilder): void {
   record.object.rotation.y = r.yaw;
   record.params.visible = 0.4;
   record.params.progress = 0.05;
-  record.setText('COLD-FIELD ENVELOPE RECORD'); // NEW (O3: the Reformation cage's record)
+  record.setText('REFORMATION COLD-FIELD ENVELOPE RECORD'); // NEW (O3: the Reformation cage's record; ≤ 40 characters)
   b.add(record.object);
   b.onUpdate((dt, t) => record.update(dt, t));
   S.record = record;

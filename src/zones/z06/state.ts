@@ -28,10 +28,13 @@ export interface Z06State {
   anchor: DeviceHandle | null;
   wallrunner: Actor | null;
   weaver: Actor | null;
-  /** the first body: «King?» */
+  /** the first body: «King?», and the light on the human half of its face (dark outside the close-up) */
   king: Actor | null;
+  kingLight: THREE.PointLight | null;
   /** the fight's forked routines and subscriptions have been started this load */
   fightLive: boolean;
+  /** materials the zone made itself (the crystal growth): released with the state */
+  owned: THREE.Material[];
 }
 
 export let S: Z06State = blank();
@@ -40,7 +43,7 @@ function blank(): Z06State {
   return {
     exit: null, entry: null, plate: null, lift: null, seamMat: null, seamGlow: 0, seamFlicker: 0, lifting: false,
     plug: null, plugLight: null,
-    enc: null, anchor: null, wallrunner: null, weaver: null, king: null, fightLive: false,
+    enc: null, anchor: null, wallrunner: null, weaver: null, king: null, kingLight: null, fightLive: false, owned: [],
   };
 }
 
@@ -48,5 +51,6 @@ function blank(): Z06State {
 export function resetState(): void {
   S.plate?.dispose();
   S.seamMat?.dispose();
+  for (const m of S.owned) m.dispose();
   S = blank();
 }
