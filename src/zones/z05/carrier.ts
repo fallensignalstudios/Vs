@@ -88,6 +88,7 @@ function* alarmScene(z: ZoneRuntime): Routine {
     const sel = game.player.actor;
     const tarrik = z.cast('tarrik');
     const tharne = z.cast('tharne');
+    game.player.cancelAction?.();
     sel.visual?.stop();
     tarrik?.stopAction();
     tarrik?.play('guard', { loop: true });
@@ -170,6 +171,7 @@ function* ringScene(z: ZoneRuntime): Routine {
     const sel = game.player.actor;
     const tarrik = z.cast('tarrik');
     const tharne = z.cast('tharne');
+    game.player.cancelAction?.();
     place(z, sel, z.m('ring'), z.myaw('ring'));
     if (tarrik) {
       tarrik.teleport(z.m('tarrikBehind'), z.myaw('tarrikBehind'));
@@ -202,7 +204,7 @@ function* ringScene(z: ZoneRuntime): Routine {
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI + 30, distance: 1.7, height: 1.6, lookHeight: 1.5, fov: 32 });
     yield* say(z, 'Selene', 'Tharne.', sel);
     if (tharne) c.shot(tharne.actor.pos, { yawDeg: 250, distance: 2.6, height: 1.55, fov: 32 });
-    yield* z.say('Tharne', 'I’m here.', { channel: 'radio', offscreen: true, actor: tharne });
+    yield* say(z, 'Tharne', 'I’m here.', tharne, { channel: 'radio', offscreen: true, keepFacing: true });
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI - 25, distance: 1.8, height: 1.6, lookHeight: 1.5, fov: 32 });
     yield* say(z, 'Selene', 'Give me the carrier’s remaining thrust.', sel);
     yield* z.say('Tharne', 'It has no primary engines.', { channel: 'radio', offscreen: true });
@@ -213,7 +215,7 @@ function* ringScene(z: ZoneRuntime): Routine {
     c.shot(ring, { yawDeg: ((-z.myaw('ring')) * 180) / Math.PI + 15, distance: 1.5, height: 1.62, lookHeight: 1.55, fov: 30 });
     yield* say(z, 'Selene', 'They do not need to. Change the miss distance.', sel);
     if (tharne) c.shot(tharne.actor.pos, { yawDeg: 280, distance: 2.0, height: 1.6, fov: 30 });
-    yield* z.say('Tharne', 'Yes.', { channel: 'radio', offscreen: true, actor: tharne });
+    yield* say(z, 'Tharne', 'Yes.', tharne, { channel: 'radio', offscreen: true, keepFacing: true });
     // end state
     place(z, sel, z.m('ring'), z.myaw('ring'));
     sel.visual?.setGlow(1);
@@ -361,6 +363,7 @@ export function* aftermath(z: ZoneRuntime): Routine {
     const tarrik = z.cast('tarrik');
     const tharne = z.cast('tharne');
     const lyric = z.cast('lyric');
+    game.player.cancelAction?.();
     sel.visual?.stop('holdPlane');
     if (S.holo) S.holo.params.visible = 0;
     // “Selene exhales and turns.” — a breath, not a victory

@@ -40,6 +40,8 @@ function* meetingScene(z: ZoneRuntime): Routine {
     const squad: Array<[Companion | null, string]> = [[lyessa, 'lyessa'], ...soldiers.map((s, i): [Companion | null, string] => [s, SOLDIERS[i]])];
     const all: Array<[Companion | null, string]> = [[tarrik, 'tarrik'], ...squad];
 
+    // the scene takes her over: drop any swing / dodge / lock in progress first, so the facing set here holds
+    game.player.cancelAction?.();
     // Selene's people take their places (the first cut hides the step)
     place(z, sel, z.m('seleneStop'), z.myaw('seleneStop'));
     for (const k of [tharne, lyric]) if (k) k.mode = 'scripted';
@@ -138,7 +140,8 @@ function* meetingScene(z: ZoneRuntime): Routine {
     c.shot(z.m('lyricOut'), { yawDeg: 15, distance: 2.0, height: 1.6, lookHeight: 1.58, fov: 30 });
     yield waitOr(z, () => z.skipping || atPost(z, lyric, 'lyricOut', 0.6), 3);
     if (lyric && tarrik) lyric.face(tarrik.actor.pos.clone());
-    yield* say(z, 'Lyric', 'Your girlfriend points weapons when she gets nervous.', lyric);
+    // said to Tarrik, not to Selene: she keeps facing him (an aside — the dialogue would turn her to the lead)
+    yield* say(z, 'Lyric', 'Your girlfriend points weapons when she gets nervous.', lyric, { aside: true });
     // “Lyessa’s expression turns murderous.”
     if (lyessa) c.shot(lyessa.actor.pos, { yawDeg: bearingDeg(lyessa.actor.pos, sel.pos) + 8, distance: 1.7, height: 1.64, lookHeight: 1.6, fov: 28 });
     yield 1.5;
@@ -191,6 +194,7 @@ function* duelScene(z: ZoneRuntime): Routine {
       tv?.play(action);
     };
     const tPos = (): THREE.Vector3 => (tar ? tar.pos : sel.pos);
+    game.player.cancelAction?.();
     audio.setMusic('duel', 0.5);
     // the others give the leaders room: Tharne goes to his viewmaker across the chamber, Lyric with him
     const tharne = z.cast('tharne');
@@ -364,9 +368,11 @@ function* duelScene(z: ZoneRuntime): Routine {
       }
       audio.play('frostArrest', { pos: tPos() });
     });
-    tv?.setFrozen(0.22);
+    // (integration) the ice is round his lead boot only — the book's image — not a whole-figure arrest
+    tv?.setFrozen(1, { region: 'lead' });
     c.shot(tPos(), { yawDeg: bearingDeg(S.centre, tPos()) + 25, distance: 3.0, height: 0.9, lookHeight: 0.5, fov: 36 });
     yield 1.1;
+    // he walks out of it in steam
     tv?.setFrozen(0);
     fx(() => {
       vfx.spawn('dustPuff', tPos(), { color: 0xe8f0ff, scale: 1.4 });

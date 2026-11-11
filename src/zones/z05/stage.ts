@@ -93,11 +93,26 @@ function posOf(b: Body): THREE.Vector3 | null {
   return (b as Companion).actor ? (b as Companion).actor.pos : (b as Actor).pos;
 }
 
-/** a line whose speaker's mouth moves, without the talk gesture (it would sheathe a drawn blade) */
-export function* say(z: ZoneRuntime, speaker: SpeakerId, text: string, body: Body, opts?: SayOpts): Routine {
+/**
+ * A line in this zone, where the blades stay out. A figure speaking TO THE LEAD goes through the dialogue with
+ * `{ actor, keepWeapon: true }` (integration): it turns to her and looks at her eyes, its mouth moves, a drawn
+ * weapon stays drawn (the talk gesture would sheathe it) and the zone's `face()` target comes back after the line.
+ * The lead's own lines and a line said to someone else (`aside`) keep the facing the scene gave them: only the
+ * mouth moves here — the dialogue would turn the lead's head to her nearest ally, not to the man she is facing.
+ */
+export function* say(
+  z: ZoneRuntime, speaker: SpeakerId, text: string, body: Body, opts?: SayOpts & { aside?: boolean },
+): Routine {
+  const { aside, ...rest } = opts ?? {};
+  const who = body ? ((body as Companion).actor ? (body as Companion) : (body as Actor)) : null;
+  const actor = who ? ((who as Companion).actor ?? (who as Actor)) : null;
+  if (who && actor && actor !== z.player && !aside) {
+    yield* z.say(speaker, text, { ...rest, actor: who, keepWeapon: true });
+    return;
+  }
   const v = visualOf(body);
   if (isHumanoidVisual(v) && !z.skipping) v.setSpeaking(0.7);
-  yield* z.say(speaker, text, opts);
+  yield* z.say(speaker, text, rest);
   if (isHumanoidVisual(v)) v.setSpeaking(0);
 }
 
