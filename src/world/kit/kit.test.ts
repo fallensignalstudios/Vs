@@ -8,6 +8,7 @@ import { createPhysicsWorld } from '@/world/physics';
 import { Geo } from './geo';
 import { solidArcs } from './structure';
 import { createZoneBuilder, PROP_KINDS } from './index';
+import { LIGHT_BUDGET } from './lights';
 
 interface Fake { game: Game; scripts: ScriptRunnerImpl; time: { now: number; dt: number }; audio: string[] }
 
@@ -397,5 +398,94 @@ describe('ZoneBuilder content', () => {
     };
     expect(count(7)).toBe(count(7));
     expect(count(7)).not.toBe(count(8));
+  });
+});
+
+describe('polish 3', () => {
+  it('Geo.crystal and Geo.blob emit unit normals that face outward', () => {
+    const r = (() => { let s = 1; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
+    const g = new Geo().crystal(0.2, 1, 0.4, 6, r);
+    const h = new Geo().blob(1, 0.6, 0.8, 0.9, r);
+    for (const [geo, c] of [[g, [0, 0.6, 0]], [h, [0, 0.1, 0]]] as const) {
+      expect(geo.vertexCount).toBeGreaterThan(30);
+      for (let i = 0; i < geo.pos.length; i += 9) {
+        const cx = (geo.pos[i] + geo.pos[i + 3] + geo.pos[i + 6]) / 3, cy = (geo.pos[i + 1] + geo.pos[i + 4] + geo.pos[i + 7]) / 3, cz = (geo.pos[i + 2] + geo.pos[i + 5] + geo.pos[i + 8]) / 3;
+        const n = [geo.nor[i], geo.nor[i + 1], geo.nor[i + 2]];
+        expect(Math.hypot(n[0], n[1], n[2])).toBeCloseTo(1, 4);
+        expect(n[0] * (cx - c[0]) + n[1] * (cy - c[1]) + n[2] * (cz - c[2])).toBeGreaterThan(-0.05);
+      }
+    }
+  });
+
+  // the zone's rand() is ONE stream: prop variants (and with them their colliders) depend on where it stands.
+  // Reworked dressing must leave it exactly where the pre-polish-3 pieces left it (values recorded from them).
+  it('frost, corruption, broken ribs and cover leave the shared PRNG stream where it always was', () => {
+    const cases: Array<[string, (b: ZoneBuilder) => void, number]> = [
+      ['frost', (b) => b.frost({ x: 0, n: 0, w: 12, d: 0.8, height: 4 }), 0.870370583609],
+      ['frostWide', (b) => b.frost({ x: 0, n: 0, w: 3, d: 9, height: 5, density: 1.2 }), 0.566763374722],
+      ['corr', (b) => b.corruption({ x: 0, n: 0, r: 2.5 }), 0.676656869473],
+      ['corrWall', (b) => b.corruption({ x: 0, n: 0, r: 0.8, onWall: true }), 0.988564268686],
+      ['broken', (b) => b.rib({ x: 0, n: 0, span: 20, height: 14, style: 'broken' }), 0.022132867714],
+      ['brokenRow', (b) => b.ribRow({ x: 0, n: 0, span: 20, height: 14, style: 'broken', count: 3, spacing: 6 }), 0.606505196542],
+      ['cover', (b) => { b.coverLow({ x: 0, n: 0, style: 'debris' }); b.coverHigh({ x: 4, n: 0, style: 'ancient' }); }, 0.867735031061],
+      ['props', (b) => { b.prop('domCrate', { x: 0, n: 0 }); b.prop('refConsole', { x: 3, n: 0 }); b.prop('recoveryPanel', { x: 6, n: 0 }); b.prop('fireControlStation', { x: 9, n: 0 }); b.prop('ancientConsole', { x: 12, n: 0 }); }, 0.526592542185],
+    ];
+    for (const [name, make, next] of cases) {
+      const { b } = builder();
+      make(b);
+      expect(b.rand(), name).toBeCloseTo(next, 10);
+    }
+  });
+
+  it('barrier emitter posts are solid whether the wall is up or down', () => {
+    const f = fakeGame();
+    const { b } = builder(f);
+    b.floor({ x: 10, n: 10, w: 20, d: 20 });
+    const bar = b.barrier({ from: [8, 10], to: [12, 10], active: false });
+    b.finalize();
+    expect(bar.active).toBe(false);
+    for (const x of [8, 12]) {
+      const hit = b.physics.raycast({ x, y: 1, z: -6 }, { x: 0, y: 0, z: -1 }, 8);
+      expect(hit, `post at x ${x}`).not.toBeNull();
+      expect(hit!.point.z).toBeGreaterThan(-10.5);
+    }
+    // the opening between the posts stays free
+    expect(b.physics.raycast({ x: 10, y: 1, z: -6 }, { x: 0, y: 0, z: -1 }, 8)).toBeNull();
+  });
+
+  it('glass walls take their mullion spacing from mullionSpacing', () => {
+    const count = (o?: { mullionSpacing?: number }): number => {
+      const { b, root } = builder();
+      b.wall({ from: [0, 0], to: [24, 0], height: 6, style: 'glass', ...o });
+      let tris = 0;
+      root.traverse((m) => {
+        const mesh = m as THREE.Mesh;
+        if (mesh.isMesh && (mesh.material as THREE.Material).name.startsWith('goldDark')) tris += mesh.geometry.getAttribute('position').count / 3;
+      });
+      return tris;
+    };
+    const def = count(), dense = count({ mullionSpacing: 1.5 }), none = count({ mullionSpacing: 0 });
+    expect(dense).toBeGreaterThan(def);
+    expect(none).toBeLessThan(def);
+    expect(none).toBeGreaterThan(0);
+  });
+
+  it('fixture lights share or drop down to the light budget; placed lights are kept', () => {
+    const { b, root } = builder();
+    b.floor({ x: 30, n: 30, w: 60, d: 60 });
+    const placed: THREE.Light[] = [];
+    for (let i = 0; i < 4; i++) placed.push(b.point({ x: 5 + i * 15, n: 50, h: 4 }));
+    // ten lamps in pairs a metre apart, spread over the room, and a corruption patch
+    for (let i = 0; i < 10; i++) b.prop('refLamp', { x: 5 + (i >> 1) * 12 + (i & 1), n: 10 + ((i >> 1) % 3) * 8 });
+    b.corruption({ x: 50, n: 30, r: 1.5 });
+    b.finalize();
+    let lights = 0;
+    root.traverse((o) => { if ((o as THREE.PointLight).isPointLight || (o as THREE.SpotLight).isSpotLight) lights++; });
+    expect(lights).toBeLessThanOrEqual(LIGHT_BUDGET);
+    for (const l of placed) expect(l.parent).not.toBeNull();
+    let shared = 0;
+    root.traverse((o) => { if (o.name.startsWith('kit-shared-light')) shared++; });
+    expect(shared).toBeGreaterThan(0);
+    expect(b.stats.lights).toBe(lights);
   });
 });

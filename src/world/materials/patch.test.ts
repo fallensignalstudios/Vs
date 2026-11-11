@@ -205,6 +205,19 @@ describe('material library', () => {
     expect((findUniform(holo, 'holoB')?.value as THREE.Vector4).y).toBe(0.5);
   });
 
+  it('polish 3: glow strips take a lineWidth (distance fade), panels carry seam grime', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const c = lib.clone('goldChannel', { lineWidth: 0.06 });
+    expect((findUniform(c, 'glowB')?.value as THREE.Vector4).z).toBeCloseTo(0.06);
+    expect((findUniform(lib.get('goldChannel'), 'glowB')?.value as THREE.Vector4).z).toBe(0);
+    lib.setParam(lib.clone('whiteLight'), 'lineWidth', 0.05);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    const panel = findUniform(lib.get('whiteGoldPanel'), 'tpPanel3')?.value as THREE.Vector4;
+    expect(panel.x).toBeGreaterThan(0);
+    expect(findUniform(lib.get('blackStoneFloor'), 'tpPanel3')?.value).toBeDefined();
+  });
+
   it('emissive materials are cached per colour and intensity', () => {
     const a = lib.emissive(0xffc56b, 3);
     expect(lib.emissive(0xffc56b, 3)).toBe(a);

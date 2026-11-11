@@ -116,10 +116,16 @@ export const DRESSING_PROPS: PropTable = {
     variants: 3,
     build(p, r) {
       const ice = p.g('frostIce');
+      // polish 3: a crystal cluster — faceted prisms fanning out of a common root, big ones in the middle
       for (let i = 0; i < 7; i++) {
         const a = r() * Math.PI * 2, d = r() * 0.6, h = 0.7 + r() * 1.6 * (1 - d * 0.8), rad = 0.12 + r() * 0.16;
         ice.push().move(Math.cos(a) * d, 0, Math.sin(a) * d).rotZ((r() - 0.5) * 0.5).rotX((r() - 0.5) * 0.5)
-          .band(rad, 0, rad * 0.75, h * 0.7, 6, 0, 0, false).band(rad * 0.75, h * 0.7, 0, h, 6, 0, 0, false).pop();
+          .crystal(rad, h * 0.68, h * 0.32, 6, r).pop();
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = r() * Math.PI * 2, d = 0.35 + r() * 0.45, h = 0.25 + r() * 0.5;
+        ice.push().move(Math.cos(a) * d, 0, Math.sin(a) * d).rotY(-a).rotZ(0.35 + r() * 0.6)
+          .crystal(0.05 + r() * 0.07, h * 0.6, h * 0.4, 5, r).pop();
       }
       for (let i = 0; i < 5; i++) {
         const a = r() * Math.PI * 2, d = 0.3 + r() * 0.7, s = 0.3 + r() * 0.3;

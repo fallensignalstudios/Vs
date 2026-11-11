@@ -11,7 +11,7 @@ import type { PropTable } from './types';
 
 /** Lectern-style console head: a slanted slab with a lit reading surface, front edge at −Z. */
 function lectern(p: Part, w: number, x = 0, y = 0.95, z = 0, ry = 0): void {
-  const wg = p.g('whiteGold').at(x, y, z, ry), trim = p.g('goldTrim').at(x, y, z, ry), lit = p.g(p.ctx.seam()).at(x, y, z, ry);
+  const wg = p.g(p.ctx.agedStone()).at(x, y, z, ry), trim = p.g('goldTrim').at(x, y, z, ry), lit = p.g(p.ctx.seam()).at(x, y, z, ry);
   wg.prismX([[-0.36, 0], [0.3, 0], [0.3, 0.3], [-0.36, 0.1]], w, 0);
   trim.prismX([[-0.375, 0.07], [-0.36, 0.1], [0.3, 0.3], [0.315, 0.3], [0.315, 0.27], [-0.375, 0.04]], w + 0.04, 0);
   const tilt = Math.atan2(0.2, 0.66);
@@ -22,7 +22,7 @@ function lectern(p: Part, w: number, x = 0, y = 0.95, z = 0, ry = 0): void {
 export const ANCIENT_PROPS: PropTable = {
   ancientConsole: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
+      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark');
       dk.tbox(0.99, 0.05, 0.76, 0.02);
       wg.tbox(0.95, 0.18, 0.72, 0.04, 0, 0.03, 0).taperOn(0.62, 0.46, 0.42, 0.32, 0.74, 0, 0.21, 0.02, true);
       trim.box(0.66, 0.035, 0.5, 0, 0.22, 0.02).box(0.46, 0.035, 0.36, 0, 0.92, 0.02);
@@ -33,11 +33,12 @@ export const ANCIENT_PROPS: PropTable = {
       lectern(p, 0.92);
     },
     colliders: () => [{ box: [0.95, 1.25, 0.72], sight: false }],
-    light: () => ({ color: PALETTE.goldLight, intensity: 6, distance: 5, at: [0, 1.5, -0.3] }),
+    // a reading light over the lectern, aimed at its face (a point light at head height flattened the reader)
+    light: () => ({ color: PALETTE.goldLight, intensity: 6, distance: 5, at: [0, 1.95, -0.55], target: [0, 0.95, 0], angleDeg: 40 }),
   },
   ancientPedestal: {
     build(p) {
-      p.g('whiteGold').lathe([[0.72, 0], [0.72, 0.14], [0.6, 0.2], [0.5, 0.28], [0.44, 0.86], [0.56, 0.94], [0.56, 1.04], [0, 1.04]], 16);
+      p.g(p.ctx.agedStone()).lathe([[0.72, 0], [0.72, 0.14], [0.6, 0.2], [0.5, 0.28], [0.44, 0.86], [0.56, 0.94], [0.56, 1.04], [0, 1.04]], 16);
       p.g('goldTrim').band(0.515, 0.26, 0.5, 0.32, 16).band(0.575, 0.93, 0.575, 0.97, 16);
       p.g(p.ctx.channel()).cap(0.36, 0.42, 1.046, 20);
       p.g(p.ctx.inlay('goldDark')).cap(0, 0.3, 1.045, 16);
@@ -46,7 +47,7 @@ export const ANCIENT_PROPS: PropTable = {
   },
   ancientPylon: {
     build(p) {
-      const wg = p.g('whiteGold');
+      const wg = p.g(p.ctx.agedStone());
       wg.tbox(0.7, 0.24, 0.7, 0.05).taperOn(0.48, 0.48, 0.34, 0.34, 1.75, 0, 0.24, 0, true);
       p.g('goldTrim').boxOn(0.52, 0.04, 0.52, 0, 0.24, 0).boxOn(0.4, 0.05, 0.4, 0, 1.99, 0).taperOn(0.4, 0.4, 0.12, 0.12, 0.16, 0, 2.38, 0);
       p.g('whiteLight').boxOn(0.3, 0.34, 0.3, 0, 2.04, 0);
@@ -61,7 +62,7 @@ export const ANCIENT_PROPS: PropTable = {
   },
   ancientBench: {
     build(p) {
-      const wg = p.g('whiteGold');
+      const wg = p.g(p.ctx.agedStone());
       for (const s of [-1, 1]) wg.prismZ([[s * 1.0, 0], [s * 0.62, 0], [s * 0.7, 0.36], [s * 1.0, 0.36]], 0.56, 0);
       wg.tbox(2.3, 0.12, 0.64, 0.035, 0, 0.36, 0);
       p.g('goldTrim').box(2.2, 0.03, 0.66, 0, 0.36, 0);
@@ -72,7 +73,7 @@ export const ANCIENT_PROPS: PropTable = {
   conduitJunction: {
     build(p) {
       const dk = p.g('goldDark'), trim = p.g('goldTrim');
-      p.g('whiteGold').tbox(1.05, 0.14, 1.05, 0.04);
+      p.g(p.ctx.agedStone()).tbox(1.05, 0.14, 1.05, 0.04);
       dk.cboxOn(0.8, 0.52, 0.8, 0.06, 0, 0.14, 0);
       for (let i = 0; i < 4; i++) {
         const a = (i * Math.PI) / 2;
@@ -88,7 +89,7 @@ export const ANCIENT_PROPS: PropTable = {
   // ---- story pieces -----------------------------------------------------------------------------------
   fireControlStation: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
+      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
       // dais with an inlaid border
       wg.tbox(3.2, 0.16, 2.2, 0.04);
       ch.ribbon([[-1.4, 0.167, -0.9], [1.4, 0.167, -0.9], [1.4, 0.167, 0.9], [-1.4, 0.167, 0.9]], 0.05, [0, 1, 0], true);
@@ -125,11 +126,13 @@ export const ANCIENT_PROPS: PropTable = {
       p.g(p.ctx.emissive(0xffb060, 4)).box(0.2, 0.03, 0.1, 0, 1.39, -0.2);
     },
     colliders: () => [{ box: [3.0, 1.35, 1.0], at: [0, -0.45] }, { cyl: [0.25, 2.4], at: [-1.42, -0.85], sight: false }, { cyl: [0.25, 2.4], at: [1.42, -0.85], sight: false }],
-    light: () => ({ color: PALETTE.goldLight, intensity: 12, distance: 8, at: [0, 1.8, 0.3] }),
+    // from above and behind the operator, down onto the three consoles: the desks get a pool of light with real
+    // falloff instead of a point light sitting a few decimetres off their white faces
+    light: () => ({ color: PALETTE.goldLight, intensity: 11, distance: 8, at: [0, 2.7, 0.9], target: [0, 0.9, -0.5], angleDeg: 42 }),
   },
   recoveryPanel: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
+      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark');
       wg.tbox(2.3, 0.2, 0.7, 0.04).cboxOn(2.1, 2.0, 0.4, 0.05, 0, 0.2, 0.05);
       trim.box(2.14, 0.04, 0.44, 0, 0.3, 0.05).box(2.14, 0.04, 0.44, 0, 2.1, 0.05);
       p.g(p.ctx.channel()).ribbon([[0, 0.5, -0.153], [0, 2.0, -0.153]], 0.05, [0, 0, -1]);
@@ -157,7 +160,7 @@ export const ANCIENT_PROPS: PropTable = {
   },
   controlRing: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), ch = p.g(p.ctx.channel());
+      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), ch = p.g(p.ctx.channel());
       const A0 = (30 * Math.PI) / 180, A1 = (330 * Math.PI) / 180; // open toward the south (+Z) so one can step in
       const south = Math.PI;
       const a0 = south + A0, a1 = south + A1;
@@ -188,7 +191,7 @@ export const ANCIENT_PROPS: PropTable = {
   },
   manualShutter: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
+      const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark');
       for (const s of [-1, 1]) wg.cboxOn(0.44, 3.3, 0.6, 0.05, s * 1.72, 0, 0);
       wg.cbox(3.9, 0.5, 0.66, 0.05, 0, 3.25, 0);
       trim.box(3.5, 0.04, 0.68, 0, 3.02, 0);

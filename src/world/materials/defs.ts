@@ -73,12 +73,12 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   },
   whiteGoldFloor: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.15, metalness: 0.15 },
+    props: { color: 0xffffff, roughness: 0.11, metalness: 0.15 },
     family: 'ceramicFloor',
     tp: {
       scale: 4,
       normal: 1,
-      roughAmp: 0.32,
+      roughAmp: 0.26,
       macro: { albedo: 0.12, rough: 0.08, scale: 27, hue: 0.35 },
       detail: { scale: 0.31, normal: 0.06, rough: 0.11, albedo: 0.03 },
       panel: {

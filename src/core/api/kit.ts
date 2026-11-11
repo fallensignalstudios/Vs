@@ -40,8 +40,13 @@
  *    be moved or hidden individually. Wrap the call in `b.keep(...)` to leave a piece as its own object
  *    (`b.keep(b.prop('fallenPlate', …)).visible = false`). Doors, barriers, lights and the white point stay live.
  *  - LIGHT BUDGET: every `point` / `spot` / `panelLight`, each lamp / console / scenic prop, each `whitePoint`,
- *    `barrier` and `corruption` patch owns one unshadowed point light. Keep a zone to roughly a dozen. Shadows:
+ *    `barrier` and `corruption` patch owns one unshadowed light. Keep a zone to roughly a dozen. Shadows:
  *    the key light first, then `spot({ shadow: true })` in creation order, up to `quality.maxShadowLights`.
+ *    ADDED (polish 3): finalize() enforces it for FIXTURE lights (props, `panelLight`, `corruption`): fixtures of a
+ *    similar colour within 6 m share one light at their intensity-weighted centre, and while the zone still holds
+ *    more than 12 point / spot lights the weakest fixtures go emissive-only. Lights you place yourself (`point`,
+ *    `spot`), the white point, barriers and the key are never touched. Consoles, the recovery panel and the
+ *    fire-control station light their own faces with a narrow spot from above, not a point light at head height.
  *  - MIRROR FLOORS (`reflective: true`): keep the key light steep (≥ 40° elevation) or behind the usual view,
  *    otherwise its reflection blooms into a white glint. finalize() warns about it.
  *  - LIFECYCLE: the builder animates itself on the sim clock (it registers one routine with `game.scripts`);
@@ -328,9 +333,16 @@ export interface ZoneBuilder {
   conduit(points: Array<[number, number, number]>, o?: { r?: number; glow?: boolean; /** ADDED (kit): thin solids along the horizontal runs (default false) */ collider?: boolean }): THREE.Object3D;
   /** the "white point" navigation landmark above a threshold */
   whitePoint(o: { x: number; n: number; h: number; intensity?: number }): THREE.Object3D;
-  /** frozen-atmosphere panels / curtains (Z03) */
+  /**
+   * frozen-atmosphere panels / curtains (Z03). Polish 3: thick faceted slabs fringed and rooted with prism
+   * crystals and faceted icicles (same footprint and collider as before).
+   */
   frost(o: RectOpts & { height?: number; density?: number; /** ADDED (kit): solid footprint (sight passes). Default: true for curtains ≤ 1.5 m thick, false for wide areas */ collider?: boolean }): THREE.Object3D;
-  /** localized Eclipse contamination patch following conduits */
+  /**
+   * localized Eclipse contamination patch following conduits. Polish 3: a raised violet-black growth — lumps
+   * heaped toward the source (up to ~1 m for r ≥ 10), tendrils arching out along the flow (local −Z), nodules,
+   * splinters of dark plate, violet veins over all of it and creeping ahead on the clean floor. No collider.
+   */
   corruption(o: { x: number; n: number; h?: number; r: number; intensity?: number; onWall?: boolean; yawDeg?: number }): THREE.Object3D;
 
   prop(kind: PropKind, o: PropOpts): THREE.Object3D;

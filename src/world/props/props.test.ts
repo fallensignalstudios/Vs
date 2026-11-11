@@ -183,6 +183,79 @@ describe('hero props', () => {
   });
 });
 
+describe('polish 3 additions', () => {
+  it('hologram pools hold the long headers and labels (40 / 32 characters)', () => {
+    for (const k of HOLO) {
+      const h = createHeroProps(null).hologram(k);
+      const canvas = (h as unknown as { canvas: HoloCanvas }).canvas;
+      // every quad the display asked for fitted in its pool (a full pool refuses quads silently)
+      const max = (canvas as unknown as { max: number }).max;
+      expect(canvas.count, k).toBeLessThan(max);
+      h.setText('A'.repeat(40));
+      h.update(0.016, 0);
+      h.dispose();
+    }
+  });
+
+  it('long header lines shrink to the nominal width instead of being cut off', () => {
+    const c = new HoloCanvas(800);
+    const fit = (26 * 4 - 1) * 0.011;
+    const t = c.text('SHORT', 0, 0, 0.011, 0xffffff, 1, 0, 1, 40, fit);
+    const mesh = c.mesh(new THREE.MeshBasicMaterial());
+    const pos = mesh.geometry.attributes.position;
+    const right = (): number => {
+      let x = -Infinity;
+      for (let i = 0; i < 40 * 15 * 4; i++) if (mesh.geometry.attributes.color.getW(i) > 0) x = Math.max(x, pos.getX(i));
+      return x;
+    };
+    expect(right()).toBeLessThan(fit * 0.3);
+    t.set('A'.repeat(40));
+    c.commit();
+    expect(right()).toBeLessThanOrEqual(fit + 0.011);
+    expect(right()).toBeGreaterThan(fit * 0.9);
+    t.set('B'.repeat(26));
+    c.commit();
+    expect(right()).toBeGreaterThan(fit * 0.9);
+  });
+
+  it('threatStreams labels are configurable; unknown slots warn once and do nothing', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const h = createHeroProps(null).hologram('threatStreams');
+    expect(() => {
+      h.setLabel('top', 'CROWNWATCH TRACK');
+      h.setLabel('bottom', 'RECOVERY TRACK');
+      h.setLabel('status', 'SHARED TARGETS');
+      h.setLabel('header', 'TRACK EXCHANGE');
+      h.update(0.016, 1);
+    }).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+    h.setLabel('nope', 'X');
+    h.setLabel('nope', 'X');
+    expect(warn).toHaveBeenCalledTimes(1);
+    const f = createHeroProps(null).hologram('forecast');
+    expect(() => f.setLabel('header', 'MARGIN')).not.toThrow();
+    warn.mockRestore();
+    h.dispose(); f.dispose();
+  });
+
+  it('containmentCage opts: no fog anywhere, and a brighter distant read', () => {
+    const lib = createMaterialLibrary(null);
+    const hero = createHeroProps({ mats: lib } as never);
+    const near = hero.containmentCage('dominion');
+    const far = hero.containmentCage('dominion', { fog: false, distant: true });
+    for (const p of [near, far]) p.update(1 / 60, 0);
+    let fogged = 0;
+    far.object.traverse((o) => {
+      const m = (o as THREE.Mesh).material as (THREE.Material & { fog?: boolean }) | undefined;
+      if (m && m.fog) fogged++;
+    });
+    expect(fogged).toBe(0);
+    const light = (p: typeof near): THREE.PointLight => p.object.getObjectByName('prop.cage.light') as THREE.PointLight;
+    expect(light(far).intensity).toBeGreaterThan(light(near).intensity);
+    near.dispose(); far.dispose();
+  });
+});
+
 describe('break-up', () => {
   const piece = (motion: Piece['motion']): Piece => ({ set: 0, slot: 0, pos: new THREE.Vector3(1, 4, 0), quat: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1), motion });
   const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();

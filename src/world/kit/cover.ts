@@ -13,7 +13,7 @@ export const COVER_HIGH = 2.2;
 type CoverStyle = NonNullable<CoverOpts['style']>;
 
 function ancient(p: Part, w: number, d: number, H: number): void {
-  const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
+  const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark'), inset = p.g('blackStone'), ch = p.g(p.ctx.channel());
   // polish 3: a stepped plinth with a dark toe, a cap that oversails the body, corner stiles and framed panels —
   // the block reads as carved and assembled instead of as one pale box (the footprint and height are unchanged)
   dk.tbox(w + 0.02, 0.06, d + 0.02, 0.02, 0, 0, 0);
@@ -24,7 +24,8 @@ function ancient(p: Part, w: number, d: number, H: number): void {
   for (let r = 0; r < rows; r++) {
     const y = 0.36 + ph * r + (ph - 0.08) / 2;
     for (const s of [-1, 1]) {
-      dk.box(pw, ph - 0.14, 0.03, 0, y, s * (d / 2 - 0.06));
+      // the recessed panel is polished black stone (the quarantine painting's blocks), framed in gold
+      inset.box(pw, ph - 0.14, 0.03, 0, y, s * (d / 2 - 0.06));
       // gold frame around the recessed panel
       const z = s * (d / 2 - 0.05), fh = ph - 0.1;
       trim.box(pw + 0.06, 0.03, 0.035, 0, y + fh / 2, z).box(pw + 0.06, 0.03, 0.035, 0, y - fh / 2, z);
@@ -120,7 +121,10 @@ function plate(p: Part, w: number, d: number, H: number): void {
   const pl = p.g('whiteGoldPanel');
   pl.push().move(0, 0, d * 0.32).rotX(-lean).cbox(w, len, 0.24, 0.04, 0, len / 2, 0).pop();
   p.g('goldTrim').push().move(0, 0, d * 0.32).rotX(-lean).box(w * 0.92, 0.05, 0.25, 0, len * 0.82, 0).box(w * 0.92, 0.05, 0.25, 0, len * 0.2, 0).pop();
-  p.g('goldDark').push().move(0, 0, d * 0.32).rotX(-lean).box(w * 0.6, len * 0.4, 0.02, 0, len * 0.5, 0.125).pop();
+  // the panel's inset: polished black stone in a gold frame, as on the standing blocks
+  p.g('blackStone').push().move(0, 0, d * 0.32).rotX(-lean).box(w * 0.6, len * 0.4, 0.02, 0, len * 0.5, 0.125).pop();
+  p.g('goldTrim').push().move(0, 0, d * 0.32).rotX(-lean)
+    .box(w * 0.6 + 0.05, 0.025, 0.024, 0, len * 0.7, 0.126).box(w * 0.6 + 0.05, 0.025, 0.024, 0, len * 0.3, 0.126).pop();
   // what it leans on
   p.g('whiteGold').push().move(w * 0.12, 0, -d * 0.12).rotY(0.2).chunk(w * 0.6, H * 1.5, d * 0.55, 0.22, r, 0, H * 0.36, 0).pop();
   for (let i = 0; i < 6; i++) {

@@ -133,7 +133,8 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
     stars: 0.6, starDensity: 0.55, nebula: 4.5, nebulaTint: 0xc0c6d6, sat: 0.75,
     zenith: 0x0b0b12, horizon: 0x16161f, haze: 0x1c1c26, hazeAmt: 0.55, hazeFall: 7,
     ground: 1, gain: 1.0, scenicHaze: 0.003, scenicAmbient: 0.35,
-    battle: { at: [0, 15], spread: 34, fleet: 0.6, intensity: 0.3 },
+    // low enough to fill a glass wall at eye level (Z07), wide enough to reach a clerestory overhead (Z08)
+    battle: { at: [0, 20], spread: 38, fleet: 0.6, intensity: 0.3 },
     key: { at: [20, 60], color: 0x9aa4c8, intensity: 0.5 },
   }),
   // Z09: the Wound overlook concept painting. A desaturated night — charcoal, grey-violet, teal-black — with the red

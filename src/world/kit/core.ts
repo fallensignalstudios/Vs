@@ -221,6 +221,22 @@ export class KitCtx {
     return dark ? this.inlay('goldChannel', { emissiveIntensity: 2.2, lineWidth: LINE_WIDTH }) : this.inlay('whiteLight', { emissiveIntensity: 2.3, lineWidth: LINE_WIDTH });
   }
 
+  /**
+   * polish 3: the ivory of furniture-scale ancient pieces (consoles, pedestals, pylons, cover blocks): an aged,
+   * slightly darker stone than the walls, so a desk under a spot models instead of reading as a white block
+   */
+  agedStone(): THREE.Material {
+    const key = 'aged:whiteGold';
+    let m = this.inlays.get(key);
+    if (!m) {
+      // (named apart from the kit-glow variants: this one is solid stone and casts shadows)
+      m = this.clone<THREE.Material>('whiteGold', { color: 0xcfc6b6 });
+      m.name = 'kit-aged:whiteGold';
+      this.inlays.set(key, m);
+    }
+    return m;
+  }
+
   /** build-once cache (prop templates, shared textures) */
   cached<T>(key: string, make: () => T): T {
     if (!this.templates.has(key)) this.templates.set(key, make());

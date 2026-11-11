@@ -26,9 +26,9 @@ import type { Vec3Like } from './common';
 export type SkyPreset =
   | 'void'            // plain dark backdrop (title / fallbacks)
   | 'crashRib'        // Z00–Z02: seen through fractured ribs; contained black Wound far away, fleet flashes
-  | 'frozenInterior'  // Z03–Z04: cold haze, pale exterior glow through ribs
+  | 'frozenInterior'  // Z03–Z04: daylight inside the megastructure — bright cold haze, its own ribbed upper space overhead, no stars
   | 'battleCeiling'   // Z05: transparent ceiling, amber / blue-white / violet battle light, carrier crossing
-  | 'breachDeep'      // Z06–Z08: enclosed, distant impacts
+  | 'breachDeep'      // Z06–Z08: enclosed; through glass a dark grey-blue nebula and the fleet battle low over the horizon
   | 'woundVista'      // Z09: one enormous Crownmark arm; Wound fills much of the horizon (concept: Wound overlook)
   | 'coreChamber'     // Z10: enclosed nested machinery volume; the Wound seen dimly through the dark shut view boundary
   | 'observation'     // Z11: red remnant left, hard white remnant right, Wound between
@@ -224,8 +224,11 @@ export interface ScenicFactory {
    * 0.2 × `drop` below the floor (what the eye-level camera sees) and the main deck `drop` metres below.
    * `radius` 800…6000 (default 3000), `drop` 40…900 (default 220), `density` 0.25…2.
    * `corridor` keeps a central strip (metres wide) free of spires so `crownmarkArm` can lie in it.
-   * `clearWound` (default true): nothing shines inside the `woundVista` Wound's disc as seen from the origin —
-   * structures in its cone are capped low and unlit, so the disc stays an absence. Pass false for other skies.
+   * `clearWound` (default true): nothing stands or shines inside the `woundVista` Wound's disc as seen from the
+   * origin — structures in its azimuth band are capped under its lower limb, so the disc keeps a clean silhouette
+   * (the accretion swirl beyond the rim may sink behind them). Pass false for other skies.
+   * Spires come in six families (needle, stepped crown, ribs, cluster, ziggurat, blade) of weathered pale stone and
+   * black stone with gold trim; only the tall ones stand pale against a dark city mass.
    */
   terminalVista(opts?: { radius?: number; seed?: number; density?: number; drop?: number; corridor?: number; clearWound?: boolean }): THREE.Object3D;
   /**
