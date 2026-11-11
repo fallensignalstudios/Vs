@@ -57,8 +57,17 @@ export interface SkyPresetDef {
   enclosureColor: number;
   /** 0..1 a shut view boundary between the viewer and space (dims and greys everything beyond it) */
   veil: number;
-  /** brightness of the Wound's accretion swirl, debris light and inner band (the rim stays as authored) */
+  /**
+   * brightness of the Wound's smoke and of the dust its stream drags (its own lavender light on the shell is
+   * fixed): a look that crushes its blacks needs more for the smoke to read
+   */
   swirl: number;
+  /**
+   * how far the Wound's void is lifted off black (× the authored core colours): its charcoal depth has to survive
+   * the zone's grade — a look that crushes its blacks needs more — yet stay darker than the sky around it, or the
+   * absence stops reading (so less against a black sky, or behind a veil)
+   */
+  woundCore: number;
   /**
    * white balance of everything in space (not the horizon haze, which scenic pieces share): lets a preset be
    * authored against its zone's grade — e.g. warm here so a look with blue split-toned shadows lands on charcoal
@@ -81,7 +90,7 @@ const D = (o: Partial<SkyPresetDef> & Pick<SkyPresetDef, 'key'>): SkyPresetDef =
   ground: 0, gain: 1, scenicHaze: 0.00055, scenicAmbient: 0.5,
   battle: { at: [20, 40], spread: 30, fleet: 0, intensity: 0 },
   fill: { at: [-38, 20], color: 0xff5a3c, intensity: 0 },
-  sat: 1, nebulaTint: 0xffffff, starDensity: 1, redGain: 1, enclosure: 0, enclosureColor: 0x8a98a6, veil: 0, swirl: 1, tint: 0xffffff,
+  sat: 1, nebulaTint: 0xffffff, starDensity: 1, redGain: 1, enclosure: 0, enclosureColor: 0x8a98a6, veil: 0, swirl: 1, woundCore: 0.6, tint: 0xffffff,
   ...o,
 });
 
@@ -138,14 +147,15 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
     key: { at: [20, 60], color: 0x9aa4c8, intensity: 0.5 },
   }),
   // Z09: the Wound overlook concept painting. A desaturated night — charcoal, grey-violet, teal-black — with the red
-  // remnant as the one accent, small and high on the left; the Wound a clean black disc wholly above the city,
-  // its accretion swirl reaching down behind the spires; few stars.
+  // remnant as the one accent, small and high on the left; the Wound a soft vortex wholly above the city: a charcoal
+  // void (lifted well off black, so its striations survive the gallery's crushed blacks) in a fractured, violet-lit
+  // shell, its smoke reaching down behind the spires and its debris stream crossing the red nebula; few stars.
   woundVista: D({
     wound: { at: [0, 15], radius: 9.5, vis: 1, lens: 0.42, debris: 1, halo: 1, activity: 0.45 },
     red: { at: [-34, 21], radius: 4.1, vis: 1 },
     white: { at: [34, 17], radius: 0.30, vis: 1 },
     // (authored a touch warm: the gallery grade pulls shadows toward blue)
-    stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 2.6, tint: 0xfff2d0,
+    stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 2.4, woundCore: 4, tint: 0xfff2d0,
     zenith: 0x221f1e, horizon: 0x302b29, haze: 0x4d433d, hazeAmt: 0.88, hazeFall: 11,
     hazeRed: 0x260907, hazeWhite: 0x16161a, ground: 1, scenicHaze: 0.00055, scenicAmbient: 1.0,
     battle: { at: [62, 30], spread: 26, fleet: 0.3, intensity: 0.15 },
@@ -157,7 +167,7 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   // back (setWoundActivity → 0) the disc visibly contracts.
   coreChamber: D({
     wound: { at: [0, 27], radius: 8, vis: 1, lens: 0.3, debris: 0.8, halo: 0.9, activity: 0.3 },
-    stars: 0.45, starDensity: 0.45, nebula: 2.6, nebulaTint: 0xc4c0c0, sat: 0.35, swirl: 2.0, veil: 0.5,
+    stars: 0.45, starDensity: 0.45, nebula: 2.6, nebulaTint: 0xc4c0c0, sat: 0.35, swirl: 2.4, woundCore: 0.5, veil: 0.5,
     zenith: 0x0c0c0d, horizon: 0x141315, haze: 0x161518, hazeAmt: 0.55, hazeFall: 4,
     ground: 1, gain: 0.9, scenicHaze: 0.0012, scenicAmbient: 0.5,
     key: { at: [0, 78], color: 0xffe9c4, intensity: 1.5 },
@@ -209,7 +219,7 @@ export class SkyState {
   readonly fillDir = new THREE.Vector3(-0.5, 0.4, 0.5).normalize();
   readonly fillColor = new THREE.Color(1, 0.35, 0.25);
   fillIntensity = 0;
-  sat = 1; starDensity = 1; redGain = 1; enclosure = 0; veil = 0; swirl = 1;
+  sat = 1; starDensity = 1; redGain = 1; enclosure = 0; veil = 0; swirl = 1; woundCore = 1;
   readonly nebulaTint = new THREE.Color(1, 1, 1);
   readonly enclosureColor = new THREE.Color(0.25, 0.3, 0.37);
   readonly tint = new THREE.Color(1, 1, 1);
@@ -234,7 +244,7 @@ export class SkyState {
     this.keyColor.setHex(d.key.color); this.keyIntensity = d.key.intensity;
     dirFromAzEl(d.fill.at[0], d.fill.at[1], this.fillDir);
     this.fillColor.setHex(d.fill.color); this.fillIntensity = d.fill.intensity;
-    this.sat = d.sat; this.starDensity = d.starDensity; this.redGain = d.redGain; this.enclosure = d.enclosure; this.veil = d.veil; this.swirl = d.swirl;
+    this.sat = d.sat; this.starDensity = d.starDensity; this.redGain = d.redGain; this.enclosure = d.enclosure; this.veil = d.veil; this.swirl = d.swirl; this.woundCore = d.woundCore;
     this.nebulaTint.setHex(d.nebulaTint); this.enclosureColor.setHex(d.enclosureColor); this.tint.setHex(d.tint);
     return this;
   }
@@ -249,7 +259,7 @@ const NUM_KEYS = [
   'woundRadius', 'woundVis', 'woundLens', 'woundDebris', 'woundHalo', 'woundActivity', 'redRadius', 'redVis',
   'whiteRadius', 'whiteVis', 'stars', 'nebula', 'hazeAmt', 'hazeFall', 'ground', 'gain', 'scenicHaze', 'scenicAmbient',
   'battleSpread', 'fleet', 'battleIntensity', 'keyIntensity', 'fillIntensity',
-  'sat', 'starDensity', 'redGain', 'enclosure', 'veil', 'swirl',
+  'sat', 'starDensity', 'redGain', 'enclosure', 'veil', 'swirl', 'woundCore',
 ] as const satisfies readonly (keyof SkyState)[];
 const DIR_KEYS = ['woundDir', 'redDir', 'whiteDir', 'battleDir', 'keyDir', 'fillDir'] as const satisfies readonly (keyof SkyState)[];
 const COL_KEYS = ['zenith', 'horizon', 'haze', 'hazeRed', 'hazeWhite', 'keyColor', 'fillColor', 'nebulaTint', 'enclosureColor', 'tint'] as const satisfies readonly (keyof SkyState)[];

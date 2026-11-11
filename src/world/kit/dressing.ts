@@ -228,6 +228,10 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
   const tissue = G(part.g('eclipseTissue')), plate = G(part.g('eclipsePlate'));
   const vein = G(part.g(ctx.inlay('eclipseVein', { emissiveIntensity: 2.4 * Math.max(0.2, k) })));
   const H = Math.min(1.1, 0.22 + Math.sqrt(R) * 0.26);
+  // a wall patch may sit on a narrow face (a rib, a pilaster): its tendrils and creeping veins stop at the edge of a
+  // compact footprint instead of running on past the face into thin air (the draws stay the same either way)
+  const onFace = (p: V3): boolean => !o.onWall || (Math.abs(p[0]) <= R * 0.5 && p[2] >= -R * 1.25 && p[2] <= R * 0.35);
+  const clip = (path: V3[]): V3[] => { const i = path.findIndex((p) => !onFace(p)); return i < 0 ? path : path.slice(0, i); };
   // the body: a few overlapping lumps, the biggest at the source, smaller ones trailing along the flow
   const lumps = 3 + Math.round(Math.min(6, R * 1.2));
   for (let i = 0; i < lumps; i++) {
@@ -251,12 +255,16 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
       path.push([x, lift, z]);
     }
     // the tube tapers in three stages (a cheap taper: thinner tubes for the outer runs)
-    tissue.tube(path.slice(0, 3), r0, 6, true).tube(path.slice(2, 5), r0 * 0.7, 6, true).tube(path.slice(4), r0 * 0.45, 5, true);
+    const run = clip(path);
+    for (const [a0, a1, k, sg] of [[0, 3, 1, 6], [2, 5, 0.7, 6], [4, 7, 0.45, 5]] as const) {
+      const seg = run.slice(a0, a1);
+      if (seg.length >= 2) tissue.tube(seg, r0 * k, sg, true);
+    }
     // a vein riding on top of the tendril
-    vein.ribbon(path.map((p): V3 => [p[0], p[1] + r0 * 0.75, p[2]]), Math.max(0.02, r0 * 0.5));
+    if (run.length >= 2) vein.ribbon(run.map((p): V3 => [p[0], p[1] + r0 * 0.75, p[2]]), Math.max(0.02, r0 * 0.5));
     if (rnd() < 0.5) {
       const p = path[3 + Math.floor(rnd() * 2)];
-      tissue.ball(r0 * 2.2, 8, p[0], p[1], p[2], r0 * 1.6);
+      if (onFace(p)) tissue.ball(r0 * 2.2, 8, p[0], p[1], p[2], r0 * 1.6);
     }
   }
   // nodules on the body with a violet core showing through
@@ -284,10 +292,12 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
       path.push([x, 0.016, z]);
       if (st > 1 && rnd() < 0.3) {
         const ba = a + (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5), bl = reach * 0.25;
-        vein.ribbon([[x, 0.016, z], [x + Math.sin(ba) * bl * 0.5, 0.016, z - Math.cos(ba) * bl * 0.5], [x + Math.sin(ba + 0.4) * bl, 0.016, z - Math.cos(ba + 0.4) * bl]], 0.03);
+        const branch = clip([[x, 0.016, z], [x + Math.sin(ba) * bl * 0.5, 0.016, z - Math.cos(ba) * bl * 0.5], [x + Math.sin(ba + 0.4) * bl, 0.016, z - Math.cos(ba + 0.4) * bl]]);
+        if (branch.length >= 2) vein.ribbon(branch, 0.03);
       }
     }
-    vein.ribbon(path, 0.035 + rnd() * 0.02);
+    const run = clip(path), w = 0.035 + rnd() * 0.02;
+    if (run.length >= 2) vein.ribbon(run, w);
   }
   for (const g of used) g.pop();
   const group = part.done();

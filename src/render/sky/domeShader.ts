@@ -1,6 +1,7 @@
 /**
  * Sky dome shader: deep-space gradient, stable star field, nebula, the red remnant, the white remnant and
- * the Wound (true-black disc with lensing, orbiting angular debris and restrained violet movement).
+ * the Wound (a soft vortex: a striated charcoal void inside a fractured, violet-lit shell of rock plates, wrapped in
+ * smoke, with a stream of debris torn off toward the red remnant; the background is lensed around it).
  *
  * The vertex stage ignores camera translation, so the dome sits at infinity for ANY camera (main view, planar
  * reflection camera, PMREM cube faces) without having to follow anything on the CPU. It is pinned to the far
@@ -10,12 +11,75 @@
  * COST. The fragment program is compiled per quality tier (`#define SKY_DETAIL` 0 low · 1 medium · 2 high/ultra,
  * from QualityProfile), so the cheaper tiers do not merely branch around the expensive code — it is not in the
  * program at all (software rasterisers and some mobile compilers flatten uniform branches). Worst-case
- * value-noise evaluations per pixel (inside the Wound's halo AND the red nebula): low ≈ 14, medium ≈ 26,
- * high ≈ 34 (the first version: ≈ 50 everywhere within 7 remnant radii). Each body is skipped outside its own
- * cone: red nebula 4.6 radii, Wound 3.3 radii. `uLite` (set per pass for small secondary targets: reflections,
- * PMREM faces) additionally drops the fine debris and the violet at run time.
+ * value-noise evaluations per pixel, in the Wound's shell band (0.7–1.55 radii, the worst place; the red nebula
+ * never reaches it): low ≈ 16, medium ≈ 30, high ≈ 38 — plus three cellular lookups (≈ 30 cheap hashes) for its
+ * plates and veins. Inside the void, where the background is skipped, it costs 3; between 1.55 and 2.9 radii only
+ * the smoke (7) and the rock lattices (hashes) run. Each body is skipped outside its own cone: red nebula 4.6
+ * radii; Wound 2.8 radii, reaching out along its debris stream (≤ 5.2) only while the red remnant is up. `uLite`
+ * (set per pass for small secondary targets: reflections, PMREM faces) drops the fine plates, glints and veins.
  */
 import { GLSL_DITHER, GLSL_HAZE, GLSL_NOISE } from './glsl';
+
+/**
+ * The Wound's void and its boundary. The shader takes these as constants and {@link woundCoreColor} /
+ * {@link woundVoidOpacity} mirror its maths on the CPU (tests), so "the core is not black" and "the edge is not a
+ * step" are checked against the numbers the GPU actually uses.
+ */
+export const WOUND_LOOK = {
+  /** linear colour of the void at its centre, and where it meets the shell (before the zone grade) */
+  coreDeep: [0.0057, 0.0056, 0.0053],
+  coreRim: [0.0081, 0.008, 0.0069],
+  /** how the lift is spread from the centre to the rim (higher = it stays nearer the rim) */
+  coreLift: 2.2,
+  /** ± brightness of the striations at the rim (30 % of it at the centre, which stays calm) */
+  striation: 0.35,
+  /** mean boundary radius and how far it wobbles with angle (Wound radii) */
+  edgeR: 0.965,
+  edgeWobble: 0.14,
+  /** the void fades out over [boundary − edgeIn, boundary + edgeOut]: a soft edge, never a step */
+  edgeIn: 0.13,
+  edgeOut: 0.05,
+} as const;
+
+/** Inside this radius (Wound radii) the void is opaque at every angle: nothing behind it needs shading. */
+export const WOUND_SOLID = WOUND_LOOK.edgeR - WOUND_LOOK.edgeWobble * 0.5 - WOUND_LOOK.edgeIn - 0.01;
+
+const smooth = (a: number, b: number, x: number): number => {
+  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+
+/** Linear colour of the void `rn` Wound radii from its centre, where the striation noise is `streak` (0..1). */
+export function woundCoreColor(rn: number, streak: number): [number, number, number] {
+  const L = WOUND_LOOK;
+  const k = Math.pow(smooth(0, 1, rn), L.coreLift);
+  const m = 1 + L.striation * (0.3 + 0.7 * k) * (2 * streak - 1);
+  return [0, 1, 2].map((i) => (L.coreDeep[i] + (L.coreRim[i] - L.coreDeep[i]) * k) * m) as [number, number, number];
+}
+
+/** Opacity of the void `rn` Wound radii from its centre, where the boundary's wobble noise is `wob` (0..1). */
+export function woundVoidOpacity(rn: number, wob: number): number {
+  const L = WOUND_LOOK;
+  const rb = L.edgeR + L.edgeWobble * (wob - 0.5);
+  return 1 - smooth(rb - L.edgeIn, rb + L.edgeOut, rn);
+}
+
+const glf = (n: number): string => {
+  const r = Number(n.toFixed(5));
+  return Number.isInteger(r) ? r.toFixed(1) : String(r);
+};
+const glv = (v: readonly number[]): string => `vec3(${v.map(glf).join(', ')})`;
+const WOUND_GLSL_CONSTANTS = [
+  `const vec3 CORE_DEEP = ${glv(WOUND_LOOK.coreDeep)};`,
+  `const vec3 CORE_RIM = ${glv(WOUND_LOOK.coreRim)};`,
+  `const float CORE_LIFT = ${glf(WOUND_LOOK.coreLift)};`,
+  `const float CORE_STRIATION = ${glf(WOUND_LOOK.striation)};`,
+  `const float EDGE_R = ${glf(WOUND_LOOK.edgeR)};`,
+  `const float EDGE_WOBBLE = ${glf(WOUND_LOOK.edgeWobble)};`,
+  `const float EDGE_IN = ${glf(WOUND_LOOK.edgeIn)};`,
+  `const float EDGE_OUT = ${glf(WOUND_LOOK.edgeOut)};`,
+  `const float WOUND_SOLID = ${glf(WOUND_SOLID)};`,
+].join('\n');
 
 export const DOME_VERTEX = /* glsl */ `
 uniform float uFarZ;
@@ -63,6 +127,7 @@ uniform vec3 uEncCol;
 uniform float uVeil;
 uniform float uWoundScale;
 uniform float uSwirl;
+uniform float uWoundCore;
 uniform vec3 uTint;
 ${GLSL_NOISE}
 ${GLSL_HAZE}
@@ -255,12 +320,41 @@ vec3 whiteRemnant(vec3 d, float px) {
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// The Wound.
+// The Wound — a soft vortex, after the overlook painting:
+//   CORE    not black: a charcoal void, darkest at the centre and lifting toward the rim, with faint striations
+//           like a curtain of falling ash that bows with the funnel and drifts slowly down;
+//   EDGE    no drawn rim and no circle: a soft, wobbling falloff crowded by a FRACTURED SHELL of dark rock plates
+//           whose near faces catch lavender-violet light (brightest upper left), with glints and glowing cracks;
+//   SMOKE   grey matter churning around it in slow spiral tendrils, heavier low and toward the red remnant;
+//   STREAM  a long arc of rocks and dust torn off its left edge toward the red remnant, thinning with distance.
+// Everything is drawn in a chart around the Wound (azimuthal-equidistant, x right / y up as seen, in Wound radii),
+// so nothing has a seam, and each debris layer turns RIGIDLY at its own slow rate, so nothing winds up over time.
 // ---------------------------------------------------------------------------------------------------------
-// One angular rock per lattice cell in (angle, radius) space around the Wound: an irregular five-sided
-// silhouette (never a round blob), with flat facets lit from the white remnant's side and a thin bright edge.
-// q = cell coordinates, asp = cell width / height, fill = chance that a cell holds a rock (also sets its size),
-// L = direction toward the white remnant in (tangential, radial) coordinates. Returns (coverage, facet light).
+${WOUND_GLSL_CONSTANTS}
+const vec2 UL = vec2(-0.6963, 0.7177);
+const vec3 VIOLET = vec3(0.60, 0.30, 0.88);
+const vec3 LAVENDER = vec3(0.53, 0.46, 0.74);
+// the light on the plates' faces: a cool grey with only a breath of violet (the grade cools it further)
+const vec3 FACE = vec3(0.50, 0.45, 0.50);
+// opacity of the void at this pixel: woundComposite writes it, the horizon haze and the white remnant read it
+float gWoundVoid;
+
+vec2 rot2(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+
+// Void colour at rn Wound radii from the centre; streak 0..1 = the striation there (mirrored by woundCoreColor()).
+vec3 woundCore(float rn, float streak) {
+  float k = pow(smoothstep(0.0, 1.0, rn), CORE_LIFT);
+  return mix(CORE_DEEP, CORE_RIM, k) * (1.0 + CORE_STRIATION * (0.3 + 0.7 * k) * (2.0 * streak - 1.0));
+}
+// Opacity of the void; wob 0..1 = the boundary's wobble noise at this angle (mirrored by woundVoidOpacity()).
+float woundVoid(float rn, float wob) {
+  float rb = EDGE_R + EDGE_WOBBLE * (wob - 0.5);
+  return 1.0 - smoothstep(rb - EDGE_IN, rb + EDGE_OUT, rn);
+}
+
+// One angular rock per lattice cell: an irregular five-sided silhouette (never a round blob), with flat facets lit
+// from L and a thin bright edge. q = cell coordinates, asp = cell width / height, fill = chance that a cell holds a
+// rock (also sets its size), na = lattice period along x. Returns (coverage, facet light).
 vec2 rock(vec2 q, float asp, float fill, float seed, float na, float aa, vec2 L) {
   vec2 c = floor(q);
   vec3 h = hash33(vec3(mod(c.x, na), c.y, seed));
@@ -291,182 +385,293 @@ vec2 rock(vec2 q, float asp, float fill, float seed, float na, float aa, vec2 L)
   return vec2(m, m * lam * (0.22 + 0.78 * edge));
 }
 
-// Two interleaved lattices per band so rocks overlap and never betray the grid.
-vec2 rockBand(float turn, float rn, float na, float nr, float seed, float fill, float px, float R, vec2 L, bool twice) {
-  vec2 q = vec2(turn * na, rn * nr);
-  float asp = 6.2832 * rn * nr / na;
-  float aa = clamp(px * nr / R * 0.9, 0.004, 0.4);
-  vec2 a = rock(q, asp, fill, seed, na, aa, L);
-  if (twice) {
-    vec2 b = rock(q + vec2(0.5, 0.37), asp, fill * 0.8, seed + 31.0, na, aa, L);
-    a = vec2(max(a.x, b.x), mix(a.y, b.y, step(a.x, b.x)));
+// Cellular noise: the two nearest feature points of a jittered lattice. Returns (F1, ≈ distance to the cell's
+// edge) and the nearest feature point fp (cell units). Its cells are the broken plates of the Wound's shell.
+vec2 cells(vec2 q, float seed, out vec2 fp) {
+  vec2 c = floor(q);
+  vec2 f = q - c;
+  float d1 = 9.0, d2 = 9.0;
+  fp = c;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 o = vec2(float(i), float(j)) + 0.12 + 0.76 * hash33(vec3(c + vec2(float(i), float(j)), seed)).xy;
+      vec2 r = o - f;
+      float dd = dot(r, r);
+      if (dd < d1) { d2 = d1; d1 = dd; fp = c + o; }
+      else if (dd < d2) { d2 = dd; }
+    }
   }
-  return a;
+  d1 = sqrt(d1);
+  return vec2(d1, 0.5 * (sqrt(d2) - d1));
 }
 
-// Dust of the accretion swirl sampled in SPIRAL coordinates: s is constant along a log spiral, so a noise that is
-// coarse in s and fine in log-radius draws streaks wound around the disc (cos/sin of s: no seam anywhere).
-float spiralDust(float s, float lr, float scale, float seed) {
-  vec3 p = vec3(cos(s) * 1.7, sin(s) * 1.7, lr * 9.0) * scale + seed;
-  return FBM_SMALL(p);
+// One layer of the fractured shell: broken rock plates (cells with gaps between them) crowding the boundary. The
+// layer turns rigidly by a; whether a cell holds a plate is decided once per cell from where its centre sits
+// (prof = radial profile in, full, full, out; bias = how much thicker it is upper left; dens = overall), so the
+// outline breaks into WHOLE plates. Each plate is split through its centre into two faces tilted apart, with grain.
+// p = chart position, k = cells per Wound radius, Lv = light in chart space (x right, y up, z toward the viewer).
+// Returns (coverage, light on its faces); crack = a thin glowing fracture across the plate or in the gap beside it.
+vec2 shellPlates(vec2 p, float k, float a, float seed, vec4 prof, float bias, float dens, float pxn, vec3 Lv, out float crack) {
+  crack = 0.0;
+  vec2 q = rot2(p, a) * k;
+  // warp the lattice so plate edges are broken and wavy (rubble, not crystal)
+  vec2 qw = q + 0.42 * (vec2(vnoise(vec3(q * 0.85, seed)), vnoise(vec3(q * 0.85, seed + 5.0))) - 0.5);
+  vec2 fp;
+  vec2 ce = cells(qw, seed, fp);
+  vec3 h = hash33(vec3(floor(fp), seed + 7.0));
+  vec2 fc = rot2(fp / k, -a);
+  float rc = length(fc);
+  vec2 dc = fc / max(rc, 1e-4);
+  // thicker (reaching further out) on the upper left, thinner lower right
+  float ul = 0.5 + 0.5 * dot(dc, UL);
+  float crowd = smoothstep(prof.x, prof.y, rc) * (1.0 - smoothstep(prof.z, prof.w + 0.22 * ul * ul, rc));
+  crowd *= 1.0 - bias + bias * ul;
+  crowd *= dens * (0.45 + 1.0 * vnoise(vec3(dc * 2.3, rc * 2.0 + seed)));
+  if (h.x > crowd) return vec2(0.0);
+  float aa = max(pxn * k, 0.02);
+  float gap = 0.02 + 0.05 * h.y;
+  float m = smoothstep(gap - aa, gap + aa, ce.y);
+  vec2 rel = qw - fp;
+  float fa = h.z * 6.2832;
+  vec2 sd = vec2(cos(fa), sin(fa));
+  float side = dot(rel, sd);
+  vec3 h2 = hash33(vec3(floor(fp), seed + 13.0));
+  // a lumpy chunk: its surface bulges toward the viewer (normal leans out from its centre), tilted at random,
+  // with a weak break through the middle
+  vec2 tilt = dc * 0.4 + (h2.xy - 0.5) * 1.1 + rot2(rel * 0.6 + sd * (side > 0.0 ? 0.22 : -0.22), -a);
+  float lam = max(dot(normalize(vec3(tilt, 1.0)), Lv), 0.0);
+  // rough, pitted faces (grain at two scales) and only a faint lip where an edge faces the light
+  float grain = 0.35 + 0.65 * vnoise(vec3(qw * 3.3, seed + 2.0)) + 0.4 * (vnoise(vec3(qw * 11.0, seed + 9.0)) - 0.5);
+  float lip = (1.0 - smoothstep(gap + aa, gap + 0.10 + aa, ce.y)) * 0.4;
+  // a third of the chunks are dark rock that hardly catches the light
+  float albedo = h2.z < 0.45 ? 0.10 : 0.45 + 0.55 * h2.z;
+  float lit = (lam * lam * grain + lip * lam * lam * 0.2) * albedo;
+  float cw = max(0.03, aa * 0.7);
+  crack = (h.y > 0.55 ? exp(-abs(side) / cw) * m : 0.0) + (1.0 - m) * smoothstep(0.45, 0.9, crowd);
+  return vec2(m, lit);
 }
 
-// The Wound: a seam-free, exactly black disc; a hairline violet-grey event-horizon rim; a slow accretion swirl of
-// dark dust and angular debris AROUND it (debris may cross the rim — the rim is drawn over it, so the silhouette
-// stays a perfect circle); restrained violet movement behind the boundary that follows the activity.
-// rn = angle from the centre in (contracted) Wound radii, R = contracted radius in radians.
 vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
-  if (rn > 3.2) return col;
   vec3 W = uWoundDir;
+  // its stream reaches toward the red remnant, so the Wound's cone grows with that distance (when there is one)
+  float cRed = dot(uRedDir, W);
+  float redDist = acos(clamp(cRed, -1.0, 1.0)) / R;
+  float reach = uRedVis > 0.01 ? clamp(redDist * 1.3, 2.8, 5.2) : 2.8;
+  if (rn > reach) return col;
   float pxn = px / R;
   vec3 base = col;
   float settle = 1.0 - 0.88 * uClosed;
   float act = uActivity * settle;
+  bool lite = uLite > 0.5;
 
-  // --- behind the boundary: true black, with a slow violet stir deep inside only while the Wound is active
-  vec3 inner = vec3(0.0);
-  if (rn < 1.0 + 2.0 * pxn && rn > 0.5) {
-    float depth = smoothstep(0.5, 1.0, rn);
-    vec3 qi = rotAxis(d, W, -uTime * 0.010 - 2.4 * rn);
+  // the chart: x right, y up as seen (world up projected onto the sky at the Wound)
+  vec3 Yc = vec3(0.0, 1.0, 0.0) - W * W.y;
+  float yl = length(Yc);
+  Yc = yl > 1e-3 ? Yc / yl : vec3(0.0, 0.0, -1.0);
+  vec3 Xc = cross(W, Yc);
+  vec2 dir = vec2(dot(e, Xc), dot(e, Yc));
+  vec2 p = dir * rn;
+  vec3 tr = uRedDir - W * cRed;
+  vec2 toRed = vec2(dot(tr, Xc), dot(tr, Yc));
+  toRed = length(toRed) > 1e-5 ? normalize(toRed) : vec2(-1.0, 0.0);
+  float sr = max(dot(dir, toRed), 0.0);
+  // the Wound's own light, from the upper left and a little toward the viewer: pale lavender on its matter,
+  // saturated violet only in what glows (cracks, glints, veins) — that rises with the activity
+  vec3 Lv = vec3(-0.6157, 0.5459, 0.5683);
+  float vio = 0.45 + 0.55 * act;
+  vec3 violet = VIOLET * vio;
+  vec3 lav = LAVENDER * (0.85 + 0.3 * act);
+  // how strongly the shell is lit where this pixel sits: brightest upper left, a little on the right flank
+  float gul = smoothstep(-0.25, 0.95, dot(dir, UL));
+  float gate = 0.05 + 0.95 * gul * sqrt(gul) + 0.35 * pow(max(dir.x, 0.0), 3.0);
+
+  // --- stream geometry: an arc leaving the left edge a little below the line to the red remnant, sagging under
+  //     its chord as it reaches toward it and on past it, widening and thinning with distance
+  float stream = 0.0, haze = 0.0, sl = 0.0, soff = 0.0, st = 0.0;
+  vec2 su = vec2(1.0, 0.0), sv = vec2(0.0, -1.0);
+  if (uRedVis > 0.01) {
+    vec2 A = rot2(toRed, toRed.x < 0.0 ? 0.30 : -0.30) * 0.95;
+    vec2 B = rot2(toRed, toRed.x < 0.0 ? 0.16 : -0.16) * max(redDist + 0.6, 2.2);
+    vec2 ch = B - A;
+    float Lc = length(ch);
+    su = ch / Lc;
+    sv = vec2(-su.y, su.x);
+    if (sv.y > 0.0) sv = -sv;
+    vec2 rp = p - A;
+    st = dot(rp, su) / Lc;
+    float tc = clamp(st, 0.0, 1.0);
+    soff = dot(rp, sv) - 0.52 * Lc * tc * (1.0 - tc);
+    sl = st * Lc;
+    float along = smoothstep(-0.10, 0.05, st) * (1.0 - smoothstep(0.70, 1.0, st)) * uRedVis;
+    float w = 0.10 + 0.30 * tc;
+    stream = exp(-soff * soff / (w * w)) * along;
+    // the smoky haze the stream drags along is much wider than its rocks
+    float wh = 0.30 + 0.55 * tc;
+    haze = exp(-soff * soff / (wh * wh)) * along;
+  }
+
+  // --- 1. smoke: grey matter churning in slow spiral tendrils, heavier low and toward the red remnant where the
+  //        Wound meets the crimson nebula, packed into a dense crust against the boundary. It is matter, not glow:
+  //        it hides the sky behind it.
+  // (deep inside the void nothing shows it: a constant stands in, faded so nothing pops where it starts)
+  float smoke = 0.5, smA = 0.0;
+  vec3 smC = vec3(0.0);
+  if (rn > 0.70 && rn < 2.9) {
+    vec2 ps = rot2(p, 0.95 * log(max(rn, 0.3)) - uTime * 0.0042);
     #if SKY_DETAIL >= 1
-    float m = fbm3(qi * (2.2 / R) + W * (uTime * 0.018));
+    vec3 q = vec3(ps * 1.6, uTime * 0.006);
+    vec2 wv = vec2(vnoise(q + 3.0), vnoise(q + 19.0)) - 0.5;
+    smoke = FBM_BIG(vec3(ps * 2.6 + wv * 1.9, uTime * 0.005 + 7.0));
     #else
-    float m = vnoise(qi * (2.2 / R) + W * (uTime * 0.018));
+    smoke = fbm3(vec3(ps * 2.6, 7.0));
     #endif
-    float veil = smoothstep(0.55, 0.88, m) * depth * depth * depth;
-    inner = vec3(0.050, 0.016, 0.130) * veil * act * 0.35;
-    float surge = vnoise(qi * (1.1 / R) + vec3(uTime * 0.11, 3.0, -uTime * 0.07));
-    inner += vec3(0.22, 0.08, 0.60) * pow(max(surge - 0.72, 0.0) / 0.28, 2.0) * veil * act * act * 0.6;
+    smoke = mix(0.5, smoke, smoothstep(0.70, 0.78, rn));
+    float prof = smoothstep(0.78, 1.0, rn) * exp(-pow(max(rn - 0.98, 0.0) / 1.15, 1.3));
+    float heavy = 0.6 + 0.3 * sr + 0.3 * max(-dir.y, 0.0);
+    smA = prof * heavy * smoothstep(0.26, 0.72, smoke) * 1.2;
+    float crust = smoothstep(0.86, 0.97, rn) * (1.0 - smoothstep(1.04, 1.24, rn)) * (0.55 + 0.45 * smoke);
+    smA = clamp(max(smA, crust), 0.0, 0.95);
+    float near = exp(-max(rn - 1.0, 0.0) / 0.4);
+    smC = mix(vec3(0.020, 0.0185, 0.016), vec3(0.098, 0.090, 0.080), smoothstep(0.38, 0.92, smoke));
+    smC *= (0.55 + 0.45 * near) * uSwirl;
+    // the crust nearest the boundary catches the Wound's light (upper left): the plates sit in lit matter
+    smC += lav * 0.7 * near * near * gate * gate * smoothstep(0.3, 0.8, smoke);
+    smC += vec3(0.11, 0.022, 0.016) * sr * sr * smoothstep(1.0, 1.9, rn) * uRedVis * smoothstep(0.35, 0.8, smoke);
   }
-  // well inside the disc nothing else can contribute (the swirl, debris and rim all start at the edge)
-  if (rn < 0.96) return mix(base, inner, uWoundVis);
-  float outside = smoothstep(1.0 - 0.7 * pxn, 1.0 + 0.7 * pxn, rn);
+  if (haze > 0.01) {
+    float dn = 0.6 * vnoise(vec3(sl * 2.2 + uTime * 0.02, soff * 6.0, 4.0)) + 0.4 * vnoise(vec3(p * 3.1, 11.0));
+    float tc = clamp(st, 0.0, 1.0);
+    float dust = haze * smoothstep(0.25, 0.75, dn) * (1.0 - 0.45 * tc) * 0.8;
+    vec3 dcol = (vec3(0.075, 0.056, 0.050) + vec3(0.13, 0.03, 0.021) * smoothstep(0.1, 0.8, st) * uRedVis) * uSwirl;
+    smC = mix(smC, dcol, dust / max(smA + dust, 1e-4));
+    smA = max(smA, dust);
+  }
+  col = mix(col, smC, smA * uWoundHalo);
 
-  vec3 tr = uRedDir - W * dot(uRedDir, W);
-  vec3 tw = uWhiteDir - W * dot(uWhiteDir, W);
-  vec3 toRed = tr / max(length(tr), 1e-4);
-  vec3 toWhite = tw / max(length(tw), 1e-4);
-  float sr = max(dot(e, toRed), 0.0);
-  float sw = max(dot(e, toWhite), 0.0);
-  // polar frame: angle measured from the red remnant's bearing, tangent = direction of increasing angle
-  vec3 tang = cross(W, e);
-  float theta = atan(dot(e, cross(W, toRed)), dot(e, toRed));
-  float thetaW = atan(dot(toWhite, cross(W, toRed)), dot(toWhite, toRed));
-  vec2 L = normalize(vec2(dot(toWhite, tang), dot(toWhite, e)) + vec2(1e-4, 0.0));
-  float lr = log(max(rn, 0.5));
-
-  // --- a long stream of matter drawn off the red remnant (it spirals as it falls), and a thin one crossing in
-  //     front of the white remnant
-  float dr = theta + 0.50 * lr;
-  dr = atan(sin(dr), cos(dr));
-  float streamR = exp(-pow(dr * rn / 0.34, 2.0)) * smoothstep(1.05, 1.35, rn) * (1.0 - smoothstep(2.4, 3.2, rn));
-  float dw = theta - thetaW - 0.35 * lr;
-  dw = atan(sin(dw), cos(dw));
-  float streamW = exp(-pow(dw * rn / 0.10, 2.0)) * smoothstep(1.1, 1.45, rn) * (1.0 - smoothstep(2.3, 3.1, rn));
-  float stream = max(streamR, 0.7 * streamW);
-
-  // --- the accretion swirl: dark matter wound in log spirals around the disc, turning slowly — a lopsided ring of
-  //     turbulent charcoal cloud with pale grey wisps where the remnants light it, densest just outside the edge
-  //     and thinning outward by ~2.4 R. It is matter, not glow: it hides the stars and nebula behind it.
-  #if SKY_DETAIL >= 1
-  float cloud = FBM_BIG(rotAxis(d, W, 1.9 * lr - uTime * 0.003) * (3.0 / R) + 5.0);
-  #else
-  float cloud = vnoise(rotAxis(d, W, 1.9 * lr - uTime * 0.003) * (3.0 / R) + 5.0);
-  #endif
-  // turbulence bends the spiral lanes, so the swirl reads as churning matter rather than a painted galaxy
-  float s = theta - 2.6 * lr + uTime * 0.0035 + 1.3 * (cloud - 0.5);
-  float coarse = spiralDust(s, lr, 0.9, 3.0);
-  #if SKY_DETAIL >= 1
-  float fine = spiralDust(s * 2.0 + coarse * 1.5, lr * 1.6, 2.1, 11.0);
-  #else
-  float fine = coarse;
-  #endif
-  float arms = 0.5 + 0.5 * sin(2.0 * s + 4.0 * coarse);
-  float prof = smoothstep(1.0, 1.05, rn) * exp(-pow(max(rn - 1.05, 0.0) / 1.05, 1.25));
-  // a tilted ring: heavier toward the red remnant's side and opposite it
-  float lop = 0.66 + 0.34 * cos(2.0 * (theta - 0.35));
-  float dens = prof * lop * smoothstep(0.26, 0.66, 0.45 * cloud + 0.35 * coarse + 0.25 * arms);
-  dens = max(dens, 0.7 * stream * smoothstep(0.3, 0.7, 0.5 * cloud + 0.5 * fine));
-  float wisp = smoothstep(0.46, 0.84, 0.6 * fine + 0.5 * cloud) * (0.45 + 0.55 * arms);
-  vec3 dustDark = vec3(0.030, 0.026, 0.026);
-  vec3 dustLit = vec3(0.145, 0.130, 0.135) * (0.40 + 0.80 * sw * sw) + vec3(0.115, 0.016, 0.012) * (sr * sr * sr + streamR * 0.8);
-  // the remnants light the outer swirl less than the inner, where it is densest
-  vec3 swirl = mix(dustDark, dustLit, wisp * (0.55 + 0.45 * exp(-max(rn - 1.1, 0.0) / 0.6))) * uSwirl;
-  // clots of dark matter churning in it (the dark smoke of the painting): they swallow the light
-  float clot = smoothstep(0.56, 0.78, cloud * 0.7 + (1.0 - fine) * 0.4) * smoothstep(1.06, 1.3, rn);
-  swirl *= 1.0 - 0.85 * clot;
-  col = mix(col, swirl, min(dens * 1.2, 0.95) * outside * uWoundHalo);
-  // the hot inner edge of the accretion: a thin luminous band hugging the boundary
-  float hot = exp(-max(rn - 1.0, 0.0) / 0.05) * (0.45 + 0.55 * fine) * outside;
-  col += vec3(0.105, 0.092, 0.110) * hot * (0.55 + 0.45 * sw) * uWoundHalo * uSwirl;
-
-  // --- violet: thin filaments riding the swirl, alive only in a few drifting arcs, slow swell (never a strobe)
-  if (uLite < 0.5) {
-    float v1 = spiralDust(s * 3.0 + uTime * 0.02, lr * 2.2, 2.6, 41.0);
+  // --- 2. the void: soft, wobbling boundary; inside, the ash curtain
+  // (the wobble only matters where the void is not opaque at every angle)
+  vec2 wq = dir * 2.4;
+  float wob = rn < WOUND_SOLID ? 0.5 : 0.6 * vnoise(vec3(wq, 1.7 + uTime * 0.008)) + 0.4 * vnoise(vec3(wq * 3.5, 9.1 - uTime * 0.011));
+  // tongues of the smoke beneath lick in over the boundary, so the outline is never a clean circle
+  float voidA = woundVoid(rn, wob) * (1.0 - 0.85 * smoothstep(0.82, 1.0, rn) * smoothstep(0.48, 0.78, smoke));
+  if (voidA > 0.0) {
+    // striations bow a little with the funnel (meridians of a sphere seen from inside) and drift slowly down
+    float bow = p.x / sqrt(max(1.0 - 0.35 * p.y * p.y, 0.4));
     #if SKY_DETAIL >= 1
-    float swell = 0.55 + 0.45 * sin(uTime * 0.6 + 6.2832 * coarse);
-    #else
-    float swell = 0.75;
+    bow += 0.09 * (vnoise(vec3(p * 2.2, uTime * 0.01 + 3.0)) - 0.5);
     #endif
-    float ridge = 1.0 - abs(2.0 * v1 - 1.0);
-    float fil = pow(ridge, 18.0);
-    float gate = smoothstep(0.50, 0.78, vnoise(vec3(cos(s), sin(s), lr * 3.0) * 1.3 + vec3(uTime * 0.028, 0.0, uTime * 0.019)));
-    float band = smoothstep(0.98, 1.04, rn) * exp(-max(rn - 1.0, 0.0) / 0.36);
-    // sub-linear in activity so the default mid settings still show a few live threads
-    float vio = act * (0.55 + 0.45 * act) + 0.5 * sqrt(act) * (1.0 - act);
-    vec3 violet = vec3(0.42, 0.20, 0.95) * fil * gate * swell * band * vio * 1.6;
-    violet += vec3(0.10, 0.035, 0.26) * gate * band * dens * wisp * vio * 0.8;
-    col += violet * outside;
+    float fall = uTime * 0.010;
+    float s1 = vnoise(vec3(bow * 13.0, p.y * 2.4 + fall, uTime * 0.012));
+    #if SKY_DETAIL >= 1
+    float s2 = lite ? s1 : vnoise(vec3(bow * 31.0 + 7.3, p.y * 2.3 + fall * 1.7, uTime * 0.017 + 4.0));
+    #else
+    float s2 = s1;
+    #endif
+    float streak = smoothstep(0.2, 0.85, 0.6 * s1 + 0.4 * s2);
+    vec3 core = woundCore(rn, streak) * uWoundCore;
+    // the Wound's own violet stirs faintly in the curtain near the rim while it is active
+    core += VIOLET * 0.012 * uWoundCore * streak * streak * streak * smoothstep(0.55, 0.95, rn) * act * gate;
+    col = mix(col, core, voidA);
   }
 
-  col = mix(inner, col, outside);
+  // --- 3. the fractured shell: broken plates crowd the boundary and break its outline
+  float open = 1.0 - 0.75 * uClosed;
+  if (rn > 0.70 && rn < 1.55) {
+    vec3 dark = vec3(0.0125, 0.0115, 0.0095);
+    vec3 redRim = vec3(0.035, 0.008, 0.006) * sr * sr * uRedVis;
+    float ck;
+    vec2 a = shellPlates(p, 7.5, uTime * 0.0040, 3.0, vec4(0.76, 0.90, 1.03, 1.16), 0.75, 1.0, pxn, Lv, ck);
+    float crack = ck * a.x;
+    vec3 face = dark + (FACE * 0.42 * gate + redRim) * a.y;
+    col = mix(col, face, a.x * uWoundDebris * open);
+    #if SKY_DETAIL >= 1
+    if (!lite) {
+      vec2 b = shellPlates(p, 15.0, uTime * 0.0055 + 1.3, 11.0, vec4(0.86, 0.99, 1.10, 1.40), 0.7, 0.75, pxn, Lv, ck);
+      face = dark + (FACE * 0.34 * gate + redRim) * b.y;
+      col = mix(col, face, b.x * uWoundDebris * open);
+      crack = max(crack * (1.0 - b.x), ck * b.x);
+    }
+    #endif
+    // which cracks glow drifts slowly; they flare with the activity
+    float cg = smoothstep(0.5, 0.8, vnoise(vec3(dir * 2.6, uTime * 0.035 + 2.0)));
+    col += violet * crack * cg * (0.10 + 0.40 * act) * (0.35 + 0.65 * gate) * uWoundDebris * open;
+    #if SKY_DETAIL >= 1
+    // glints: sparse specks of light riding the big plates
+    if (!lite) {
+      vec2 gq = rot2(p, uTime * 0.0040) * 46.0;
+      vec2 gc = floor(gq);
+      vec3 gh = hash33(vec3(gc, 57.0));
+      float prob = 0.14 * smoothstep(0.85, 0.97, rn) * (1.0 - smoothstep(1.1, 1.3, rn)) * (0.3 + 0.7 * gate);
+      if (gh.z < prob) {
+        vec2 dv = gq - (gc + 0.2 + 0.6 * gh.xy);
+        float r = max(0.07, pxn * 46.0 * 0.7);
+        float tw = 0.55 + 0.45 * sin(uTime * (0.7 + gh.x) + gh.y * 40.0);
+        col += vec3(0.75, 0.62, 1.0) * exp(-dot(dv, dv) / (r * r)) * (0.0049 / (r * r)) * tw * vio * uWoundDebris * open;
+      }
+    }
+    #endif
+  }
+  // the lavender-violet glow the shell sits in: strongest upper left, hugging the boundary on both sides
+  col += violet * 0.18 * gate * gate * exp(-abs(rn - 1.0) / 0.15) * (0.45 + 0.55 * smoke) * uWoundHalo;
+  // violet veins: a network of thin glowing fractures through the matter just outside the boundary (the edges of
+  // a cellular pattern turning with the smoke), lit only along a few drifting stretches; they swell with the activity
+  if (!lite && rn > 0.85 && rn < 1.6) {
+    vec2 pv = rot2(p, 0.95 * log(max(rn, 0.3)) - uTime * 0.0042) * 9.0;
+    vec2 vfp;
+    vec2 ve = cells(pv + 0.3 * (vec2(vnoise(vec3(pv * 0.7, 3.0)), vnoise(vec3(pv * 0.7, 8.0))) - 0.5), 71.0, vfp);
+    float vw = max(0.022, pxn * 9.0 * 0.6);
+    float fil = exp(-ve.y / vw) * (0.022 / vw);
+    float live = smoothstep(0.45, 0.75, vnoise(vec3(vfp * 0.45, uTime * 0.03 + 41.0)));
+    float band = smoothstep(0.86, 0.98, rn) * exp(-max(rn - 1.0, 0.0) / 0.3);
+    col += violet * 2.8 * fil * live * band * (0.45 + 0.55 * gate) * (0.25 + 0.75 * act) * smoothstep(0.3, 0.6, smoke) * uWoundHalo;
+  }
 
-  // --- orbiting dark debris: three bands of angular rocks at different speeds (inner faster), gathered in the
-  //     swirl's arms and the streams. No soft veil hugs the rim: the silhouette is the rim alone.
-  float occ = 0.0;
-  float lit = 0.0;
-  float turn = theta / 6.2832 + 0.5;
-  float open = 1.0 - uClosed * (1.0 - smoothstep(1.10, 1.55, rn));
-  float armBias = 0.55 + 0.45 * arms;
-  {
-    float fill = (0.40 * armBias * smoothstep(1.0, 1.12, rn) * (1.0 - smoothstep(1.5, 2.4, rn)) + 0.55 * stream) * open;
-    vec2 rk = rockBand(turn + uTime * 0.00095, rn, 22.0, 7.0, 3.0, fill, px, R, L, SKY_DETAIL >= 1);
-    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
+  // --- 4. flying debris (front-most): the stream's rocks drifting in toward the Wound, and loose chunks thrown
+  //        off the shell, most toward the upper left and the red remnant. Near the Wound they catch its light;
+  //        out in front of the crimson nebula they are black silhouettes rimmed red.
+  float occ = 0.0, lit = 0.0;
+  float redness = smoothstep(1.3, 2.4, rn) * uRedVis;
+  vec2 Lc2 = normalize(mix(UL, toRed, redness) + vec2(1e-4, 0.0));
+  if (stream > 0.01) {
+    vec2 sq = vec2(sl + uTime * 0.006, soff);
+    vec2 Ls = vec2(dot(Lc2, su), dot(Lc2, sv));
+    float fill = stream * (0.62 - 0.38 * clamp(st, 0.0, 1.0));
+    vec2 r1 = rock(sq * 5.0, 1.0, fill * 0.8, 5.0, 1e4, clamp(pxn * 4.5, 0.004, 0.4), Ls);
+    occ = r1.x; lit = r1.y;
+    if (!lite) {
+      vec2 r2 = rock(sq * 11.0 + vec2(0.37, 0.61), 1.0, fill, 13.0, 1e4, clamp(pxn * 9.9, 0.004, 0.4), Ls);
+      lit = mix(lit, r2.y, step(occ, r2.x)); occ = max(occ, r2.x);
+    }
   }
-  #if SKY_DETAIL >= 1
-  if (uLite < 0.5) {
-    float fill = (0.36 * armBias * smoothstep(1.02, 1.2, rn) * (1.0 - smoothstep(1.8, 2.6, rn)) + 0.60 * stream) * open;
-    vec2 rk = rockBand(turn + uTime * 0.00060 + 0.31, rn, 46.0, 15.0, 9.0, fill, px, R, L, SKY_DETAIL >= 2);
-    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
-  }
-  #endif
-  if (uLite < 0.5) {
-    float fill = 0.22 * armBias * smoothstep(1.1, 1.35, rn) * (1.0 - smoothstep(2.1, 3.0, rn)) + 0.65 * stream;
-    vec2 rk = rockBand(turn + uTime * 0.00035 + 0.67, rn, 96.0, 34.0, 23.0, fill, px, R, L, SKY_DETAIL >= 2);
-    lit = mix(lit, rk.y, step(occ, rk.x)); occ = max(occ, rk.x);
+  if (rn > 0.95 && rn < 2.6) {
+    float a = uTime * 0.0030 + 0.7;
+    vec2 cq = rot2(p, a) * 8.0;
+    float fill = 0.36 * smoothstep(0.98, 1.15, rn) * exp(-max(rn - 1.1, 0.0) / 0.6)
+      * (0.3 + 0.7 * max(dot(dir, normalize(UL + toRed)), 0.0)) * open;
+    vec2 Lq = rot2(Lc2, a);
+    vec2 r3 = rock(cq, 1.0, fill, 29.0, 1e4, clamp(pxn * 7.2, 0.004, 0.4), Lq);
+    lit = mix(lit, r3.y, step(occ, r3.x)); occ = max(occ, r3.x);
+    #if SKY_DETAIL >= 1
+    if (!lite) {
+      vec2 r4 = rock(cq * 2.3 + vec2(0.41, 0.77), 1.0, fill * 1.2, 31.0, 1e4, clamp(pxn * 16.6, 0.004, 0.4), Lq);
+      lit = mix(lit, r4.y, step(occ, r4.x)); occ = max(occ, r4.x);
+    }
+    #endif
   }
   occ *= uWoundDebris;
   col *= 1.0 - occ;
-  col += (vec3(0.118, 0.108, 0.112) * (0.25 + 0.75 * sw) + vec3(0.13, 0.022, 0.014) * sr * sr) * lit * uWoundDebris * uSwirl;
+  col += (FACE * 0.30 * gate * (1.0 - redness) + vec3(0.12, 0.022, 0.013) * redness) * lit * uWoundDebris;
 
-  // --- the event horizon: a hairline of light bent around the rim, drawn OVER the debris so the edge stays a
-  //     perfect circle; a little brighter on one flank (the side the swirl turns toward the viewer) and toward
-  //     the white remnant. A soft lensed glow falls off just outside it.
-  float lw = max(0.0032, 0.85 * pxn);
-  float x = (rn - 1.0 - 0.6 * lw) / lw;
-  float line = exp(-x * x) * min(1.0, 0.0032 / lw * 1.6);
-  float beam = 0.72 + 0.28 * sin(theta + 0.9) + 0.25 * pow(sw, 4.0);
-  vec3 rimCol = vec3(0.80, 0.66, 0.90);
-  float glowOut = exp(-max(rn - 1.0, 0.0) / 0.030) * 0.16 + exp(-max(rn - 1.0, 0.0) / 0.16) * 0.035;
-  float rimLife = 0.75 + 0.5 * act;
-  col += rimCol * (line * 1.6 + glowOut * outside) * beam * rimLife * (1.0 - uClosed);
+  // --- closed: the torn edge has receded and a thin steady gold rim seals the (still irregular) boundary
+  if (uClosed > 0.001) {
+    float rb = EDGE_R + EDGE_WOBBLE * (wob - 0.5);
+    float gl = max(0.0045, pxn);
+    float gx = (rn - rb) / gl;
+    vec3 gold = vec3(1.0, 0.64, 0.24);
+    col += gold * (exp(-gx * gx) * 1.5 * min(1.0, 0.009 / gl) + exp(-max(rn - rb, 0.0) / 0.03) * 0.045 * smoothstep(rb - 0.01, rb + 0.01, rn)) * uClosed;
+  }
 
-  // --- closed: the torn edge has receded and a thin steady gold rim seals the boundary
-  vec3 gold = vec3(1.0, 0.64, 0.24);
-  float gl = max(0.0038, 1.0 * pxn);
-  float gx = (rn - 1.0) / gl;
-  col += gold * (exp(-gx * gx) * 1.5 * min(1.0, 0.0076 / gl) + exp(-max(rn - 1.0, 0.0) / 0.03) * 0.045 * outside) * uClosed;
-
+  gWoundVoid = voidA * uWoundVis;
   return mix(base, col, uWoundVis);
 }
 
@@ -522,13 +727,14 @@ void main() {
   float beta = th - defl;
   vec3 dl = uWoundDir * cos(beta) + e * sin(beta);
   float pxl = max(max(length(dFdx(dl)), length(dFdy(dl))), px);
+  gWoundVoid = 0.0;
 
   // --- deep space
   float up = clamp(d.y, 0.0, 1.0);
   vec3 col = mix(uHorizon, uZenith, pow(up, 0.55));
   // nothing behind the Wound's disc or under an opaque ground needs shading
   bool buried = uGround > 0.999 && d.y < -0.04;
-  bool hidden = buried || (uWoundVis > 0.999 && rn < 0.97);
+  bool hidden = buried || (uWoundVis > 0.999 && rn < WOUND_SOLID);
   vec4 red = vec4(0.0);
   if (!hidden) {
     if (uNebula > 0.01) col += nebula(dl) * uNebula * uNebTint;
@@ -551,14 +757,15 @@ void main() {
   // --- horizon haze, then whatever lies below the horizon
   vec3 hz = skyHaze(d);
   float band = exp(-max(d.y, 0.0) * uHazeFall) * uHazeAmt;
-  // the atmosphere does not veil the Wound: it is an absence, not an object behind the haze
-  float absence = (1.0 - smoothstep(0.985, 1.0, rn)) * uWoundVis * smoothstep(0.0, 0.09, d.y);
-  col = mix(col, hz, band * (1.0 - 0.94 * absence));
+  // the atmosphere barely veils the Wound's void (it is an absence, not an object behind the haze); it follows the
+  // void's own soft edge, so the haze never draws a circle across it
+  float absence = gWoundVoid * smoothstep(0.0, 0.09, d.y);
+  col = mix(col, hz, band * (1.0 - 0.85 * absence));
   float below = smoothstep(0.0, -0.035, d.y) * uGround;
   col = mix(col, hz * mix(1.0, 0.35, smoothstep(0.0, -0.6, d.y)), below);
 
-  // (its glare never reaches into the Wound: the disc stays exactly black)
-  if (uWhiteVis > 0.002) col += whiteRemnant(d, px) * uWhiteVis * (1.0 - 0.6 * band) * (1.0 - below) * (1.0 - uWoundVis * (1.0 - smoothstep(0.97, 1.02, rn)));
+  // (its glare never reaches into the Wound's void)
+  if (uWhiteVis > 0.002) col += whiteRemnant(d, px) * uWhiteVis * (1.0 - 0.6 * band) * (1.0 - below) * (1.0 - gWoundVoid);
 
   // --- a shut view boundary (Z10): a dark membrane between the chamber and space — everything beyond is dimmed
   //     and greyed, the Wound reads only as a deeper absence behind it; faint folds catch the chamber's light

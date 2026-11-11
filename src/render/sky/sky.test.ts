@@ -4,6 +4,7 @@ import type { Game, SkyPreset } from '@/core/api';
 import type { Carrier } from './carrier';
 import { insideHull } from './carrierHull';
 import { woundScale } from './dome';
+import { DOME_FRAGMENT, WOUND_LOOK, WOUND_SOLID, woundCoreColor, woundVoidOpacity } from './domeShader';
 import { createSkySystem } from './index';
 import { battleFrame, battlePlaneCoords } from './fleet';
 import { SKY_PRESETS, SKY_PRESET_IDS, SkyState, blendSkyStates, dirFromAzEl, rotateSkyState, slerpDir } from './presets';
@@ -116,6 +117,86 @@ describe('sky presets', () => {
     const expected = s.woundDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     expect(r.woundDir.distanceTo(expected)).toBeLessThan(1e-9);
     expect(r.woundDir.y).toBeCloseTo(s.woundDir.y, 9);
+  });
+});
+
+describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', () => {
+  const lum = (c: readonly number[]): number => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+  it('its core is a charcoal void, not uniform black: lifted off black, darkest at the centre, striated', () => {
+    const centre = woundCoreColor(0, 0.5);
+    for (const ch of centre) expect(ch).toBeGreaterThan(0.002);
+    // depth: it lifts steadily from the centre toward the rim
+    let prev = 0;
+    for (let rn = 0; rn <= 1.0001; rn += 0.05) {
+      const l = lum(woundCoreColor(rn, 0.5));
+      expect(l).toBeGreaterThanOrEqual(prev - 1e-12);
+      prev = l;
+    }
+    expect(lum(woundCoreColor(0.95, 0.5))).toBeGreaterThan(lum(centre) * 1.25);
+    // the ash-curtain striations: clearly there near the rim, calmer at the centre
+    const rim = lum(woundCoreColor(0.9, 1)) / lum(woundCoreColor(0.9, 0));
+    const mid = lum(woundCoreColor(0, 1)) / lum(woundCoreColor(0, 0));
+    expect(rim).toBeGreaterThan(1.6);
+    expect(mid).toBeGreaterThan(1.1);
+    expect(mid).toBeLessThan(rim);
+    for (let st = 0; st <= 1; st += 0.25) {
+      for (const ch of woundCoreColor(0.5, st)) {
+        expect(ch).toBeGreaterThan(0);
+        expect(ch).toBeLessThan(0.05); // a void: never as bright as the smoke around it
+      }
+    }
+    // no preset renders it flat black; the gallery lifts it most (its grade crushes the blacks)
+    for (const id of SKY_PRESET_IDS) expect(SKY_PRESETS[id].woundCore, id).toBeGreaterThan(0.3);
+    expect(SKY_PRESETS.woundVista.woundCore).toBeGreaterThan(2);
+  });
+
+  it('its edge is soft and irregular: never a step, never a circle', () => {
+    for (const wob of [0, 0.25, 0.5, 0.75, 1]) {
+      expect(woundVoidOpacity(WOUND_SOLID, wob)).toBeCloseTo(1, 6);
+      expect(woundVoidOpacity(1.2, wob)).toBe(0);
+      // from 95 % to 5 % takes at least an eighth of the radius, and no 1 % of the radius drops it by 12 % or more
+      let r95 = Number.NaN, r05 = Number.NaN, maxDrop = 0;
+      for (let rn = 0.6; rn < 1.3; rn += 0.001) {
+        const a = woundVoidOpacity(rn, wob);
+        maxDrop = Math.max(maxDrop, a - woundVoidOpacity(rn + 0.01, wob));
+        if (Number.isNaN(r95) && a < 0.95) r95 = rn;
+        if (Number.isNaN(r05) && a < 0.05) r05 = rn;
+      }
+      expect(r05 - r95).toBeGreaterThan(0.12);
+      expect(maxDrop).toBeLessThan(0.12);
+    }
+    // the boundary wanders with angle (its wobble noise 0 → 1) by more than a tenth of the radius
+    const half = (wob: number): number => {
+      let rn = 0.5;
+      while (woundVoidOpacity(rn, wob) > 0.5) rn += 0.0005;
+      return rn;
+    };
+    expect(half(1) - half(0)).toBeGreaterThan(0.1);
+  });
+
+  it('the shader runs on exactly the numbers the mirror checks, and draws no hairline rim', () => {
+    expect(DOME_FRAGMENT).toContain(`const float EDGE_R = ${WOUND_LOOK.edgeR};`);
+    expect(DOME_FRAGMENT).toContain(`const float EDGE_WOBBLE = ${WOUND_LOOK.edgeWobble};`);
+    expect(DOME_FRAGMENT).toContain(`const float EDGE_IN = ${WOUND_LOOK.edgeIn};`);
+    expect(DOME_FRAGMENT).toContain(`const float EDGE_OUT = ${WOUND_LOOK.edgeOut};`);
+    expect(DOME_FRAGMENT).toContain(`const float CORE_STRIATION = ${WOUND_LOOK.striation};`);
+    expect(DOME_FRAGMENT).toContain(`const vec3 CORE_DEEP = vec3(${WOUND_LOOK.coreDeep.join(', ')});`);
+    expect(DOME_FRAGMENT).toMatch(/const float WOUND_SOLID = 0\.\d+;/);
+    expect(DOME_FRAGMENT).not.toMatch(/event.horizon/i);
+    // the background is only skipped where the void is opaque at every angle
+    expect(DOME_FRAGMENT).toContain('rn < WOUND_SOLID');
+  });
+
+  it('its void stays wholly above the skyline and above every spire capped under it, even fully swollen', () => {
+    const w = SKY_PRESETS.woundVista.wound;
+    // the furthest the void's faintest fringe reaches, in Wound radii
+    const reach = WOUND_LOOK.edgeR + WOUND_LOOK.edgeWobble / 2 + WOUND_LOOK.edgeOut;
+    expect(woundVoidOpacity(reach, 1)).toBe(0);
+    const lowest = w.at[1] - w.radius * reach * woundScale(1);
+    expect(lowest).toBeGreaterThan(3);
+    // scenic/woundClear caps spires in the Wound's band at (elevation − 1.12 radii)
+    expect(lowest).toBeGreaterThan(w.at[1] - w.radius * 1.12);
   });
 });
 
@@ -394,6 +475,7 @@ describe('sky system', () => {
     sky.setWoundActivity(0.3, { snap: true });
     expect(sky.woundActivity).toBe(0.3);
     expect(dome.material.uniforms.uWoundScale.value).toBeCloseTo(1, 6);
+    expect(dome.material.uniforms.uWoundCore.value).toBeCloseTo(SKY_PRESETS.coreChamber.woundCore, 6);
     // eased by default…
     sky.setWoundActivity(0.05);
     sky.update(1 / 60, cam);

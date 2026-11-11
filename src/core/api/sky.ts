@@ -146,8 +146,9 @@ export interface SkySystem {
   setBattleIntensity(n: number): void;
   /**
    * 0..1 restrained violet movement behind the Wound boundary. The Wound also breathes with it: drawn back toward 0
-   * it visibly CONTRACTS (to 86 % of its radius at 0; the authored size at the default 0.3; +3 % at 1), and the
-   * violet and the rim's life withdraw. Eased (≈ 1 s) unless snapped.
+   * it visibly CONTRACTS (to 86 % of its radius at 0; the authored size at the default 0.3; +3 % at 1) — void,
+   * shell and smoke together — and the violet glow, the glowing cracks and veins of its shell and its glints
+   * withdraw; at 1 they flare. Eased (≈ 1 s) unless snapped.
    * ADDED `opts.snap`: land on the value at once. The sky also snaps by itself while the mission fast-forwards a
    * skipped cinematic or loads a zone (`game.mission.runtime.skipping` / `game.mission.loading`), so a skipped scene
    * lands in the state it would have reached watched; pass `{ snap: z.skipping }` to be explicit.

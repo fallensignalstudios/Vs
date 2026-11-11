@@ -12,9 +12,11 @@ import type { PropTable } from './types';
 function domCrateBox(p: Part, w: number, h: number, d: number, x = 0, y = 0, z = 0, ry = 0): void {
   const blk = p.g('domBlack').at(x, y, z, ry), brz = p.g('domBronze').at(x, y, z, ry), ox = p.g('domOxblood').at(x, y, z, ry), amb = p.g('domAmberGlow').at(x, y, z, ry);
   blk.cboxOn(w, h, d, 0.04);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) brz.boxOn(0.09, h + 0.02, 0.09, sx * (w / 2 - 0.03), 0, sz * (d / 2 - 0.03));
+  // polish 3: chamfered corner posts and a stepped lid, so the crate is not one hard box silhouette
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) brz.vbox(0.09, h + 0.02, 0.09, 0.02, sx * (w / 2 - 0.03), 0, sz * (d / 2 - 0.03));
   brz.box(w + 0.03, 0.07, d + 0.03, 0, h * 0.22, 0).box(w + 0.03, 0.07, d + 0.03, 0, h * 0.8, 0);
   ox.tbox(w - 0.22, 0.05, d - 0.22, 0.02, 0, h - 0.01, 0);
+  blk.tbox(w - 0.5, 0.035, d - 0.5, 0.015, 0, h + 0.035, 0);
   for (const s of [-1, 1]) {
     ox.box(w - 0.34, h * 0.4, 0.025, 0, h * 0.51, s * (d / 2 + 0.005));
     amb.box(w * 0.3, 0.07, 0.02, 0, h * 0.51, s * (d / 2 + 0.022));
@@ -28,8 +30,12 @@ function refCrateBox(p: Part, w: number, h: number, d: number, x = 0, y = 0, z =
   navy.cboxOn(w, h, d, 0.05);
   slate.box(w - 0.2, h - 0.2, d + 0.02, 0, h / 2, 0).box(w + 0.02, h - 0.2, d - 0.2, 0, h / 2, 0);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    steel.box(0.12, 0.12, 0.12, sx * (w / 2 - 0.04), 0.06, sz * (d / 2 - 0.04)).box(0.12, 0.12, 0.12, sx * (w / 2 - 0.04), h - 0.06, sz * (d / 2 - 0.04));
+    // polish 3: chamfered corner guards (they catch a highlight instead of reading as hard cubes)
+    steel.cbox(0.12, 0.12, 0.12, 0.025, sx * (w / 2 - 0.04), 0.06, sz * (d / 2 - 0.04)).cbox(0.12, 0.12, 0.12, 0.025, sx * (w / 2 - 0.04), h - 0.06, sz * (d / 2 - 0.04));
   }
+  // a raised lid panel with a grip bar: breaks the flat top
+  slate.tbox(w - 0.3, 0.025, d - 0.3, 0.012, 0, h, 0);
+  steel.box(w * 0.28, 0.02, 0.06, 0, h + 0.035, 0);
   for (const s of [-1, 1]) {
     steel.box(w * 0.34, 0.04, 0.05, 0, h * 0.7, s * (d / 2 + 0.03));
     blue.box(0.05, h * 0.36, 0.02, w * 0.32, h * 0.5, s * (d / 2 + 0.014));

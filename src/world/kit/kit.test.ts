@@ -438,6 +438,27 @@ describe('polish 3', () => {
     }
   });
 
+  it('a wall corruption patch keeps its veins and tendrils on a compact face (none run off a narrow rib)', () => {
+    const lateral = (onWall: boolean): number => {
+      const { b, root } = builder();
+      const g = b.corruption({ x: 0, n: 0, h: 1, r: 1, onWall });
+      root.updateMatrixWorld(true);
+      let ext = 0;
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || !String((m.material as THREE.Material).name).includes('eclipseVein')) return;
+        const bb = new THREE.Box3().setFromObject(m);
+        ext = Math.max(ext, Math.abs(bb.min.x), Math.abs(bb.max.x));
+      });
+      return ext;
+    };
+    // across the face: the confined half-width (0.5 r) plus a nodule and a ribbon's width
+    expect(lateral(true)).toBeGreaterThan(0.2);
+    expect(lateral(true)).toBeLessThan(0.75);
+    // floor patches are not confined: their veins creep well out over the clean floor
+    expect(lateral(false)).toBeGreaterThan(1);
+  });
+
   it('barrier emitter posts are solid whether the wall is up or down', () => {
     const f = fakeGame();
     const { b } = builder(f);
