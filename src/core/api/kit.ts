@@ -342,6 +342,8 @@ export interface ZoneBuilder {
    * localized Eclipse contamination patch following conduits. Polish 3: a raised violet-black growth — lumps
    * heaped toward the source (up to ~1 m for r ≥ 10), tendrils arching out along the flow (local −Z), nodules,
    * splinters of dark plate, violet veins over all of it and creeping ahead on the clean floor. No collider.
+   * With `onWall` the tendrils and creeping veins stay on a compact face (about ±0.5 r across, 1.25 r along the
+   * flow) so a patch on a narrow rib or pilaster does not run off its edge into the air.
    */
   corruption(o: { x: number; n: number; h?: number; r: number; intensity?: number; onWall?: boolean; yawDeg?: number }): THREE.Object3D;
 
