@@ -499,5 +499,248 @@
     2236
    ]
   }
+ },
+ "ship_dominion_capital": {
+  "file": "ship_dominion_capital.glb",
+  "kind": "ship",
+  "tris": 10922,
+  "bbox": [
+   0.295,
+   0.362,
+   1.0
+  ],
+  "longAxis": "z",
+  "front": "+z",
+  "up": "+y",
+  "targetLength": 600,
+  "engineGlow": [
+   [
+    0.0,
+    0.0,
+    -0.48
+   ],
+   [
+    -0.066,
+    -0.043,
+    -0.48
+   ],
+   [
+    0.066,
+    -0.043,
+    -0.48
+   ],
+   [
+    0.0,
+    -0.098,
+    -0.48
+   ]
+  ],
+  "notes": "Cathedral-like capital warship. Raw units, origin at bbox centre; uniform scale 600 (600 m long). Prow +z: a wide armoured wedge narrowing to a long lance (tip at z=+0.5). Gothic tower and spires on the dorsal centre-line (top at y=+0.18), short spikes under the keel. Black-bronze plates with engraved flame linework filled with amber, gold-bronze where the light catches (metalness ~1). Stern (-z): four ring engine crowns in a diamond (top, left, right, bottom), openings facing -z, amber discs inside; engineGlow = disc centres. Glow is base colour only, no emissive map: add sprites/lights at engineGlow. Thin spires go sub-pixel beyond ~1.5 km."
+ },
+ "ship_reformation_carrier": {
+  "file": "ship_reformation_carrier.glb",
+  "kind": "ship",
+  "tris": 11195,
+  "bbox": [
+   1.0,
+   0.212,
+   0.246
+  ],
+  "longAxis": "x",
+  "front": "+x",
+  "up": "+y",
+  "targetLength": 500,
+  "engineGlow": [
+   [
+    -0.4,
+    -0.005,
+    0.119
+   ],
+   [
+    -0.39,
+    -0.038,
+    0.104
+   ],
+   [
+    -0.39,
+    -0.07,
+    0.092
+   ],
+   [
+    -0.4,
+    -0.005,
+    -0.119
+   ],
+   [
+    -0.39,
+    -0.038,
+    -0.104
+   ],
+   [
+    -0.39,
+    -0.07,
+    -0.092
+   ]
+  ],
+  "notes": "Dark sleek carrier. Raw units, origin at bbox centre; uniform scale 500 (500 m long). Prow +x (a pointed bow at x=+0.5). NOTE: faces +x, unlike the other ships (+z). Long flat flight deck on top, small stepped bridge tower aft of centre (top at y=+0.106), a long recessed hangar opening on each flank amidships. Engines: three stacked narrow horizontal light bars on EACH flank of the stern quarter (x -0.465..-0.33), facing sideways; the stern face itself has no emitter, so put exhaust VFX at x=-0.5 at the same heights. Dark navy-black hull with silver trim and seams; highly metallic, so under a bright studio/env map it reads chrome-silver, in a dark sky it reads dark with silver edges (see _final_dark). Glow is base colour only, no emissive map."
+ },
+ "ship_reformation_dropship": {
+  "file": "ship_reformation_dropship.glb",
+  "kind": "ship",
+  "tris": 7674,
+  "bbox": [
+   0.999,
+   0.274,
+   1.0
+  ],
+  "longAxis": "z",
+  "front": "+z",
+  "up": "+y",
+  "targetLength": 22,
+  "engineGlow": [
+   [
+    0.215,
+    0.065,
+    0.03
+   ],
+   [
+    -0.215,
+    0.065,
+    0.03
+   ],
+   [
+    0.18,
+    -0.045,
+    -0.28
+   ],
+   [
+    -0.18,
+    -0.045,
+    -0.28
+   ]
+  ],
+  "notes": "Compact armoured troop dropship. Raw units, origin at bbox centre; uniform scale 22 (22 m nose to tail; the wing span along x is the same 22 m). Nose +z with a dark tinted canopy, wedge hull in navy and silver armour panels. Two engine pods on top at the wing roots with cold-blue slits on their FRONT faces (engineGlow 1-2), long blue slits low on each flank aft (engineGlow 3-4); nothing glows on the stern. Rear (-z): a closed ramp door modelled into the hull (not a separate part, cannot open). Glow is base colour only, no emissive map."
+ },
+ "ship_dominion_shuttle": {
+  "file": "ship_dominion_shuttle.glb",
+  "kind": "ship",
+  "tris": 7826,
+  "bbox": [
+   0.997,
+   0.343,
+   0.936
+  ],
+  "longAxis": "z",
+  "front": "+z",
+  "up": "+y",
+  "targetLength": 18,
+  "engineGlow": [
+   [
+    0.088,
+    -0.036,
+    -0.45
+   ],
+   [
+    -0.088,
+    -0.036,
+    -0.45
+   ],
+   [
+    0.066,
+    0.083,
+    -0.45
+   ],
+   [
+    -0.066,
+    0.083,
+    -0.45
+   ],
+   [
+    0.0,
+    -0.15,
+    0.243
+   ],
+   [
+    0.1,
+    -0.15,
+    0.083
+   ],
+   [
+    -0.1,
+    -0.15,
+    0.083
+   ],
+   [
+    0.115,
+    -0.155,
+    -0.104
+   ],
+   [
+    -0.115,
+    -0.155,
+    -0.104
+   ]
+  ],
+  "notes": "Small armoured shuttle. Raw units, origin at bbox centre; longAxis z is nose-to-tail (0.936 raw), so the uniform scale is 18/0.936 = 19.23 and the stubby wing span along x becomes 19.2 m. Nose +z with a slit cockpit. Scored, riveted bronze plates with engraved linework (reads tan-bronze in bright light, darker bronze in the dark). engineGlow 1-4: four rear nozzles in a 2x2 block facing -z; 5-9: five amber lift thrusters under the hull facing -y (one under the nose, two pairs). Glow is base colour only, no emissive map."
+ },
+ "varo": {
+  "file": "varo.glb",
+  "kind": "humanoid",
+  "height": 1.85,
+  "tris": 56217,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   1.034,
+   1.85,
+   0.408
+  ],
+  "notes": "Hero tier, bare head (close-up character). Weathered man in his late 30s, short soldier's haircut, stubble, light eyes. Bronze plate (cuirass, layered pauldrons, tassets, greaves) engraved with crowned-flame motifs whose grooves are painted molten amber in BASE COLOUR only (no emissive map; add emissive in-engine if the amber should glow), segmented bronze gauntlets on both forearms, quilted crimson under-layer. Broad: 1.03 m across the pauldrons, hand bones at x=+-0.45 y=1.04. Face reads well at 0.6 m, slightly painterly; gaze a touch uneven. Hands rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore). Post-processed locally: roughness floored (raw skin and hair were wet-glossy) (0.60 non-metal / 0.45 metal)."
+ },
+ "officer": {
+  "file": "officer.glb",
+  "kind": "humanoid",
+  "height": 1.82,
+  "tris": 54566,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   0.926,
+   1.82,
+   0.365
+  ],
+  "notes": "Hero tier, bare head (close-up character). Gaunt, tired man in his 50s, pale skin, deep-set eyes, short dark hair. Clean black-bronze officer armour: high plated gorget up to the jaw, fitted cuirass, slim pauldrons, plated forearms and greaves, thin amber/copper edge trim (base colour only, no emissive), quilted crimson skirt panels, dark trousers. Built clean: apply the infection as an in-engine tint. Grey at the temples was lost in meshing and was repainted into the base colour (subtle; reads in 3/4 view). Small pale fleck on the crown of the hair (texture). Skin is quite pale under the studio light. Hand bones at x=+0.40/-0.42 y=1.00. Hands rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore). Post-processed locally: roughness floored (raw skin and hair were wet-glossy) (0.60 / 0.45)."
+ },
+ "king": {
+  "file": "king.glb",
+  "kind": "humanoid",
+  "height": 1.76,
+  "tris": 53336,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   0.91,
+   1.76,
+   0.353
+  ],
+  "notes": "Hero tier, bare head (close-up character). Man in his 40s, dark complexion, short dark hair, close-cut beard; real-man proportions, no crown, no cape. Intact ancient white-gold plate: ivory-white plates with gold edging and engraved leaf ornament, gold-and-black belt with a round boss, short tassets with small black inset tiles, black under-layer at joints. Battle damage is meant to be an in-engine tint. Grey at the temples was lost in meshing and repainted subtly into the base colour. Eyes came out grey rather than brown. Hand bones at x=+-0.40 y=0.97. Hands rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore). Post-processed locally: roughness floored (raw skin and hair were wet-glossy) (0.62 non-metal / 0.55 metal) and base-colour highlights above 0.8 compressed to 0.70. The white armour still blooms under the bright studio sandbox light (fine in the dark env); scale base colour x0.85 in-engine if it flares in a bright zone."
+ },
+ "vesryn": {
+  "file": "vesryn.glb",
+  "kind": "humanoid",
+  "height": 1.74,
+  "tris": 53840,
+  "rigged": true,
+  "facing": "+Z",
+  "skeleton": "meshy24",
+  "bbox": [
+   0.892,
+   1.74,
+   0.352
+  ],
+  "notes": "Hero tier, bare head (close-up character). Thin man in his 60s, collar-length grey hair (sculpted solid mesh), weathered lined face, slightly stooped. A white gauze strip runs along HIS LEFT cheek and jaw (+x); it meshed as a flat white band (reads as a bandage at gameplay distance, a bit like paint in extreme close-up). Long dark charcoal coat to the knees, open at the front, over an off-white high-collared shirt; dark trousers, worn lace-up boots; no armour. The coat skirt is skinned to the legs (no cloth bones): in a stride the front panels stretch with the thighs. Flaws: HIS RIGHT eye (-x) has a greyish hooded look in extreme close-up; two small hair stubs stick out sideways at jaw level; the off-white shirt blooms under the bright studio sandbox light (fine in the dark env). Hand bones at x=+-0.38 y=0.95. Hands rigid (no finger bones). One 0.03 s rest-pose clip from the rigger (ignore). Post-processed locally: roughness floored (raw skin and hair were wet-glossy) (0.60 / 0.45); base-colour highlights above 0.8 compressed to 0.64."
  }
 }

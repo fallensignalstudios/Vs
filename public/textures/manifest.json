@@ -1,0 +1,75 @@
+{
+  "marble_dark": {
+    "albedo": "marble_dark_albedo.webp",
+    "normal": "marble_dark_normal.webp",
+    "orm": "marble_dark_orm.webp",
+    "tileMeters": 2.5,
+    "metal": false,
+    "notes": "Polished near-black marble with thin gold-white veins. Low roughness (~0.17) and a very weak normal, so it reads as polished. Albedo kept dark (mean ~0.12 sRGB). Organic pattern, so repetition is barely visible. Floors and wall cladding in ancient interiors."
+  },
+  "stone_pale": {
+    "albedo": "stone_pale_albedo.webp",
+    "normal": "stone_pale_normal.webp",
+    "orm": "stone_pale_orm.webp",
+    "tileMeters": 2.5,
+    "metal": false,
+    "notes": "Pale white-gold limestone ashlar, 5 courses per tile (blocks about 1.0 x 0.5 m at 2.5 m/tile). Courses run along U; on walls, map V to up. Rough (~0.8). Regular bond, so the repeat is visible on very large flat walls; break it with trims or decals. Ancient precursor architecture, parapets, plazas."
+  },
+  "stone_worn": {
+    "albedo": "stone_worn_albedo.webp",
+    "normal": "stone_worn_normal.webp",
+    "orm": "stone_worn_orm.webp",
+    "tileMeters": 3.0,
+    "metal": false,
+    "notes": "Dark charcoal worn flagstones of varied size, with black grime in the joints (rougher and AO-darkened). Slab tops are smoother (~0.62) and the joints rougher. Floors, roads, courtyards."
+  },
+  "bronze_plate": {
+    "albedo": "bronze_plate_albedo.webp",
+    "normal": "bronze_plate_normal.webp",
+    "orm": "bronze_plate_orm.webp",
+    "tileMeters": 1.5,
+    "metal": true,
+    "notes": "Aged, scored bronze with engraved flame-like ornament in shallow grooves (a darker patina in the grooves gives higher roughness and AO). Fully metallic, roughness ~0.45. At tiled scale the ornament reads softly and the surface looks partly hammered or mottled. Use 0.5-1.0 m/tile on props and armour and 1.5-3 m on large wall or hull plates. Dominion structures and set-dressing."
+  },
+  "panel_navy": {
+    "albedo": "panel_navy_albedo.webp",
+    "normal": "panel_navy_normal.webp",
+    "orm": "panel_navy_orm.webp",
+    "tileMeters": 4.0,
+    "metal": true,
+    "notes": "Deep navy hull plating in panels of varied size, with thin light seams and a few silver trim strips. The height was inverted, so panels are raised and seams and strips recessed. Metalness 0.8 on the navy paint and 1.0 on the silver trim, roughness ~0.36. With the ORM metalness it reads dark in dim scenes: lift material.color or envMapIntensity rather than the map. Reformation interiors and hulls; use 8-20 m/tile on large distant hulls."
+  },
+  "metal_blackgold": {
+    "albedo": "metal_blackgold_albedo.webp",
+    "normal": "metal_blackgold_normal.webp",
+    "orm": "metal_blackgold_orm.webp",
+    "tileMeters": 2.0,
+    "metal": true,
+    "notes": "Aged blackened metal with a light rust bloom and bright gold inlay lines in a chevron pattern (about 4 chevron columns per tile; the chevrons point along -V). Fully metallic. The gold lines are smoother (lower roughness) and very slightly raised. Ancient black-gold relics, doors, plinths, trims."
+  },
+  "frost": {
+    "albedo": "frost_albedo.webp",
+    "normal": "frost_normal.webp",
+    "orm": "frost_orm.webp",
+    "tileMeters": 1.5,
+    "metal": false,
+    "notes": "Feathery white frost crystals over dark grey stone; the crystals are slightly smoother than the stone. Organic, so the repeat is not obvious. Use as a frost overlay or blend layer on stone, or on its own for icy floors."
+  },
+  "eclipse_tissue": {
+    "albedo": "eclipse_tissue_albedo.webp",
+    "normal": "eclipse_tissue_normal.webp",
+    "orm": "eclipse_tissue_orm.webp",
+    "emissive": "eclipse_tissue_emissive.webp",
+    "tileMeters": 2.0,
+    "metal": false,
+    "notes": "Black wet organic membrane with branching violet veins. Roughness ~0.32 (wet), and the baked glints from the source were suppressed. Extra map: emissive.webp is a violet vein mask (sRGB). Use material.emissiveMap with emissive=0xffffff and emissiveIntensity 1-3, and pulse it for life. Corruption surfaces."
+  },
+  "concrete_hangar": {
+    "albedo": "concrete_hangar_albedo.webp",
+    "normal": "concrete_hangar_normal.webp",
+    "orm": "concrete_hangar_orm.webp",
+    "tileMeters": 6.0,
+    "metal": false,
+    "notes": "Worn grey steel and concrete hangar deck in a 6x6 grid of plates per tile (1 m plates at 6 m/tile), with corner bolts, scuffs, oil stains and faint tyre marks. The tyre marks repeat visibly on very large floors, so overlay decals. Metal is false as the brief asked; it reads as painted or sealed deck. Hangars, landing pads, industrial floors."
+  }
+}

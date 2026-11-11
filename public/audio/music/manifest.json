@@ -77,5 +77,41 @@
     "loopBars": 23,
     "key": "C (C-G fifths, minor colour)",
     "notes": "Awe/stillness. Four solo bell strikes, pad from ~19 s, full drone + bell every bar from ~35 s to the end. Loop: start the next pass at seconds-2.0 (100.364 s = 23 bars) with a 2.0 s equal-power crossfade and the seam is bar-aligned."
+  },
+  "witness_elegy": {
+    "file": "witness_elegy.mp3",
+    "seconds": 118.0,
+    "bpm": 60,
+    "loopStart": 0,
+    "meanDb": -18.4,
+    "maxDb": -3.5,
+    "loopBars": 29,
+    "key": "D minor (ends on an unresolved low A/B-flat chord, then a lone high D bell)",
+    "notes": "Z10 witness: a memory of a last battle, watched, not played. Solemn low strings and a sustained high wordless-pad tone with one low accent per bar; from ~32 s the full ensemble with low drums and brass on every bar, building steadily to ~112 s (the drums do not recede in the last third; the build runs to the end). The last full chord (low A/B-flat, unresolved) strikes at 112 s and decays to 116 s; a lone high D bell strikes at 116 s and rings into the tail (faded over the last 1.2 s). Intended as a one-shot started with the scene. If the scene runs longer, the whole-file loop is bar-aligned: start the next pass at seconds-2.0 (116.000 s = 29 bars) with a 2.0 s equal-power crossfade; each pass then breathes through the decay (about 1 s under -40 dB) before restarting. Two-pass linear loudnorm: the generated build is kept (opening about 8 dB under the body).",
+    "gainDb": -0.2
+  },
+  "farewell_departure": {
+    "file": "farewell_departure.mp3",
+    "seconds": 109.077,
+    "bpm": 65,
+    "loopStart": 0,
+    "meanDb": -18.8,
+    "maxDb": -2.1,
+    "loopBars": 29,
+    "key": "F major (ends on an open F-C fifth)",
+    "notes": "Z12 farewell / departure. 0-15 s: a soft bell/celesta figure over low strings; 15 s: warm string pad enters; 30-72 s: the restrained swell (peak ~60-64 s); 72-94 s: settles back; 94-107 s: quiet hopeful coda (bells over held strings) and a soft fade in the last ~2 s. No drums. Opening lifted +10 dB and coda +8 dB before loudnorm so the arc survives a linear (two-pass) loudnorm: opening ~6 dB and coda ~10 dB under the swell. One-shot by intent; the whole-file loop is still bar-aligned: next pass at seconds-2.0 (107.077 s = 29 bars) with a 2.0 s equal-power crossfade, quiet into quiet.",
+    "gainDb": -0.6
+  },
+  "wound_vista": {
+    "file": "wound_vista.mp3",
+    "seconds": 88.4,
+    "bpm": 50,
+    "loopStart": 38.4,
+    "meanDb": -16.8,
+    "maxDb": -2.3,
+    "loopBars": 10,
+    "key": "D (low D drone, dissonant D/E-flat/A overtones)",
+    "notes": "Z09 overlook, first view of the wound. A giant heartbeat (double thud, ~0.3 s apart) on beats 1 and 3 (every 2.4 s) from the first second to the end. 0-19 s: heartbeat and one cold mid drone only (very sparse); 19.2 s: slow low swells join; 38.4 s: the full texture, sub drone, glassy high swells every 2 bars (9.6 s) and metallic resonance. The first pass plays from 0 (the sparse reveal, about 5 dB under the body); every later pass starts at loopStart 38.4 s (8 bars): loop 38.4-86.4 s = 10 bars = 5 swell cycles, then the 2.0 s equal-power tail; heartbeat and swell phase continue across the seam. Loop region alone: meanDb -15.7, -15.7 LUFS. Very bass-heavy (about 69 % of the energy below 80 Hz), hence the positive gainDb. Peaks limited about 2 dB before a linear (two-pass) loudnorm.",
+    "gainDb": 1.5
   }
 }
