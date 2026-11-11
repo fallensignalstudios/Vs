@@ -16,7 +16,7 @@ import { buildCover } from './cover';
 import { buildBarrier, buildDoor } from './doors';
 import { buildChannel, buildConduit, buildCorruption, buildFrost, buildWhitePoint, type ChannelOpts } from './dressing';
 import { computeBounds, mergeStatics } from './finalize';
-import { applyEnv, applyShadowBudget, buildPanelLight, buildPoint, buildSpot, fitKeyLight } from './lights';
+import { applyEnv, applyShadowBudget, budgetLights, buildPanelLight, buildPoint, buildSpot, fitKeyLight } from './lights';
 import { buildProp } from './props';
 import { buildColumn, buildRib, buildRibRow } from './ribs';
 import { buildBlocker, buildBridge, buildDeck, buildDisc, buildFloor, buildRail, buildRamp, type DeckExtras } from './structure';
@@ -191,6 +191,7 @@ export class ZoneBuilderImpl implements ZoneBuilder {
       try { render?.registerReflectiveFloor(mesh, { y: y + this.root.getWorldPosition(new THREE.Vector3()).y }); } catch (err) { ctx.warn('reflect', `registerReflectiveFloor failed: ${String(err)}`); }
     });
 
+    budgetLights(ctx);
     if (this.key) {
       fitKeyLight(this.key, this.worldBounds());
       const dir = this.key.userData.kitDir as THREE.Vector3;

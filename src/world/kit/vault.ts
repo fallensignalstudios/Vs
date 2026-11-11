@@ -45,6 +45,7 @@ varying vec2 vSheet;
 uniform vec3 uColor;
 uniform float uStrength;
 uniform float uTime;
+uniform float uFog;
 float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float noise( vec2 p ) {
   vec2 i = floor( p ), f = fract( p );
@@ -59,7 +60,9 @@ void main() {
   float along = pow( 1.0 - vSheet.y, 1.7 ) * smoothstep( 0.0, 0.04, vSheet.y );
   float ends = smoothstep( 0.0, 0.2, vSheet.x ) * smoothstep( 1.0, 0.8, vSheet.x );
   float dust = 0.55 + 0.45 * noise( vec2( vWorld.x + vWorld.z, vWorld.y * 0.6 ) * 0.7 + vec2( uTime * 0.04, -uTime * 0.025 ) );
-  float a = uStrength * face * along * ends * dust * smoothstep( 0.6, 4.0, dist );
+  // depth fade: lit haze thins with view depth like the scene fog it stands in for
+  float haze = uFog * dist;
+  float a = uStrength * face * along * ends * dust * smoothstep( 0.6, 4.0, dist ) * exp( - haze * haze );
   gl_FragColor = vec4( uColor * a, a );
 }`;
 
@@ -317,7 +320,7 @@ function lightSheets(ctx: KitCtx, part: Part, seams: Seam[], at: (t: number, off
   g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
   g.setAttribute('aSheet', new THREE.BufferAttribute(new Float32Array(uv), 2));
   g.computeBoundingSphere();
-  const uniforms = { uColor: { value: new THREE.Color(color) }, uStrength: { value: 0.24 }, uTime: { value: 0 } };
+  const uniforms = { uColor: { value: new THREE.Color(color) }, uStrength: { value: 0.24 }, uTime: { value: 0 }, uFog: { value: 0 } };
   const m = new THREE.ShaderMaterial({
     vertexShader: SHEET_VERT, fragmentShader: SHEET_FRAG, uniforms, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: true,
@@ -329,6 +332,7 @@ function lightSheets(ctx: KitCtx, part: Part, seams: Seam[], at: (t: number, off
   mesh.renderOrder = 8;
   ctx.updaters.push((_dt, time) => {
     uniforms.uTime.value = time;
+    uniforms.uFog.value = ctx.fogDensity();
     mesh.visible = ctx.volumetrics();
   });
   return mesh;

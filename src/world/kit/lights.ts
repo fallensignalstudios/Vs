@@ -29,6 +29,8 @@ varying float vAxial;
 uniform vec3 uColor;
 uniform float uStrength;
 uniform float uTime;
+uniform float uFog;
+uniform float uFloorY;
 float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 float noise( vec2 p ) {
   vec2 i = floor( p ), f = fract( p );
@@ -43,7 +45,13 @@ void main() {
   float along = pow( 1.0 - vAxial, 1.4 ) * smoothstep( 0.0, 0.06, vAxial );
   float dust = 0.62 + 0.38 * noise( vWorld.xz * 0.55 + vec2( uTime * 0.05, vWorld.y * 0.35 - uTime * 0.03 ) );
   float nearFade = smoothstep( 0.4, 2.5, dist );
-  float a = uStrength * edge * along * dust * nearFade;
+  // depth fade: the shaft is lit air, so it thins with view depth exactly as the scene's haze does (it draws
+  // without fog, being additive), and it settles softly into the floor it lands on instead of cutting a hard
+  // ellipse where the cone meets the stone
+  float haze = uFog * dist;
+  float depth = exp( - haze * haze ) * ( 1.0 - smoothstep( 25.0, 90.0, dist ) * 0.45 );
+  float contact = smoothstep( 0.0, 1.2, vWorld.y - uFloorY );
+  float a = uStrength * edge * along * dust * nearFade * depth * contact;
   gl_FragColor = vec4( uColor * a, a );
 }`;
 
@@ -51,6 +59,7 @@ function buildShaft(ctx: KitCtx, light: THREE.SpotLight, color: number, length: 
   const geo = new Geo().band(0.08, 0, 0.08 + Math.tan(angle) * length, -length, 28).toGeometry();
   const uniforms = {
     uColor: { value: new THREE.Color(color) }, uStrength: { value: 0.5 }, uTime: { value: 0 }, uLength: { value: length },
+    uFog: { value: 0 }, uFloorY: { value: -1e4 },
   };
   const mat = new THREE.ShaderMaterial({
     vertexShader: SHAFT_VERT, fragmentShader: SHAFT_FRAG, uniforms, transparent: true, depthWrite: false,
@@ -67,10 +76,14 @@ function buildShaft(ctx: KitCtx, light: THREE.SpotLight, color: number, length: 
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
   ctx.updaters.push((_dt, time) => {
     uniforms.uTime.value = time;
+    uniforms.uFog.value = ctx.fogDensity();
+    // the floor the shaft lands on: the target height (zone-root space → world)
+    uniforms.uFloorY.value = light.target.getWorldPosition(_tgt).y;
     mesh.visible = light.visible && light.intensity > 0 && ctx.volumetrics();
   });
   return mesh;
 }
+const _tgt = new THREE.Vector3();
 
 function flicker(ctx: KitCtx, light: THREE.Light, amount: number): void {
   const base = light.intensity, ph = ctx.rand() * 40;
@@ -135,9 +148,87 @@ export function buildPanelLight(ctx: KitCtx, o: RectOpts & { color?: number; int
   const group = part.done();
   const light = new THREE.PointLight(o.color ?? 0xffe9c4, ctx.num(o.intensity, 22, 0, 5000), Math.max(w, d) * 3 + 8, 2);
   light.position.set(off[0], off[1], off[2]);
+  light.userData.kitFixture = true;
   group.add(light);
   ctx.lights.push(light);
   return group;
+}
+
+/**
+ * LIGHT BUDGET (polish 3). A forward renderer pays for every light in every lit pixel, and a zone full of lamps,
+ * consoles and corruption patches that each own a point light washes the room evenly instead of pooling light.
+ * Fixture lights (props, panel lights, corruption — tagged `userData.kitFixture`) are therefore SHARED: fixtures
+ * of a similar colour within {@link SHARE_RADIUS} m become one light at their intensity-weighted centre. If the
+ * zone still holds more than {@link LIGHT_BUDGET} point / spot lights, the weakest fixtures go emissive-only.
+ * Lights the zone placed itself (`point`, `spot`), the white point, barriers and the key are never touched.
+ */
+export const LIGHT_BUDGET = 12;
+export const SHARE_RADIUS = 6;
+
+interface Fixture { light: THREE.PointLight; pos: THREE.Vector3; color: THREE.Color }
+
+export function budgetLights(ctx: KitCtx): { shared: number; dropped: number } {
+  const out = { shared: 0, dropped: 0 };
+  const isLocal = (l: THREE.Light): boolean => (l as THREE.PointLight).isPointLight === true || (l as THREE.SpotLight).isSpotLight === true;
+  const count = (): number => ctx.lights.filter(isLocal).length;
+  if (count() <= LIGHT_BUDGET) return out;
+  ctx.root.updateMatrixWorld(true);
+  const remove = (l: THREE.Light): void => {
+    (l as THREE.SpotLight).target?.removeFromParent();
+    l.removeFromParent();
+    l.dispose();
+    const i = ctx.lights.indexOf(l);
+    if (i >= 0) ctx.lights.splice(i, 1);
+  };
+  // ---- share: greedy clusters of point fixtures, strongest first ------------------------------------------
+  const points: Fixture[] = ctx.lights
+    .filter((l): l is THREE.PointLight => (l as THREE.PointLight).isPointLight === true && l.userData.kitFixture === true && !l.castShadow)
+    .map((light) => ({ light, pos: light.getWorldPosition(new THREE.Vector3()), color: light.color.clone() }))
+    .sort((a, b) => b.light.intensity - a.light.intensity);
+  const clusters: Fixture[][] = [];
+  for (const f of points) {
+    const home = clusters.find((c) => {
+      const lead = c[0];
+      const dc = Math.abs(lead.color.r - f.color.r) + Math.abs(lead.color.g - f.color.g) + Math.abs(lead.color.b - f.color.b);
+      return dc < 0.35 && lead.pos.distanceTo(f.pos) < SHARE_RADIUS;
+    });
+    if (home) home.push(f); else clusters.push([f]);
+  }
+  const inv = new THREE.Matrix4().copy(ctx.root.matrixWorld).invert();
+  for (const c of clusters) {
+    if (c.length < 2) continue;
+    let sum = 0, reach = 0;
+    const centre = new THREE.Vector3(), col = new THREE.Color(0, 0, 0);
+    for (const f of c) { sum += f.light.intensity; centre.addScaledVector(f.pos, f.light.intensity); }
+    centre.multiplyScalar(1 / Math.max(1e-6, sum));
+    for (const f of c) {
+      reach = Math.max(reach, f.light.distance + f.pos.distanceTo(centre));
+      col.r += f.color.r * f.light.intensity; col.g += f.color.g * f.light.intensity; col.b += f.color.b * f.light.intensity;
+    }
+    col.multiplyScalar(1 / Math.max(1e-6, sum));
+    // one light for the group: the overlap of neighbouring pools is not doubled, so a little under the sum
+    const shared = new THREE.PointLight(col, sum * 0.8, reach, 2);
+    shared.name = `kit-shared-light:${c.length}`;
+    shared.userData.kitFixture = true;
+    shared.position.copy(centre).applyMatrix4(inv);
+    ctx.root.add(shared);
+    for (const f of c) remove(f.light);
+    ctx.lights.push(shared);
+    out.shared += c.length - 1;
+  }
+  // ---- drop: weakest fixtures become emissive-only ------------------------------------------------------
+  let over = count() - LIGHT_BUDGET;
+  if (over > 0) {
+    const fixtures = ctx.lights.filter((l) => isLocal(l) && l.userData.kitFixture === true && !l.castShadow)
+      .sort((a, b) => a.intensity * (a as THREE.PointLight).distance - b.intensity * (b as THREE.PointLight).distance);
+    for (const l of fixtures) {
+      if (over <= 0) break;
+      remove(l);
+      over--;
+      out.dropped++;
+    }
+  }
+  return out;
 }
 
 /** The zone's environment: sky, look, ambience, music and the key directional light. */

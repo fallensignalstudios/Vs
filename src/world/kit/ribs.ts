@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import type { MatId, RibOpts } from '@/core/api';
 import type { SweepFrame, V2, V3 } from './geo';
 import { bx, bz } from './geo';
-import { familyOf, KitCtx, Part, type PartTemplate } from './core';
+import { familyOf, KitCtx, localRand, Part, type PartTemplate } from './core';
 
 type RibStyle = NonNullable<RibOpts['style']>;
 
@@ -53,14 +53,43 @@ function emitRib(part: Part, d: RibDims, style: RibStyle, lit: boolean, mat: Mat
   const seam: V2[] = [[-T / 2 - 0.04, -0.055], [-T / 2 - 0.04, 0.055], [-T / 2 + 0.01, 0.055], [-T / 2 + 0.01, -0.055]];
   const N = 32;
   const all = archFrames(a, b, 0, 1, N, 0.52);
+  // fractured ends (polish 3): the section stays FULL where the rib broke — no pinching to a point. The last frame
+  // shears a little; the break itself is a ragged face of blocky fragments standing proud of the cut.
+  // (The zone stream `ctx.rand` is drawn exactly as before — five per sheared frame — the fragments use a
+  // private stream seeded from those draws.)
+  const breaks: Array<{ f: SweepFrame; prev: SweepFrame; seed: number[] }> = [];
   const jagged = (fr: SweepFrame[]): SweepFrame[] => {
-    // fractured end: the last frames shear and pinch irregularly
+    const seed: number[] = [];
     for (let i = 1; i <= 2; i++) {
-      const f = fr[fr.length - i], k = i === 1 ? 0.35 : 0.8;
-      f.su = (f.su ?? 1) * (k + ctx.rand() * 0.2); f.sv = (f.sv ?? 1) * (k + ctx.rand() * 0.25);
-      f.p = [f.p[0] + (ctx.rand() - 0.5) * 0.3, f.p[1] + (ctx.rand() - 0.5) * 0.3, (ctx.rand() - 0.5) * 0.4];
+      const f = fr[fr.length - i];
+      const a = ctx.rand(), b = ctx.rand(), dx = ctx.rand(), dy = ctx.rand(), dz = ctx.rand();
+      seed.push(a, b, dx);
+      // barely thinner (the outer skin spalled off), sheared across the cut
+      const k = i === 1 ? 0.9 : 0.97;
+      f.su = (f.su ?? 1) * (k + a * 0.08); f.sv = (f.sv ?? 1) * (k + b * 0.06);
+      f.p = [f.p[0] + (dx - 0.5) * 0.18 * (i === 1 ? 1 : 0.4), f.p[1] + (dy - 0.5) * 0.18 * (i === 1 ? 1 : 0.4), (dz - 0.5) * 0.12];
     }
+    breaks.push({ f: fr[fr.length - 1], prev: fr[fr.length - 2], seed });
     return fr;
+  };
+  const fracture = (): void => {
+    for (const { f, prev, seed } of breaks) {
+      const lr = localRand(...seed);
+      // tangent out of the break (from the previous frame to the last), section axes u (radial) and v (depth)
+      const tx = f.p[0] - prev.p[0], ty = f.p[1] - prev.p[1], tz = f.p[2] - prev.p[2], tl = Math.hypot(tx, ty, tz) || 1;
+      const t: V3 = [tx / tl, ty / tl, tz / tl];
+      const su = (f.su ?? 1) * T, sv = (f.sv ?? 1) * D;
+      const pieces = 5 + Math.floor(lr() * 3);
+      for (let i = 0; i < pieces; i++) {
+        const u = (lr() - 0.5) * su * 0.8, v = (lr() - 0.5) * sv * 0.8, out = (lr() - 0.2) * Math.min(T, D) * 0.45;
+        const px = f.p[0] + f.u[0] * u + f.v[0] * v + t[0] * out;
+        const py = f.p[1] + f.u[1] * u + f.v[1] * v + t[1] * out;
+        const pz = f.p[2] + f.u[2] * u + f.v[2] * v + t[2] * out;
+        const sz = Math.min(T, D) * (0.25 + lr() * 0.3);
+        part.g(i % 3 === 2 ? 'goldDark' : mat).push().move(px, py, pz).rotY(lr() * 6.28).rotX((lr() - 0.5) * 1.2).rotZ((lr() - 0.5) * 1.2)
+          .chunk(sz * 1.3, sz, sz * 1.1, 0.4, lr).pop();
+      }
+    }
   };
   // collars: every fourth segment is a slightly heavier band with a gold edge — the rib reads as built from
   // segments, which gives the eye a unit to measure its size by
@@ -99,6 +128,7 @@ function emitRib(part: Part, d: RibDims, style: RibStyle, lit: boolean, mat: Mat
     const fr = jagged(all.slice(0, cut + 1).map((f) => ({ ...f })));
     run(fr, true);
     run(jagged(all.slice(N - 3).reverse().map((f) => ({ ...f }))), true);
+    fracture();
     foot(-a); foot(a);
     seamRun(2, cut - 3);
     // rubble under the break

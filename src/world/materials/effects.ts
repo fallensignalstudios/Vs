@@ -20,13 +20,19 @@ export interface GlowParams {
   period?: number;
   /** slow random flicker amplitude 0 … 1 (keep small) */
   flicker?: number;
+  /**
+   * ADDED (polish 3): nominal width (m) of the strips drawn with this material, 0 = off. Once a strip is
+   * narrower than a pixel its glow fades toward its true average brightness, so a thin channel far away is a
+   * steady faint line instead of a shimmer of popping hot pixels (and their bloom).
+   */
+  lineWidth?: number;
 }
 
 const GLOW_INDEX: Record<GlowMode, number> = { channel: 0, panel: 1, louvre: 2, segment: 3, vein: 4 };
 
 const GLOW_PARS = /* glsl */ `
 uniform vec4 glowA; // x pulse depth · y speed m/s · z wavelength m · w pattern strength
-uniform vec4 glowB; // x pattern period m · y flicker · z,w unused
+uniform vec4 glowB; // x pattern period m · y flicker · z line width m (0 = no distance fade) · w unused
 `;
 
 const GLOW_SURFACE = /* glsl */ `
@@ -66,6 +72,14 @@ const GLOW_SURFACE = /* glsl */ `
 		float gKnot = 0.5 + 0.5 * sin( gs * 9.0 + sin( gs * 3.7 ) * 2.0 );
 		g = 1.0 - glowA.x + glowA.x * 1.7 * max( gBeatA, gBeatB ) + ( gKnot - 0.5 ) * glowA.w;
 	#endif
+	if ( glowB.z > 0.0 ) {
+		// pixel footprint in metres: the larger axis of the surface's screen-space derivative
+		vec3 gdx = dFdx( mxPos ), gdy = dFdy( mxPos );
+		float gPx = max( length( gdx ), length( gdy ) );
+		// coverage of the strip in its pixel; keep a floor so far channels still read as a faint line
+		float gCov = clamp( glowB.z / max( gPx, 1e-5 ), 0.0, 1.0 );
+		g *= mix( 0.28, 1.0, gCov );
+	}
 	totalEmissiveRadiance *= max( g, 0.0 );
 }
 `;
@@ -78,7 +92,7 @@ export function glowPatch(mode: GlowMode, p: GlowParams = {}): SurfacePatch {
     defines: { AUR_GLOW: GLOW_INDEX[mode] },
     uniforms: {
       glowA: { value: new THREE.Vector4(p.pulse ?? 0.3, p.speed ?? 1.5, p.wavelength ?? 6, p.pattern ?? 0.1) },
-      glowB: { value: new THREE.Vector4(p.period ?? 0.2, p.flicker ?? 0, 0, 0) },
+      glowB: { value: new THREE.Vector4(p.period ?? 0.2, p.flicker ?? 0, p.lineWidth ?? 0, 0) },
     },
     fragmentPars: GLOW_PARS,
     surface: GLOW_SURFACE,
@@ -88,6 +102,7 @@ export function glowPatch(mode: GlowMode, p: GlowParams = {}): SurfacePatch {
       pulseWavelength: { uniform: 'glowA', comp: 'z' },
       pattern: { uniform: 'glowA', comp: 'w' },
       flicker: { uniform: 'glowB', comp: 'y' },
+      lineWidth: { uniform: 'glowB', comp: 'z' },
     },
   };
 }

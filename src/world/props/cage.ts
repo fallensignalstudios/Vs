@@ -12,7 +12,7 @@
  * Owns one point light.
  */
 import * as THREE from 'three';
-import type { MaterialLibrary } from '@/core/api';
+import type { ContainmentCageOpts, MaterialLibrary } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { clamp01, mulberry32 } from '@/core/mathx';
 import { PropBase, TMP, ramp, rate, spring, uC, uF, type Glow } from './base';
@@ -61,8 +61,12 @@ export class ContainmentCage extends PropBase<Params> {
   private readonly coreY: number;
   private turn = 0;
 
-  constructor(lib: MaterialLibrary | null, kind: 'dominion' | 'reformation') {
+  /** 0 = read at 20–40 m (default) · 1 = `distant`: brighter self-light so the silhouette carries at ~100 m+ */
+  private readonly far: number;
+
+  constructor(lib: MaterialLibrary | null, kind: 'dominion' | 'reformation', opts: ContainmentCageOpts = {}) {
     super(`containmentCage.${kind}`, lib, { charge: 0.2, destroyed: 0 }, { charge: spring(4, 0.85), destroyed: rate(TOTAL) });
+    this.far = opts.distant === true ? 1 : 0;
     const dom = (this.dominion = kind === 'dominion');
     const rnd = mulberry32(dom ? 7701 : 4242);
     const P = new Parts();
@@ -259,6 +263,19 @@ export class ContainmentCage extends PropBase<Params> {
     this.addSocket('core', 0, this.coreY, 0);
     this.addSocket('top', 0, dom ? 6.2 : 4.9, 0);
     this.addCollider({ kind: 'cyl', r: 3.6, hy: 3 }, 0, 3, 0);
+    // seen through glass across a long gap: the scene's haze would wash it to a ghost — opt out of fog
+    if (opts.fog === false) {
+      this.object.traverse((o) => {
+        const mats = (o as THREE.Mesh).material;
+        for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {
+          if ('fog' in m && (m as THREE.Material & { fog: boolean }).fog) {
+            (m as THREE.Material & { fog: boolean }).fog = false;
+            m.needsUpdate = true;
+          }
+        }
+      });
+    }
+    if (this.far) this.light.distance = 60;
     this.ready();
   }
 
@@ -268,14 +285,15 @@ export class ContainmentCage extends PropBase<Params> {
     const spike = d > 0 && d < 0.14 ? Math.sin(Math.PI * (d / 0.14)) : 0;
     const hum = this.dominion ? 1 + 0.12 * ch * Math.sin(time * 13) * Math.sin(time * 5.1) : 1;
     const embers = this.dominion ? 0.3 * ramp(d, 0.3, 0.5) * (1 - ramp(d, 0.82, 1)) * (0.6 + 0.4 * Math.sin(time * 9)) : 0;
-    this.glow.set(((this.dominion ? 1.0 : 0.9) + 2.3 * ch) * hum * alive + 3.5 * spike + embers);
-    this.light.intensity = (6 + 44 * ch) * alive * hum + 150 * spike;
-    this.frameMat.emissiveIntensity = (0.22 + 0.5 * ch) * alive + 0.6 * spike + 0.05;
+    const far = this.far;
+    this.glow.set((((this.dominion ? 1.0 : 0.9) + 2.3 * ch) * hum * alive + 3.5 * spike + embers) * (1 + 0.7 * far));
+    this.light.intensity = ((6 + 44 * ch) * alive * hum + 150 * spike) * (1 + 3 * far);
+    this.frameMat.emissiveIntensity = (0.22 + 0.5 * ch) * alive * (1 + 1.2 * far) + 0.6 * spike + 0.05 + 0.12 * far;
 
     const collapse = ramp(d, 0.03, 0.3);
     this.fieldMesh.visible = collapse < 0.999;
     this.field.uniforms.uCollapse.value = collapse;
-    this.field.uniforms.uGain.value = 0.55 + 1.3 * ch + 2 * spike;
+    this.field.uniforms.uGain.value = (0.55 + 1.3 * ch) * (1 + 0.5 * far) + 2 * spike;
     if (this.matter && this.matterMesh) {
       const gone = ramp(d, 0.08, 0.52);
       this.matterMesh.visible = gone < 0.999;

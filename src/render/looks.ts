@@ -35,33 +35,34 @@ function look(over: DeepPartial<Look>): Look {
  * real corruption sources in the scene.
  */
 export const LOOKS: Readonly<Record<LookName, Look>> = {
+  // the engine reference: no tint, no split-tone, neutral contrast — the other looks are graded away from it
   neutral: look({}),
 
-  // Z00 — fractured white-gold landing: smoke haze, amber emergency practicals, teal shadows.
+  // Z00 — fractured white-gold landing: smoke haze, amber emergency practicals, teal shadows. Polish 3: less
+  // fill (the light comes through the breach and from the fires), deeper shadows, the stone reads greyer.
   crash: look({
     exposure: 0.96,
     bloom: { intensity: 0.82, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x33261c, density: 0.022 },
-    grade: { tint: 0xffe6c6, saturation: 0.9, contrast: 1.12, lift: 0.008, shadowsTint: 0x9cc4ff, highlightsTint: 0xffc98a },
-    vignette: 0.5, grain: 0.45, chromaticAberration: 0.32,
-    ao: { intensity: 3.2, radius: 1.3 },
-    ambient: { sky: 0x8a7663, ground: 0x2a1a10, intensity: 0.5 },
-    envIntensity: 0.85,
+    fog: { color: 0x2c221a, density: 0.022 },
+    grade: { tint: 0xffe8cc, saturation: 0.86, contrast: 1.18, lift: -0.004, shadowsTint: 0x9cc0f0, highlightsTint: 0xffc98a },
+    vignette: 0.52, grain: 0.45, chromaticAberration: 0.32,
+    ao: { intensity: 3.6, radius: 1.3 },
+    ambient: { sky: 0x6e6152, ground: 0x1e140c, intensity: 0.36 },
+    envIntensity: 0.7,
   }),
 
-  // Z01 — long ivory hall: bright, clean, a touch cool so the cold security light and warm strips both read.
+  // Z01 — long ivory hall under its ENCLOSED vault (kit 'vaultClosed'): light enters through the high seams and the
+  // key; the floor bounce is warm but low, so the hall has real pools and shadow (relay-route painting: grey
+  // veined marble, deep shade under the cover) and the far end recedes into warm haze rather than into grey.
   pressureHall: look({
-    // Z01 under its ENCLOSED vault (kit 'vaultClosed'): light enters through high seams and bounces off the pale
-    // floor, so the ground ambient is a warm bounce rather than dark earth; a pale warm haze makes the far end
-    // recede into light (relay-route painting) instead of into grey; the key, shafts and seams still carry it
-    exposure: 0.9,
-    bloom: { intensity: 0.7, threshold: 1.0, radius: 0.74 },
-    fog: { color: 0xb3a792, density: 0.017 },
-    grade: { tint: 0xf4f6fb, saturation: 0.96, contrast: 1.06, lift: 0.006, shadowsTint: 0xc4d0e8, highlightsTint: 0xfff2dc },
-    vignette: 0.34, grain: 0.26, chromaticAberration: 0.16,
-    ao: { intensity: 3.0, radius: 1.4 },
-    ambient: { sky: 0xc9c2b4, ground: 0x8a7b64, intensity: 0.6 },
-    envIntensity: 1.0,
+    exposure: 0.92,
+    bloom: { intensity: 0.72, threshold: 1.0, radius: 0.74 },
+    fog: { color: 0x9a8f7c, density: 0.016 },
+    grade: { tint: 0xf4f4f6, saturation: 0.9, contrast: 1.16, lift: -0.004, shadowsTint: 0xb4c2e0, highlightsTint: 0xfff0d8 },
+    vignette: 0.4, grain: 0.26, chromaticAberration: 0.16,
+    ao: { intensity: 3.6, radius: 1.4 },
+    ambient: { sky: 0xa8a294, ground: 0x5a4c3a, intensity: 0.36 },
+    envIntensity: 0.72,
   }),
 
   // Z02 — survivor bend: muted and low-key; soft contrast, lifted blacks, warm practicals. A breath after E1.
@@ -76,28 +77,31 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     envIntensity: 0.8,
   }),
 
-  // Z03 — frozen sensor access: cold cyan atmosphere, thick pale haze, icy glow.
+  // Z03 — frozen sensor access: cold cyan atmosphere, thick pale haze, icy glow; contrast enough that the ice,
+  // the conduits and the figures separate from the haze (relay-route painting: marble greys, not a white-out).
   frozen: look({
-    exposure: 1.06,
-    bloom: { intensity: 0.9, threshold: 0.94, radius: 0.8 },
-    fog: { color: 0x6b93a3, density: 0.024 },
-    grade: { tint: 0xdff2ff, saturation: 0.8, contrast: 1.06, lift: 0.01, shadowsTint: 0xa8dcf8, highlightsTint: 0xeefaff },
-    vignette: 0.4, grain: 0.3, chromaticAberration: 0.24,
-    ao: { intensity: 2.6, radius: 1.2 },
-    ambient: { sky: 0x9cc9e2, ground: 0x22323e, intensity: 0.72 },
-    envIntensity: 0.95,
+    exposure: 1.02,
+    bloom: { intensity: 0.86, threshold: 0.96, radius: 0.8 },
+    fog: { color: 0x5f8494, density: 0.024 },
+    grade: { tint: 0xe2f0fa, saturation: 0.78, contrast: 1.16, lift: -0.006, shadowsTint: 0x9cc8ec, highlightsTint: 0xf2f8ff },
+    vignette: 0.44, grain: 0.3, chromaticAberration: 0.24,
+    ao: { intensity: 3.3, radius: 1.2 },
+    ambient: { sky: 0x86b0c8, ground: 0x1a2630, intensity: 0.5 },
+    envIntensity: 0.8,
   }),
 
-  // Z04 — relay overlook: silver daylight through the ribs, pale marble, long hazy sight lines (relay concept).
+  // Z04 — relay overlook: silver daylight through the ribs, veined marble, long hazy sight lines (relay concept).
+  // Polish 3: the fill is a dim silver (the key, the shafts and the strips carry the room) and the reflection
+  // probe adds less flat white, so the plinths and columns model instead of reading as pale blocks.
   relay: look({
-    exposure: 1.18,
-    bloom: { intensity: 0.5, threshold: 1.08, radius: 0.64 },
-    fog: { color: 0x8f9aa8, density: 0.007 },
-    grade: { tint: 0xf0f5ff, saturation: 0.9, contrast: 1.04, lift: 0.01, shadowsTint: 0xbfd2f5, highlightsTint: 0xfff6e6 },
-    vignette: 0.28, grain: 0.22, chromaticAberration: 0.14,
-    ao: { intensity: 3.0, radius: 1.5 },
-    ambient: { sky: 0xd2dae8, ground: 0x4e463a, intensity: 1.0 },
-    envIntensity: 1.1,
+    exposure: 1.1,
+    bloom: { intensity: 0.55, threshold: 1.05, radius: 0.66 },
+    fog: { color: 0x8a94a2, density: 0.008 },
+    grade: { tint: 0xf0f4fc, saturation: 0.86, contrast: 1.14, lift: -0.004, shadowsTint: 0xb0c4ea, highlightsTint: 0xfff4e2 },
+    vignette: 0.34, grain: 0.22, chromaticAberration: 0.14,
+    ao: { intensity: 3.6, radius: 1.5 },
+    ambient: { sky: 0x9ca6b6, ground: 0x2e2a24, intensity: 0.6 },
+    envIntensity: 0.68,
   }),
 
   // Z05 — meeting atrium: vast, saturated, hard contrast; blue shadows under amber / blue-white battle light.
@@ -125,28 +129,31 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     envIntensity: 0.85,
   }),
 
-  // Z07 — capture-control gallery: dim technical space below grade; teal shadows, amber console highlights.
+  // Z07 — capture-control gallery: dim technical space below grade, read against the wound-overlook palette —
+  // charcoal and grey-violet shadows, teal-black depth, warm only in the console highlights.
   gallery: look({
     exposure: 0.94,
-    bloom: { intensity: 0.8, threshold: 1.0, radius: 0.7 },
-    fog: { color: 0x0c1418, density: 0.017 },
-    grade: { tint: 0xeaf4f6, saturation: 0.95, contrast: 1.14, lift: 0, shadowsTint: 0xa8d0d8, highlightsTint: 0xffe0b0 },
-    vignette: 0.5, grain: 0.34, chromaticAberration: 0.24,
-    ao: { intensity: 3.3, radius: 1.1 },
-    ambient: { sky: 0x4c5c66, ground: 0x14130f, intensity: 0.38 },
+    bloom: { intensity: 0.82, threshold: 1.0, radius: 0.72 },
+    fog: { color: 0x0b0f14, density: 0.017 },
+    grade: { tint: 0xeceaf2, saturation: 0.84, contrast: 1.2, lift: -0.008, shadowsTint: 0xb0b2d8, highlightsTint: 0xffe2bc },
+    vignette: 0.54, grain: 0.34, chromaticAberration: 0.24,
+    ao: { intensity: 3.4, radius: 1.1 },
+    ambient: { sky: 0x3e4452, ground: 0x0e0d0f, intensity: 0.3 },
     envIntensity: 0.9,
   }),
 
-  // Z08 — quarantine crucible: luminous white-gold arena over a wet dark floor (quarantine concept).
+  // Z08 — quarantine crucible: luminous white-gold walls lit from their gold seams over a wet black floor
+  // (quarantine concept). Its own grade: gold-warm highlights, cool steel shadows, the hardest contrast of the
+  // white-gold rooms, little fill — the court is lit by the walls, not by the air.
   crucible: look({
-    exposure: 1.1,
-    bloom: { intensity: 0.95, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x3a322a, density: 0.008 },
-    grade: { tint: 0xfff2dc, saturation: 1.08, contrast: 1.12, lift: 0, shadowsTint: 0xc2ccf0, highlightsTint: 0xffe0a8 },
-    vignette: 0.4, grain: 0.3, chromaticAberration: 0.24,
-    ao: { intensity: 3.0, radius: 1.5 },
-    ambient: { sky: 0xb6aa94, ground: 0x2e251c, intensity: 0.62 },
-    envIntensity: 1.05,
+    exposure: 1.06,
+    bloom: { intensity: 1.0, threshold: 0.96, radius: 0.78 },
+    fog: { color: 0x2e2822, density: 0.008 },
+    grade: { tint: 0xfff0d8, saturation: 1.0, contrast: 1.24, lift: -0.012, shadowsTint: 0xa6b4dc, highlightsTint: 0xffd890 },
+    vignette: 0.44, grain: 0.3, chromaticAberration: 0.24,
+    ao: { intensity: 3.5, radius: 1.5 },
+    ambient: { sky: 0x9a8e7a, ground: 0x1e1812, intensity: 0.42 },
+    envIntensity: 0.88,
   }),
 
   // Z09 — wound gallery: near-black, crushed, cold; the sky does the talking (wound-overlook concept).
@@ -161,27 +168,30 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     envIntensity: 1.1,
   }),
 
-  // Z10 — Fifth Crownmark chamber: mirror-black stone and gold, luminous rings (crownmark-chamber concept).
+  // Z10 — Fifth Crownmark chamber: mirror-black stone and gold, luminous rings (crownmark-chamber concept). Its own
+  // grade: silver-cold and nearly colourless except the gold — cold steel shadows, gold highlights, crushed
+  // blacks, a wide bloom on the rings and the core.
   core: look({
     exposure: 1.0,
-    bloom: { intensity: 0.92, threshold: 1.0, radius: 0.76 },
-    fog: { color: 0x060608, density: 0.0066 },
-    grade: { tint: 0xfff6e8, saturation: 1.08, contrast: 1.18, lift: -0.012, shadowsTint: 0xc9cdea, highlightsTint: 0xffdca0 },
-    vignette: 0.48, grain: 0.28, chromaticAberration: 0.2,
+    bloom: { intensity: 1.04, threshold: 0.98, radius: 0.82 },
+    fog: { color: 0x050507, density: 0.0066 },
+    grade: { tint: 0xf6f4f0, saturation: 0.8, contrast: 1.28, lift: -0.02, shadowsTint: 0x9aa6cc, highlightsTint: 0xffd486 },
+    vignette: 0.5, grain: 0.28, chromaticAberration: 0.2,
     ao: { intensity: 3.2, radius: 1.4 },
-    ambient: { sky: 0x57524a, ground: 0x0b0a0c, intensity: 0.28 },
+    ambient: { sky: 0x4a4a4e, ground: 0x09090b, intensity: 0.22 },
     envIntensity: 1.15,
   }),
 
-  // Z11 — observation gallery: quiet and warm inside, soft bloom, a little lifted; the cold stays outside.
+  // Z11 — observation gallery: quiet and warm inside — its own grade is the soft one: low contrast, lifted
+  // dusky-violet shadows, amber highlights, a wide gentle bloom; the cold stays outside the glass.
   observation: look({
     exposure: 0.98,
-    bloom: { intensity: 0.75, threshold: 1.0, radius: 0.8 },
-    fog: { color: 0x100e12, density: 0.01 },
-    grade: { tint: 0xffeeda, saturation: 0.9, contrast: 1.04, lift: 0.012, shadowsTint: 0xbcc6e8, highlightsTint: 0xffd49a },
-    vignette: 0.5, grain: 0.36, chromaticAberration: 0.16,
-    ao: { intensity: 3.0, radius: 1.0 },
-    ambient: { sky: 0x6b626c, ground: 0x1c1410, intensity: 0.4 },
+    bloom: { intensity: 0.8, threshold: 0.96, radius: 0.86 },
+    fog: { color: 0x120f12, density: 0.01 },
+    grade: { tint: 0xffe6c8, saturation: 0.84, contrast: 0.96, lift: 0.022, shadowsTint: 0xc4b6dc, highlightsTint: 0xffc47e },
+    vignette: 0.58, grain: 0.38, chromaticAberration: 0.14,
+    ao: { intensity: 2.8, radius: 1.0 },
+    ambient: { sky: 0x6b5e62, ground: 0x1e1410, intensity: 0.4 },
     envIntensity: 1.0,
   }),
 

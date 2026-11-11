@@ -10,10 +10,25 @@ import * as THREE from 'three';
 import type { ColliderDesc, ColliderHandle, Game, MatId, PhysicsWorld, QualityProfile, SurfaceDesc, SurfaceHandle } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { RENDER_LAYERS } from '@/core/api/render';
+import { mulberry32 } from '@/core/mathx';
 import { isStub } from '@/core/stub';
 import { Geo } from './geo';
 
 export type MatRef = MatId | THREE.Material;
+
+/**
+ * A private PRNG for extra visual variation, seeded from numbers the caller already drew from the zone stream.
+ * The zone's `rand` is ONE shared stream (prop variants, and so their colliders, depend on its position): a
+ * piece that wants more randomness than it used to draw must take it from here, never from `ctx.rand`.
+ */
+export function localRand(...seeds: number[]): () => number {
+  let h = 0x9e3779b9;
+  for (const v of seeds) h = Math.imul(h ^ Math.floor((Number.isFinite(v) ? v : 0) * 4294967296), 0x85ebca6b) ^ (h >>> 13);
+  return mulberry32(h >>> 0);
+}
+
+/** nominal width of the kit's thin light strips (channels, seams: 4.5–7 cm) for the glow's distance fade */
+export const LINE_WIDTH = 0.06;
 
 /** Materials that never cast shadows (light sources and see-through surfaces). */
 const NO_CAST = new Set<string>([
@@ -196,11 +211,14 @@ export class KitCtx {
     return m;
   }
 
-  /** the emissive gold channel as laid into floors: dimmer than a raw strip so long runs do not flood the bloom */
-  channel(): THREE.Material { return this.inlay('goldChannel', { emissiveIntensity: 1.9 }); }
+  /**
+   * the emissive gold channel as laid into floors: dimmer than a raw strip so long runs do not flood the bloom;
+   * `lineWidth` fades a strip that has gone sub-pixel at distance instead of letting it shimmer
+   */
+  channel(): THREE.Material { return this.inlay('goldChannel', { emissiveIntensity: 1.9, lineWidth: LINE_WIDTH }); }
   /** architectural light seam (rib seams, pilaster strips): a calmer white-gold than a light panel */
   seam(dark = false): THREE.Material {
-    return dark ? this.inlay('goldChannel', { emissiveIntensity: 2.2 }) : this.inlay('whiteLight', { emissiveIntensity: 2.3 });
+    return dark ? this.inlay('goldChannel', { emissiveIntensity: 2.2, lineWidth: LINE_WIDTH }) : this.inlay('whiteLight', { emissiveIntensity: 2.3, lineWidth: LINE_WIDTH });
   }
 
   /** build-once cache (prop templates, shared textures) */
@@ -230,6 +248,12 @@ export class KitCtx {
   }
 
   volumetrics(): boolean { return this.quality().volumetrics !== false; }
+
+  /** density of the scene's exponential haze (0 without fog or renderer) — additive light effects fade by it */
+  fogDensity(): number {
+    const fog = (this.game.render && !isStub(this.game.render) ? this.game.render.scene?.fog : null) as THREE.FogExp2 | null;
+    return fog && typeof fog.density === 'number' && Number.isFinite(fog.density) ? fog.density : 0;
+  }
 
   rebuildNav(): void {
     try { this.physics.nav.rebuild(); } catch (err) { this.warn('nav', `nav rebuild failed: ${String(err)}`); }

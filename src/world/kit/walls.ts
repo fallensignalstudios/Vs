@@ -22,6 +22,8 @@ interface SegOpts {
   ext1: number;
   /** ribbed walls: put pilasters only at the segment start (ring walls) */
   jointPilasters?: boolean;
+  /** glass walls: mullion spacing, metres (0 = frames at the span ends only) */
+  mullion: number;
 }
 
 /** Emit one straight wall into `part`, starting at local (ox, oz) and running along local yaw `ry`. */
@@ -49,7 +51,7 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
       wg.boxOn(len, 0.28, t, cx, 0, 0).box(len, 0.3, t, cx, H - 0.15, 0);
       trim.box(len, 0.035, t + 0.03, cx, 0.3, 0).box(len, 0.035, t + 0.03, cx, H - 0.32, 0);
       part.g('glass').box(len, H - 0.58, 0.05, cx, H / 2 - 0.01, 0);
-      const n = Math.max(1, Math.round(len / 3));
+      const n = o.mullion > 0 ? Math.max(1, Math.round(len / o.mullion)) : 1;
       for (let i = 0; i <= n; i++) {
         const mx = a + (len * i) / n;
         part.g('goldDark').boxOn(0.14, H - 0.58, t * 0.5, mx, 0.28, 0);
@@ -148,6 +150,7 @@ function segOpts(ctx: KitCtx, o: Omit<WallOpts, 'from' | 'to'>, ext0: number, ex
     height: ctx.num(o.height, 8, 0.3), thickness: ctx.num(o.thickness, 0.6, 0.1, 4), mat: o.mat ?? 'whiteGoldPanel', style,
     doors: (o.doors ?? []).map((d) => ({ at: ctx.num(d.at, 0), width: ctx.num(d.width, 3, 0), height: ctx.num(d.height, 3.5, 0.5) })),
     noCollider: !!o.noCollider, ext0, ext1,
+    mullion: ctx.num(o.mullionSpacing, 3, 0, 1000),
   };
 }
 
@@ -184,7 +187,7 @@ export function buildWalls(ctx: KitCtx, points: Array<[number, number]>, o: Omit
   return part.done();
 }
 
-export function buildRingWall(ctx: KitCtx, o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; thickness?: number }): THREE.Object3D {
+export function buildRingWall(ctx: KitCtx, o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; thickness?: number; mullionSpacing?: number }): THREE.Object3D {
   const r = ctx.num(o.r, 10, 1), h = ctx.num(o.h, 0);
   const part = new Part(ctx, 'ringWall', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h));
   const segments = Math.round(ctx.num(o.segments, Math.max(16, Math.min(72, Math.round((Math.PI * 2 * r) / 4.5))), 6, 180));

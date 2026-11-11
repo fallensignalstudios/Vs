@@ -34,6 +34,9 @@ export interface PanelParams {
   dark?: number;
   /** wear along slab edges: colour blended in near seams, broken up by the family mask */
   wear?: { color: number; width: number; strength: number; roughness: number; metalness: number };
+  /** ADDED (polish 3): grime settled along the seams — darkening 0 … 1 (default 0) and its reach in metres (default 0.09) */
+  grime?: number;
+  grimeWidth?: number;
 }
 
 export interface MaskParams {
@@ -82,6 +85,7 @@ uniform vec4 tpDetail; // x repeats/m · y normal strength · z roughness amplit
 	uniform vec4 tpPanel2;  // x tint variation · y uv jitter · z brick stagger · w bevel slope
 	uniform vec4 tpWearCol; // rgb wear colour · a strength
 	uniform vec4 tpWear;    // x wear width (m) · y wear roughness · z wear metalness · w seam darkening
+	uniform vec4 tpPanel3;  // x grime darkening · y grime reach (m)
 #endif
 #ifdef AUR_MASK
 	uniform vec4 tpMaskCol;  // rgb accent colour · a amount
@@ -95,6 +99,7 @@ AurTp aurTpAxis( vec2 uvm, vec2 gx, vec2 gy ) {
 	AurTp s;
 	vec2 uv = uvm * tpA.x;
 	float tint = 1.0;
+	float grime = 0.0;
 	vec2 bevelN = vec2( 0.0 );
 	s.aux = vec3( 0.0 );
 	#ifdef AUR_PANEL
@@ -114,6 +119,8 @@ AurTp aurTpAxis( vec2 uvm, vec2 gx, vec2 gy ) {
 		float bt = clamp( ( e - sw ) / tpPanel.w, 0.0, 1.0 );
 		bevelN = - pdir * ( 1.0 - bt ) * ( 1.0 - bt ) * step( sw, e ) * tpPanel2.w * clamp( tpPanel.w / px, 0.0, 1.0 );
 		s.aux.y = 1.0 - smoothstep( 0.0, tpWear.x, e - sw );
+		// grime settles along the seam, fading out over the grime reach (crisp or soft, whatever the distance)
+		grime = tpPanel3.x * ( 1.0 - smoothstep( sw, sw + max( tpPanel3.y, px ), e ) );
 	#endif
 	vec2 dx = gx * tpA.x, dy = gy * tpA.x;
 	vec4 a = textureGrad( tpAlbedo, uv, dx, dy );
@@ -125,10 +132,11 @@ AurTp aurTpAxis( vec2 uvm, vec2 gx, vec2 gy ) {
 	float ds = tpDetail.x;
 	vec4 d = textureGrad( aurDetailTex, uvm * ds, gx * ds, gy * ds );
 	s.alb = a.rgb * tint * ( 1.0 + ( m1.r + m2.g - 1.0 ) * tpMacro.x + ( d.a - 0.5 ) * tpDetail.w );
+	s.alb *= 1.0 - grime * clamp( 0.45 + 1.1 * d.a * m1.b, 0.0, 1.0 );
 	s.alb *= mix( vec3( 1.0 ), vec3( 1.04, 1.0, 0.93 ), ( m2.b - 0.5 ) * 2.0 * tpMacro.w );
 	s.tn = n.xyz * 2.0 - 1.0;
 	s.tn.xy = s.tn.xy * tpA.y + ( d.xy * 2.0 - 1.0 ) * tpDetail.y + bevelN;
-	s.pbr = vec4( o.r, ( o.g - 0.5 ) * tpA.z + ( m1.g + m2.r - 1.0 ) * tpMacro.y + ( d.b - 0.5 ) * tpDetail.z, o.b, o.a );
+	s.pbr = vec4( o.r * ( 1.0 - grime * 0.5 ), ( o.g - 0.5 ) * tpA.z + ( m1.g + m2.r - 1.0 ) * tpMacro.y + ( d.b - 0.5 ) * tpDetail.z + grime * 0.35, o.b, o.a );
 	s.aux.z = m1.a;
 	return s;
 }
@@ -232,6 +240,7 @@ export function triplanarPatch(familyKey: string, fam: FamilyUniforms, shared: T
     const wc = lin(w?.color ?? 0xffffff);
     uniforms.tpWearCol = { value: new THREE.Vector4(wc.r, wc.g, wc.b, w?.strength ?? 0) };
     uniforms.tpWear = { value: new THREE.Vector4(w?.width ?? 0.05, w?.roughness ?? 0.4, w?.metalness ?? 1, pn.dark ?? 0.6) };
+    uniforms.tpPanel3 = { value: new THREE.Vector4(pn.grime ?? 0, pn.grimeWidth ?? 0.09, 0, 0) };
   }
   if (p.mask) {
     const m = p.mask;

@@ -176,7 +176,8 @@ class SkySystemImpl implements SkySystem {
       blendSkyStates(this.from, this.to, EASE.inOut(this.blendT), this.cur);
     }
     this.battleNow = damp(this.battleNow, this.battleTarget, 1.6, step);
-    this.activityNow = damp(this.activityNow, this.activityTarget, 1.2, step);
+    // the Wound swells slowly but contracts violently: drawing the pressure back is fast (≈ 0.4 s), building it is not
+    this.activityNow = damp(this.activityNow, this.activityTarget, this.activityTarget < this.activityNow ? 2.6 : 1.2, step);
     if (this.closedNow !== this.closedTarget) {
       const d = this.closedTarget - this.closedNow;
       const m = this.closedRate * step;

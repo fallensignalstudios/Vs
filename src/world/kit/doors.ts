@@ -275,6 +275,8 @@ class Barrier implements BarrierHandle {
     ctx.lights.push(this.glow);
 
     this.collider = ctx.collider(fx.pose.box(L / 2, H / 2, 0, L / 2, H / 2, 0.15, { blocksSight: false, tag: 'barrier' }));
+    // the emitter posts are solid whether the wall is up or not (the 0.4 m shaft; the low plinth is walkable trim)
+    for (const px of [0, L]) ctx.collider(fx.pose.box(px, (H + 0.5) / 2, 0, 0.22, (H + 0.5) / 2, 0.22, { tag: 'barrier-post' }));
     const on = o.active !== false;
     this.amount = this.target = on ? 1 : 0;
     this.collider.enabled = on;

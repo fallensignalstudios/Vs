@@ -22,9 +22,13 @@ function lectern(p: Part, w: number, x = 0, y = 0.95, z = 0, ry = 0): void {
 export const ANCIENT_PROPS: PropTable = {
   ancientConsole: {
     build(p) {
-      const wg = p.g('whiteGold'), trim = p.g('goldTrim');
-      wg.tbox(0.95, 0.18, 0.72, 0.04).taperOn(0.62, 0.46, 0.42, 0.32, 0.77, 0, 0.18, 0.02, true);
-      trim.box(0.66, 0.035, 0.5, 0, 0.2, 0.02).box(0.46, 0.035, 0.36, 0, 0.92, 0.02);
+      const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark');
+      dk.tbox(0.99, 0.05, 0.76, 0.02);
+      wg.tbox(0.95, 0.18, 0.72, 0.04, 0, 0.03, 0).taperOn(0.62, 0.46, 0.42, 0.32, 0.74, 0, 0.21, 0.02, true);
+      trim.box(0.66, 0.035, 0.5, 0, 0.22, 0.02).box(0.46, 0.035, 0.36, 0, 0.92, 0.02);
+      // a dark recessed panel on the front of the stem, framed in gold
+      dk.push().move(0, 0.56, -0.184).rotX(0.094).box(0.36, 0.42, 0.02, 0, 0, 0).pop();
+      trim.push().move(0, 0.56, -0.19).rotX(0.094).box(0.4, 0.022, 0.02, 0, 0.22, 0).box(0.4, 0.022, 0.02, 0, -0.22, 0).pop();
       for (const s of [-1, 1]) p.g(p.ctx.channel()).ribbon([[s * 0.292, 0.3, 0.02], [s * 0.222, 0.86, 0.02]], 0.05, [s, 0.12, 0]);
       lectern(p, 0.92);
     },
@@ -95,10 +99,17 @@ export const ANCIENT_PROPS: PropTable = {
         trim.push().move(x, 0.16, z).rotY(ry).box(w * 0.72, 0.035, 0.38, 0, 0.78, 0).pop();
         lectern(p, w, x, 0.96, z, ry + Math.PI);
       }
-      // flanking pylons with channel lights
+      // flanking pylons with channel lights (polish 3: a dark stepped foot, two gold collars and dark inlays on the
+      // faces break the tall white obelisks up into carved stone)
       for (const s of [-1, 1]) {
+        dk.tbox(0.52, 0.12, 0.52, 0.03, s * 1.42, 0.16, -0.85);
         wg.taperOn(0.4, 0.4, 0.28, 0.28, 2.1, s * 1.42, 0.16, -0.85, true);
         trim.taperOn(0.32, 0.32, 0.1, 0.1, 0.2, s * 1.42, 2.26, -0.85);
+        for (const [y, k] of [[0.95, 0.375], [1.75, 0.322]] as const) trim.box(k + 0.035, 0.05, k + 0.035, s * 1.42, y, -0.85);
+        for (const f of [-1, 1]) {
+          // side faces: a narrow dark inlay down the middle of each
+          dk.push().move(s * 1.42 + f * 0.17, 1.15, -0.85).rotZ(f * 0.03).box(0.012, 1.5, 0.08, 0, 0, 0).pop();
+        }
         ch.ribbon([[s * 1.42, 0.5, -0.648], [s * 1.42, 2.1, -0.708]], 0.05, [0, 0.04, 1]);
       }
       // the sighting ring the shot is laid through

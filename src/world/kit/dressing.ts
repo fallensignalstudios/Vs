@@ -7,7 +7,7 @@ import { PALETTE } from '@/core/api/materials';
 import { RENDER_LAYERS } from '@/core/api/render';
 import type { Geo, V2, V3 } from './geo';
 import { filletPath } from './geo';
-import { KitCtx, Part } from './core';
+import { KitCtx, LINE_WIDTH, Part, localRand } from './core';
 
 export interface ChannelOpts { h?: number; width?: number; color?: number; intensity?: number; pulse?: boolean; vertical?: boolean }
 
@@ -20,7 +20,10 @@ export function buildChannel(ctx: KitCtx, points: Array<[number, number]>, o: Ch
   if (o.color !== undefined) over.emissive = o.color;
   if (o.intensity !== undefined) over.emissiveIntensity = ctx.num(o.intensity, 3, 0, 40);
   if (o.pulse === false) over.pulse = 0;
-  const mat = Object.keys(over).length ? ctx.inlay('goldChannel', over) : ctx.channel();
+  // no overrides = the kit's floor channel (intensity 1.9); either way the strip fades by its own width far away
+  if (!Object.keys(over).length) over.emissiveIntensity = 1.9;
+  over.lineWidth = width;
+  const mat = width === LINE_WIDTH && Object.keys(over).length === 2 && over.emissiveIntensity === 1.9 ? ctx.channel() : ctx.inlay('goldChannel', over);
   const path = pts.map((p): V3 => [p[0], h + (o.vertical ? 0 : 0.007), -p[1]]);
   if (o.vertical) {
     // a strip standing on edge at height h (drawn on a wall): normal = across the run
@@ -117,8 +120,12 @@ export function buildWhitePoint(ctx: KitCtx, o: { x: number; n: number; h: numbe
 export function buildFrost(ctx: KitCtx, o: RectOpts & { height?: number; density?: number; collider?: boolean }): THREE.Object3D {
   const w = ctx.num(o.w, 6, 0.3), d = ctx.num(o.d, 0.8, 0.2), H = ctx.num(o.height, 4, 0.5), density = ctx.num(o.density, 0.6, 0.05, 2);
   const part = new Part(ctx, 'frost', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0)), ctx.yaw(ctx.num(o.yawDeg, 0)));
+  // `r` is the zone's shared stream: the draws below keep exactly the count and order they always had (prop
+  // variants later in the zone depend on it); the new crystal detail draws from `lr`, a private stream
   const r = ctx.rand, alongX = w >= d, L = alongX ? w : d, Wd = alongX ? d : w;
   const ice = part.g('frostIce'), rime = part.g('frostRime');
+  const at = (g: Geo, t: number, off: number, y: number): Geo => g.push().move(alongX ? t : off, y, alongX ? off : t);
+  const across = Math.max(0.05, Wd / 2 - 0.12);
   // glowing conduits the ice has grown around
   const nc = Math.max(1, Math.round(L / 3.5));
   for (let i = 0; i < nc; i++) {
@@ -126,68 +133,156 @@ export function buildFrost(ctx: KitCtx, o: RectOpts & { height?: number; density
     part.g('goldTrim').cyl(0.05, 0.05, H, 6, x, 0, z);
     part.g('whiteLight').cyl(0.062, 0.062, H * 0.5, 6, x, H * (0.18 + r() * 0.2), z);
   }
-  // sheets: standing from the floor and hanging from above, with jagged free edges
+  // crystalline growth (polish 3): thick faceted slabs — standing from the floor, hanging from above — each
+  // fringed with prism crystals along its free edge, a cluster of crystals fanning out of its root, a rime crust
   const n = Math.max(2, Math.round(L * density * 1.1));
   for (let i = 0; i < n; i++) {
-    const t = -L / 2 + (L * (i + r() * 0.8)) / n, off = (r() - 0.5) * Math.max(0, Wd - 0.3);
+    const t = -L / 2 + (L * (i + r() * 0.8)) / n, off0 = (r() - 0.5) * Math.max(0, Wd - 0.3);
     const pw = 0.9 + r() * 1.5, ph = H * (0.45 + r() * 0.55), hang = i % 3 === 2;
+    const off = Math.max(-across, Math.min(across, off0));
     const outline: V2[] = [];
     const teeth = 5 + Math.floor(r() * 3);
     outline.push([-pw / 2, 0], [pw / 2, 0]);
     for (let k = teeth; k >= 0; k--) outline.push([-pw / 2 + (pw * k) / teeth + (r() - 0.5) * 0.12, ph * (0.6 + 0.4 * r() * (k % 2 ? 1 : 0.55))]);
-    ice.push().move(alongX ? t : off, hang ? H : 0, alongX ? off : t).rotY((alongX ? 0 : Math.PI / 2) + (r() - 0.5) * 0.5);
+    const turn = (alongX ? 0 : Math.PI / 2) + (r() - 0.5) * 0.5, lean = (r() - 0.5) * 0.16, depth0 = r();
+    const lr = localRand(t, off0, pw, ph, depth0);
+    // the slab: thick, leaning a little, so its edges catch the rim light and show depth
+    const thick = 0.16 + depth0 * 0.16;
+    at(ice, t, off, hang ? H : 0).rotY(turn);
     if (hang) ice.rotZ(Math.PI);
-    ice.rotX((r() - 0.5) * 0.12).prismZ(outline, 0.05 + r() * 0.08).pop();
-    if (!hang) rime.push().move(alongX ? t : off, 0.08, alongX ? off : t).rotY(r() * 3).chunk(pw * 0.9, 0.22, 0.5 + r() * 0.4, 0.5, r).pop();
+    ice.rotX(lean).prismZ(outline, thick);
+    // crystals along the jagged edge: tilted out of the slab plane, every one different
+    const tips = 3 + Math.floor(pw * 2.2);
+    for (let k = 0; k < tips; k++) {
+      const u = -pw / 2 + pw * ((k + 0.5) / tips) + (lr() - 0.5) * 0.1;
+      const top = ph * (0.6 + 0.3 * lr());
+      const cr = 0.05 + lr() * 0.07, chh = 0.15 + lr() * 0.35;
+      ice.push().move(u, top - chh * 0.45, (lr() - 0.5) * thick).rotZ((lr() - 0.5) * 0.9).rotX((lr() - 0.5) * 0.9)
+        .crystal(cr, chh, cr * (2 + lr() * 2), 5 + Math.floor(lr() * 2), lr).pop();
+    }
+    ice.pop();
+    // a cluster fanning out of the root (floor slabs) or the crown (hanging ones)
+    const cluster = 3 + Math.floor(lr() * 4);
+    for (let k = 0; k < cluster; k++) {
+      const a = lr() * Math.PI * 2, rr = 0.1 + lr() * 0.35;
+      const cr = 0.06 + lr() * 0.1, chh = 0.25 + lr() * 0.7;
+      at(ice, t + Math.cos(a) * rr * (alongX ? 1.4 : 0.5), Math.max(-across, Math.min(across, off + Math.sin(a) * rr * 0.6)), hang ? H : 0).rotY(lr() * 6.28);
+      if (hang) ice.rotZ(Math.PI);
+      ice.rotZ((lr() - 0.5) * 1.1).rotX((lr() - 0.5) * 0.8).crystal(cr, chh, cr * (2.5 + lr() * 2), 5 + Math.floor(lr() * 3), lr).pop();
+    }
+    if (!hang) {
+      rime.push().move(alongX ? t : off0, 0.08, alongX ? off0 : t).rotY(r() * 3).chunk(pw * 0.9, 0.22, 0.5 + r() * 0.4, 0.5, r).pop();
+      // opaque rime-white crystals at the root give the translucent growth a solid base
+      for (let k = 0; k < 2; k++) {
+        at(rime, t + (lr() - 0.5) * pw * 0.8, off + (lr() - 0.5) * 0.2, 0.05).rotY(lr() * 6.28).rotZ((lr() - 0.5) * 0.7)
+          .crystal(0.05 + lr() * 0.05, 0.12 + lr() * 0.25, 0.12 + lr() * 0.12, 5, lr).pop();
+      }
+    }
   }
-  // icicles from the top line
+  // icicles from the top line: faceted, pointing down
   for (let i = 0; i < n * 2; i++) {
-    const t = -L / 2 + L * r(), off = (r() - 0.5) * Wd * 0.6, len = 0.3 + r() * H * 0.3;
-    ice.band(0.03 + r() * 0.05, H, 0, H - len, 5, alongX ? t : off, alongX ? off : t);
+    const t = -L / 2 + L * r(), off = (r() - 0.5) * Wd * 0.6, len = 0.3 + r() * H * 0.3, rad = 0.03 + r() * 0.05;
+    const lr = localRand(t, off, len);
+    at(ice, t, off, H).rotZ(Math.PI).rotX((lr() - 0.5) * 0.2).crystal(rad, len * 0.55, len * 0.45, 5, lr).pop();
   }
   const solid = o.collider ?? Math.min(w, d) <= 1.5;
   if (solid) ctx.collider(part.pose.box(0, H / 2, 0, w / 2, H / 2, d / 2, { blocksSight: false, tag: 'frost' }));
   return part.done();
 }
 
+/**
+ * Advance the zone stream exactly as the original (pre-polish-3) corruption patch did, and return a hash of what
+ * it drew: the patch now draws its shape from a private stream, but everything built after it in the zone must
+ * see the shared stream where it always was.
+ */
+function skipCorruptionDraws(rnd: () => number, R: number): number[] {
+  const got: number[] = [];
+  const d = (): number => { const v = rnd(); if (got.length < 6) got.push(v); return v; };
+  for (let i = 0; i < 22; i++) d();
+  for (let i = 0; i < 4 + Math.round(R); i++) { d(); d(); d(); }
+  const veins = 5 + Math.round(R);
+  for (let i = 0; i < veins; i++) {
+    d(); d();
+    const steps = 5 + Math.floor(d() * 4);
+    for (let s = 0; s < steps; s++) {
+      d();
+      if (s > 1 && d() < 0.3) { d(); d(); }
+    }
+    d();
+  }
+  return got;
+}
+
 export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: number; r: number; intensity?: number; onWall?: boolean; yawDeg?: number }): THREE.Object3D {
-  const R = ctx.num(o.r, 2, 0.3, 40), k = ctx.num(o.intensity, 1, 0, 4), rnd = ctx.rand;
+  const R = ctx.num(o.r, 2, 0.3, 40), k = ctx.num(o.intensity, 1, 0, 4);
   const pos = ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0));
+  const rnd = localRand(...skipCorruptionDraws(ctx.rand, R), pos.x, pos.z);
   const part = new Part(ctx, 'corruption', pos, ctx.yaw(ctx.num(o.yawDeg, 0)));
   const used: Geo[] = [];
   const G = (g: Geo): Geo => {
     if (!used.includes(g)) { g.push(); if (o.onWall) g.rotX(-Math.PI / 2); used.push(g); }
     return g;
   };
-  const tissue = G(part.g('eclipseTissue')), vein = G(part.g(ctx.inlay('eclipseVein', { emissiveIntensity: 2.4 * Math.max(0.2, k) })));
-  // tissue mat: an irregular low mound stretched along the flow direction (local −Z)
-  const lobes = 22, rim: V3[] = [];
-  for (let i = 0; i < lobes; i++) {
-    const a = (i / lobes) * Math.PI * 2, stretch = 1 + 0.5 * Math.max(0, Math.cos(a));
-    const rr = R * (0.55 + 0.45 * rnd()) * stretch * 0.8;
-    rim.push([Math.sin(a) * rr, 0.012, -Math.cos(a) * rr]);
+  // polish 3: violet-black GROWTH, raised and organic — a lumpy body heaped toward the source, tendrils that
+  // climb out of it along the flow (local −Z), nodules and splinters of dark plate, violet veins threading all of it
+  const tissue = G(part.g('eclipseTissue')), plate = G(part.g('eclipsePlate'));
+  const vein = G(part.g(ctx.inlay('eclipseVein', { emissiveIntensity: 2.4 * Math.max(0.2, k) })));
+  const H = Math.min(1.1, 0.22 + Math.sqrt(R) * 0.26);
+  // the body: a few overlapping lumps, the biggest at the source, smaller ones trailing along the flow
+  const lumps = 3 + Math.round(Math.min(6, R * 1.2));
+  for (let i = 0; i < lumps; i++) {
+    const along = i === 0 ? 0 : (0.15 + rnd() * 0.7) * R, side = (rnd() - 0.5) * R * 0.7 * (i === 0 ? 0 : 1);
+    const sz = (i === 0 ? 0.62 : 0.28 + rnd() * 0.3) * R;
+    tissue.push().move(side, 0, -along).rotY(rnd() * 6.28)
+      .blob(sz * (0.8 + rnd() * 0.4), H * (i === 0 ? 1 : 0.4 + rnd() * 0.5), sz * (0.7 + rnd() * 0.4), 0.9, rnd, 12, 5).pop();
   }
-  for (let i = 0; i < lobes; i++) {
-    const a = rim[i], b = rim[(i + 1) % lobes];
-    const ma: V3 = [a[0] * 0.5, 0.05 + R * 0.03, a[2] * 0.5], mb: V3 = [b[0] * 0.5, 0.05 + R * 0.03, b[2] * 0.5];
-    tissue.quadFacing(a, b, mb, ma, [0, 1, 0]);
-    tissue.quadFacing(ma, mb, [0, 0.07 + R * 0.04, 0], [0, 0.07 + R * 0.04, 0], [0, 1, 0]);
+  // tendrils: tapering tubes that leave the body and creep outward, lifting off the floor in arches
+  const tendrils = 5 + Math.round(R * 1.5);
+  for (let i = 0; i < tendrils; i++) {
+    let a = i < tendrils * 0.6 ? (rnd() - 0.5) * 1.3 : rnd() * Math.PI * 2;
+    const reach = R * (i < tendrils * 0.6 ? 1.1 + rnd() * 0.7 : 0.5 + rnd() * 0.5), steps = 6;
+    const r0 = Math.min(0.12, 0.035 + R * 0.02) * (0.6 + rnd() * 0.6);
+    let x = Math.sin(a) * R * 0.25, z = -Math.cos(a) * R * 0.25;
+    const path: V3[] = [[x * 0.5, H * 0.35, z * 0.5]];
+    for (let s = 0; s < steps; s++) {
+      a += (rnd() - 0.5) * 0.8;
+      x += (Math.sin(a) * reach) / steps; z -= (Math.cos(a) * reach) / steps;
+      const lift = Math.sin(((s + 1) / steps) * Math.PI) * r0 * 2.2 + r0 * 0.6;
+      path.push([x, lift, z]);
+    }
+    // the tube tapers in three stages (a cheap taper: thinner tubes for the outer runs)
+    tissue.tube(path.slice(0, 3), r0, 6, true).tube(path.slice(2, 5), r0 * 0.7, 6, true).tube(path.slice(4), r0 * 0.45, 5, true);
+    // a vein riding on top of the tendril
+    vein.ribbon(path.map((p): V3 => [p[0], p[1] + r0 * 0.75, p[2]]), Math.max(0.02, r0 * 0.5));
+    if (rnd() < 0.5) {
+      const p = path[3 + Math.floor(rnd() * 2)];
+      tissue.ball(r0 * 2.2, 8, p[0], p[1], p[2], r0 * 1.6);
+    }
   }
+  // nodules on the body with a violet core showing through
   for (let i = 0; i < 4 + Math.round(R); i++) {
-    const a = rnd() * Math.PI * 2, rr = rnd() * R * 0.55, s = 0.12 + rnd() * 0.22 * Math.min(2, R * 0.5);
-    tissue.ball(s, 8, Math.sin(a) * rr, s * 0.35, -Math.cos(a) * rr, s * 0.6);
+    const a = rnd() * Math.PI * 2, rr = rnd() * R * 0.45, s = 0.08 + rnd() * 0.16 * Math.min(2, R * 0.5);
+    const y = H * (1 - Math.min(1, rr / (R * 0.62))) * 0.85;
+    tissue.ball(s, 8, Math.sin(a) * rr, y, -Math.cos(a) * rr, s * 0.8);
+    vein.ball(s * 0.45, 6, Math.sin(a) * rr, y + s * 0.55, -Math.cos(a) * rr, s * 0.3);
   }
-  // veins creep outward, most of them along the flow direction, branching as they go
+  // splinters of appropriated plate breaking through the growth
+  for (let i = 0; i < 2 + Math.round(R * 0.8); i++) {
+    const a = rnd() * Math.PI * 2, rr = rnd() * R * 0.5;
+    plate.push().move(Math.sin(a) * rr, H * 0.3, -Math.cos(a) * rr).rotY(rnd() * 6.28).rotZ((rnd() - 0.5) * 1.2).rotX((rnd() - 0.5) * 0.8)
+      .crystal(0.05 + rnd() * 0.06, 0.2 + rnd() * H * 0.6, 0.1 + rnd() * 0.15, 4, rnd).pop();
+  }
+  // veins creeping out over the clean floor ahead of the growth, branching as they go
   const veins = 5 + Math.round(R);
   for (let i = 0; i < veins; i++) {
     let a = i < veins * 0.6 ? (rnd() - 0.5) * 1.3 : rnd() * Math.PI * 2;
     let x = 0, z = 0;
-    const path: V3[] = [[0, 0.02, 0]], reach = R * (i < veins * 0.6 ? 1.1 + rnd() * 0.7 : 0.5 + rnd() * 0.5), steps = 5 + Math.floor(rnd() * 4);
-    for (let s = 0; s < steps; s++) {
+    const path: V3[] = [[0, 0.02, 0]], reach = R * (i < veins * 0.6 ? 1.3 + rnd() * 0.8 : 0.6 + rnd() * 0.5), steps = 5 + Math.floor(rnd() * 4);
+    for (let st = 0; st < steps; st++) {
       a += (rnd() - 0.5) * 0.9;
       x += (Math.sin(a) * reach) / steps; z -= (Math.cos(a) * reach) / steps;
       path.push([x, 0.016, z]);
-      if (s > 1 && rnd() < 0.3) {
+      if (st > 1 && rnd() < 0.3) {
         const ba = a + (rnd() < 0.5 ? -1 : 1) * (0.6 + rnd() * 0.5), bl = reach * 0.25;
         vein.ribbon([[x, 0.016, z], [x + Math.sin(ba) * bl * 0.5, 0.016, z - Math.cos(ba) * bl * 0.5], [x + Math.sin(ba + 0.4) * bl, 0.016, z - Math.cos(ba + 0.4) * bl]], 0.03);
       }
@@ -198,6 +293,7 @@ export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: numb
   const group = part.done();
   const light = new THREE.PointLight(PALETTE.eclipseViolet, 5 * k, Math.max(5, R * 3), 2);
   light.position.set(0, o.onWall ? 0 : 0.7, o.onWall ? -0.5 : 0);
+  light.userData.kitFixture = true;
   group.add(light);
   ctx.lights.push(light);
   return group;

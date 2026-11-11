@@ -388,6 +388,75 @@ export class Geo {
     return this;
   }
 
+  /**
+   * ADDED (polish 3): faceted crystal standing along local +Y from the origin — an irregular `sides`-gon prism of
+   * radius `r` and height `h`, a sheared pyramid tip of length `tip`, slightly wider at the shoulder than at the
+   * root. Flat-shaded facets, closed at the root. `rand` jitters the section so no two crystals match.
+   */
+  crystal(r: number, h: number, tip: number, sides: number, rand: () => number): this {
+    const n = Math.max(3, Math.round(sides));
+    const rootK = 0.7 + rand() * 0.2, shoulderK = 1;
+    const ring = (y: number, k: number, ph: number): V3[] => {
+      const out: V3[] = [];
+      for (let i = 0; i < n; i++) {
+        const a = ph + (Math.PI * 2 * i) / n, rr = r * k * (0.82 + 0.36 * ((i * 7919 + Math.floor(ph * 1000)) % 13) / 13);
+        out.push([Math.cos(a) * rr, y, Math.sin(a) * rr]);
+      }
+      return out;
+    };
+    const ph = rand() * Math.PI;
+    const a = ring(0, rootK, ph), b = ring(h, shoulderK, ph);
+    const apex: V3 = [(rand() - 0.5) * r * 0.5, h + tip, (rand() - 0.5) * r * 0.5];
+    const faces: V3[][] = [a.slice().reverse()];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      faces.push([a[i], a[j], b[j], b[i]]);
+      faces.push([b[i], b[j], apex]);
+    }
+    return this.hull(faces, [0, h * 0.5, 0]);
+  }
+
+  /**
+   * ADDED (polish 3): organic lump — a dome over the ellipse rx × rz rising to `ry`, its surface pushed in and out
+   * by `bumps` (0..1) so it reads as grown rather than turned; smooth normals. Sits on local y = 0.
+   */
+  blob(rx: number, ry: number, rz: number, bumps: number, rand: () => number, seg = 12, rings = 5): this {
+    const ph = [rand() * 6.28, rand() * 6.28, rand() * 6.28];
+    const lump = (t: number, u: number): number => 1 + bumps * 0.22 * (Math.sin(3 * t + ph[0]) * Math.cos(2 * u + ph[1]) + 0.6 * Math.sin(5 * t + 2 * u + ph[2]));
+    const pt = (i: number, k: number): V3 => {
+      const t = (Math.PI * 2 * i) / seg, u = (Math.PI / 2) * (k / rings);
+      const l = lump(t, u), c = Math.cos(u), sn = Math.sin(u);
+      return [Math.cos(t) * rx * c * l, ry * sn * (k === 0 ? 0 : l) + (k === 0 ? 0.004 : 0), Math.sin(t) * rz * c * l];
+    };
+    const grid: V3[][] = [];
+    for (let k = 0; k <= rings; k++) {
+      const row: V3[] = [];
+      for (let i = 0; i < seg; i++) row.push(k === rings ? [0, ry * lump(0, Math.PI / 2), 0] : pt(i, k));
+      grid.push(row);
+    }
+    // normals by central differences over the grid (good enough for a lump)
+    const nrm = (k: number, i: number): V3 => {
+      const p = grid[k][i], q = grid[Math.min(rings, k + 1)][i], r0 = grid[Math.max(0, k - 1)][i];
+      const e = grid[k][(i + 1) % seg], w = grid[k][(i + seg - 1) % seg];
+      const ux = q[0] - r0[0], uy = q[1] - r0[1], uz = q[2] - r0[2];
+      const vx = e[0] - w[0], vy = e[1] - w[1], vz = e[2] - w[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (nx * p[0] + ny * (p[1] + ry * 0.5) + nz * p[2] < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      if (k === rings) return [0, 1, 0];
+      return [nx, ny, nz];
+    };
+    for (let k = 0; k < rings; k++) {
+      for (let i = 0; i < seg; i++) {
+        const j = (i + 1) % seg;
+        const a = grid[k][i], b = grid[k][j], c = grid[k + 1][j], d = grid[k + 1][i];
+        // wind counter-clockwise seen from outside (the outward normal decides)
+        this.triN(a, nrm(k, i), c, nrm(k + 1, j), b, nrm(k, j));
+        if (k + 1 < rings) this.triN(a, nrm(k, i), d, nrm(k + 1, i), c, nrm(k + 1, j));
+      }
+    }
+    return this;
+  }
+
   /** solid annular sector between bearings a0..a1 (plan convention), y0..y1 */
   arcBand(rIn: number, rOut: number, a0: number, a1: number, y0: number, y1: number, seg: number, opts: { top?: boolean; bottom?: boolean; ends?: boolean; flat?: boolean } = {}): this {
     const full = Math.abs(a1 - a0) >= Math.PI * 2 - 1e-6;

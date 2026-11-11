@@ -157,6 +157,12 @@ export interface WallOpts {
   /** architectural treatment */
   style?: 'plain' | 'ribbed' | 'panelled' | 'conduit' | 'glass';
   noCollider?: boolean;
+  /**
+   * ADDED (kit, polish 3): `style: 'glass'` — spacing of the vertical mullions in metres (default 3; each solid
+   * span is divided evenly, so the actual spacing is the nearest that fits). `0` leaves only the end mullions of
+   * each span: one clear pane between the frames.
+   */
+  mullionSpacing?: number;
 }
 
 export interface RibOpts {
@@ -296,7 +302,7 @@ export interface ZoneBuilder {
   /** closed or open polyline of walls */
   walls(points: Array<[number, number]>, o?: Omit<WallOpts, 'from' | 'to'> & { closed?: boolean }): THREE.Object3D;
   /** curved wall ring (atrium / chamber): centre, radius, arc, door gaps in degrees (0 = north, clockwise) */
-  ringWall(o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; /** ADDED (kit): default 0.6 */ thickness?: number }): THREE.Object3D;
+  ringWall(o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; /** ADDED (kit): default 0.6 */ thickness?: number; /** ADDED (kit, polish 3): see WallOpts.mullionSpacing */ mullionSpacing?: number }): THREE.Object3D;
   /** blocks movement only (invisible) — "simple blocking volumes behind scenery" */
   blocker(o: RectOpts & { height?: number }): ColliderHandle;
   /** ceiling slab / vault over a rect; see CeilingOpts for the styles (ADDED: 'vaultClosed', the enclosed vault) */
@@ -471,7 +477,7 @@ export interface HeroProps {
    * the start — spawn `cageDestroy` VFX with it), scrub-able and restorable: 1 = the wreck at rest.
    * Sockets: `core` (the contained matter / fragment), `top`. Collider: cylinder.
    */
-  containmentCage(kind: 'dominion' | 'reformation'): HeroProp<{ charge: number; destroyed: number }>;
+  containmentCage(kind: 'dominion' | 'reformation', opts?: ContainmentCageOpts): HeroProp<{ charge: number; destroyed: number }>;
   /**
    * fallen plate trapping the marine (Z06): 5 × 3.5 m ceiling plate on rubble, hinge line along its rear edge.
    * `lift` raises the front edge from 0.5 m to 2.2 m (8° → 37°, heavy spring with a slight overshoot).
@@ -489,6 +495,18 @@ export interface HeroProps {
   departureShip(kind: 'dominionShuttle' | 'reformationTransport'): HeroProp<{ engines: number; ramp: number }>;
   /** holographic displays: trajectory overlay, threat-track streams, diagnostic, forecast clock — see {@link HologramProp} */
   hologram(kind: HologramKind): HologramProp;
+}
+
+/**
+ * ADDED (polish 3): options of `HeroProps.containmentCage`, for a cage seen far away through glass (Z07: ~120 m).
+ *
+ *   const cage = game.props.containmentCage('dominion', { fog: false, distant: true });
+ */
+export interface ContainmentCageOpts {
+  /** false = the cage ignores the scene fog (it stays a crisp silhouette at any distance). Default true. */
+  fog?: boolean;
+  /** brighter frame glow, field and own light so the silhouette carries at ~100 m and beyond. Default false. */
+  distant?: boolean;
 }
 
 /** ADDED (hero-props): the display kinds of `HeroProps.hologram`. */
@@ -531,8 +549,19 @@ export interface HologramProp extends HeroProp<{ progress: number; visible: numb
   /**
    * Replace the display's text line: the clock digits of `forecast` (`'02:11:43'`), the header of the other
    * kinds. Characters outside 0-9 A-Z : / . - and space are drawn as blanks. Safe to call every frame.
+   * ADDED (polish 3): headers hold up to 40 characters and the `trajectory` readout up to 32 — the nominal 26 /
+   * 22 / 16 characters keep their full size, longer lines shrink to the same width instead of being cut off.
    */
   setText(text: string): void;
+  /**
+   * ADDED (polish 3): replace a secondary label. `'header'` is the same as `setText`. `threatStreams`:
+   * `'top'` / `'bottom'` name the two track lanes (default `DOMINION TRACK` / `REFORMATION TRACK`, up to 32
+   * characters) and `'status'` replaces the words before the live count (`COMMON TARGETS 2/4`, up to 20).
+   * An unknown slot warns once and does nothing.
+   *
+   *   streams.setLabel('top', 'CROWNWATCH TRACK'); streams.setLabel('status', 'SHARED TARGETS');
+   */
+  setLabel(slot: 'header' | 'top' | 'bottom' | 'status' | (string & {}), text: string): void;
 }
 
 export interface HeroProp<P extends Record<string, number>> {

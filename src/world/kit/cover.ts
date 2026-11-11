@@ -14,17 +14,27 @@ type CoverStyle = NonNullable<CoverOpts['style']>;
 
 function ancient(p: Part, w: number, d: number, H: number): void {
   const wg = p.g('whiteGold'), trim = p.g('goldTrim'), dk = p.g('goldDark'), ch = p.g(p.ctx.channel());
-  wg.tbox(w, 0.2, d, 0.04, 0, 0, 0).tbox(w - 0.14, H - 0.4, d - 0.14, 0.03, 0, 0.2, 0).tbox(w, 0.2, d, 0.05, 0, H - 0.2, 0);
-  trim.box(w - 0.08, 0.045, d - 0.08, 0, H - 0.27, 0).box(w - 0.08, 0.035, d - 0.08, 0, 0.26, 0);
-  const rows = H > 1.6 ? 2 : 1, ph = (H - 0.75) / rows;
+  // polish 3: a stepped plinth with a dark toe, a cap that oversails the body, corner stiles and framed panels —
+  // the block reads as carved and assembled instead of as one pale box (the footprint and height are unchanged)
+  dk.tbox(w + 0.02, 0.06, d + 0.02, 0.02, 0, 0, 0);
+  wg.tbox(w, 0.2, d, 0.05, 0, 0.04, 0).tbox(w - 0.14, H - 0.42, d - 0.14, 0.03, 0, 0.22, 0);
+  wg.tbox(w - 0.02, 0.07, d - 0.02, 0.03, 0, H - 0.22, 0).tbox(w + 0.04, 0.15, d + 0.04, 0.06, 0, H - 0.15, 0);
+  trim.box(w - 0.08, 0.045, d - 0.08, 0, H - 0.27, 0).box(w - 0.08, 0.035, d - 0.08, 0, 0.27, 0);
+  const rows = H > 1.6 ? 2 : 1, ph = (H - 0.75) / rows, pw = w * 0.72;
   for (let r = 0; r < rows; r++) {
     const y = 0.36 + ph * r + (ph - 0.08) / 2;
     for (const s of [-1, 1]) {
-      dk.box(w * 0.72, ph - 0.14, 0.03, 0, y, s * (d / 2 - 0.06));
+      dk.box(pw, ph - 0.14, 0.03, 0, y, s * (d / 2 - 0.06));
+      // gold frame around the recessed panel
+      const z = s * (d / 2 - 0.05), fh = ph - 0.1;
+      trim.box(pw + 0.06, 0.03, 0.035, 0, y + fh / 2, z).box(pw + 0.06, 0.03, 0.035, 0, y - fh / 2, z);
+      trim.box(0.03, fh, 0.035, -pw / 2 - 0.015, y, z).box(0.03, fh, 0.035, pw / 2 + 0.015, y, z);
       ch.ribbon([[-w * 0.3, y, s * (d / 2 - 0.042)], [w * 0.3, y, s * (d / 2 - 0.042)]], 0.045, [0, 0, s]);
     }
   }
   for (const s of [-1, 1]) dk.box(0.03, H - 0.62, d * 0.5, s * (w / 2 - 0.06), H / 2, 0);
+  // corner stiles: dark bronze-gold posts set into the body's corners
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) dk.boxOn(0.07, H - 0.5, 0.07, sx * (w / 2 - 0.085), 0.24, sz * (d / 2 - 0.085));
 }
 
 function dominion(p: Part, w: number, d: number, H: number): void {

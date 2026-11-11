@@ -33,7 +33,7 @@ export function createHeroProps(game: Game | null): HeroProps {
     stabilizer: () => new Stabilizer(lib()),
     observationSet: () => new ObservationSet(lib()),
     recognitionThreshold: () => new RecognitionThreshold(lib()),
-    containmentCage: (kind) => new ContainmentCage(lib(), kind === 'reformation' ? 'reformation' : 'dominion'),
+    containmentCage: (kind, opts) => new ContainmentCage(lib(), kind === 'reformation' ? 'reformation' : 'dominion', opts ?? {}),
     fallenPlate: () => new FallenPlate(lib()),
     departureShip: (kind) => new DepartureShip(lib(), kind === 'reformationTransport' ? 'reformationTransport' : 'dominionShuttle'),
     hologram: (kind: HologramKind) => new Hologram(lib(), kind),

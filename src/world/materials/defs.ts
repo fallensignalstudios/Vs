@@ -38,7 +38,7 @@ const BARE_STEEL = 0xaab3be;
 /** Shared look of the upper-terminal ceramic. */
 const CERAMIC_TP: TriplanarParams = {
   scale: 4,
-  normal: 1,
+  normal: 1.35,
   roughAmp: 0.34,
   macro: { albedo: 0.1, rough: 0.07, scale: 23, hue: 0.4 },
   detail: { scale: 0.31, normal: 0.06, rough: 0.14, albedo: 0.03 },
@@ -54,25 +54,26 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   // ------------------------------------------------------------------ King-era substrate — upper
   whiteGold: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.42, metalness: 0.3 },
+    props: { color: 0xffffff, roughness: 0.36, metalness: 0.22 },
     family: 'ceramic',
     tp: CERAMIC_TP,
   },
   whiteGoldPanel: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.4, metalness: 0.3 },
+    props: { color: 0xffffff, roughness: 0.36, metalness: 0.22 },
     family: 'ceramic',
     tp: {
       ...CERAMIC_TP,
       panel: {
-        w: 2.4, h: 3.6, seam: 0.004, bevel: 0.03, depth: 0.55, tint: 0.05, jitter: 1, dark: 0.55,
-        wear: { color: GOLD_LEAF, width: 0.035, strength: 0.7, roughness: 0.26, metalness: 1 },
+        // polish 3: deeper seams with grime settled along them, more slab-to-slab variation, gold-leaf wear
+        w: 2.4, h: 3.6, seam: 0.006, bevel: 0.04, depth: 0.75, tint: 0.1, jitter: 1, dark: 0.78, grime: 0.3,
+        wear: { color: GOLD_LEAF, width: 0.035, strength: 0.75, roughness: 0.26, metalness: 1 },
       },
     },
   },
   whiteGoldFloor: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.2, metalness: 0.25 },
+    props: { color: 0xffffff, roughness: 0.15, metalness: 0.15 },
     family: 'ceramicFloor',
     tp: {
       scale: 4,
@@ -81,7 +82,7 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
       macro: { albedo: 0.12, rough: 0.08, scale: 27, hue: 0.35 },
       detail: { scale: 0.31, normal: 0.06, rough: 0.11, albedo: 0.03 },
       panel: {
-        w: 3, h: 3, seam: 0.004, bevel: 0.025, depth: 0.5, tint: 0.07, jitter: 1, dark: 0.6,
+        w: 3, h: 3, seam: 0.005, bevel: 0.025, depth: 0.55, tint: 0.1, jitter: 1, dark: 0.72, grime: 0.24,
         wear: { color: GOLD_LEAF, width: 0.02, strength: 0.5, roughness: 0.28, metalness: 1 },
       },
     },
