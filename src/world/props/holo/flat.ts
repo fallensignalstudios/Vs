@@ -11,7 +11,14 @@ export interface Content {
   /** advance the display: `p` = eased progress 0…1 */
   update(p: number, time: number): void;
   setText(text: string): void;
+  /** replace a named secondary label (see HologramProp.setLabel); false when the display has no such slot */
+  setLabel?(slot: string, text: string): boolean;
 }
+
+/** header line: the nominal 26 characters at full size, up to {@link HEADER_MAX} shrunk to the same width */
+export const HEADER_MAX = 40;
+const HEADER_CELL = 0.011;
+const HEADER_FIT = (26 * 4 - 1) * HEADER_CELL;
 
 export const AMBER = PALETTE.domAmber, BLUE = PALETTE.refBlue, GOLD = PALETTE.goldLight, PALE = 0xf2f6ff, CINDER = PALETTE.cinder;
 /** contamination marker: violet pulled toward white so it stays a data colour, not a glow */
@@ -34,7 +41,7 @@ function frame(c: HoloCanvas, color: number): void {
 /** A clock face of segmented numerals: HH:MM:SS across a ring of sixty ticks that drains with progress. */
 export function forecast(c: HoloCanvas): Content {
   frame(c, GOLD);
-  const header = c.text('FORECAST', -W / 2 + 0.04, H / 2 - 0.06, 0.011, GOLD, 0.85, 0, 1, 26);
+  const header = c.text('FORECAST', -W / 2 + 0.04, H / 2 - 0.06, HEADER_CELL, GOLD, 0.85, 0, 1, HEADER_MAX, HEADER_FIT);
   c.text('CONTAINMENT MARGIN', -W / 2 + 0.04, -H / 2 + 0.085, 0.008, GOLD, 0.55);
   // the face is wider than the panel: only its left and right arcs show, bracketing the numerals
   const TICKS = 120, R = 0.76, CUT = 0.36;
@@ -82,7 +89,7 @@ export function forecast(c: HoloCanvas): Content {
     },
     setText(text) {
       // digits fill the clock; anything else (a label) goes to the header line
-      if (/[0-9]/.test(text)) show(text); else header.set(text.slice(0, 26));
+      if (/[0-9]/.test(text)) show(text); else header.set(text.slice(0, HEADER_MAX));
     },
   };
 }
@@ -96,10 +103,14 @@ export function forecast(c: HoloCanvas): Content {
  */
 export function threatStreams(c: HoloCanvas): Content {
   frame(c, PALE);
-  const header = c.text('THREAT TRACK EXCHANGE', -W / 2 + 0.04, H / 2 - 0.06, 0.011, PALE, 0.85, 0, 1, 26);
-  c.text('DOMINION TRACK', -W / 2 + 0.04, 0.325, 0.008, AMBER, 0.8);
-  c.text('REFORMATION TRACK', -W / 2 + 0.04, -0.105, 0.008, BLUE, 0.8);
-  const status = c.text('COMMON TARGETS 0/4', W / 2 - 0.04 - 18 * 0.036, -H / 2 + 0.085, 0.009, PALE, 0.8, 0, 1, 18);
+  const header = c.text('THREAT TRACK EXCHANGE', -W / 2 + 0.04, H / 2 - 0.06, HEADER_CELL, PALE, 0.85, 0, 1, HEADER_MAX, HEADER_FIT);
+  // lane labels (setLabel 'top' / 'bottom'): 18 characters at full size, up to 32 shrunk to the same width
+  const top = c.text('DOMINION TRACK', -W / 2 + 0.04, 0.325, 0.008, AMBER, 0.8, 0, 1, 32, (18 * 4 - 1) * 0.008);
+  const bottom = c.text('REFORMATION TRACK', -W / 2 + 0.04, -0.105, 0.008, BLUE, 0.8, 0, 1, 32, (18 * 4 - 1) * 0.008);
+  // status line (setLabel 'status' replaces the words before the live count): right-aligned, 24 characters
+  const STATUS_CELL = 0.009, STATUS_CAP = 24, STATUS_FIT = (18 * 4 - 1) * STATUS_CELL;
+  const status = c.text('COMMON TARGETS 0/4', W / 2 - 0.04 - STATUS_FIT, -H / 2 + 0.085, STATUS_CELL, PALE, 0.8, 0, 1, STATUS_CAP, STATUS_FIT);
+  let statusWords = 'COMMON TARGETS';
   const N = 12, SW = 0.132, CELL = 0.024, SPAN = N * SW;
   const LANES = [{ y: 0.2, color: AMBER }, { y: -0.23, color: BLUE }] as const;
   for (const l of LANES) for (const sy of [-1, 1]) c.rect(0, l.y + sy * 0.085, SPAN, 0.003, l.color, 0.4);
@@ -181,11 +192,20 @@ export function threatStreams(c: HoloCanvas): Content {
       }
       if (count !== lastCount) {
         lastCount = count;
-        status.set(`COMMON TARGETS ${count}/4`);
+        status.set(`${statusWords} ${count}/4`.trim());
       }
     },
     setText(text) {
-      header.set(text.slice(0, 26));
+      header.set(text.slice(0, HEADER_MAX));
+    },
+    setLabel(slot, text) {
+      if (slot === 'top') top.set(text.slice(0, 32));
+      else if (slot === 'bottom') bottom.set(text.slice(0, 32));
+      else if (slot === 'status') {
+        statusWords = text.slice(0, STATUS_CAP - 4);
+        lastCount = -1;
+      } else return false;
+      return true;
     },
   };
 }
@@ -197,7 +217,7 @@ const STATUS = ['LOST', 'MISSING', 'ALIVE'] as const;
 /** Rows of unit identifiers with a status mark and word; rows reveal top-down under a cursor, a tally fills. */
 export function casualtyLog(c: HoloCanvas): Content {
   frame(c, AMBER);
-  const header = c.text('CASUALTY LOG', -W / 2 + 0.04, H / 2 - 0.06, 0.011, AMBER, 0.9, 0, 1, 26);
+  const header = c.text('CASUALTY LOG', -W / 2 + 0.04, H / 2 - 0.06, HEADER_CELL, AMBER, 0.9, 0, 1, HEADER_MAX, HEADER_FIT);
   const rnd = mulberry32(2291);
   const ROWS = 9, PITCH = 0.078, TOP = 0.3, CELL = 0.011;
   const rows: Array<{ range: Range; status: number; tally: number }> = [];
@@ -238,7 +258,7 @@ export function casualtyLog(c: HoloCanvas): Content {
       c.setAlpha(cursor, p > 0.001 && p < 0.999 ? 0.7 + 0.3 * Math.sin(time * 6) : 0);
     },
     setText(text) {
-      header.set(text.slice(0, 26));
+      header.set(text.slice(0, HEADER_MAX));
     },
   };
 }
@@ -252,7 +272,7 @@ export function casualtyLog(c: HoloCanvas): Content {
  */
 export function contaminationRecord(c: HoloCanvas): Content {
   frame(c, BLUE);
-  const header = c.text('CONTAMINATION RECORD', -W / 2 + 0.04, H / 2 - 0.06, 0.011, BLUE, 0.9, 0, 1, 26);
+  const header = c.text('CONTAMINATION RECORD', -W / 2 + 0.04, H / 2 - 0.06, HEADER_CELL, BLUE, 0.9, 0, 1, HEADER_MAX, HEADER_FIT);
   const count = c.text('JUNCTIONS 00/21', W / 2 - 0.04 - 15 * 0.036, -H / 2 + 0.085, 0.009, PALE, 0.8, 0, 1, 15);
   const COLS = 7, ROWS = 3, DX = 0.22, DY = 0.19, CY = 0.03;
   const px = (col: number): number => (col - (COLS - 1) / 2) * DX;
@@ -321,7 +341,7 @@ export function contaminationRecord(c: HoloCanvas): Content {
       }
     },
     setText(text) {
-      header.set(text.slice(0, 26));
+      header.set(text.slice(0, HEADER_MAX));
     },
   };
 }

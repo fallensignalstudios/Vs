@@ -5,9 +5,13 @@
  */
 import { clamp01, lerp, smoothstep } from '@/core/mathx';
 import type { HoloCanvas, Range } from './canvas';
-import { BLUE, CINDER, GOLD, PALE, type Content } from './flat';
+import { BLUE, CINDER, GOLD, HEADER_MAX, PALE, type Content } from './flat';
 
 const TAU = Math.PI * 2;
+/** trajectory readout: up to 32 characters (16 at full size, longer lines shrink to the same width) */
+export const LABEL_MAX = 32;
+/** the spatial headers' nominal width: 22 characters of 12 mm cells */
+const SPATIAL_FIT = (22 * 4 - 1) * 0.012;
 
 // ------------------------------------------------------------------------------------------------ trajectory
 
@@ -57,7 +61,8 @@ export function trajectory(c: HoloCanvas): Content {
   c.line(C[0], Y0 + 0.006, C[2] - 0.3, C[0], Y0 + 0.006, C[2] + 0.3, 0.008, CINDER, 0.8, true);
   const impact: Range = [mf, c.count - mf];
   const clear = c.circle(C[0], Y0 + 0.004, C[2], 0.2, 0.014, PALE, 1, true, 28, 0.5, TAU - 0.5);
-  const label = c.text('IMPACT 01:31', 0.95, 2.24, 0.016, PALE, 0.95, 0.3, -1, 16);
+  // 16 characters at full size; up to LABEL_MAX shrink to the same width instead of being cut off
+  const label = c.text('IMPACT 01:31', 0.95, 2.24, 0.016, PALE, 0.95, 0.3, -1, LABEL_MAX, (16 * 4 - 1) * 0.016);
   c.rect(0.55, 2.19, 0.82, 0.004, PALE, 0.5, 0.3);
   return {
     update(p, time) {
@@ -80,7 +85,7 @@ export function trajectory(c: HoloCanvas): Content {
       c.fade(clear, lift);
     },
     setText(text) {
-      label.set(text.slice(0, 16));
+      label.set(text.slice(0, LABEL_MAX));
     },
   };
 }
@@ -116,7 +121,7 @@ export function diagnostic(c: HoloCanvas): Content {
   c.rect(0, CY - 0.99, 0.5, 0.004, GOLD, 0.5);
   for (const sx of [-1, 1]) c.rect(sx * 0.25, CY - 0.99, 0.004, 0.04, GOLD, 0.6);
   const needle = c.line(-0.25, CY - 0.99, 0, 0.25, CY - 0.99, 0, 0.01, PALE, 1);
-  const header = c.text('MERIDIAN CONTINUITY', 0.84, CY + 0.98, 0.012, GOLD, 0.85, 0, -1, 22);
+  const header = c.text('MERIDIAN CONTINUITY', 0.84, CY + 0.98, 0.012, GOLD, 0.85, 0, -1, HEADER_MAX, SPATIAL_FIT);
   const tally = c.text('4/5', 0.165, CY - 1.17, 0.03, PALE, 1, 0, -1, 3);
   const nx = [0, 0, 0, 0, 0], ny = [0, 0, 0, 0, 0];
   let five = false;
@@ -154,7 +159,7 @@ export function diagnostic(c: HoloCanvas): Content {
       }
     },
     setText(text) {
-      header.set(text.slice(0, 22));
+      header.set(text.slice(0, HEADER_MAX));
     },
   };
 }
@@ -175,7 +180,7 @@ export function sensorReconstruction(c: HoloCanvas): Content {
     const z = -GZ + (i * 2 * GZ) / 4, edge = i === 0 || i === 4;
     c.line(-GX, Y0, z, GX, Y0, z, edge ? 0.01 : 0.005, BLUE, edge ? 0.8 : 0.3, true);
   }
-  const header = c.text('SENSOR RECONSTRUCTION', 1.2, Y0 + 0.98, 0.012, BLUE, 0.85, GZ, -1, 22);
+  const header = c.text('SENSOR RECONSTRUCTION', 1.2, Y0 + 0.98, 0.012, BLUE, 0.85, GZ, -1, HEADER_MAX, SPATIAL_FIT);
   c.rect(0.7, Y0 + 0.93, 1.0, 0.004, BLUE, 0.5, GZ);
   // emitters: a post, a head, a fan of seven rays
   const RAYS = 7, REACH = 1.05, SPREAD = 0.5;
@@ -243,7 +248,7 @@ export function sensorReconstruction(c: HoloCanvas): Content {
       }
     },
     setText(text) {
-      header.set(text.slice(0, 22));
+      header.set(text.slice(0, HEADER_MAX));
     },
   };
 }

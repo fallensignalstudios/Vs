@@ -23,14 +23,15 @@ interface KindDef {
   center: number;
 }
 
+// pool sizes include the longer text fields (40-character headers, 32-character labels: 15 quads a character)
 const KINDS: Record<HologramKind, KindDef> = {
-  trajectory: { build: trajectory, max: 900, flat: false, gain: 3.4, center: 1.5 },
-  threatStreams: { build: threatStreams, max: 2400, flat: true, gain: 3.2, center: 1.5 },
-  diagnostic: { build: diagnostic, max: 1000, flat: false, gain: 3.2, center: 1.55 },
-  forecast: { build: forecast, max: 1100, flat: true, gain: 3.4, center: 1.5 },
-  casualtyLog: { build: casualtyLog, max: 3400, flat: true, gain: 3.0, center: 1.5 },
-  contaminationRecord: { build: contaminationRecord, max: 1600, flat: true, gain: 3.2, center: 1.5 },
-  sensorReconstruction: { build: sensorReconstruction, max: 900, flat: false, gain: 3.4, center: 1.3 },
+  trajectory: { build: trajectory, max: 1200, flat: false, gain: 3.4, center: 1.5 },
+  threatStreams: { build: threatStreams, max: 3200, flat: true, gain: 3.2, center: 1.5 },
+  diagnostic: { build: diagnostic, max: 1400, flat: false, gain: 3.2, center: 1.55 },
+  forecast: { build: forecast, max: 1400, flat: true, gain: 3.4, center: 1.5 },
+  casualtyLog: { build: casualtyLog, max: 3700, flat: true, gain: 3.0, center: 1.5 },
+  contaminationRecord: { build: contaminationRecord, max: 1900, flat: true, gain: 3.2, center: 1.5 },
+  sensorReconstruction: { build: sensorReconstruction, max: 1300, flat: false, gain: 3.4, center: 1.3 },
 };
 
 type Params = { progress: number; visible: number };
@@ -64,6 +65,12 @@ export class Hologram extends PropBase<Params> implements HologramProp {
 
   setText(text: string): void {
     this.content.setText(typeof text === 'string' ? text : String(text ?? ''));
+  }
+
+  setLabel(slot: string, text: string): void {
+    const t = typeof text === 'string' ? text : String(text ?? '');
+    if (slot === 'header') { this.content.setText(t); return; }
+    if (!this.content.setLabel?.(String(slot), t)) warnOnce(`hologram ${this.object.name}: no label slot "${String(slot)}"`);
   }
 
   protected apply(_dt: number, time: number): void {
