@@ -92,6 +92,7 @@ uniform float uFrozen;
 uniform mat4 uRest;
 uniform float uRestUnit;
 uniform vec4 uLocal;
+uniform vec4 uFace;
 ${FROST_REGION_GLSL}
 `;
 
@@ -99,8 +100,8 @@ ${FROST_REGION_GLSL}
 const VERT_BEGIN = /* glsl */ `
 vRest = ( uRest * vec4( position, 1.0 ) ).xyz;
 vRestN = normalize( mat3( uRest ) * normal );
-// the frost shell swells the surface a little (a boot locked in ice: three times as much, there only)
-float frostSwell = uFrozen * ( uLocal.x > 0.5 ? 0.012 * aurFrostRegion( vRest, uLocal ) : 0.004 );
+// the frost shell swells the surface a little (a boot locked in ice: three times as much, there only — not on props)
+float frostSwell = uFrozen * ( uLocal.x > 0.5 ? 0.012 * aurFrostRegion( vRest, uLocal ) * step( 0.001, uFace.w ) : 0.004 );
 vec3 transformed = vec3( position ) + normalize( normal ) * ( frostSwell * uRestUnit );
 `;
 
@@ -218,7 +219,8 @@ const FRAG_COLOR = /* glsl */ `
   if ( uFrozen > 0.001 ) {
     // whole figure, or one boot (regions.ts): ggFz is how frozen THIS point is
     float local = step( 0.5, uLocal.x );
-    float fm = aurFrostRegion( vRest + vec3( 0.0, ( gNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal );
+    // (a prop has no boot: carried items only freeze with the whole figure)
+    float fm = aurFrostRegion( vRest + vec3( 0.0, ( gNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal ) * ( local > 0.5 && uFace.w <= 0.0 ? 0.0 : 1.0 );
     ggFz = uFrozen * fm;
     vec3 cell = gCells( ( vRest + uSeed * 0.37 ) * mix( vec3( 36.0, 17.0, 36.0 ), vec3( 48.0, 30.0, 48.0 ), local ) );
     float grow = gFbm( vRest * 5.0 + uSeed );
@@ -250,15 +252,16 @@ const FRAG_COLOR = /* glsl */ `
         float a = uCorruption;
         ggIris = aurIris( fd, vRestN, fs ) * smoothstep( 0.0, 0.3, a );
         float region = aurFaceVeinRegion( fd, fs );
-        float w1 = abs( gNoise( vRest * 46.0 + uSeed * 3.0 ) - 0.5 );
-        float w2 = abs( gNoise( vRest * 95.0 + 7.0 ) - 0.5 );
+        float w1 = abs( gNoise( vRest * vec3( 70.0, 34.0, 70.0 ) + uSeed * 3.0 ) - 0.5 );
+        float w2 = abs( gNoise( vRest * 140.0 + 7.0 ) - 0.5 );
         // the veins reach further from their roots as the amount rises
         float reach = smoothstep( 1.0 - a, 1.25 - a, region + gNoise( vRest * 19.0 ) * 0.25 );
-        float thin = smoothstep( 0.024, 0.004, w1 ) + 0.45 * smoothstep( 0.012, 0.0, w2 );
+        float thin = smoothstep( 0.013, 0.002, w1 ) + 0.4 * smoothstep( 0.008, 0.0, w2 );
         ggVein = clamp( thin * reach * region, 0.0, 1.0 );
-        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), ggVein * 0.82 );
+        diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), ggVein * 0.85 );
         diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.32, 0.1, 0.62 ), ggIris * 0.9 );
-        ggVein *= 0.3;
+        // dark veins with only a breath of light in them; the irises carry the light
+        ggVein *= 0.1;
       }
     } else {
       float m = gFbm( cp * 3.6 + 11.0 );
@@ -267,12 +270,13 @@ const FRAG_COLOR = /* glsl */ `
       float dir = clamp( 0.5 + dot( vRest - vec3( 0.0, 1.0, 0.0 ), cdir ) * 1.5, 0.0, 1.0 );
       float reach = uCorruption * 0.78;
       ggCorr = smoothstep( 1.0 - reach, 1.14 - reach, m * 0.45 + dir * 0.55 );
-      if ( uLocal.y > 1.5 && uFace.w > 0.0 ) {
-        // HALF FACE: on the head one half is taken (split by a ragged line), the other stays human
-        float head = aurHead( fd, fs );
+      if ( uLocal.y > 1.5 ) {
+        // HALF FACE: on the head one half is taken (split by a ragged line), the other stays human; the rest of
+        // the figure keeps its own look (and props are untouched)
+        float head = uFace.w > 0.0 ? aurHead( fd, fs ) : 0.0;
         float edge = fd.x * uLocal.z + ( gNoise( vRest * 55.0 + uSeed ) - 0.5 ) * 0.014 * fs + ( gNoise( vRest * 13.0 ) - 0.5 ) * 0.024 * fs;
         float halfMask = smoothstep( -0.003, 0.005, edge ) * smoothstep( 0.0, 0.35, uCorruption );
-        ggCorr = mix( ggCorr, halfMask, head );
+        ggCorr = halfMask * head;
       }
       float front = smoothstep( 0.0, 0.25, ggCorr ) * smoothstep( 0.8, 0.3, ggCorr );
       float lines = smoothstep( 0.03, 0.0, v1 ) + 0.45 * smoothstep( 0.018, 0.0, v2 );

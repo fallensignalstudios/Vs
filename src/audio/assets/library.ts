@@ -196,6 +196,7 @@ export class AssetLibrary {
           loopStart: typeof v.loopStart === 'number' ? v.loopStart : 0,
           meanDb: typeof v.meanDb === 'number' ? v.meanDb : -16,
           maxDb: typeof v.maxDb === 'number' ? v.maxDb : 0,
+          ...(typeof v.gainDb === 'number' && Number.isFinite(v.gainDb) ? { gainDb: v.gainDb } : {}),
           loopBars: typeof v.loopBars === 'number' ? v.loopBars : undefined,
           key: typeof v.key === 'string' ? v.key : undefined,
           notes: typeof v.notes === 'string' ? v.notes : undefined,

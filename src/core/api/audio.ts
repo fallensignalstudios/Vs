@@ -107,6 +107,9 @@ export type SfxId =
   | 'resonanceWindow' | 'thermalFracture' | 'recognitionTone' | 'assentToneTarrik' | 'assentToneSelene'
   | 'meridianAlign' | 'meridianComplete' | 'boundaryClose' | 'grammarPropagate' | 'witnessEnter' | 'witnessSunder'
   | 'liftMove' | 'chairSettle' | 'evidenceExchange' | 'engineSpool' | 'shipDepart'
+  // ADDED (polish 3): one soldier screaming (positional, for «Then a Dominion soldier screams.») and a short cry
+  // of pain; the comm squelch that brackets a recorded radio line (played by the voice-over itself)
+  | 'soldierScream' | 'painCry' | 'commOpen' | 'commClose'
   // small world details (also scheduled automatically by the ambience beds)
   | 'ventHiss' | 'ambMetalTick' | 'ambEmberPop' | 'ambDust' | 'ambServoFar' | 'ambMurmur' | 'ambDrip' | 'ambMedBeep'
   | 'ambIceTick' | 'ambIceCreak' | 'ambCommBlip' | 'ambWhisper' | 'ambRelayClick' | 'ambZapFar' | 'ambChain'

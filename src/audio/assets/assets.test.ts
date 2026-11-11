@@ -15,7 +15,7 @@ import { MUSIC } from '../music/defs';
 import { FakeBuffer, FakeContext } from '../testing/fake-context';
 import { AssetLibrary, voiceGain, type FetchResult } from './library';
 import { audioProblem, mpegDuration } from './sniff';
-import { TRACKS, type TrackMeta, type TrackName } from './mapping';
+import { loopSpec, TRACKS, type TrackMeta, type TrackName } from './mapping';
 import { TrackPlayer } from './player';
 import { voiceChannel } from './voice';
 import { voLineId } from './voiceId';
@@ -225,6 +225,24 @@ function step(ctx: FakeContext, seconds: number, each: (dt: number) => void, dt 
 
 describe('track player', () => {
   const loop = { intro: 0, from: 0, to: 18, xfade: 2, rate: 1, meanDb: -16 };
+
+  it('puts a track\'s low shelf (frozen_stealth) in its chain, and the manifest trim in its level', () => {
+    const meta = { ...MANIFEST.frozen_stealth, gainDb: 2.4 };
+    const spec = loopSpec('frozen_stealth', meta);
+    expect(spec.lowShelf).toEqual({ hz: 200, db: -3 });
+    expect(spec.gainDb).toBe(2.4);
+    expect(loopSpec('main_theme', MANIFEST.main_theme).lowShelf).toBeNull();
+    const ctx = new FakeContext();
+    const p = new TrackPlayer(ctx.asContext(), ctx.asContext().createGain());
+    const buf = new FakeBuffer(2, 44100 * 20, 44100) as unknown as AudioBuffer;
+    const shelves = (): number => ctx.all.filter((n) => n.nodeType === 'BiquadFilterNode' && n.type === 'lowshelf').length;
+    p.play('frozen_stealth:whole', buf, { ...loop, lowShelf: spec.lowShelf }, 0.5, 20000, 1, 1);
+    expect(shelves()).toBe(1);
+    p.play('main_theme:whole', buf, loop, 0.5, 20000, 1.5, 1);
+    expect(shelves()).toBe(1);
+    step(ctx, 4, () => p.update(1.5));
+    expect(ctx.problems).toEqual([]);
+  });
 
   it('hands each pass over to the next exactly one loop period later, with overlapping tails', () => {
     const ctx = new FakeContext();

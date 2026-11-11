@@ -30,6 +30,8 @@ import { corruptionCode, frostCode } from '@/chars/regions';
 
 /** eye centre above the head joint / in front of it, in skull lengths (the `eye` socket uses the same) */
 const FACE_EYE_Y = 0.47, FACE_EYE_Z = 0.42;
+/** measured on the generated leads: the eyes are this much above the `eye` socket's estimate (m) */
+const FACE_EYE_LIFT = 0.01;
 import type { RigInfo } from './analyze';
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _t = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -254,7 +256,10 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     make('head', 'head', new THREE.Vector3(head.x, head.y + skull * 0.45, head.z));
     make('eye', 'head', new THREE.Vector3(head.x, head.y + skull * 0.47, head.z - skull * 0.42));
     // the face, in the shader's rest space (scale 1), for face-only and half-face corruption (regions.ts)
-    for (const m of body.materials) m.own.uFace.value.set(head.x / g, (head.y + skull * FACE_EYE_Y) / g, (head.z - skull * FACE_EYE_Z) / g, skull / g);
+    // (the socket sits a little under the eyes of the generated heads; the face's scale follows the stature, not the
+    // skull estimate — meshy rigs put the head joint low)
+    const faceScale = 0.21 * Math.min(1.2, Math.max(0.85, body.height / g / 1.78));
+    for (const m of body.materials) m.own.uFace.value.set(head.x / g, (head.y + skull * FACE_EYE_Y) / g + FACE_EYE_LIFT, (head.z - skull * FACE_EYE_Z) / g, faceScale);
     make('handL', 'handL', rig.hands.L.grip.clone().multiplyScalar(g));
     make('handR', 'handR', rig.hands.R.grip.clone().multiplyScalar(g));
   }

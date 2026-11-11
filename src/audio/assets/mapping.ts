@@ -36,6 +36,13 @@ export interface TrackMeta {
   meanDb: number;
   /** sample peak, dBFS */
   maxDb: number;
+  /**
+   * Trim (dB) on top of the RMS levelling. The plans level recordings by their mean RMS; two that measure the
+   * same RMS can still differ in loudness (LUFS — a bass-heavy file reads quieter). Set from
+   * `ffmpeg -af ebur128` so that every track's integrated loudness sits the same distance from its plan level.
+   * Optional (0).
+   */
+  gainDb?: number;
   loopBars?: number;
   key?: string;
   notes?: string;
@@ -78,6 +85,11 @@ export interface TrackInfo {
    */
   body?: number;
   regions?: Readonly<Partial<Record<RegionName, Region>>>;
+  /**
+   * a gentle low-shelf cut in the playback chain (before the tone low-pass): `hz` shelf midpoint, `db` (< 0).
+   * For a recording that came out darker and boomier than intended.
+   */
+  lowShelf?: { hz: number; db: number };
 }
 
 const BAR_ATRIUM = 240 / 72;
@@ -86,7 +98,10 @@ export const TRACKS: Readonly<Record<TrackName, TrackInfo>> = {
   main_theme: { tonic: 38, tune: 0 },
   // sparse low hits for the first 20 s; the ostinato is in from bar 9 (19.2 s)
   dominion_combat: { tonic: 36, tune: 0, body: 19.2 },
-  frozen_stealth: { tonic: 38, tune: 0 },
+  // measured (ffmpeg astats): energy under 150 Hz only 2.0 dB below the file's RMS (the other quiet beds: 4–5 dB)
+  // and above 4 kHz 34 dB below (others 23–30): darker and boomier than intended. −3 dB under 200 Hz brings the
+  // low band to 2.8 dB below; its loudness loss is made up by the manifest's gainDb.
+  frozen_stealth: { tonic: 38, tune: 0, lowShelf: { hz: 200, db: -3 } },
   // a lighter arpeggio for 15 s (8 bars), then the drive
   relay_combat: { tonic: 38, tune: 0, body: 15 },
   atrium_carrier: {
@@ -199,6 +214,10 @@ export interface LoopSpec {
   rate: number;
   /** mean level of the looped part, dBFS */
   meanDb: number;
+  /** loudness trim from the manifest (dB; default 0) */
+  gainDb?: number;
+  /** playback low-shelf of the track (TrackInfo.lowShelf), or null */
+  lowShelf?: { hz: number; db: number } | null;
 }
 
 /**
@@ -212,12 +231,14 @@ export function loopSpec(track: TrackName, meta: TrackMeta, region: RegionName =
   const seconds = Number.isFinite(meta.seconds) && meta.seconds > 0 ? meta.seconds : 0;
   const r = region === 'whole' ? undefined : info.regions?.[region];
   const rate = Math.pow(2, info.tune / 12);
-  if (r && r.to + LOOP_XFADE <= seconds + 1e-6) return { intro: r.from, from: r.from, to: r.to, xfade: LOOP_XFADE, rate, meanDb: r.meanDb };
+  const gainDb = typeof meta.gainDb === 'number' && Number.isFinite(meta.gainDb) ? clamp(meta.gainDb, -12, 12) : 0;
+  const lowShelf = info.lowShelf ?? null;
+  if (r && r.to + LOOP_XFADE <= seconds + 1e-6) return { intro: r.from, from: r.from, to: r.to, xfade: LOOP_XFADE, rate, meanDb: r.meanDb, gainDb, lowShelf };
   const xfade = Math.min(LOOP_XFADE, seconds / 4);
   const from = clamp(Number.isFinite(meta.loopStart) ? meta.loopStart : 0, 0, Math.max(0, seconds - 2 * xfade));
   const to = seconds - xfade;
   const intro = hot && info.body !== undefined && info.body < to - 2 * xfade ? info.body : 0;
-  return { intro, from, to, xfade, rate, meanDb: Number.isFinite(meta.meanDb) ? meta.meanDb : -16 };
+  return { intro, from, to, xfade, rate, meanDb: Number.isFinite(meta.meanDb) ? meta.meanDb : -16, gainDb, lowShelf };
 }
 
 /** Seconds heard between the start of one pass and the next (after the first). */
@@ -230,7 +251,7 @@ const amp = (db: number): number => Math.pow(10, db / 20);
 export function planGain(plan: ScorePlan, loop: LoopSpec, intensity: number): number {
   const db = lerp(plan.gain[0], plan.gain[1], clamp01(Number.isFinite(intensity) ? intensity : 0));
   // a quiet file is never boosted by more than 6 dB: its noise floor and its peaks come up with it
-  return amp(Math.min(6, db - loop.meanDb));
+  return amp(Math.min(6, db - loop.meanDb + (loop.gainDb ?? 0)));
 }
 
 /** Low-pass frequency (Hz) for `intensity`: opens exponentially, the way it is heard. */

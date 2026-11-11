@@ -77,7 +77,8 @@ describe('state → track mapping', () => {
     const p = SCORE_PLAN.combatTarrik;
     const loop = loopSpec('dominion_combat', MANIFEST.dominion_combat);
     expect(planGain(p, loop, 1)).toBeGreaterThan(planGain(p, loop, 0) * 1.5);
-    expect(20 * Math.log10(planGain(p, loop, 1))).toBeCloseTo(p.gain[1] - MANIFEST.dominion_combat.meanDb, 5);
+    // (the manifest's loudness trim rides on top of the RMS levelling)
+    expect(20 * Math.log10(planGain(p, loop, 1))).toBeCloseTo(p.gain[1] - MANIFEST.dominion_combat.meanDb + (MANIFEST.dominion_combat.gainDb ?? 0), 5);
     expect(planTone(p, 0)).toBeCloseTo(3200, 5);
     expect(planTone(p, 1)).toBeCloseTo(20000, 5);
     expect(planTone(p, 0.5)).toBeCloseTo(Math.sqrt(3200 * 20000), 3);

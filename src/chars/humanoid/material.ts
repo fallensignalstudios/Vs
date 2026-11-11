@@ -188,7 +188,7 @@ fgPart = vCode - fgZone * 16.0;
   if ( uFrozen > 0.001 ) {
     // whole figure, or one boot (regions.ts)
     float local = step( 0.5, uLocal.x );
-    float fm = aurFrostRegion( vRest + vec3( 0.0, ( hNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal );
+    float fm = aurFrostRegion( vRest + vec3( 0.0, ( hNoise( vRest * 31.0 + uSeed ) - 0.5 ) * 0.05 * local, 0.0 ), uLocal ) * ( local > 0.5 && uFace.w <= 0.0 ? 0.0 : 1.0 );
     fgFz = uFrozen * fm;
     vec3 cell = hCells( ( vRest + uSeed * 0.37 ) * mix( vec3( 36.0, 17.0, 36.0 ), vec3( 48.0, 30.0, 48.0 ), local ) );
     float grow = hFbm( vRest * 5.0 + uSeed );
@@ -216,12 +216,12 @@ fgPart = vCode - fgZone * 16.0;
       float a = uCorruption;
       fgIris = aurIris( fd, vRestN, fs ) * smoothstep( 0.0, 0.3, a );
       float region = aurFaceVeinRegion( fd, fs );
-      float w1 = abs( hNoise( vRest * 46.0 + uSeed * 3.0 ) - 0.5 );
+      float w1 = abs( hNoise( vRest * vec3( 70.0, 34.0, 70.0 ) + uSeed * 3.0 ) - 0.5 );
       float reach = smoothstep( 1.0 - a, 1.25 - a, region + hNoise( vRest * 19.0 ) * 0.25 );
-      fgVein = clamp( smoothstep( 0.024, 0.004, w1 ) * reach * region, 0.0, 1.0 );
-      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), fgVein * 0.82 );
+      fgVein = clamp( smoothstep( 0.013, 0.002, w1 ) * reach * region, 0.0, 1.0 );
+      diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.075, 0.025, 0.12 ), fgVein * 0.85 );
       diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.32, 0.1, 0.62 ), fgIris * 0.9 );
-      fgVein *= 0.3;
+      fgVein *= 0.1;
     }
   } else if ( uCorruption > 0.001 ) {
     vec3 cp = vRest + uSeed * 1.7;
@@ -231,10 +231,10 @@ fgPart = vCode - fgZone * 16.0;
     float dir = clamp( 0.5 + dot( vRest - vec3( 0.0, 1.0, 0.0 ), cdir ) * 1.5, 0.0, 1.0 );
     float reach = uCorruption * 0.78;
     fgCorr = smoothstep( 1.0 - reach, 1.14 - reach, m * 0.45 + dir * 0.55 );
-    if ( uLocal.y > 1.5 && uFace.w > 0.0 ) {
-      // HALF FACE: on the head one half is taken, split by a ragged line
+    if ( uLocal.y > 1.5 ) {
+      // HALF FACE: on the head one half is taken, split by a ragged line; the rest keeps its own look
       float edge = fd.x * uLocal.z + ( hNoise( vRest * 55.0 + uSeed ) - 0.5 ) * 0.014 * fs + ( hNoise( vRest * 13.0 ) - 0.5 ) * 0.024 * fs;
-      fgCorr = mix( fgCorr, smoothstep( -0.003, 0.005, edge ) * smoothstep( 0.0, 0.35, uCorruption ), aurHead( fd, fs ) );
+      fgCorr = smoothstep( -0.003, 0.005, edge ) * smoothstep( 0.0, 0.35, uCorruption ) * ( uFace.w > 0.0 ? aurHead( fd, fs ) : 0.0 );
     }
     float seam = smoothstep( 0.95, 0.62, ao );
     float front = smoothstep( 0.0, 0.25, fgCorr ) * smoothstep( 0.8, 0.3, fgCorr );

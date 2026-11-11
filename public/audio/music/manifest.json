@@ -19,7 +19,8 @@
     "maxDb": -1.0,
     "loopBars": 38,
     "key": "C minor",
-    "notes": "Heavy 4/4 battle cue. Sparse low hits for the first 20 s, then full taiko/low-brass ostinato that keeps building. Loop: start the next pass at seconds-2.0 (91.200 s = 38 bars) with a 2.0 s equal-power crossfade and the seam is bar-aligned."
+    "notes": "Heavy 4/4 battle cue. Sparse low hits for the first 20 s, then full taiko/low-brass ostinato that keeps building. Loop: start the next pass at seconds-2.0 (91.200 s = 38 bars) with a 2.0 s equal-power crossfade and the seam is bar-aligned.",
+    "gainDb": 0.5
   },
   "frozen_stealth": {
     "file": "frozen_stealth.mp3",
@@ -30,7 +31,8 @@
     "maxDb": -1.7,
     "loopBars": 26,
     "key": "D (D-A drone, no third)",
-    "notes": "Stealth bed. Sustained glassy partials + ticking pulse; a low boom every 2 bars (6 s). Dark: little content above 3 kHz. Loop: start the next pass at seconds-2.0 (78.000 s = 26 bars) with a 2.0 s equal-power crossfade and the seam is bar-aligned."
+    "notes": "Stealth bed. Sustained glassy partials + ticking pulse; a low boom every 2 bars (6 s). Dark: little content above 3 kHz. Loop: start the next pass at seconds-2.0 (78.000 s = 26 bars) with a 2.0 s equal-power crossfade and the seam is bar-aligned.",
+    "gainDb": 2.4
   },
   "relay_combat": {
     "file": "relay_combat.mp3",

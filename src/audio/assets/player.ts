@@ -3,7 +3,7 @@
  * with an equal-power cross-fade to the next recording when the state changes.
  *
  *   pass (buffer source) ─► pass gain (loop cross-fade) ─┐
- *   next pass ─────────────► pass gain ──────────────────┴─► level ─► tone (low-pass) ─► fader ─► music bus
+ *   next pass ─────────────► pass gain ──────────────────┴─► level ─► [low shelf] ─► tone (low-pass) ─► fader ─► music bus
  *
  * A "slot" is one recording (and one loop region of it) with its own level, tone and fader; a state change
  * to another recording fades a new slot in while the old one fades out and is then discarded. Returning to
@@ -92,6 +92,7 @@ class Slot {
   disposeAt = Infinity;
   private readonly level: GainNode;
   private readonly tone: BiquadFilterNode;
+  private shelf: BiquadFilterNode | null = null;
   private readonly out: GainNode;
   private readonly fader: PowerFader;
   private nextAt: number;
@@ -109,7 +110,17 @@ class Slot {
     this.tone.frequency.value = this.hz(toneHz);
     this.out = ac.createGain();
     this.fader = new PowerFader(this.out.gain, 0);
-    this.level.connect(this.tone);
+    // a track that came out boomy gets its gentle low-shelf cut here (TrackInfo.lowShelf)
+    const ls = loop.lowShelf;
+    if (ls && Number.isFinite(ls.hz) && Number.isFinite(ls.db) && ls.db !== 0) {
+      const shelf = ac.createBiquadFilter();
+      shelf.type = 'lowshelf';
+      shelf.frequency.value = clamp(ls.hz, 30, 2000);
+      shelf.gain.value = clamp(ls.db, -18, 6);
+      this.level.connect(shelf);
+      shelf.connect(this.tone);
+      this.shelf = shelf;
+    } else this.level.connect(this.tone);
     this.tone.connect(this.out);
     this.out.connect(to);
     this.nextAt = startAt;
@@ -183,6 +194,7 @@ class Slot {
       p.gain.disconnect();
     }
     this.passes.length = 0;
+    this.shelf?.disconnect();
     this.out.disconnect();
   }
 }

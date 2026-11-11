@@ -68,15 +68,15 @@ export const FACE_REGION_GLSL = /* glsl */ `
 // irises: two small discs either side of the eye centre, on surfaces that face forward
 float aurIris( vec3 d, vec3 n, float s ) {
   float front = smoothstep( 0.15, 0.55, -n.z ) * step( abs( d.z ), 0.06 * s );
-  float r = length( vec2( abs( d.x ) - 0.031 * s, d.y + 0.002 * s ) );
-  return smoothstep( 0.0115 * s, 0.0055 * s, r ) * front;
+  float r = length( vec2( abs( d.x ) - 0.031 * s, d.y ) );
+  return smoothstep( 0.0068 * s, 0.0042 * s, r ) * front;
 }
 // where the veins show: the temples (beside and behind the eyes) and the neck (jaw line to collar, not the nape)
 float aurFaceVeinRegion( vec3 d, float s ) {
-  vec3 t = vec3( abs( d.x ) - 0.066 * s, d.y - 0.018 * s, d.z - 0.04 * s );
-  float temple = smoothstep( 0.05 * s, 0.018 * s, length( t ) );
-  float y = d.y + 0.12 * s;
-  float band = smoothstep( 0.015 * s, -0.02 * s, y ) * smoothstep( -0.17 * s, -0.11 * s, y );
+  vec3 t = vec3( abs( d.x ) - 0.062 * s, d.y - 0.022 * s, d.z - 0.025 * s );
+  float temple = smoothstep( 0.036 * s, 0.012 * s, length( t ) );
+  float y = d.y + 0.09 * s;
+  float band = smoothstep( 0.0, -0.02 * s, y ) * smoothstep( -0.135 * s, -0.09 * s, y );
   float ring = smoothstep( 0.095 * s, 0.055 * s, length( vec2( d.x, d.z - 0.075 * s ) ) );
   float notNape = smoothstep( 0.13 * s, 0.07 * s, d.z );
   return max( temple, band * ring * notNape );

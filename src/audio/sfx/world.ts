@@ -260,6 +260,35 @@ export const WORLD_SFX: RecipeTable = {
     }
     k.noise('pink', { a: 0.6, h: 0.8, d: 1.2, g: 0.3 }, { to: mouth });
   }),
+  // ONE man screaming (polish 3: «Then a Dominion soldier screams.»): a ragged glottal onset, the pitch climbing
+  // into a strained cry, a crack where the voice breaks, then falling away; vowel formants (an open "ah" that
+  // narrows), breath and rasp. Positional — across a room it carries; a voice, not an effect.
+  soldierScream: sfx(-14, { gap: 1.5, max: 1, prio: 3, send: 0.55, ref: 9, vary: 70, tail: 0.8 }, (k) => {
+    const len = k.rr(1.35, 1.75);
+    const f0 = k.rr(205, 260);
+    const mouth = k.bank([720, 1180, 2650, 3500], 8, { gains: [1, 0.9, 0.42, 0.18], g: 2.6 });
+    const v = k.osc('sawtooth', [[0, f0 * 0.78], [0.1, f0 * 1.22], [len * 0.42, f0 * 1.42], [len * 0.68, f0 * 1.18], [len, f0 * 0.66]],
+      { a: 0.025, h: len * 0.5, d: len * 0.45, g: 0.75 }, { to: mouth });
+    k.lfo(k.rr(5.6, 6.8), f0 * 0.035, v.frequency, { dur: len });
+    // a second, rougher voice under it: the rasp of a throat pushed past its range
+    const r = k.osc('square', [[0, f0 * 0.5], [len * 0.4, f0 * 0.71], [len, f0 * 0.33]], { a: 0.06, h: len * 0.4, d: len * 0.5, g: 0.18 }, { to: mouth });
+    k.lfo(31, f0 * 0.05, r.frequency, { dur: len });
+    // the break: for a moment the voice jumps up and frays
+    k.osc('sawtooth', [[0, f0 * 1.75], [len * 0.12, f0 * 1.9], [len * 0.22, f0 * 1.5]], { a: 0.02, h: len * 0.08, d: len * 0.16, g: 0.32 }, { at: len * 0.36, to: mouth });
+    // breath through it, and the hard glottal attack
+    k.noise('pink', { a: 0.03, h: len * 0.45, d: len * 0.45, g: 0.32 }, { to: mouth });
+    k.noise('white', { a: 0.002, d: 0.07, g: 0.45 }, { bp: 1500, q: 1.3 });
+  }),
+  // a short cry of pain (a hit, a fall): a voiced grunt that rises a little and is cut off
+  painCry: sfx(-17, { gap: 0.6, max: 2, prio: 2, send: 0.35, ref: 6, vary: 90, tail: 0.6 }, (k) => {
+    const len = k.rr(0.32, 0.5);
+    const f0 = k.rr(150, 200);
+    const mouth = k.bank([620, 1050, 2500], 7, { gains: [1, 0.75, 0.3], g: 2.4 });
+    const v = k.osc('sawtooth', [[0, f0 * 0.85], [len * 0.25, f0 * 1.25], [len, f0 * 0.8]], { a: 0.012, h: len * 0.35, d: len * 0.6, g: 0.8 }, { to: mouth });
+    k.lfo(9, f0 * 0.03, v.frequency, { dur: len });
+    k.noise('pink', { a: 0.01, h: len * 0.3, d: len * 0.6, g: 0.4 }, { to: mouth });
+    k.noise('white', { a: 0.002, d: 0.04, g: 0.35 }, { bp: 1200, q: 1.2 });
+  }),
   plateLift: sfx(-10, { gap: 0.6, max: 1, prio: 2, send: 0.45, ref: 6 }, (k) => {
     // Tarrik takes the weight: strain, scrape, and the plate coming free
     const sh = k.shaper('soft', 2);

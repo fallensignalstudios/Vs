@@ -192,8 +192,8 @@ export interface FrozenOpts {
  *  - 'body' (default): it climbs over the figure from one flank.
  *  - 'face': the face only — violet in the irises, thin dark veins at the temples and down the neck that reach
  *    further as the amount rises (Lyric, "the black patterns in her iris, at her neck"). Nothing else is touched.
- *  - 'halfFace': the body as 'body', and on the head exactly one half is taken, split by a ragged line — the other
- *    half stays human. `side` picks the taken half (default 'right', the figure's right). Needs a face: see
+ *  - 'halfFace': on the head exactly one half is taken (dark tissue, violet veins), split down the middle by a
+ *    ragged line — the other half stays human. The rest of the figure keeps its own look. `side` picks the taken half (default 'right', the figure's right). Needs a face: see
  *    CharacterCreateOpts.halfHuman for the linkbound.
  * The mode (and side) are remembered until a later call passes another.
  */
