@@ -71,5 +71,29 @@
     "tileMeters": 6.0,
     "metal": false,
     "notes": "Worn grey steel and concrete hangar deck in a 6x6 grid of plates per tile (1 m plates at 6 m/tile), with corner bolts, scuffs, oil stains and faint tyre marks. The tyre marks repeat visibly on very large floors, so overlay decals. Metal is false as the brief asked; it reads as painted or sealed deck. Hangars, landing pads, industrial floors."
+  },
+  "marble_slab": {
+    "albedo": "marble_slab_albedo.webp",
+    "normal": "marble_slab_normal.webp",
+    "orm": "marble_slab_orm.webp",
+    "tileMeters": 4.0,
+    "metal": false,
+    "notes": "Polish pass 4. One large polished white-silver marble slab: soft feathery grey veining drifting diagonally, a faint warm vein here and there, no joints. Roughness ~0.22 (polished); the normal is near-flat, keep its strength very low (polished stone is flat: strong normals read as crinkled foil). Isotropic, so it may be turned per slab. King-era walls, pilasters and panels where the paintings show large smooth slabs; the slab joints come from geometry or the shader's panel layer."
+  },
+  "floor_wet_grey": {
+    "albedo": "floor_wet_grey_albedo.webp",
+    "normal": "floor_wet_grey_normal.webp",
+    "orm": "floor_wet_grey_orm.webp",
+    "tileMeters": 5.0,
+    "metal": false,
+    "notes": "Polish pass 4. Light-to-mid grey honed marble floor: smoky darker veins in long gentle waves, white hairline veins, fine speckle, even tone, no joints. Roughness ~0.15 (polished, reads wet under a planar reflection); faint normal only. Isotropic. The relay-route floors (finish 'wet')."
+  },
+  "gold_inlay": {
+    "albedo": "gold_inlay_albedo.webp",
+    "normal": "gold_inlay_normal.webp",
+    "orm": "gold_inlay_orm.webp",
+    "tileMeters": 0.6,
+    "metal": true,
+    "notes": "Polish pass 4. Polished gold with a fine engraved ornament: horizontal bands of a small angular meander between thin parallel grooves (7 bands per tile; bands run along U). Fully metallic, roughness ~0.28, grooves rougher and darker. Not isotropic. Gold trims and frames: a fine engraved, non-glowing gold."
   }
 }

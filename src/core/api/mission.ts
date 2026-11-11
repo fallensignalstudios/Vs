@@ -142,6 +142,18 @@ export interface SayOpts {
    * as `gesture: false`. Default false. Only meaningful with `actor`.
    */
   keepWeapon?: boolean;
+  /**
+   * ADDED (polish 4). Who the speaker addresses, instead of the default (the protagonist, else the nearest
+   * same-side figure): another figure — an Actor or a Companion (the speaker turns to it, unless `keepFacing`, and
+   * looks at its eyes); a world point (turned to; looked at, a floor point lifted to eye height); or `null` =
+   * nobody (no turn and no gaze change: a line said to the room, or under the breath). Only meaningful with `actor`.
+   *   yield* z.say('Lyric', 'Should.', { actor: lyric, listener: tharne });   // Lyric answers Tharne, not the lead
+   * The end of every line (polish 4 fix): a companion goes back to the facing target it had, and its head to that
+   * target at eye height — with `keepFacing` too (it used to drop to the target's feet).
+   * A companion that holds a scripted pose (`Companion.play(…, { persist: true })`) never plays the talk gesture
+   * (it would end the hold): it only moves its mouth.
+   */
+  listener?: Actor | Companion | Vec3Like | null;
 }
 
 /**

@@ -86,6 +86,12 @@ export class CompanionImpl implements Companion, ActorController {
   private readonly stepDir = new THREE.Vector3();
   private readonly assistRun: Assist;
   private pose: string | null = null;
+  /**
+   * (polish 4) a SCRIPTED HOLD: an upper-body pose played with `persist` (Selene's `verityCollapsed`). It survives
+   * stopAction(), mode changes, follow / moveTo and dialogue lines; while it is held the body never draws, aims or
+   * attacks. Ended by stopAction('<that action>'), assist(), or the pose itself ending (another clip replaced it).
+   */
+  private hold: string | null = null;
 
   constructor(
     private readonly core: AiCore,
@@ -139,6 +145,10 @@ export class CompanionImpl implements Companion, ActorController {
   /** the facing target set with face() (read-only view; null = none) */
   get facing(): Vec3Like | null {
     return this.faceTo;
+  }
+  /** (polish 4) the scripted hold played with `play(action, { persist: true })`, or null */
+  get heldPose(): string | null {
+    return this.hold;
   }
   get assisting(): boolean {
     return this.assistRun.pending;
@@ -202,10 +212,21 @@ export class CompanionImpl implements Companion, ActorController {
     v.lookAt(this.faceTo ? gazeAt(this.faceTo, this.actor, _gaze) : null);
   }
 
-  play(action: string, opts?: { loop?: boolean }): number {
+  play(action: string, opts?: { loop?: boolean; persist?: boolean }): number {
     const a = this.actor;
     const v = a?.visual;
     if (!v) return 0;
+    if (opts?.persist === true) {
+      // a scripted hold: whatever was drawn goes away first, and nothing draws it again while the hold lasts
+      this.cancelAttack();
+      if (this.drawn) {
+        this.drawn = false;
+        v.stop(this.kit.aimPose);
+      }
+      this.hold = action;
+      const held = v.play(action, opts.loop === undefined ? { persist: true } : { loop: opts.loop, persist: true });
+      return fin(held?.duration, 0);
+    }
     const info = v.play(action, opts);
     if (HELD_POSES.has(action) && opts?.loop !== false) {
       // seated / lying / working figures are set pieces: nothing shoves them
@@ -215,10 +236,32 @@ export class CompanionImpl implements Companion, ActorController {
     return fin(info?.duration, 0);
   }
 
-  stopAction(): void {
-    this.actor?.visual?.stop();
+  stopAction(action?: string): void {
+    const v = this.actor?.visual;
+    if (typeof action === 'string' && action) {
+      // one action only: the scripted hold when it is named, else that clip; the loadout comes back either way
+      if (action === this.hold) this.hold = null;
+      if (action === this.pose) this.release();
+      else v?.stop(action);
+      v?.setLoadout(this.kit.loadout);
+      return;
+    }
+    v?.stop();
     this.release();
-    this.actor?.visual?.setLoadout(this.kit.loadout);
+    v?.setLoadout(this.kit.loadout);
+    this.keepHold();
+  }
+
+  /**
+   * After a stop-everything, the scripted hold must still be there. A figure whose stop() honours `persist` keeps
+   * it by itself; otherwise it is put back at its held end pose (no second collapse is seen).
+   */
+  private keepHold(): void {
+    const v = this.actor?.visual;
+    const held = this.hold;
+    if (!v || !held || v.isPlaying(held) !== false) return;
+    const len = fin(v.info(held)?.duration, 0);
+    v.play(held, { persist: true, startAt: len, fade: 0.01 });
   }
 
   /** let go of a held pose so the body can walk again */
@@ -258,6 +301,11 @@ export class CompanionImpl implements Companion, ActorController {
 
   assist(target: Actor, kind: AssistKind): void {
     if (!live(target) || !this.actor?.alive || this.downed) return;
+    // a scripted assist takes the whole body: a scripted hold ends here
+    if (this.hold) {
+      this.actor.visual?.stop(this.hold);
+      this.hold = null;
+    }
     this.release();
     this.cancelAttack();
     this.holster();
@@ -322,6 +370,8 @@ export class CompanionImpl implements Companion, ActorController {
   }
 
   update(a: Actor, dt: number): void {
+    // a scripted hold that another clip has replaced is over (the zone played something else on the figure)
+    if (this.hold && a.visual?.isPlaying(this.hold) === false) this.hold = null;
     if (this.downed || a.fixed) return;
     if (a.frozen || a.staggered) {
       this.cancelAttack();
@@ -358,7 +408,8 @@ export class CompanionImpl implements Companion, ActorController {
       }
       this.arrived = true;
     }
-    if ((this._mode === 'combat' || this._mode === 'hold') && !this.npc && this.kit.style !== 'none' && !this.core.ceasefire) {
+    // a scripted hold (polish 4) stands the body down: it keeps its orders and follows, but does not fight
+    if ((this._mode === 'combat' || this._mode === 'hold') && !this.npc && this.kit.style !== 'none' && !this.core.ceasefire && !this.hold) {
       if (this.fight(a, dt, now)) {
         this.lastFightAt = now;
         return;

@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import type {
   Actor, ActorController, BeamHandle, DeviceHandle, DeviceKind, DeviceSystem, HitInfo, HitResult, LoopHandle,
-  ScanPlaneHandle, Team, Vec3Like,
+  ScanHeadOpts, ScanPlaneHandle, Team, Vec3Like,
 } from '@/core/api';
 import { asCommandEmitter, asDevice, asFrostAnchor, asScanHead, RAY_SIGHT } from '@/core/api';
 import { DEG, forwardX, forwardZ, wrapAngle, yawTo } from '@/core/mathx';
@@ -142,7 +142,10 @@ export class DeviceSystemImpl implements DeviceSystem {
 
   // ---- construction ---------------------------------------------------------------------------------------
 
-  private make(id: string, kind: DeviceKind, pos: Vec3Like, team: Team, opts: { yaw?: number; hp?: number; passive?: boolean; variant?: number } = {}): DeviceImpl {
+  private make(
+    id: string, kind: DeviceKind, pos: Vec3Like, team: Team,
+    opts: { yaw?: number; hp?: number; passive?: boolean; variant?: number; name?: string; radius?: number; tags?: string[] } = {},
+  ): DeviceImpl {
     const game = this.core.game;
     const key = String(id ?? kind);
     if (this.list.some((d) => d.id === key)) warnOnce(`device:${key}`, `device id "${key}" is used twice — byId() returns the first`);
@@ -150,15 +153,16 @@ export class DeviceSystemImpl implements DeviceSystem {
     const v = live(visual) ? visual : null;
     let dev: DeviceImpl | null = null;
     const p = vec(pos);
+    const extra = Array.isArray(opts.tags) ? opts.tags.filter((t): t is string => typeof t === 'string' && t.length > 0) : [];
     const actor = game.actors.spawn({
-      archetype: kind, name: key, team, pos: p, yaw: fin(opts.yaw, 0),
+      archetype: kind, name: typeof opts.name === 'string' && opts.name ? opts.name : key, team, pos: p, yaw: fin(opts.yaw, 0),
       hp: Math.max(1, fin(opts.hp, DEVICE_HP[kind])), poise: DEVICE_POISE[kind],
       // a passive floor device (the frost anchor) is stood ON: it must not shove bodies off itself
-      radius: opts.passive ? 0.05 : Math.max(0.35, fin(v?.radius, 0.6)), height: Math.max(0.6, fin(v?.height, 1.8)),
+      radius: opts.passive ? 0.05 : Math.max(0.35, fin(opts.radius, fin(v?.radius, 0.6))), height: Math.max(0.6, fin(v?.height, 1.8)),
       visual: v, fixed: true, corpseSeconds: Infinity, dissolveOnDeath: false,
       targetable: !opts.passive, invulnerable: opts.passive === true,
       material: kind === 'weaverAnchor' ? 'eclipse' : 'metal',
-      tags: opts.passive ? ['device'] : ['device', 'objective', 'source', kind],
+      tags: opts.passive ? ['device', ...extra] : ['device', 'objective', 'source', kind, ...extra],
       controller: new DeviceController(this, () => dev),
     });
     dev = new DeviceImpl(this, key, kind, actor);
@@ -217,8 +221,13 @@ export class DeviceSystemImpl implements DeviceSystem {
     if (net.members.indexOf(drone) < 0) net.members.push(drone);
   }
 
-  scanHead(opts: { id: string; pos: Vec3Like; yaw: number; arcDeg: number; range: number; period: number; onDetect?: () => void }): DeviceHandle {
-    const dev = this.make(opts?.id, 'scanHead', opts?.pos, 'reformation', { yaw: opts?.yaw });
+  scanHead(opts: ScanHeadOpts): DeviceHandle {
+    const dev = this.make(opts?.id, 'scanHead', opts?.pos, 'reformation', {
+      yaw: opts?.yaw, hp: opts?.hp, name: opts?.name, radius: opts?.radius, tags: opts?.tags,
+    });
+    // (polish 4) a passive head is a physical source only: a destructible device actor with no sweep, beams,
+    // sound or detection of its own (the zone turns the head; scan planes do the seeing)
+    if (opts?.passive === true) return dev;
     dev.scan = {
       yaw: fin(opts?.yaw, 0), arc: Math.max(0, fin(opts?.arcDeg, 90)) * DEG, range: Math.max(1, fin(opts?.range, 20)),
       period: Math.max(0.5, fin(opts?.period, 6)), phase: 0, rate: 1,

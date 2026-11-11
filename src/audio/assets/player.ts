@@ -152,11 +152,37 @@ class Slot {
     }
   }
 
+  /** POLISH 4: context time a once-played recording falls silent (Infinity for a loop, or before it is scheduled) */
+  endsAt = Infinity;
+
   private startPass(now: number): void {
     const l = this.loop;
     const k = this.k++;
     const at = this.nextAt;
     const offset = k === 0 ? l.intro : l.from;
+    if (l.once) {
+      // (polish 4) played once: the first pass runs to the file's last sample, its natural tail included, and no
+      // pass follows
+      const end = Math.max(offset + 0.5, l.end ?? l.to + l.xfade);
+      const len = (end - offset) / l.rate;
+      this.nextAt = Infinity;
+      this.endsAt = at + len;
+      const late = Math.max(0, now - at);
+      if (late >= len) return;
+      const src = this.ac.createBufferSource();
+      src.buffer = this.buffer;
+      src.playbackRate.value = l.rate;
+      const gain = this.ac.createGain();
+      src.connect(gain);
+      gain.connect(this.level);
+      const startAt = at + late;
+      if (late > 0) { gain.gain.value = 0; powerRamp(gain.gain, startAt, 0.03, 0, 1); }
+      const stopAt = at + len + 0.05;
+      src.start(startAt, Math.max(0, offset + late * l.rate));
+      src.stop(stopAt);
+      this.passes.push({ src, gain, k, startAt, offset, handoverAt: stopAt, stopAt, fadeIn: late > 0 ? 0.03 : 0 });
+      return;
+    }
     const body = Math.max(0.5, (l.to - offset) / l.rate);
     const xfade = l.xfade / l.rate;
     const handoverAt = at + body;
@@ -203,11 +229,16 @@ export class TrackPlayer {
   private slot: Slot | null = null;
   private readonly leaving: Slot[] = [];
 
-  constructor(private readonly ac: BaseAudioContext, private readonly to: AudioNode) {}
+  constructor(readonly ac: BaseAudioContext, private readonly to: AudioNode) {}
 
   /** key of the recording that is current (it may still be fading in), or null */
   get key(): string | null {
     return this.slot ? this.slot.key : null;
+  }
+
+  /** POLISH 4: context time the current recording, played once, falls silent (Infinity: it loops, or none) */
+  get endsAt(): number {
+    return this.slot ? this.slot.endsAt : Infinity;
   }
 
   /** recordings sounding right now, fading ones included */

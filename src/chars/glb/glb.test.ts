@@ -10,6 +10,7 @@ import { bareHeadFor, GLB_ARCHETYPES, ITEM_SLOTS, modelsFor } from './config';
 import type { ModelInstance, ModelLibrary, ModelTemplate } from './library';
 import { alignFrames, Retargeter, solveJoint } from './retarget';
 import { GlbHumanoidVisual } from './visual';
+import { preloadModels } from './index';
 
 // ---- a synthetic "generated" humanoid: meshy24 names, A-pose, bones pointing along +Y, cm under a 0.01 armature ----
 const JOINTS: Record<string, [string | null, number, number, number]> = {
@@ -460,5 +461,160 @@ describe('bare head graft', () => {
     for (const g of p.headLods) for (let i = 0; i < g.index!.count; i++) expect(g.index!.getX(i)).toBeLessThan(hp.count);
     // cached per body / donor / proportions
     expect(bareHeadParts(body, donor, { donor: 'civilian', skin: [0.5, 0.5, 0.5], hair: [1, 1, 1, 1], shape: [1, 1, 1] })).toBe(p);
+  });
+});
+
+// ---- polish 4 ----------------------------------------------------------------------------------------------------
+describe('polish 4: faces, corruption on the arms, speech, reach, preload', () => {
+  function fakeLib(): ModelLibrary {
+    const sk = makeSkeleton();
+    const tpl: ModelTemplate = {
+      name: 'fake', entry: { file: 'fake.glb', kind: 'humanoid', height: 1.8 }, root: sk.root, mesh: sk.mesh, rig: makeRigInfo(sk.bones),
+      box: new THREE.Box3(), materials: [sk.mesh.material as THREE.MeshStandardMaterial], triangles: 1, lods: [], lodMesh: 0,
+    };
+    return {
+      version: 0, enabled: true,
+      has: (n: string) => n === 'fake',
+      unavailable: (n: string) => n !== 'fake',
+      instantiate: (n: string): ModelInstance | null => {
+        if (n !== 'fake') return null;
+        const fresh = makeSkeleton();
+        return { template: tpl, root: fresh.root, mesh: fresh.mesh, meshes: [fresh.mesh] };
+      },
+    } as unknown as ModelLibrary;
+  }
+  const cfg = (a: HumanoidArchetype) => ({ ...GLB_ARCHETYPES[a]!, model: 'fake' });
+  type Uniforms = Record<string, { value: THREE.Vector4 | number }>;
+  const own = (v: GlbHumanoidVisual): Uniforms => (v as unknown as { body: { materials: Array<{ own: Uniforms }> } }).body.materials[0].own;
+  const shared = (v: GlbHumanoidVisual): Uniforms => (v as unknown as { shared: Uniforms }).shared;
+  const v4 = (u: Uniforms, k: string): THREE.Vector4 => u[k].value as THREE.Vector4;
+
+  it('shades faces as skin, greys the King, dresses Vesryn\'s cheek, lights Varo\'s grooves', () => {
+    for (const a of ['tarrik', 'selene', 'lyessa', 'tharne', 'lyric', 'varo', 'malik', 'officer', 'kingWitness', 'vesryn'] as const) {
+      expect(GLB_ARCHETYPES[a]!.face?.skin, a).toBe(1);
+    }
+    expect(GLB_ARCHETYPES.dominionSoldier!.face).toBeUndefined(); // a helmet is not skin
+    const king = new GlbHumanoidVisual(null, 'kingWitness', cfg('kingWitness'), fakeLib());
+    const k = v4(own(king), 'uSkin'), kf = v4(own(king), 'uFaceFx');
+    expect(k.x).toBe(1);
+    expect(k.y).toBeGreaterThan(0.5); // grey temples
+    expect(k.z).toBeGreaterThan(0.3); // salt-and-pepper beard
+    expect(kf.y).toBeGreaterThan(0.5); // brown eyes
+    king.dispose();
+    const ves = new GlbHumanoidVisual(null, 'vesryn', cfg('vesryn'), fakeLib());
+    expect(v4(own(ves), 'uSkin').w).toBe(1); // strands
+    expect(v4(own(ves), 'uFaceFx').x).toBe(1); // gauze
+    ves.dispose();
+    const sol = new GlbHumanoidVisual(null, 'dominionSoldier', cfg('dominionSoldier'), fakeLib());
+    expect(v4(own(sol), 'uSkin').x).toBe(0);
+    sol.dispose();
+    // Varo's amber grooves: the measured hue (0.082), bright and saturated, a softer gain on the injured man
+    expect(GLB_ARCHETYPES.varo!.mask.hue).toBeCloseTo(0.082, 3);
+    expect(GLB_ARCHETYPES.malik!.mask.hue).toBeCloseTo(0.082, 3);
+    expect(GLB_ARCHETYPES.malik!.mask.gain).toBeLessThan(GLB_ARCHETYPES.varo!.mask.gain);
+  });
+
+  it('breaks the shoulder the camera sees: woundSide', () => {
+    const left = new GlbHumanoidVisual(null, 'kingWitness', cfg('kingWitness'), fakeLib(), { wounded: true });
+    const right = new GlbHumanoidVisual(null, 'kingWitness', cfg('kingWitness'), fakeLib(), { wounded: true, woundSide: 'right' });
+    expect(v4(own(left), 'uShoulder').x).toBeLessThan(0);
+    expect(v4(own(right), 'uShoulder').x).toBeGreaterThan(0);
+    expect(v4(own(right), 'uShoulder').w).toBeCloseTo(0.2, 6); // the larger break that reads at 3–6 m
+    left.dispose();
+    right.dispose();
+  });
+
+  it('knows the skull for the head-ball shading, and the arms for CorruptionOpts.arms', () => {
+    const v = new GlbHumanoidVisual(null, 'lyric', cfg('lyric'), fakeLib());
+    expect(v4(shared(v), 'uHeadW').w).toBe(0);
+    v.update(1 / 60);
+    const h = v4(shared(v), 'uHeadW');
+    expect(h.w).toBe(1);
+    expect(h.y).toBeGreaterThan(1.4);
+    const a = v4(own(v), 'uArmA'), b = v4(own(v), 'uArmB');
+    expect(a.w).toBe(1);
+    expect(b.x).toBeGreaterThan(a.x); // hand outside the shoulder (A-pose), mirrored to +X
+    expect(b.y).toBeLessThan(a.y);
+    expect(b.w).toBeGreaterThanOrEqual(0.08);
+    expect(b.w).toBeLessThanOrEqual(0.15);
+    v.setCorruption(0.8, { mode: 'face', arms: 1 });
+    expect(shared(v).uArmCorr.value).toBe(1);
+    v.setCorruption(0.6, { mode: 'face' }); // remembered
+    expect(shared(v).uArmCorr.value).toBe(1);
+    v.setCorruption(0.6, { arms: 7 });
+    expect(shared(v).uArmCorr.value).toBe(1);
+    v.setCorruption(0.6, { arms: 0 });
+    expect(shared(v).uArmCorr.value).toBe(0);
+    v.dispose();
+  });
+
+  it('moves a speaking head a little with the voice (no jaw bone), and not otherwise', () => {
+    const headQ = (speaking: boolean): THREE.Quaternion => {
+      const v = new GlbHumanoidVisual(null, 'tarrik', cfg('tarrik'), fakeLib());
+      if (speaking) v.setSpeaking(0.7);
+      for (let i = 0; i < 90; i++) v.update(1 / 60);
+      const q = (v.root.getObjectByName('Head') as THREE.Object3D).getWorldQuaternion(new THREE.Quaternion());
+      v.dispose();
+      return q;
+    };
+    const still = headQ(false), talking = headQ(true);
+    const angle = still.angleTo(talking);
+    expect(angle).toBeGreaterThan(0.002);
+    expect(angle).toBeLessThan(0.07); // tasteful: a few degrees at most
+    expect(headQ(false).angleTo(still)).toBeLessThan(1e-6);
+  });
+
+  it('reach assist: a forward reach just out of the straight arm\'s length is made by leaning in; a raised arm is not', () => {
+    const sk = makeSkeleton();
+    const rig = makeRigInfo(sk.bones);
+    const driver = createHumanoid(null, 'tharne', { driverOnly: true }) as HumanoidVisualImpl;
+    const acc = driver.retargetAccess();
+    const rt = new Retargeter(sk.root, rig, 1, acc.fig.spec);
+    acc.model.scale.setScalar(rt.driverScale);
+    for (let k = 0; k < 20; k++) driver.update(1 / 60);
+    const pose = (): void => rt.pose(acc.solver.wp, acc.solver.wq, rt.driverScale);
+    pose();
+    const sh = rt.pos('uArmR', new THREE.Vector3());
+    // straight ahead (the figure faces −Z), a little below the shoulder, ~10 cm beyond the arm
+    const far = sh.clone().add(new THREE.Vector3(-0.15, -0.25, -0.62));
+    rt.pullHand(1, far, 1, false);
+    const plain = rt.grip(1, new THREE.Vector3()).distanceTo(far);
+    pose();
+    rt.pullHand(1, far, 1, true);
+    const helped = rt.grip(1, new THREE.Vector3()).distanceTo(far);
+    expect(plain).toBeGreaterThan(0.05);
+    expect(helped).toBeLessThan(plain * 0.5);
+    // above the head: the arm alone, as before
+    const up = sh.clone().add(new THREE.Vector3(0.1, 0.8, -0.2));
+    pose();
+    rt.pullHand(1, up, 1, false);
+    const a = rt.grip(1, new THREE.Vector3());
+    pose();
+    rt.pullHand(1, up, 1, true);
+    expect(rt.grip(1, new THREE.Vector3()).distanceTo(a)).toBeLessThan(1e-6);
+  });
+
+  it('a persisted held pose survives stop() without an action; only its own stop ends it', () => {
+    const s = createHumanoid(null, 'selene');
+    s.play('verityCollapsed', { persist: true });
+    s.update(0.5);
+    s.stop();
+    s.update(0.1);
+    expect(s.isPlaying('verityCollapsed')).toBe(true);
+    s.play('idle', { loop: true });
+    s.update(0.1);
+    expect(s.isPlaying('verityCollapsed')).toBe(true);
+    s.stop('verityCollapsed');
+    expect(s.isPlaying('verityCollapsed')).toBe(false);
+    s.play('verityCollapsed');
+    s.stop();
+    expect(s.isPlaying('verityCollapsed')).toBe(false); // without persist, as before
+    s.dispose();
+  });
+
+  it('preload fetches the grafted head\'s donor with the linkbound (halfHuman)', () => {
+    expect(preloadModels(['linkbound'])).toContain('survivor');
+    expect(preloadModels(['dominionSoldier', 'tarrik'])).not.toContain('survivor');
+    expect(preloadModels(['elite'])).toEqual([]); // creature skins load through the creature path
   });
 });

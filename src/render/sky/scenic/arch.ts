@@ -437,7 +437,7 @@ export function archPanel(b: GeoBuilder, o: ArchPanelOpts): void {
 export function addCauseway(
   b: GeoBuilder, cards: LightCards,
   x0: number, z0: number, x1: number, z1: number, y: number, width: number,
-  opts: { pylonEvery?: number; pylonDepth?: number; lightEvery?: number; channel?: number; arches?: boolean; rand: () => number },
+  opts: { pylonEvery?: number; pylonDepth?: number; lightEvery?: number; channel?: number; arches?: boolean; edgeGlow?: number; rand: () => number },
 ): void {
   const dx = x1 - x0, dz = z1 - z0;
   const len = Math.hypot(dx, dz);
@@ -451,7 +451,8 @@ export function addCauseway(
   for (const s of [-1, 1]) {
     b.paint(KING.black, 0, 1).box(s * (ch / 2 + half / 2), -th / 2, 0, half, th, len);
     b.paint(KING.blackDeep, 0, 1.2).box(s * (width / 2 - 0.9), 1.6, 0, 1.8, 3.2, len);
-    b.paint(KING.gold, 0, 0.55).box(s * (width / 2 + 0.3), -th * 0.2, 0, 0.6, th * 0.16, len);
+    // (polish pass 4: the gold edges glow faintly, so from afar every avenue is a fine lit line, as in the overlook painting)
+    b.paint(KING.gold, opts.edgeGlow ?? 0.5, 0.55).box(s * (width / 2 + 0.3), -th * 0.2, 0, 0.6, th * 0.16, len);
   }
   b.dress(0, 0).paint(KING.channel, opts.channel ?? 1.7).box(0, -1.6 - th * 0.2, 0, ch, th * 0.4, len);
   b.dress(0, 1);

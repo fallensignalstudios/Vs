@@ -4,7 +4,7 @@
  * the sandbox can render the exact same graph through an OfflineAudioContext for measurement.
  */
 import { clamp, clamp01, mulberry32 } from '@/core/mathx';
-import type { AmbienceId, LoopHandle, MusicState, SfxOpts, Vec3Like, VoiceOpts } from '@/core/api';
+import type { AmbienceId, LoopHandle, MusicOpts, MusicState, SfxOpts, Vec3Like, VoiceOpts } from '@/core/api';
 import { makeShared, type Shared } from './synth/shared';
 import { SampleBank, type SampleOpts } from './synth/samples';
 import { Mixer, type Volumes } from './mixer';
@@ -125,8 +125,8 @@ export class AudioEngine {
     return this.voices.loop(id, opts);
   }
 
-  setMusic(state: MusicState, fadeSeconds?: number): void {
-    this.score.setState(state, fadeSeconds);
+  setMusic(state: MusicState, fadeSeconds?: number, opts?: MusicOpts): void {
+    this.score.setState(state, fadeSeconds, opts);
   }
 
   setAmbience(id: AmbienceId, fadeSeconds?: number): void {

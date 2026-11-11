@@ -1,12 +1,31 @@
 /**
  * Material library contract — OWNER: materials (src/world/materials/*).
  * Procedural PBR materials for the three visual layers (King-era substrate, arriving factions, Eclipse overlay).
- * All textures are generated at boot (no external image assets). World-space/triplanar mapping so procedural
- * geometry needs no UVs.
+ * World-space/triplanar mapping so procedural geometry needs no UVs. The procedural families are baked at boot;
+ * since the integration wave most textured materials also wear a generated PHOTOGRAPHIC set from
+ * `public/textures/` (manifest.json), layered over the family and loaded lazily per zone (see PHOTOGRAPHIC SETS).
+ *
+ * PHOTOGRAPHIC SETS (integration wave; updated polish 4)
+ *  - Default sets: `whiteGold` / `whiteGoldPanel` → `marble_slab` (polish 4: large smooth white-silver marble
+ *    slabs; was the `stone_pale` ashlar) · `goldTrim` → `gold_inlay` (fine engraving, ≤ 512²) · `whiteGoldFloor` →
+ *    `marble_dark` lifted to a deep polished grey · `blackStone` / `blackStoneFloor` → `marble_dark` · `goldDark`
+ *    → `metal_blackgold` · `domBronze` → `bronze_plate` · `refNavy` → `panel_navy` · `frostRime` → `frost` ·
+ *    `eclipseTissue` → `eclipse_tissue` (its vein mask drives the glow). Untextured materials have none.
+ *  - `clone(id, { surface: '<set>' | 'none' })` puts another set on any TEXTURED material (or strips it): the set's
+ *    finish preset brings the material properties that suit it (e.g. `stone_worn` is rough, `floor_wet_grey` is a
+ *    wet polish). Sets: marble_dark, stone_pale, stone_worn, bronze_plate, panel_navy, metal_blackgold, frost,
+ *    eclipse_tissue, concrete_hangar, marble_slab, floor_wet_grey, gold_inlay. The kit's floor `finish` and wall
+ *    `finish` use this (`'worn'`, `'hangar'`, `'wet'`, `'ashlar'`).
+ *  - Sets load on first request (fetch + createImageBitmap, off the main thread), fade in without a recompile and
+ *    are released on `zone:ready` when the new zone neither requested them nor has a material wearing them in the
+ *    scene (polish 4: a material cached across zones keeps its set, and brings it back when drawn).
+ *  - Debug member (not on this interface): `game.mats.surfaces` — `info()` (sets, status, GPU bytes, load ms) and
+ *    `settled(ms)` (await before captures so the first frames do not show the procedural fallback).
+ *  - `textures(id)` returns the PROCEDURAL family maps only, never the photographic set.
  *
  * QUICK GUIDE FOR CALLERS
  *  - Geometry needs NORMALS but no UVs. Textures are projected in WORLD space by default, sized in metres
- *    (a wall is panelled every 2.4 × 3.6 m, a black-stone floor slab is 4 m, …) so merged static kit geometry
+ *    (a wall is panelled every 3 × 4.5 m, a black-stone floor slab is 4 m, …) so merged static kit geometry
  *    lines up automatically and never shows a seam between neighbouring meshes.
  *  - Anything that MOVES (doors, lifts, drones, weapons, carried props, debris) must use object-space mapping or
  *    the texture will swim through it: `mats.getLocal(id)` (shared) or `mats.clone(id, { objectSpace: true })`.
@@ -29,14 +48,15 @@ import type * as THREE from 'three';
 
 export type MatId =
   // King-era substrate — upper: white-gold ribs and immense spans
-  | 'whiteGold'          // warm ivory ceramic-metal, ribs/spans/walls
-  | 'whiteGoldPanel'     // panelled wall variant with fine seams
-  | 'whiteGoldFloor'     // walkable upper floor, slightly worn, semi-gloss
-  | 'goldTrim'           // polished gold metal trim
-  | 'goldDark'           // aged darker gold/bronze-gold for recessed structure
+  | 'whiteGold'          // smooth white-silver marble (polish 4: `marble_slab`, dielectric satin polish) — ribs/spans/columns
+  | 'whiteGoldPanel'     // the same marble cut into large slabs (3 × 4.5 m) with dark joints — walls
+  | 'whiteGoldFloor'     // walkable upper floor: polished dark-grey marble (`marble_dark` lifted); the kit's
+                         // `finish: 'wet'` swaps in the light wet grey marble of the relay route
+  | 'goldTrim'           // polished gold metal trim with a fine engraving (`gold_inlay`)
+  | 'goldDark'           // blackened relic metal with gold chevron inlay (`metal_blackgold`) — recessed structure, leaves
   // King-era substrate — lower: polished black stone with narrow angular gold channels
-  | 'blackStone'         // walls/pylons
-  | 'blackStoneFloor'    // mirror-polished walkable floor (register as reflective floor)
+  | 'blackStone'         // near-black polished marble (`marble_dark`) — walls/pylons
+  | 'blackStoneFloor'    // near-black mirror marble, walkable (register as reflective floor)
   | 'goldChannel'        // emissive narrow gold light channel ("light as information")
   | 'whiteLight'         // emissive white-gold light panel / white point
   // Dominion equipment — bronze, oxblood, black, amber
@@ -73,6 +93,11 @@ export interface TriplanarOpts {
 export type MatOverrides = Record<string, unknown> & {
   /** true = object-space triplanar (moving meshes); false = world-space. Default depends on the material. */
   objectSpace?: boolean;
+  /**
+   * (integration wave) the photographic set the clone wears instead of its default — a set name from
+   * public/textures/manifest.json, or `'none'` for the procedural maps only. See PHOTOGRAPHIC SETS above.
+   */
+  surface?: string;
 } & { [K in MatParam]?: number };
 
 /**
@@ -179,7 +204,10 @@ export interface MaterialLibrary {
    */
   rippleShield(material: THREE.Material, localPoint: { x: number; y: number; z: number }, strength?: number): void;
 
-  /** The baked maps behind a textured MatId (null for untextured ones such as glows, glass, hologram). */
+  /**
+   * The baked PROCEDURAL maps behind a textured MatId (null for untextured ones such as glows, glass, hologram).
+   * The photographic set a material wears on top (see PHOTOGRAPHIC SETS) is not included.
+   */
   textures(id: MatId): MatTextureSet | null;
 }
 

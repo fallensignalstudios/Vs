@@ -95,8 +95,13 @@ export interface SpawnOpts {
   /**
    * ADDED (polish 3). How the body is drawn — passed to `chars.create`: e.g. `{ halfHuman: true }` for a linkbound
    * whose face is half human, `{ bareHead: true }`, `{ corruption }`, `{ variant }`. `seed` is the spawn's own.
+   * POLISH 4: EVERY look option of CharacterCreateOpts is forwarded — `halfHuman`, `bareHead`, `halo`,
+   * `corruption`, `variant`, `scale`, `wounded`, `woundSide` (an option chars adds later is forwarded once it is
+   * listed in `lookOpts`, src/ai/index.ts); `seed` is the spawn's own, and `driverOnly` / `keep` are not look
+   * options. Values of the wrong kind are dropped. Also accepted by `ai.spawnNpc` and `ai.spawnCompanion`:
+   *   game.ai.spawnNpc('kingWitness', { pos, yaw, pose: 'idle', look: { wounded: true, woundSide: 'right' } })
    */
-  look?: Pick<CharacterCreateOpts, 'halfHuman' | 'bareHead' | 'corruption' | 'variant' | 'halo'>;
+  look?: Omit<CharacterCreateOpts, 'seed' | 'driverOnly' | 'keep'>;
   /**
    * ADDED. Rectangles (world XZ) the enemy never enters, never charges through and never attacks into
    * (survivor recesses in E4). Used by the elite; also changeable later with `EliteController.setNoGo`.
@@ -280,6 +285,51 @@ export interface ScanPlaneHandle {
   setRate(mult: number): void;
   readonly detections: number;
   remove(): void;
+  /**
+   * ADDED (polish 4). Where the plane stands right now: the centre of its foot on the from → to line (world
+   * space, the floor height of `from` / `to`). Updated every AI tick; the same object every read — copy it if you
+   * keep it. A plane that is not active keeps the centre it stopped at.
+   *   const c = handle.center; out.set(c.x, c.y, c.z);
+   */
+  readonly center: Vec3Like;
+}
+
+/**
+ * ADDED (polish 4). Colour of a scan plane's light sheet: an sRGB hex as the effect draws it (`0x3d8fff`), or a
+ * LINEAR RGB triple written to the sheet as is — components above 1 make an HDR light sheet that blooms, e.g.
+ * `[0.12, 0.5, 1.8]` (Z03's saturated cold blue). The alert colour on a detection is unchanged.
+ */
+export type ScanPlaneColor = number | readonly [number, number, number];
+
+/** ADDED (polish 4). Options of `DeviceSystem.scanHead`. */
+export interface ScanHeadOpts {
+  id: string;
+  pos: Vec3Like;
+  /** world yaw the head faces at the centre of its sweep */
+  yaw: number;
+  /** sweep arc in degrees (default 90; unused when `passive`) */
+  arcDeg?: number;
+  /** detection range in metres (default 20; unused when `passive`) */
+  range?: number;
+  /** seconds per sweep cycle (default 6; unused when `passive`) */
+  period?: number;
+  onDetect?: () => void;
+  /**
+   * ADDED (polish 4). A PASSIVE head: a physical source only — no sweep, no beams, no sound loop and no
+   * detection of its own (Z03's projector: the scan planes see the lead; the head is what drives them). It is
+   * still a device actor (tagged device / objective / source / scanHead, targetable, destructible, poise 20):
+   * destroying it, or `handle.disable()` (a close interaction), takes it down once and emits `device:disabled`
+   * `{ id, kind: 'scanHead', by }` like any device. Turn the head yourself: `asScanHead(handle.actor.visual)?.setSweep(rad)`.
+   */
+  passive?: boolean;
+  /** ADDED (polish 4). Actor name — the tactical-read label (default: the id) */
+  name?: string;
+  /** ADDED (polish 4). hit points (default 60) */
+  hp?: number;
+  /** ADDED (polish 4). body radius in metres (default the figure's own, ≥ 0.35) */
+  radius?: number;
+  /** ADDED (polish 4). extra actor tags (added to device / objective / source / scanHead) */
+  tags?: string[];
 }
 
 export interface DeviceSystem {
@@ -289,10 +339,19 @@ export interface DeviceSystem {
   relayReceiver(opts: { id: string; pos: Vec3Like; network: string; hp?: number }): DeviceHandle;
   /** state of a relay network */
   network(name: string): { receivers: DeviceHandle[]; down: boolean; interruptedUntil: number };
-  /** fixed scanner head sweeping a cone; onDetect fires when the player is seen (cover occludes) */
-  scanHead(opts: { id: string; pos: Vec3Like; yaw: number; arcDeg: number; range: number; period: number; onDetect?: () => void }): DeviceHandle;
-  /** moving scan plane (Z03). `source` is the physical emitter position the trace points back to. */
-  scanPlane(opts: { id: string; from: Vec3Like; to: Vec3Like; width: number; height?: number; period: number; phase?: number; source: Vec3Like; onDetect?: () => void }): ScanPlaneHandle;
+  /**
+   * fixed scanner head sweeping a cone; onDetect fires when the player is seen (cover occludes).
+   * ADDED (polish 4): `passive: true` — a physical source with no sweep, beams or detection (see ScanHeadOpts).
+   *   const head = game.ai.devices.scanHead({ id: 'z03-source', pos: z.m('source'), yaw: z.myaw('source'), passive: true,
+   *     name: 'Scan projector', radius: 0.45, tags: ['z03Source'] });
+   */
+  scanHead(opts: ScanHeadOpts): DeviceHandle;
+  /**
+   * moving scan plane (Z03). `source` is the physical emitter position the trace points back to.
+   * ADDED (polish 4) `color` (see ScanPlaneColor; default the effect's pale blue-white):
+   *   game.ai.devices.scanPlane({ id, from, to, width, height, period, phase, source, color: [0.12, 0.5, 1.8], onDetect })
+   */
+  scanPlane(opts: { id: string; from: Vec3Like; to: Vec3Like; width: number; height?: number; period: number; phase?: number; source: Vec3Like; onDetect?: () => void; color?: ScanPlaneColor }): ScanPlaneHandle;
   /**
    * E4: frost anchor position marker Selene (AI) moves to in phase B. It is stood ON
    * (`companion.moveTo(handle.actor.pos, { stopDistance: 0.6 })`); its ring lights by itself while an ally is on it.
@@ -351,10 +410,24 @@ export interface Companion {
   /**
    * play an animation action on the figure (narrative posing); returns its duration in seconds. Held whole-body
    * poses (sit, kneel, kneelTend, lieInjured, trapped, cower, distress, grounding, liftPlate, holdConsole,
-   * holdPlane, …) also pin the body in place (`actor.fixed`) until `stopAction()` / `moveTo()` / `follow()`.
+   * holdPlane, tetherStop and — polish 4 docs — `knockdown`, which lies on its back until stopped or `getUp`)
+   * also pin the body in place (`actor.fixed`) until `stopAction()` / `moveTo()` / `follow()`.
+   *
+   * ADDED (polish 4) `persist: true` — a SCRIPTED HOLD of an upper-body pose (Selene's `verityCollapsed`, Z09:
+   * «Her weapon collapsed in her hand»). The pose is played with PlayOpts.persist, and the companion keeps it:
+   * it survives `stopAction()` (no argument), mode changes, `follow()` / `moveTo()` / `holdAt()` and dialogue lines
+   * (a speaker with a hold moves its mouth instead of playing the talk gesture); while it is held the companion
+   * does not draw, aim or attack (combat / hold modes stand down; it still follows and moves). It ends with
+   * `stopAction('<that action>')`, a scripted `assist()`, or when the zone plays another upper-body pose over it.
+   *   selene.play('verityCollapsed', { persist: true });   // … follow, scenes, stopAction() …
+   *   selene.stopAction('verityCollapsed');                // her blades may come out again
    */
-  play(action: string, opts?: { loop?: boolean }): number;
-  stopAction(): void;
+  play(action: string, opts?: { loop?: boolean; persist?: boolean }): number;
+  /**
+   * stop what the figure is playing and give back its loadout. ADDED (polish 4) `action`: stop only that action
+   * (the scripted hold, when it names it). Without an argument a scripted hold (`play(…, { persist: true })`) stays.
+   */
+  stopAction(action?: string): void;
   teleport(pos: Vec3Like, yaw?: number): void;
   /** priority target hint for combat mode */
   focus(target: Actor | null): void;
@@ -381,6 +454,11 @@ export interface Companion {
    * or null when it has none. Always present on handles from `ai.spawnCompanion` / `ai.spawnNpc`.
    */
   readonly facing?: Vec3Like | null;
+  /**
+   * ADDED (polish 4). The scripted hold the figure keeps (`play(action, { persist: true })`), or null. Always
+   * present on handles from `ai.spawnCompanion` / `ai.spawnNpc`.
+   */
+  readonly heldPose?: string | null;
 }
 
 /**
@@ -440,10 +518,16 @@ export interface EliteController {
 
 export interface AiSystem {
   spawnEnemy(role: EnemyRole, opts: SpawnOpts): Actor;
-  /** Fighting / following ally with a full humanoid figure. Team 'player'. Never dies (downed → recovers). */
-  spawnCompanion(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; mode?: CompanionMode; name?: string }): Companion;
+  /**
+   * Fighting / following ally with a full humanoid figure. Team 'player'. Never dies (downed → recovers).
+   * ADDED (polish 4) `opts.seed` / `opts.look`: as for spawnNpc (e.g. `look: { corruption: 0.2 }`).
+   */
+  spawnCompanion(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; mode?: CompanionMode; name?: string; seed?: number; look?: SpawnOpts['look'] }): Companion;
   /** Non-combat protected NPC (survivors, wounded, authorities). Same handle type for posing/moving. */
-  /** ADDED (polish 3) `opts.look`: how the figure is drawn, as SpawnOpts.look (e.g. `{ halo: false }` for Vesryn). */
+  /**
+   * ADDED (polish 3) `opts.look`: how the figure is drawn, as SpawnOpts.look (e.g. `{ halo: false }` for Vesryn).
+   * Polish 4: every look option is forwarded, e.g. `look: { wounded: true, woundSide: 'right' }` for the King.
+   */
   spawnNpc(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; pose?: string; name?: string; seed?: number; look?: SpawnOpts['look'] }): Companion;
   createEncounter(def: EncounterDef): Encounter;
   readonly encounters: readonly Encounter[];

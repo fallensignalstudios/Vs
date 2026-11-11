@@ -6,12 +6,17 @@
  *
  * "Battle plane" coordinates: (u, v) in [-1, 1]² around the battle direction, scaled by the preset spread.
  * Dominion holds the left (u < 0), Reformation the right.
+ *
+ * Polish pass 4: the hulls are the GENERATED capitals (forge wave 5) — their own low-poly silhouettes with one
+ * colour per face sampled from the texture (`buildGeneratedCapital`, the same stand-ins the scenic capitals show),
+ * with engines and running lights at the files' real anchors. The procedural hulls stay the fallback
+ * (`createFleet(shared, seed, { procedural: true })`, and automatically if the silhouette data cannot be decoded).
  */
 import * as THREE from 'three';
 import { mulberry32 } from '@/core/mathx';
 import { GLSL_HAZE } from './glsl';
 import { GeoBuilder } from './scenic/geo';
-import { PartSink, buildHull, paletteFor, type ShipKind } from './scenic/hulls';
+import { GENERATED_CAPITAL_LIGHTS, PartSink, buildGeneratedCapital, buildHull, paletteFor, type ShipKind } from './scenic/hulls';
 import { SKY_ORDER, type SharedUniforms } from './shared';
 
 export interface FleetShip {
@@ -27,14 +32,28 @@ export interface FleetShip {
   lights: Array<{ x: number; y: number; w: number; engine: boolean }>;
 }
 
-const HULL_LENGTH = 660;
-const ENGINES: Record<'dominionCapital' | 'reformationCapital', Array<[number, number, number]>> = {
+type Capital = 'dominionCapital' | 'reformationCapital';
+type Anchors = Record<Capital, ReadonlyArray<readonly [number, number, number]>>;
+
+/** the procedural fallback hulls (≈ 660 m): their engine and running-light anchors */
+const PROC_LENGTH = 660;
+const PROC_ENGINES: Anchors = {
   dominionCapital: [[38, -8, 349], [-38, -8, 349], [0, 12, 357]],
   reformationCapital: [[-17, 12, 341], [17, 12, 341], [-17, -12, 341], [17, -12, 341]],
 };
-const RUNNING: Record<'dominionCapital' | 'reformationCapital', Array<[number, number, number]>> = {
+const PROC_RUNNING: Anchors = {
   dominionCapital: [[0, 206, 196], [0, -14, -312], [70, -6, 120], [-70, -6, 120]],
   reformationCapital: [[0, 96, 40], [0, 0, -398], [84, 0, -170], [-84, 0, -170], [160, 18, 150], [-160, 18, 150]],
+};
+/** the generated capitals: the forge's lengths (Dominion 600 m, carrier 500 m) share one battle-plane scale */
+const GEN_LENGTH = 600;
+const GEN_ENGINES: Anchors = {
+  dominionCapital: GENERATED_CAPITAL_LIGHTS.dominionCapital.engines,
+  reformationCapital: GENERATED_CAPITAL_LIGHTS.reformationCapital.engines,
+};
+const GEN_RUNNING: Anchors = {
+  dominionCapital: GENERATED_CAPITAL_LIGHTS.dominionCapital.running,
+  reformationCapital: GENERATED_CAPITAL_LIGHTS.reformationCapital.running,
 };
 
 export const FLEET_VERTEX = /* glsl */ `
@@ -102,23 +121,40 @@ void main() {
 
 interface RawHull { pos: readonly number[]; nrm: readonly number[]; col: readonly number[]; glow: readonly number[]; idx: readonly number[] }
 
-function rawHull(kind: ShipKind): RawHull {
+function rawHull(kind: Capital, procedural: boolean): RawHull {
   const b = new GeoBuilder();
-  buildHull(kind, PartSink.single(paletteFor(kind), b));
+  if (procedural) buildHull(kind as ShipKind, PartSink.single(paletteFor(kind), b));
+  else buildGeneratedCapital(kind, PartSink.single(paletteFor(kind), b));
   return b.raw();
+}
+
+/** Bake the hulls: the generated silhouettes, or the procedural hulls when asked (or when the data is unusable). */
+function fleetHulls(procedural: boolean): { hulls: Record<Capital, RawHull>; generated: boolean } {
+  if (!procedural) {
+    try {
+      const hulls = { dominionCapital: rawHull('dominionCapital', false), reformationCapital: rawHull('reformationCapital', false) };
+      if (hulls.dominionCapital.idx.length > 0 && hulls.reformationCapital.idx.length > 0) return { hulls, generated: true };
+    } catch { /* fall back to the procedural hulls */ }
+  }
+  return { hulls: { dominionCapital: rawHull('dominionCapital', true), reformationCapital: rawHull('reformationCapital', true) }, generated: false };
 }
 
 export interface Fleet {
   readonly mesh: THREE.Mesh;
   readonly ships: readonly FleetShip[];
+  /** true when the hulls are the generated capitals' silhouettes (false: the procedural fallback) */
+  readonly generated: boolean;
   readonly uniforms: { uFrame: { value: THREE.Matrix3 }; uSpread: { value: number }; uFleet: { value: number }; uRedLight: { value: THREE.Color }; uWhiteLight: { value: THREE.Color } };
   dispose(): void;
 }
 
-/** Bake the two fleets. Deterministic for a given seed. */
-export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
+/** Bake the two fleets. Deterministic for a given seed. `procedural` forces the old procedural hulls. */
+export function createFleet(shared: SharedUniforms, seed = 7283, opts: { procedural?: boolean } = {}): Fleet {
   const rand = mulberry32(seed);
-  const hulls = { dominionCapital: rawHull('dominionCapital'), reformationCapital: rawHull('reformationCapital') };
+  const { hulls, generated } = fleetHulls(opts.procedural === true);
+  const HULL_LENGTH = generated ? GEN_LENGTH : PROC_LENGTH;
+  const ENGINES = generated ? GEN_ENGINES : PROC_ENGINES;
+  const RUNNING = generated ? GEN_RUNNING : PROC_RUNNING;
   const ships: FleetShip[] = [];
   const aLocal: number[] = [], aCenter: number[] = [], aNormal: number[] = [], aColor: number[] = [], aMeta: number[] = [], index: number[] = [];
   const m = new THREE.Matrix4(), e = new THREE.Euler(), v = new THREE.Vector3(), n = new THREE.Vector3();
@@ -162,8 +198,9 @@ export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
       aLocal.push(v.x, v.y);
       aCenter.push(u, vv);
       aNormal.push(n.x, n.y, n.z);
-      // Reformation trusses are thin and dark: lift them so both fleets read at the same distance
-      const lift = faction === 1 ? 2.1 : 1;
+      // procedural Reformation trusses are thin and dark: lift them so both fleets read at the same distance (the
+      // generated carrier is a solid navy hull: a smaller lift, and a little for the bronze capital too)
+      const lift = generated ? (faction === 1 ? 1.5 : 1.25) : faction === 1 ? 2.1 : 1;
       aColor.push(hull.col[i * 3] * lift, hull.col[i * 3 + 1] * lift, hull.col[i * 3 + 2] * lift);
       // thin light strips are sub-pixel at fleet scale (they would shimmer): keep engines, mute the rest;
       // running lights are drawn as size-clamped sprites instead
@@ -231,7 +268,7 @@ export function createFleet(shared: SharedUniforms, seed = 7283): Fleet {
   mesh.matrixAutoUpdate = false;
 
   return {
-    mesh, ships, uniforms,
+    mesh, ships, uniforms, generated,
     dispose() { geometry.dispose(); material.dispose(); },
   };
 }

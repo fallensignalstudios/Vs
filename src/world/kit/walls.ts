@@ -4,9 +4,11 @@
  */
 import * as THREE from 'three';
 import type { CeilingOpts, MatId, WallOpts } from '@/core/api';
-import { familyOf, KitCtx, Part } from './core';
+import { familyOf, KitCtx, Part, type MatRef } from './core';
 import { solidArcs } from './structure';
-import { emitClosedVault } from './vault';
+import { emitClosedVault, HazeWriter } from './vault';
+import { glowMesh } from './relief';
+import { buildHaze, emitSkylight } from './atmos';
 
 type Style = NonNullable<WallOpts['style']>;
 
@@ -14,6 +16,10 @@ interface SegOpts {
   height: number;
   thickness: number;
   mat: MatId;
+  /** polish 4: the wall body (the material, or an ashlar clone with `finish: 'ashlar'`) */
+  body: MatRef;
+  /** polish 4: light strips on pilasters / conduits / dark-stone outlines (default false: fine gold lines) */
+  lit: boolean;
   style: Style;
   doors: Array<{ at: number; width: number; height: number }>;
   noCollider: boolean;
@@ -43,7 +49,9 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
   if (L + o.ext1 - x > 0.02) spans.push([x, L + o.ext1]);
 
   const fam = familyOf(o.mat);
-  const body = part.g(o.mat), wg = part.g(fam.frame), trim = part.g('goldTrim');
+  const body = part.g(o.body), wg = part.g(fam.frame), trim = part.g('goldTrim');
+  // polish 4: light strips are an opt-in (`lit: true`); by default the same lines are fine inlaid gold
+  const line = (dark: boolean): MatRef => (o.lit ? ctx.seam(dark) : ctx.goldLine());
   const cornice = H >= 3;
   for (const [a, b] of spans) {
     const len = b - a, cx = (a + b) / 2;
@@ -66,11 +74,12 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
         trim.box(len, 0.04, t + 0.2, cx, H - 0.3, 0);
       }
       if (fam.dark) {
-        // black stone reads through light: a gold channel outlines the wall where it meets floor and cornice
+        // black stone: a gold line outlines the wall where it meets floor and cornice (polish 4: inlaid gold that
+        // reflects the room; `lit: true` makes it the old light channel)
         for (const s of [-1, 1]) {
-          const z = s * (t / 2 + 0.004), up: [number, number, number] = [0, 0, s];
-          part.g(ctx.seam(true)).ribbon([[a + 0.05, 0.62, z], [b - 0.05, 0.62, z]], 0.045, up);
-          if (cornice) part.g(ctx.seam(true)).ribbon([[a + 0.05, H - 0.42, z], [b - 0.05, H - 0.42, z]], 0.045, up);
+          const z = s * (t / 2 + 0.004), up: [number, number, number] = [0, 0, s], w = o.lit ? 0.045 : 0.03;
+          part.g(line(true)).ribbon([[a + 0.05, 0.62, z], [b - 0.05, 0.62, z]], w, up);
+          if (cornice) part.g(line(true)).ribbon([[a + 0.05, H - 0.42, z], [b - 0.05, H - 0.42, z]], w, up);
         }
       }
     }
@@ -87,6 +96,11 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
     if (!o.noCollider) ctx.collider(pose.box(d.at, (H + dh) / 2, 0, d.width / 2, (H - dh) / 2, t / 2, { tag: 'lintel' }));
   }
   if (glass || o.style === 'plain') { part.unframe(); return; }
+  if (o.style === 'slab' || o.style === 'framed') {
+    emitRelief(part, o, spans, doors, L, cornice);
+    part.unframe();
+    return;
+  }
 
   // positions of repeated vertical features: kept clear of door openings
   const clear = (px: number, half: number): boolean => doors.every((d) => Math.abs(px - d.at) > d.width / 2 + half + 0.15);
@@ -106,7 +120,7 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
       if (ph > 2.4) {
         for (const s of [-1, 1]) {
           const z = s * (t / 2 + 0.232), up: [number, number, number] = [0, 0, s];
-          part.g(ctx.seam(fam.dark)).ribbon([[px, 0.86, z], [px, ph - 0.75, z]], 0.07, up);
+          part.g(line(fam.dark)).ribbon([[px, 0.86, z], [px, ph - 0.75, z]], o.lit ? 0.07 : 0.035, up);
           trim.ribbon([[px - 0.085, 0.8, z], [px - 0.085, ph - 0.7, z]], 0.028, up).ribbon([[px + 0.085, 0.8, z], [px + 0.085, ph - 0.7, z]], 0.028, up);
         }
       }
@@ -131,7 +145,7 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
         for (const dx of [-0.11, 0.11]) trim.cyl(0.042, 0.042, top - 0.44, 6, px + dx, 0.44, z);
         for (let y = 1.1; y < top - 0.3; y += 1.9) part.g('goldDark').box(0.4, 0.09, 0.11, px, y, z);
         part.g('goldDark').cbox(0.36, 0.5, 0.15, 0.03, px, 1.55, z + s * 0.02);
-        part.g(ctx.seam(fam.dark)).ribbon([[px, 1.95, s * (t / 2 + 0.012)], [px, top - 0.35, s * (t / 2 + 0.012)]], 0.06, [0, 0, s]);
+        part.g(line(fam.dark)).ribbon([[px, 1.95, s * (t / 2 + 0.012)], [px, top - 0.35, s * (t / 2 + 0.012)]], o.lit ? 0.06 : 0.03, [0, 0, s]);
         part.g('whiteLight').box(0.1, 0.05, 0.02, px, 1.62, z + s * 0.1);
       }
     }
@@ -144,10 +158,94 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
   part.unframe();
 }
 
+/**
+ * Polish 4: a soft light trough along local Z (centred on x, at height y, facing `dir` on Y): three strips across
+ * (dim edges, bright middle) and fades at both ends — a recessed soft light, not a neon bar.
+ */
+function softStrip(hz: HazeWriter, x: number, y: number, w: number, len: number, dir: 1 | -1): void {
+  const xs = [x - w / 2, x - w * 0.18, x + w * 0.18, x + w / 2], kx = [0.25, 1, 1, 0.25];
+  const zs = [-len / 2, -len / 2 + Math.min(1.2, len * 0.15), len / 2 - Math.min(1.2, len * 0.15), len / 2], kz = [0.35, 1, 1, 0.35];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    hz.quad([xs[i], y, zs[j]], [xs[i + 1], y, zs[j]], [xs[i + 1], y, zs[j + 1]], [xs[i], y, zs[j + 1]], [0, dir, 0],
+      [kx[i] * kz[j], kx[i + 1] * kz[j], kx[i + 1] * kz[j + 1], kx[i] * kz[j + 1]]);
+  }
+}
+
+/**
+ * Polish 4: walls with real relief.
+ *  - `'slab'`: the face is clad in large smooth marble slabs (≈ 2.6 × 3.4 m, 6 cm proud, chamfered) with a dark
+ *    shadow gap between them, and a fine gold line run in the first course joint.
+ *  - `'framed'`: stiles every ≈ 3.2 m and, between them, recessed panels in a stone moulding with a thin gold frame
+ *    (a low dado panel and a tall upper panel on walls over 4 m).
+ * Both faces get the treatment; bays that would cut into a door opening are left plain. Geometry only (merged
+ * by material in finalize); the collider is the plain wall's.
+ */
+function emitRelief(part: Part, o: SegOpts, spans: Array<[number, number]>, doors: Array<{ at: number; width: number; height: number }>, L: number, cornice: boolean): void {
+  const ctx = part.ctx, H = o.height, t = o.thickness, fam = familyOf(o.mat);
+  const stone = part.g(fam.frame), trim = part.g('goldTrim'), gold = part.g(ctx.goldLine());
+  const y0 = 0.5, top = H - (cornice ? 0.34 : 0.05), A = top - y0;
+  if (A < 0.8) return;
+  const free = (x0: number, x1: number): boolean => doors.every((d) => x1 < d.at - d.width / 2 - 0.05 || x0 > d.at + d.width / 2 + 0.05);
+  for (const [a0, b0] of spans) {
+    const a = Math.max(a0, 0), b = Math.min(b0, L), len = b - a;
+    if (len < 0.6) continue;
+    for (const s of [-1, 1]) {
+      const zf = s * (t / 2);
+      if (o.style === 'slab') {
+        const gap = 0.035, d = 0.06;
+        const n = Math.max(1, Math.round(len / 2.6)), m = Math.max(1, Math.round(A / 3.4));
+        const sw = len / n, sh = A / m;
+        for (let i = 0; i < n; i++) {
+          const x0 = a + sw * i, x1 = x0 + sw;
+          if (!free(x0, x1)) continue;
+          for (let j = 0; j < m; j++) {
+            const yb = y0 + sh * j;
+            stone.cbox(sw - gap, sh - gap, d, 0.012, (x0 + x1) / 2, yb + sh / 2, zf + s * d / 2);
+          }
+          // the first course joint carries a fine gold line (the paintings' thin gold bands)
+          if (m > 1) gold.ribbon([[x0 + 0.02, y0 + sh, zf + s * 0.002], [x1 - 0.02, y0 + sh, zf + s * 0.002]], 0.022, [0, 0, s]);
+        }
+      } else {
+        // 'framed': stiles, then a moulded recess with a thin gold frame in every bay
+        const n = Math.max(1, Math.round(len / 3.2)), bw = len / n, stile = 0.36, sd = 0.12, md = 0.07, mw = 0.13;
+        for (let i = 0; i <= n; i++) {
+          const px = a + bw * i;
+          if (free(px - stile / 2, px + stile / 2)) {
+            stone.vbox(stile, A + 0.02, sd, 0.03, px, y0 - 0.02, zf + s * sd / 2);
+            trim.box(stile + 0.02, 0.03, sd + 0.01, px, y0 + 0.18, zf + s * sd / 2);
+          }
+        }
+        const tiers: Array<[number, number]> = A > 4 ? [[y0 + 0.2, y0 + 1.15], [y0 + 1.45, top - 0.3]] : [[y0 + 0.2, top - 0.2]];
+        for (let i = 0; i < n; i++) {
+          const x0 = a + bw * i + stile / 2 + 0.16, x1 = a + bw * (i + 1) - stile / 2 - 0.16;
+          if (x1 - x0 < 0.5 || !free(x0, x1)) continue;
+          const cx = (x0 + x1) / 2, w = x1 - x0;
+          for (const [ya, yb] of tiers) {
+            if (yb - ya < 0.4) continue;
+            const cy = (ya + yb) / 2, h = yb - ya, z = zf + s * md / 2;
+            // stone moulding round the recess
+            stone.box(w, mw, md, cx, yb - mw / 2, z).box(w, mw, md, cx, ya + mw / 2, z);
+            stone.box(mw, h - 2 * mw, md, x0 + mw / 2, cy, z).box(mw, h - 2 * mw, md, x1 - mw / 2, cy, z);
+            // the thin gold frame on the moulding's inner edge, corners cut at 45°
+            const gx0 = x0 + mw + 0.012, gx1 = x1 - mw - 0.012, gy0 = ya + mw + 0.012, gy1 = yb - mw - 0.012, c = Math.min(0.14, (gx1 - gx0) * 0.2, (gy1 - gy0) * 0.2);
+            const zg = zf + s * 0.004;
+            gold.ribbon([
+              [gx0 + c, gy0, zg], [gx1 - c, gy0, zg], [gx1, gy0 + c, zg], [gx1, gy1 - c, zg],
+              [gx1 - c, gy1, zg], [gx0 + c, gy1, zg], [gx0, gy1 - c, zg], [gx0, gy0 + c, zg],
+            ], 0.026, [0, 0, s], true);
+          }
+        }
+      }
+    }
+  }
+}
+
 function segOpts(ctx: KitCtx, o: Omit<WallOpts, 'from' | 'to'>, ext0: number, ext1: number): SegOpts {
-  const style: Style = o.style === 'ribbed' || o.style === 'panelled' || o.style === 'conduit' || o.style === 'glass' ? o.style : 'plain';
+  const style: Style = o.style === 'ribbed' || o.style === 'panelled' || o.style === 'conduit' || o.style === 'glass' || o.style === 'slab' || o.style === 'framed' ? o.style : 'plain';
+  const mat = o.mat ?? 'whiteGoldPanel';
   return {
-    height: ctx.num(o.height, 8, 0.3), thickness: ctx.num(o.thickness, 0.6, 0.1, 4), mat: o.mat ?? 'whiteGoldPanel', style,
+    height: ctx.num(o.height, 8, 0.3), thickness: ctx.num(o.thickness, 0.6, 0.1, 4), mat, style,
+    body: ctx.wallFinish(mat, o.finish), lit: o.lit === true,
     doors: (o.doors ?? []).map((d) => ({ at: ctx.num(d.at, 0), width: ctx.num(d.width, 3, 0), height: ctx.num(d.height, 3.5, 0.5) })),
     noCollider: !!o.noCollider, ext0, ext1,
     mullion: ctx.num(o.mullionSpacing, 3, 0, 1000),
@@ -187,7 +285,7 @@ export function buildWalls(ctx: KitCtx, points: Array<[number, number]>, o: Omit
   return part.done();
 }
 
-export function buildRingWall(ctx: KitCtx, o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; thickness?: number; mullionSpacing?: number }): THREE.Object3D {
+export function buildRingWall(ctx: KitCtx, o: { x: number; n: number; r: number; h?: number; height?: number; mat?: MatId; gapsDeg?: Array<[number, number]>; segments?: number; style?: WallOpts['style']; noCollider?: boolean; thickness?: number; mullionSpacing?: number; finish?: WallOpts['finish']; lit?: boolean }): THREE.Object3D {
   const r = ctx.num(o.r, 10, 1), h = ctx.num(o.h, 0);
   const part = new Part(ctx, 'ringWall', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), h));
   const segments = Math.round(ctx.num(o.segments, Math.max(16, Math.min(72, Math.round((Math.PI * 2 * r) / 4.5))), 6, 180));
@@ -219,8 +317,19 @@ export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
     emitClosedVault(ctx, part, o, w, d, h);
     return part.done();
   }
+  if (style === 'skylight') {
+    emitSkylight(ctx, part, o, w, d);
+    const group = part.done();
+    // polish 4: the upper hall fills with the light that comes through the coffers
+    if (o.hazeBelow !== false) {
+      const drop = ctx.num(o.hazeDepth, Math.min(10, h * 0.7), 1, 60);
+      buildHaze(ctx, { x: ctx.num(o.x, 0), n: ctx.num(o.n, 0), h: h - drop, w: w0 * 0.96, d: d0 * 0.96, height: drop, yawDeg: o.yawDeg,
+        color: ctx.num(o.hazeColor, 0xf2eee6), density: 0.05, intensity: 0.9, falloff: -0.8, soft: 0.3 });
+    }
+    return group;
+  }
   const mat = o.mat ?? 'whiteGoldPanel', hw = w / 2, hd = d / 2;
-  const wg = part.g(familyOf(o.mat).frame), trim = part.g('goldTrim'), light = part.g('whiteLight');
+  const wg = part.g(familyOf(o.mat).frame), trim = part.g('goldTrim');
   const bays = Math.max(1, Math.round(d / 6));
   if (style === 'vault') {
     const rise = w * 0.24, n = 14, th = 0.35;
@@ -250,13 +359,17 @@ export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
         trim.ribbon([[g0[0], g0[1], z], [g1[0], g1[1], z]], 0.08, [-(g0[0] + g1[0]) / 2, -1, 0]);
       }
     }
-    // apex light seam + springing strips
-    light.quadFacing([-0.22, rise - 0.03, -hd + 0.4], [0.22, rise - 0.03, -hd + 0.4], [0.22, rise - 0.03, hd - 0.4], [-0.22, rise - 0.03, hd - 0.4], [0, -1, 0]);
+    // apex light seam + springing strips (polish 4: soft light troughs — bright down the middle, fading to the
+    // edges and the ends — instead of flat neon bars; `glow` sets their brightness, default 1.6)
+    const soft = new HazeWriter(ctx.num(o.hazeColor, 0xf6f0e6));
+    softStrip(soft, 0, rise - 0.03, 0.44, d - 0.8, -1);
     for (const s of [-1, 1]) {
       wg.box(0.5, 0.4, d, s * (hw - 0.2), 0.1, 0);
-      light.quadFacing([s * (hw - 0.4), -0.105, -hd + 0.4], [s * (hw - 0.12), -0.105, -hd + 0.4], [s * (hw - 0.12), -0.105, hd - 0.4], [s * (hw - 0.4), -0.105, hd - 0.4], [0, -1, 0]);
+      softStrip(soft, s * (hw - 0.26), -0.105, 0.28, d - 0.8, -1);
     }
-    return part.done();
+    const group = part.done();
+    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20), group);
+    return group;
   }
   if (style === 'flat') {
     part.g(mat).box(w, 0.4, d, 0, 0.2, 0);
@@ -265,13 +378,16 @@ export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
       wg.box(w, 0.4, 0.5, 0, -0.2, z);
       trim.box(w, 0.03, 0.54, 0, -0.405, z);
     }
+    const soft = new HazeWriter(ctx.num(o.hazeColor, 0xf6f0e6));
     for (const s of [-1, 1]) {
       wg.box(0.5, 0.4, d, s * (hw - 0.25), -0.2, 0);
       const lx = s * hw * 0.42;
       wg.box(0.5, 0.12, d - 0.6, lx, -0.06, 0);
-      light.quadFacing([lx - 0.16, -0.125, -hd + 0.5], [lx + 0.16, -0.125, -hd + 0.5], [lx + 0.16, -0.125, hd - 0.5], [lx - 0.16, -0.125, hd - 0.5], [0, -1, 0]);
+      softStrip(soft, lx, -0.125, 0.32, d - 1, -1);
     }
-    return part.done();
+    const group = part.done();
+    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20), group);
+    return group;
   }
   // lattice / glass: open grid of beams, optionally glazed
   const nx = Math.max(2, Math.round(w / 5)), nz = Math.max(2, Math.round(d / 5));

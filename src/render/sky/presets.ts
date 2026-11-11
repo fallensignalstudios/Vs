@@ -88,6 +88,12 @@ export interface SkyPresetDef {
    * authored against its zone's grade — e.g. warm here so a look with blue split-toned shadows lands on charcoal
    */
   tint: number;
+  /**
+   * ADDED (polish pass 4): white balance and level of the EMPTY sky alone — its gradient, nebula and stars (sRGB hex,
+   * on top of `tint`; the remnants, the Wound and the haze are untouched): lets a preset move its night toward a
+   * painting's slate without moving the Wound's matter. Default white.
+   */
+  skyTint?: number;
 }
 
 /** Unit vector for an (azimuth, elevation) pair in degrees. */
@@ -105,7 +111,7 @@ const D = (o: Partial<SkyPresetDef> & Pick<SkyPresetDef, 'key'>): SkyPresetDef =
   ground: 0, gain: 1, scenicHaze: 0.00055, scenicAmbient: 0.5,
   battle: { at: [20, 40], spread: 30, fleet: 0, intensity: 0 },
   fill: { at: [-38, 20], color: 0xff5a3c, intensity: 0 },
-  sat: 1, nebulaTint: 0xffffff, starDensity: 1, redGain: 1, enclosure: 0, enclosureColor: 0x8a98a6, veil: 0, swirl: 1, woundCore: 0.6, coreTint: 0xffffff, matterTint: 0xffffff, tint: 0xffffff,
+  sat: 1, nebulaTint: 0xffffff, starDensity: 1, redGain: 1, enclosure: 0, enclosureColor: 0x8a98a6, veil: 0, swirl: 1, woundCore: 0.6, coreTint: 0xffffff, matterTint: 0xffffff, tint: 0xffffff, skyTint: 0xffffff,
   ...o,
 });
 
@@ -166,13 +172,17 @@ export const SKY_PRESETS: Readonly<Record<SkyPreset, SkyPresetDef>> = {
   // against the gallery's blue shadows, floating above the city. Its crust and lit smoke funnel down behind the
   // spires to the horizon, and its debris river crosses the red nebula. Few stars.
   woundVista: D({
-    wound: { at: [0, 16], radius: 10.5, vis: 1, lens: 0.42, debris: 1, halo: 1, activity: 0.45, throat: 1 },
+    // (polish pass 4: lower, as in the painting — the opening's centre ≈ 1.25 radii over the horizon, its lower arc just
+    // above the city's glow line, so its grooved funnel wall goes down behind the city instead of hanging a curtain)
+    wound: { at: [0, 13], radius: 10.5, vis: 1, lens: 0.42, debris: 1, halo: 1, activity: 0.45, throat: 1 },
     red: { at: [-34, 21], radius: 4.1, vis: 1 },
     white: { at: [34, 17], radius: 0.30, vis: 1 },
     // (authored a touch warm: the gallery grade pulls shadows toward blue)
     stars: 0.85, starDensity: 0.38, nebula: 3.4, nebulaTint: 0xe2d4ca, sat: 0.36, redGain: 0.68, swirl: 1.0,
-    woundCore: 4.4, coreTint: 0xfcffdb, matterTint: 0xebfcf0, tint: 0xfff2d0,
-    zenith: 0x343c2a, horizon: 0x414133, haze: 0x4d433d, hazeAmt: 0.88, hazeFall: 11,
+    woundCore: 4.4, coreTint: 0xfcffdb, matterTint: 0xf5f7f0, tint: 0xfff2d0,
+    // (polish pass 4: the night itself darker and slate, not violet-pink — the painting's sky is (21, 24, 28))
+    skyTint: 0xbccdc4,
+    zenith: 0x343c2a, horizon: 0x414133, haze: 0x40433a, hazeAmt: 0.88, hazeFall: 11,
     hazeRed: 0x260907, hazeWhite: 0x16161a, ground: 1, scenicHaze: 0.00055, scenicAmbient: 1.0,
     battle: { at: [62, 30], spread: 26, fleet: 0.3, intensity: 0.15 },
     key: { at: [34, 24], color: 0xf6efe4, intensity: 1.7 },
@@ -242,6 +252,7 @@ export class SkyState {
   readonly nebulaTint = new THREE.Color(1, 1, 1);
   readonly enclosureColor = new THREE.Color(0.25, 0.3, 0.37);
   readonly tint = new THREE.Color(1, 1, 1);
+  readonly skyTint = new THREE.Color(1, 1, 1);
 
   /** Load from an authored preset. */
   setFromDef(d: SkyPresetDef): this {
@@ -265,7 +276,7 @@ export class SkyState {
     dirFromAzEl(d.fill.at[0], d.fill.at[1], this.fillDir);
     this.fillColor.setHex(d.fill.color); this.fillIntensity = d.fill.intensity;
     this.sat = d.sat; this.starDensity = d.starDensity; this.redGain = d.redGain; this.enclosure = d.enclosure; this.veil = d.veil; this.swirl = d.swirl; this.woundCore = d.woundCore;
-    this.nebulaTint.setHex(d.nebulaTint); this.coreTint.setHex(d.coreTint); this.matterTint.setHex(d.matterTint); this.enclosureColor.setHex(d.enclosureColor); this.tint.setHex(d.tint);
+    this.nebulaTint.setHex(d.nebulaTint); this.coreTint.setHex(d.coreTint); this.matterTint.setHex(d.matterTint); this.enclosureColor.setHex(d.enclosureColor); this.tint.setHex(d.tint); this.skyTint.setHex(d.skyTint ?? 0xffffff);
     return this;
   }
 
@@ -282,7 +293,7 @@ const NUM_KEYS = [
   'sat', 'starDensity', 'redGain', 'enclosure', 'veil', 'swirl', 'woundCore',
 ] as const satisfies readonly (keyof SkyState)[];
 const DIR_KEYS = ['woundDir', 'redDir', 'whiteDir', 'battleDir', 'keyDir', 'fillDir'] as const satisfies readonly (keyof SkyState)[];
-const COL_KEYS = ['zenith', 'horizon', 'haze', 'hazeRed', 'hazeWhite', 'keyColor', 'fillColor', 'nebulaTint', 'enclosureColor', 'tint', 'coreTint', 'matterTint'] as const satisfies readonly (keyof SkyState)[];
+const COL_KEYS = ['zenith', 'horizon', 'haze', 'hazeRed', 'hazeWhite', 'keyColor', 'fillColor', 'nebulaTint', 'enclosureColor', 'tint', 'coreTint', 'matterTint', 'skyTint'] as const satisfies readonly (keyof SkyState)[];
 
 const _q = new THREE.Quaternion();
 const _qi = new THREE.Quaternion();

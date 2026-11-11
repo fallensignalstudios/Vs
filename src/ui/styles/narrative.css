@@ -862,3 +862,45 @@
   color: #fbf6ea;
   text-shadow: 0 0 calc(var(--u) * 3) rgba(0, 0, 0, 0.95), 0 0 calc(var(--u) * 26) rgba(0, 0, 0, 0.85);
 }
+
+/* ================================================================ world text (polish 4: legible in-world labels)
+ * A screen-space copy of small in-world text on a dark plate. Font size is set per frame in px by worldtext.ts
+ * (projected world size, never below the 720p minimum); everything else scales with it (em units). */
+.aur-wtext {
+  pointer-events: none;
+}
+
+.aur-wt {
+  --wt: #eef3fb;
+  --wt-edge: rgba(200, 220, 245, 0.34);
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 46em;
+  padding: 0.24em 0.62em 0.26em;
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.22;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: pre;
+  color: var(--wt);
+  will-change: transform, opacity;
+  text-shadow: 0 0 0.12em rgba(0, 0, 0, 0.9);
+}
+
+.aur-wt[data-align='left'] { text-align: left; }
+.aur-wt[data-align='center'] { text-align: center; }
+.aur-wt[data-align='right'] { text-align: right; }
+
+.aur-wt[data-plate='1'] {
+  background: linear-gradient(180deg, rgba(8, 13, 22, 0.9), rgba(5, 9, 16, 0.93));
+  box-shadow: inset 0 0 0 1px var(--wt-edge), 0 0.1em 0.5em rgba(0, 0, 0, 0.45);
+  border-radius: 0.12em;
+}
+
+.aur-wt[data-tone='cold'] { --wt: #cfe6ff; --wt-edge: rgba(120, 180, 255, 0.4); }
+.aur-wt[data-tone='amber'] { --wt: #ffcd8a; --wt-edge: rgba(255, 170, 70, 0.4); }
+.aur-wt[data-tone='gold'] { --wt: #f2dca6; --wt-edge: rgba(230, 200, 130, 0.42); }
+.aur-wt[data-tone='violet'] { --wt: #dccbff; --wt-edge: rgba(170, 130, 255, 0.42); }

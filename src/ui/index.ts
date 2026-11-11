@@ -19,17 +19,19 @@ import './styles/screens.css';
 
 import type {
   Actor, CaptionKind, ChoiceHandle, ChoiceOpts, DialogueLine, Game, MissionSummary, TitleOpts, UiSystem, Vec3Like,
-  WorldMarkerOpts,
+  WorldMarkerOpts, WorldTextOpts,
 } from '@/core/api';
 import { reportError } from '@/core/events';
 import { h } from './dom';
 import { Hud } from './hud';
+import { measureViewport, type Viewport } from './hud/frame';
 import { subtitleSeconds, type HitKind } from './logic';
 import { MenuInput, ModalStack } from './menu';
 import { StatusBoard, type BoardOpts, type BoardRow } from './narrative/board';
 import { ChoicePanel } from './narrative/choice';
 import { Card, FlashText, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor } from './narrative/stage';
 import { Subtitles } from './narrative/subtitles';
+import { WorldText } from './narrative/worldtext';
 import { CompleteScreen, DeathScreen, LoadingScreen, type LoadingOpts } from './screens/overlays';
 import { PauseScreen, type PauseOpts } from './screens/pause';
 import { SettingsScreen } from './screens/settings';
@@ -67,6 +69,8 @@ class UiSystemImpl implements UiSystem {
   private readonly talk: Subtitles;
   private readonly skip: SkipHint;
   private readonly choiceW: ChoicePanel;
+  private readonly wtext: WorldText;
+  private readonly view: Viewport = { w: 1280, h: 720, u: 1 };
   private readonly loading: LoadingScreen;
   private readonly death: DeathScreen;
   private readonly complete: CompleteScreen;
@@ -98,6 +102,7 @@ class UiSystemImpl implements UiSystem {
     this.talk = new Subtitles(game);
     this.skip = new SkipHint(game);
     this.choiceW = new ChoicePanel(game, this.menu, this.stack);
+    this.wtext = new WorldText(game);
     this.loading = new LoadingScreen();
     this.death = new DeathScreen(game, this.menu, this.stack);
     this.complete = new CompleteScreen(game, this.menu, this.stack);
@@ -108,7 +113,7 @@ class UiSystemImpl implements UiSystem {
 
     // paint order, bottom → top
     this.root.append(
-      this.hud.worldEl, this.hud.edgeEl, this.hud.panelEl, this.hud.noticeEl,
+      this.hud.worldEl, this.wtext.el, this.hud.edgeEl, this.hud.panelEl, this.hud.noticeEl,
       this.letterboxW.el, this.fadeW.el, this.cardW.el, this.flashW.el, this.board.el, this.hud.ctxEl, this.talk.el, this.skip.el,
       this.choiceW.el, this.loading.el, this.death.el, this.complete.el, this.title.el, this.pause.el, this.settings.el,
       this.hud.diagnostics.fpsEl, this.hud.diagnostics.debugEl,
@@ -156,6 +161,7 @@ class UiSystemImpl implements UiSystem {
     this.hud.eliteBar(null);
     this.hud.readout(null);
     this.hud.focusActor(null);
+    this.wtext.clear();
     if (this.choiceW.open) this.choiceW.dismiss();
   }
 
@@ -324,6 +330,10 @@ class UiSystemImpl implements UiSystem {
     this.board.set(rows, opts);
   }
 
+  worldText(id: string, opts: WorldTextOpts | null): void {
+    this.wtext.set(id, opts ?? null);
+  }
+
   get modalOpen(): boolean {
     return this.stack.open;
   }
@@ -363,8 +373,15 @@ class UiSystemImpl implements UiSystem {
       this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open && !clean, !screen && !clean, !screen && !this.choiceW.open && !clean);
       this.talk.setCovered(this.death.shown || this.pause.shown || clean);
       this.skip.setCovered(clean);
+      this.cardW.setCovered(clean);
     });
     this.run('narrative', () => {
+      // world text is part of the scene: only the full-screen screens cover it (not the HUD switch, not a clean frame)
+      if (this.wtext.size > 0) {
+        const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
+        measureViewport(this.root, this.view);
+        this.wtext.update(d, this.view.w, this.view.h, screen);
+      }
       this.letterboxW.update(d);
       this.fadeW.update(d);
       this.cardW.update(d);

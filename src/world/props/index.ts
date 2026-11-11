@@ -7,7 +7,7 @@ import type { Game, HeroProps, HologramKind, MaterialLibrary, NestedRingsOpts } 
 import { isStub } from '@/core/stub';
 import { AssentInterface } from './assent';
 import { ContainmentCage } from './cage';
-import { CrownmarkFive } from './crownmark';
+import { CrownmarkFive, type CrownmarkOpts } from './crownmark';
 import { Hologram } from './holo';
 import { ObservationSet } from './observation';
 import { FallenPlate } from './plate';
@@ -27,7 +27,7 @@ export function createHeroProps(game: Game | null): HeroProps {
     return m && !isStub(m) ? m : null;
   };
   return {
-    crownmarkFive: () => new CrownmarkFive(lib()),
+    crownmarkFive: (opts?: CrownmarkOpts) => new CrownmarkFive(lib(), opts ?? {}),
     nestedRings: (opts?: NestedRingsOpts) => new NestedRings(lib(), opts ?? {}),
     assentInterface: (side) => new AssentInterface(lib(), side === 'selene' ? 'selene' : 'tarrik'),
     stabilizer: () => new Stabilizer(lib()),

@@ -39,7 +39,8 @@ function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
   dk.box(W, 0.04, fd - 0.24, 0, H - 0.015, 0);
   // threshold plate with channel lines across the passage
   dk.boxOn(W, 0.018, fd, 0, 0, 0);
-  for (const z of [-fd * 0.28, fd * 0.28]) p.g(ctx.channel()).ribbon([[-W / 2 + 0.1, 0.024, z], [W / 2 - 0.1, 0.024, z]], 0.05);
+  // polish 4: fine inlaid gold, not light (the white point is what guides to an exit)
+  for (const z of [-fd * 0.28, fd * 0.28]) p.g(ctx.goldLine()).ribbon([[-W / 2 + 0.1, 0.024, z], [W / 2 - 0.1, 0.024, z]], 0.032);
   if (style === 'ancient' || style === 'threshold') {
     trim.push().move(0, H + hh + 0.04, 0).rotZ(Math.PI / 4).cbox(0.46, 0.46, fd + 0.16, 0.05).pop();
     dk.push().move(0, H + hh + 0.04, 0).rotZ(Math.PI / 4).box(0.22, 0.22, fd + 0.2).pop();
@@ -52,11 +53,11 @@ function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
       trim.taperOn(0.6, 0.6, 0.2, 0.2, 0.3, px, H + 1.6, 0);
       for (const z of [-1, 1]) p.g(ctx.seam(true)).ribbon([[px, 0.9, z * 0.354], [px, H + 1.2, z * 0.293]], 0.06, [0, 0.02, z]);
     }
-    const ch = p.g(ctx.channel()), tr = p.g(ctx.inlay('goldTrim'));
+    const ch = p.g(ctx.goldLine()), tr = p.g(ctx.inlay('goldTrim'));
     for (const z of [-1, 1]) {
       for (let i = 0; i < 3; i++) {
         const k = fd / 2 + 0.35 + i * 0.5, hwk = W / 2 + 0.3 - i * 0.35;
-        (i === 1 ? tr : ch).ribbon([[-hwk - 0.4, 0.007, z * (k - 0.4)], [-hwk, 0.007, z * k], [hwk, 0.007, z * k], [hwk + 0.4, 0.007, z * (k - 0.4)]], 0.05);
+        (i === 1 ? tr : ch).ribbon([[-hwk - 0.4, 0.007, z * (k - 0.4)], [-hwk, 0.007, z * k], [hwk, 0.007, z * k], [hwk + 0.4, 0.007, z * (k - 0.4)]], i === 1 ? 0.05 : 0.034);
       }
     }
   } else if (style === 'quarantine') {
@@ -69,12 +70,15 @@ function emitFrame(p: Part, style: DoorStyle, f: FrameDims): void {
   }
 }
 
-function emitLeaf(p: Part, style: DoorStyle, side: number, lw: number, H: number, lt: number): void {
+function emitLeaf(p: Part, style: DoorStyle, side: number, lw: number, H: number, lt: number, lit: boolean): void {
   const inner = -side * (lw / 2);
+  // polish 4: the strips on the leaves are fine gold (`lit: true` keeps them as light) — and, sharing the leaf's
+  // gold trim material, they cost no draw call of their own
+  const strip = (glow: 'goldChannel' | 'whiteLight'): 'goldChannel' | 'whiteLight' | 'goldTrim' => (lit ? glow : 'goldTrim');
   if (style === 'service') {
     p.g('goldDark').cbox(lw, H, lt, 0.02, 0, H / 2, 0);
     for (const y of [0.22, 0.5, 0.78]) p.g('whiteGold').box(lw - 0.2, 0.14, lt + 0.05, 0, H * y, 0);
-    p.g('goldChannel').box(0.035, H * 0.3, lt + 0.012, inner + side * 0.05, H * 0.5, 0);
+    p.g(strip('goldChannel')).box(0.035, H * 0.3, lt + 0.012, inner + side * 0.05, H * 0.5, 0);
     return;
   }
   if (style === 'quarantine') {
@@ -83,13 +87,13 @@ function emitLeaf(p: Part, style: DoorStyle, side: number, lw: number, H: number
     for (const y of [0.36, 0.5, 0.64]) {
       p.g('goldTrim').push().move(0, H * y, 0).rotZ(side * 0.55).box(lw * 0.72, 0.09, lt + 0.05).pop();
     }
-    p.g('whiteLight').box(0.05, H * 0.6, lt + 0.012, inner + side * 0.07, H * 0.5, 0);
+    p.g(strip('whiteLight')).box(0.05, H * 0.6, lt + 0.012, inner + side * 0.07, H * 0.5, 0);
     return;
   }
   if (style === 'threshold') {
     p.g('goldDark').cbox(lw, H, lt, 0.03, 0, H / 2, 0);
     p.g('goldTrim').box(lw - 0.3, 0.05, lt + 0.03, 0, 0.3, 0).box(lw - 0.3, 0.05, lt + 0.03, 0, H - 0.3, 0);
-    for (const k of [-0.25, 0, 0.25]) p.g('goldChannel').box(0.05, H - 0.9, lt + 0.012, lw * k, H / 2, 0);
+    for (const k of [-0.25, 0, 0.25]) p.g(strip('goldChannel')).box(lit ? 0.05 : 0.035, H - 0.9, lt + 0.012, lw * k, H / 2, 0);
     return;
   }
   // ancient: white-gold slab, gold border, a great ring split across the two leaves
@@ -100,7 +104,7 @@ function emitLeaf(p: Part, style: DoorStyle, side: number, lw: number, H: number
   const R = Math.min(lw * 0.82, H * 0.3), a0 = side < 0 ? Math.PI : 0, a1 = a0 + Math.PI;
   trim.push().move(inner, H * 0.56, 0).rotX(Math.PI / 2).arcBand(R - 0.09, R, a0, a1, -lt / 2 - 0.015, lt / 2 + 0.015, 14, { bottom: true }).pop();
   p.g('goldDark').push().move(inner, H * 0.56, 0).rotX(Math.PI / 2).arcBand(R * 0.5, R * 0.62, a0, a1, -lt / 2 - 0.01, lt / 2 + 0.01, 10, { bottom: true }).pop();
-  p.g('goldChannel').box(0.035, R * 1.1, lt + 0.014, inner + side * 0.03, H * 0.56, 0);
+  p.g(strip('goldChannel')).box(0.035, R * 1.1, lt + 0.014, inner + side * 0.03, H * 0.56, 0);
 }
 
 class Door implements DoorHandle {
@@ -146,14 +150,18 @@ class Door implements DoorHandle {
     if (hasLeaves) {
       for (const side of [-1, 1]) {
         const leaf = new Part(ctx, 'door-leaf', new THREE.Vector3(side * (W / 4), 0, 0), 0, { local: true });
-        emitLeaf(leaf, style, side, this.lw, H, f.lt);
+        emitLeaf(leaf, style, side, this.lw, H, f.lt, o.lit === true);
         this.leaves.push(leaf.done(mover));
       }
-      const ys = [0.5, 0.28, 0.72];
-      for (let i = 0; i < 3; i++) {
-        const bolt = new Part(ctx, 'door-bolt', new THREE.Vector3(0, H * ys[i], 0), 0, { local: true });
-        bolt.g('goldDark').cbox(Math.min(1.3, W * 0.4), 0.2, f.lt + 0.14, 0.03);
-        bolt.g(this.light).box(Math.min(0.5, W * 0.16), 0.06, f.lt + 0.16);
+      // the locking bolts: the middle one (locked or sealed) and the outer pair (sealed) — the pair is ONE piece
+      // (polish 4: they always show together, so they share their meshes: two draw calls fewer per door)
+      const ys: number[][] = [[0.5], [0.28, 0.72]];
+      for (const group of ys) {
+        const bolt = new Part(ctx, 'door-bolt', new THREE.Vector3(), 0, { local: true });
+        for (const y of group) {
+          bolt.g('goldDark').cbox(Math.min(1.3, W * 0.4), 0.2, f.lt + 0.14, 0.03, 0, H * y, 0);
+          bolt.g(this.light).box(Math.min(0.5, W * 0.16), 0.06, f.lt + 0.16, 0, H * y, 0);
+        }
         this.bolts.push(bolt.done(mover));
       }
       this.collider = ctx.collider(frame.pose.box(0, H / 2, 0, W / 2, H / 2, 0.25, { tag: 'door' }));
@@ -218,7 +226,7 @@ class Door implements DoorHandle {
     const s = STATE_LIGHT[this.state];
     if (this.bolts.length) {
       this.bolts[0].visible = closed && (this.state === 'locked' || this.state === 'sealed');
-      this.bolts[1].visible = this.bolts[2].visible = closed && this.state === 'sealed';
+      this.bolts[1].visible = closed && this.state === 'sealed';
     }
     this.light.emissive.setHex(s.color);
     this.light.emissiveIntensity = s.intensity * (1 - s.pulse * (0.5 + 0.5 * Math.sin(time * 3.2)));

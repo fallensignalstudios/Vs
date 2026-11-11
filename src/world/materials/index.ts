@@ -56,6 +56,8 @@ class MaterialLibraryImpl implements MaterialLibrary {
   private readonly emissives = new Map<string, THREE.MeshStandardMaterial>();
   private readonly families = new Map<FamilyId, { uniforms: FamilyUniforms; set: TextureSet }>();
   private readonly corrupted = new WeakMap<THREE.Material, CorruptHandle>();
+  /** ADDED (polish 4): the photographic set each built material wears (for the zone-change scan) */
+  private readonly wearing = new WeakMap<THREE.Material, SurfaceSetId>();
   private readonly macro: AurUniform = { value: flatTexture(128, 128, 128, 128, 'macro.placeholder'), shared: true };
   private readonly detail: AurUniform = { value: flatTexture(128, 128, 128, 128, 'detail.placeholder'), shared: true };
   private readonly veins: AurUniform = { value: flatTexture(0, 255, 128, 128, 'veins.placeholder'), shared: true };
@@ -93,6 +95,8 @@ class MaterialLibraryImpl implements MaterialLibrary {
         const r = game?.render;
         if (r && !isStub(r)) r.refreshEnvironment({ scene: true });
       },
+      // polish 4: sets worn by materials still in the scene stay loaded across a zone change (cached scenic hulls)
+      inUse: () => this.setsInScene(),
       debug: game?.flags?.debug === true,
     });
   }
@@ -255,7 +259,14 @@ class MaterialLibraryImpl implements MaterialLibrary {
     if (def.family && def.tp && fam) {
       const pbr = def.pbr ? { uniforms: this.surfaces.uniforms(def.pbr.set), params: pbrParams(def.pbr) } : undefined;
       host.add(triplanarPatch(def.family, fam.uniforms, { macro: this.macro, detail: this.detail }, def.tp, pbr));
-      if (def.pbr) this.surfaces.touch(def.pbr.set);
+      if (def.pbr) {
+        const set = def.pbr.set;
+        this.surfaces.touch(set);
+        this.wearing.set(mat, set);
+        // polish 4: a material cached across zones keeps (or brings back) its set whenever it is drawn
+        const surfaces = this.surfaces;
+        mat.onBeforeRender = (): void => surfaces.drawn(set);
+      }
     }
     if (def.effects) for (const e of def.effects) host.add(this.effectPatch(e));
     return mat;
@@ -386,6 +397,23 @@ class MaterialLibraryImpl implements MaterialLibrary {
     this.clock = Number.isFinite(time) ? time : this.clock + (Number.isFinite(dt) ? dt : 0);
     AUR_TIME.value = this.clock;
     if (this._ready && !this.baking && this.game) this.followQuality();
+  }
+
+  /** ADDED (polish 4): the sets worn by materials of meshes currently in the scene. */
+  private setsInScene(): Set<SurfaceSetId> {
+    const out = new Set<SurfaceSetId>();
+    const r = this.game?.render;
+    const scene = r && !isStub(r) ? r.scene : null;
+    if (!scene || typeof scene.traverse !== 'function') return out;
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m) return;
+      for (const mm of Array.isArray(m) ? m : [m]) {
+        const set = this.wearing.get(mm);
+        if (set) out.add(set);
+      }
+    });
+    return out;
   }
 
   /** ADDED (integration wave): the photographic set a material id wears by default (null = procedural only). */

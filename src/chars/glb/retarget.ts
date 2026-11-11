@@ -39,7 +39,7 @@ interface Node {
 }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _h = new THREE.Vector3();
-const _knee = new THREE.Vector3(), _end = new THREE.Vector3(), _t = new THREE.Vector3();
+const _knee = new THREE.Vector3(), _end = new THREE.Vector3(), _t = new THREE.Vector3(), _t2 = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const _m = new THREE.Matrix4(), _mx = new THREE.Vector3(), _my = new THREE.Vector3(), _mz = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -315,16 +315,89 @@ export class Retargeter {
    * Pull a hand (0 = L, 1 = R) so its grip centre moves a fraction `weight` of the way to `target` (root
    * space). The hand keeps its orientation; the elbow keeps its side. Call between pose() and apply().
    */
-  pullHand(side: number, target: THREE.Vector3, weight: number): void {
+  pullHand(side: number, target: THREE.Vector3, weight: number, assist = false): void {
     if (!(weight > 1e-3)) return;
     const s = side === 0 ? 'L' : 'R';
     const ua = this.node(`uArm${s}`) as Node, fa = this.node(`fArm${s}`) as Node, ha = this.node(`hand${s}`) as Node;
+    if (assist) this.reachAssist(s, ua, fa, ha, side, target, weight);
     // wrist target = grip target − (grip − wrist)
     _t.copy(this.gripOff[side]).applyQuaternion(ha.d);
     _t.subVectors(target, _t);
     if (weight < 0.999) _t.lerp(ha.p, 1 - weight);
     _c.copy(fa.p);
     this.twoBone(ua, fa, ha, _t, _c);
+  }
+
+  /**
+   * POLISH 4: turn a role's bone by an extra rotation `q` given in ROOT space, about its own joint (a leaf such as
+   * the head: its children follow through the skeleton, other nodes are not moved). Call between pose() and apply().
+   */
+  turn(role: string, q: THREE.Quaternion): void {
+    const n = this.node(role);
+    if (!n) return;
+    n.w.premultiply(q);
+    n.d.premultiply(q);
+  }
+
+  /**
+   * POLISH 4: a hand asked to reach something in front of the body and not above the shoulder that the straight arm
+   * cannot reach (a forearm clasp, a hand on a console): the body leans in from the waist (at most ~14°) and the
+   * shoulder comes forward (the clavicle, at most ~20°) to make up the difference, scaled by the pin's weight.
+   */
+  private reachAssist(s: 'L' | 'R', ua: Node, fa: Node, ha: Node, side: number, target: THREE.Vector3, weight: number): void {
+    const reach = (fa.off.length() + ha.off.length() + this.gripOff[side].length() * 0.6) * 0.985;
+    let deficit = target.distanceTo(ua.p) - reach;
+    if (!(deficit > 0.005)) return;
+    const hips = this.nodes[0];
+    // only forward reaches at or below the shoulder: a raised arm stays the arm's business
+    if (target.y > ua.p.y + 0.15) return;
+    _a.set(target.x - hips.p.x, 0, target.z - hips.p.z);
+    _b.set(ua.p.x - hips.p.x, 0, ua.p.z - hips.p.z);
+    if (_a.length() < _b.length() + 0.05) return;
+    const k = Math.min(1, weight);
+    const waist = this.index[this.waistRole];
+    // (two small passes: each re-measures what is still missing; at most ~0.25 rad of lean, ~0.36 of clavicle)
+    for (let pass = 0; pass < 2 && deficit > 0.005; pass++) {
+    if (waist !== undefined && waist > 0) {
+      const w = this.nodes[waist];
+      _a.copy(ua.p).sub(w.p);
+      _b.copy(target).sub(w.p);
+      const lever = _a.length();
+      _c.crossVectors(_a, _b);
+      if (lever > 0.05 && _c.lengthSq() > 1e-10) {
+        const ang = Math.min(0.125, Math.asin(Math.min(1, deficit / lever))) * k;
+        this.rotateSubtree(waist, _q.setFromAxisAngle(_c.normalize(), ang));
+        deficit = target.distanceTo(ua.p) - reach;
+      }
+    }
+    const clav = this.index[`clav${s}`];
+    if (clav !== undefined && deficit > 0.005) {
+      const c = this.nodes[clav];
+      _a.copy(ua.p).sub(c.p);
+      _b.copy(target).sub(c.p);
+      const lever = _a.length();
+      _c.crossVectors(_a, _b);
+      if (lever > 0.03 && _c.lengthSq() > 1e-10) {
+        const ang = Math.min(0.18, Math.asin(Math.min(1, deficit / lever))) * k;
+        this.rotateSubtree(clav, _q.setFromAxisAngle(_c.normalize(), ang));
+        deficit = target.distanceTo(ua.p) - reach;
+      }
+    }
+    }
+  }
+
+  /** Rotate node `k` and everything hanging from it rigidly about k's joint by `q` (root space). */
+  private rotateSubtree(k: number, q: THREE.Quaternion): void {
+    const nodes = this.nodes, pivot = _t2.copy(nodes[k].p);
+    for (let i = k; i < nodes.length; i++) {
+      let j = i;
+      while (j > k) j = nodes[j].parent;
+      if (j !== k) continue;
+      const n = nodes[i];
+      n.w.premultiply(q);
+      n.d.premultiply(q);
+      if (i !== k) n.p.sub(pivot).applyQuaternion(q).add(pivot);
+    }
   }
 
   /** Finger curl 0 (open, as modelled) .. 1 (fist). No-op for hands without curl bones. */

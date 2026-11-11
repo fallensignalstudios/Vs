@@ -17,7 +17,7 @@
  *    wrecks.ts and share `ShipMaterials`.
  */
 import * as THREE from 'three';
-import type { Game, MatId } from '@/core/api';
+import type { Game, MatId, ScenicShipLook } from '@/core/api';
 import { PALETTE } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { GeneratedShip, type ShipModelId } from '@/world/props/ships';
@@ -196,6 +196,7 @@ export interface ScenicShipState {
   engines: number;
   lights: number;
   readonly length: number;
+  setLook(look: ScenicShipLook): void;
 }
 
 export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: ShipKind, scale?: number): THREE.Object3D {
@@ -236,6 +237,7 @@ export function buildShip(shared: SharedUniforms, mats: ShipMaterials, kind: Shi
     get lights() { return gen.lights; },
     set lights(v: number) { gen.lights = v; },
     get length() { return (gen.loaded ? gen.length : PROC_LENGTH[kind]) * group.scale.x; },
+    setLook(look: ScenicShipLook) { gen.setLook(look); },
   };
   group.userData.ship = state;
   group.scale.setScalar(s);

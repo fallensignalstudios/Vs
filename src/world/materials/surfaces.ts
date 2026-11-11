@@ -22,6 +22,8 @@ import type { AurUniform } from './patch';
 export const SURFACE_SET_IDS = [
   'marble_dark', 'stone_pale', 'stone_worn', 'bronze_plate', 'panel_navy', 'metal_blackgold', 'frost', 'eclipse_tissue',
   'concrete_hangar',
+  // ADDED (polish 4): large smooth white-silver marble slab, light wet grey floor marble, fine engraved gold
+  'marble_slab', 'floor_wet_grey', 'gold_inlay',
 ] as const;
 export type SurfaceSetId = (typeof SURFACE_SET_IDS)[number];
 
@@ -47,7 +49,7 @@ export type SurfaceManifest = Partial<Record<SurfaceSetId, SurfaceManifestEntry>
  */
 export const SET_ROUGHNESS_MEAN: Record<SurfaceSetId, number> = {
   marble_dark: 0.17, stone_pale: 0.8, stone_worn: 0.68, bronze_plate: 0.45, panel_navy: 0.37, metal_blackgold: 0.62,
-  frost: 0.61, eclipse_tissue: 0.32, concrete_hangar: 0.73,
+  frost: 0.61, eclipse_tissue: 0.32, concrete_hangar: 0.73, marble_slab: 0.23, floor_wet_grey: 0.15, gold_inlay: 0.28,
 };
 
 /**
@@ -55,7 +57,7 @@ export const SET_ROUGHNESS_MEAN: Record<SurfaceSetId, number> = {
  * manifest's `tileMeters` and `metal`, whether the photo is isotropic (may be turned per slab: marble, frost,
  * tissue, hammered bronze — not coursed stone, panels, chevrons or deck plates) and whether it has a mask.
  */
-export const SET_DEFAULTS: Record<SurfaceSetId, { tileMeters: number; metal: boolean; isotropic: boolean; emissive: boolean }> = {
+export const SET_DEFAULTS: Record<SurfaceSetId, { tileMeters: number; metal: boolean; isotropic: boolean; emissive: boolean; maxSize?: number; snap?: number }> = {
   marble_dark: { tileMeters: 2.5, metal: false, isotropic: true, emissive: false },
   stone_pale: { tileMeters: 2.5, metal: false, isotropic: false, emissive: false },
   stone_worn: { tileMeters: 3, metal: false, isotropic: false, emissive: false },
@@ -64,7 +66,13 @@ export const SET_DEFAULTS: Record<SurfaceSetId, { tileMeters: number; metal: boo
   metal_blackgold: { tileMeters: 2, metal: true, isotropic: false, emissive: false },
   frost: { tileMeters: 1.5, metal: false, isotropic: true, emissive: false },
   eclipse_tissue: { tileMeters: 2, metal: false, isotropic: true, emissive: true },
-  concrete_hangar: { tileMeters: 6, metal: false, isotropic: false, emissive: false },
+  // polish 4: the deck is a square 6 × 6 grid of 1 m plates, so it may be turned by quarter turns and shifted by whole
+  // plates (`snap`: offsets in 1/6 of a tile) — the plate seams stay aligned and the tyre marks stop repeating
+  concrete_hangar: { tileMeters: 6, metal: false, isotropic: true, emissive: false, snap: 6 },
+  marble_slab: { tileMeters: 4, metal: false, isotropic: true, emissive: false },
+  floor_wet_grey: { tileMeters: 5, metal: false, isotropic: true, emissive: false },
+  // (fine engraving on thin trims: 512² is all it can show, and it is in every zone)
+  gold_inlay: { tileMeters: 0.6, metal: true, isotropic: false, emissive: false, maxSize: 512 },
 };
 
 /** Map edge (px) for a quality profile's `textureSize`: the delivered maps are 1024², never upscaled. */
@@ -75,7 +83,8 @@ export function surfaceMapSize(textureSize: number): number {
 /** Mean linear luminance of each set's albedo, measured on the delivered maps (the pivot of `contrast`). */
 export const SET_LUMINANCE_MEAN: Record<SurfaceSetId, number> = {
   marble_dark: 0.0151, stone_pale: 0.497, stone_worn: 0.0681, bronze_plate: 0.1155, panel_navy: 0.0365,
-  metal_blackgold: 0.0477, frost: 0.2242, eclipse_tissue: 0.0183, concrete_hangar: 0.143,
+  metal_blackgold: 0.0477, frost: 0.2242, eclipse_tissue: 0.0183, concrete_hangar: 0.143, marble_slab: 0.7818,
+  floor_wet_grey: 0.4003, gold_inlay: 0.471,
 };
 
 /** Shared uniform holders of one set (every material mapped onto it reads these). */
@@ -115,6 +124,8 @@ export interface SurfaceSetsHost {
   onZone?(loading: () => void, ready: () => void): void;
   /** ask the renderer for one fresh environment probe */
   refreshEnvironment?(): void;
+  /** ADDED (polish 4): the sets worn by materials that are in the scene right now (checked on `zone:ready`) */
+  inUse?(): Set<SurfaceSetId>;
   debug?: boolean;
 }
 
@@ -198,6 +209,18 @@ export class SurfaceSets {
     if (e.status === 'idle' && this.enabled) void this.load(e);
   }
 
+  /**
+   * ADDED (polish 4): a material wearing `id` is being DRAWN (its `onBeforeRender`). Cheap enough to run per draw.
+   * A material cached across zones by another subsystem (scenic hulls, props built once) is drawn without ever
+   * being requested again: this keeps its set alive for the zone, and reloads it if a zone change released it.
+   */
+  drawn(id: SurfaceSetId): void {
+    const e = this.entries.get(id);
+    if (!e) return;
+    if (e.lastUse !== this.epoch) e.lastUse = this.epoch;
+    if (e.status === 'idle' && this.enabled) void this.load(e);
+  }
+
   /** Resolves once no set is loading (or after `timeoutMs`). For captures and tests. */
   async settled(timeoutMs = 15000): Promise<boolean> {
     const t0 = now();
@@ -233,7 +256,8 @@ export class SurfaceSets {
     }
     if (!allowReload) return;
     for (const e of this.entries.values()) {
-      if (e.status === 'ready' && e.size !== q.size && this.enabled) void this.load(e);
+      const want = Math.min(q.size, SET_DEFAULTS[e.id].maxSize ?? q.size);
+      if (e.status === 'ready' && e.size !== want && this.enabled) void this.load(e);
     }
   }
 
@@ -244,8 +268,11 @@ export class SurfaceSets {
   }
 
   private zoneReady(): void {
-    // the new zone is built and compiled: anything it never asked for goes
+    // the new zone is built and compiled: anything it never asked for goes — except sets a material that is still
+    // in the scene wears (polish 4: cached across zones by another subsystem, see `drawn()`)
+    const inUse = this.host.inUse?.();
     for (const e of this.entries.values()) {
+      if (inUse?.has(e.id)) e.lastUse = this.epoch;
       if (e.lastUse < this.epoch && (e.status === 'ready' || e.status === 'loading')) this.release(e);
     }
     this.live = true;
@@ -298,7 +325,8 @@ export class SurfaceSets {
       const man = await this.manifest();
       const m = man?.[e.id];
       if (!m) throw new Error('not in the manifest');
-      const { size, anisotropy } = this.host.quality();
+      const q = this.host.quality();
+      const size = Math.min(q.size, SET_DEFAULTS[e.id].maxSize ?? q.size), anisotropy = q.anisotropy;
       const files: Array<[string, boolean]> = [[m.albedo, true], [m.normal, false], [m.orm, false]];
       if (m.emissive) files.push([m.emissive, true]);
       const bitmaps = await Promise.all(files.map(([f]) => this.bitmap(f, size)));

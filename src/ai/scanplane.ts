@@ -4,7 +4,7 @@
  * cover between the source and the player's chest hides them.
  */
 import * as THREE from 'three';
-import type { BeamHandle, LoopHandle, ScanPlaneHandle, ScanPlaneVisual, Vec3Like } from '@/core/api';
+import type { BeamHandle, LoopHandle, ScanPlaneColor, ScanPlaneHandle, ScanPlaneVisual, Vec3Like } from '@/core/api';
 import { yawTo } from '@/core/mathx';
 import type { AiCore } from './core';
 import { caption, fin, live, nowOf, physicsOf, playerActor, vec, warnOnce } from './util';
@@ -19,6 +19,39 @@ export interface ScanPlaneOpts {
   phase?: number;
   source: Vec3Like;
   onDetect?: () => void;
+  /** ADDED (polish 4): the sheet's colour (see ScanPlaneColor) */
+  color?: ScanPlaneColor;
+}
+
+/** a usable linear RGB triple (three finite components ≥ 0), or null */
+function linearTriple(c: unknown): [number, number, number] | null {
+  if (!Array.isArray(c) || c.length !== 3) return null;
+  const [r, g, b] = c as unknown[];
+  if (typeof r !== 'number' || typeof g !== 'number' || typeof b !== 'number' || !Number.isFinite(r + g + b)) return null;
+  return [Math.max(0, r), Math.max(0, g), Math.max(0, b)];
+}
+
+/**
+ * The effect for a plane of colour `color`. A hex goes to `vfx.scanPlane(hex)` as it is. A linear triple is
+ * written to the sheet's colour uniform (`uColor`), which the effect's own constructor fills from a hex — the
+ * one place outside src/vfx that knows that uniform; a visual of another shape keeps its default colour.
+ */
+export function scanPlaneVisual(vfx: { scanPlane(color?: number): ScanPlaneVisual }, color: ScanPlaneColor | undefined): ScanPlaneVisual {
+  if (typeof color === 'number' && Number.isFinite(color)) return vfx.scanPlane(Math.max(0, Math.min(0xffffff, Math.round(color))));
+  const rgb = linearTriple(color);
+  const v = vfx.scanPlane();
+  if (rgb && v && v.object) {
+    v.object.traverse((o) => {
+      const mat = (o as THREE.Mesh).material as THREE.ShaderMaterial | THREE.Material[] | undefined;
+      if (!mat || Array.isArray(mat)) return;
+      const u = (mat as THREE.ShaderMaterial).uniforms?.uColor?.value as unknown;
+      if (u instanceof THREE.Vector3) u.set(rgb[0], rgb[1], rgb[2]);
+      else if (u instanceof THREE.Color) u.setRGB(rgb[0], rgb[1], rgb[2]);
+    });
+  } else if (color !== undefined && !rgb) {
+    warnOnce('scanPlane:color', 'scanPlane color must be a hex number or a [r, g, b] triple of finite numbers — using the default');
+  }
+  return v;
 }
 
 /** half thickness of the detection slab along the direction of travel (m) */
@@ -50,7 +83,7 @@ export class ScanPlaneImpl implements ScanPlaneHandle {
   private alert = 0;
   private nextDetect = 0;
   private removed = false;
-  /** current centre of the plane on the floor */
+  /** current centre of the plane on the floor (contract: ScanPlaneHandle.center) */
   readonly center = new THREE.Vector3();
 
   constructor(private readonly core: AiCore, opts: ScanPlaneOpts, private readonly onRemove: (p: ScanPlaneImpl) => void) {
@@ -65,7 +98,7 @@ export class ScanPlaneImpl implements ScanPlaneHandle {
     this.onDetect = typeof opts?.onDetect === 'function' ? opts.onDetect : undefined;
     // the plane stands across its direction of travel
     this.yaw = this.from.distanceToSquared(this.to) > 1e-6 ? yawTo(this.from.x, this.from.z, this.to.x, this.to.z) : 0;
-    const v = core.game.vfx.scanPlane();
+    const v = scanPlaneVisual(core.game.vfx, opts?.color);
     this.visual = live(v) ? v : null;
     this.loop = core.game.audio.loop('scanSweep', { pos: this.from, volume: 0.6 });
     this.place();

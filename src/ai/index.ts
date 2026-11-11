@@ -41,16 +41,34 @@ const ROLE_NAME: Record<EnemyRole, string> = {
   wallrunner: 'Wallrunner', weaver: 'Weaver', elite: 'Breach organism',
 };
 
-/** SpawnOpts.look → the create options it may carry (anything else is dropped) */
-function lookOpts(look: SpawnOpts['look'] | undefined): CharacterCreateOpts {
+/** what a look option holds: a switch, a finite number, or one side of the figure */
+type LookKind = 'bool' | 'num' | 'side';
+
+/**
+ * Every look option of `CharacterCreateOpts` (polish 4: also `scale`, `wounded`, `woundSide`). `seed` is the
+ * spawn's own, and `driverOnly` / `keep` are animation-driver switches, never a look. A look option chars adds
+ * later is forwarded once it is listed here.
+ */
+const LOOK_KEYS: Partial<Record<keyof NonNullable<SpawnOpts['look']>, LookKind>> = {
+  halfHuman: 'bool', bareHead: 'bool', halo: 'bool', wounded: 'bool',
+  corruption: 'num', variant: 'num', scale: 'num',
+  woundSide: 'side',
+};
+
+/**
+ * SpawnOpts.look → `chars.create` options. Every look option the character factory supports is forwarded, so a
+ * zone never has to bypass the AI to dress a figure (the Witness King: `{ wounded: true, woundSide: 'right' }`).
+ * Unknown keys and values of the wrong kind (a non-boolean switch, a non-finite number, a side that is neither
+ * 'left' nor 'right') are dropped: a bad value never reaches the factory.
+ */
+export function lookOpts(look: SpawnOpts['look'] | undefined): CharacterCreateOpts {
   if (!look || typeof look !== 'object') return {};
-  const out: CharacterCreateOpts = {};
-  if (look.halfHuman === true) out.halfHuman = true;
-  if (look.bareHead === true) out.bareHead = true;
-  if (look.halo === false) out.halo = false;
-  if (typeof look.corruption === 'number' && Number.isFinite(look.corruption)) out.corruption = look.corruption;
-  if (typeof look.variant === 'number' && Number.isFinite(look.variant)) out.variant = look.variant;
-  return out;
+  const out: Record<string, unknown> = {};
+  for (const [k, kind] of Object.entries(LOOK_KEYS)) {
+    const v = (look as Record<string, unknown>)[k];
+    if (kind === 'bool' ? typeof v === 'boolean' : kind === 'num' ? typeof v === 'number' && Number.isFinite(v) : v === 'left' || v === 'right') out[k] = v;
+  }
+  return out as CharacterCreateOpts;
 }
 
 function weakPointsFor(role: EnemyRole): WeakPoint[] {
@@ -215,7 +233,7 @@ class AiSystemImpl implements AiSystem, AiCore, EncounterHost {
     return c;
   }
 
-  spawnCompanion(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; mode?: CompanionMode; name?: string }): Companion {
+  spawnCompanion(who: HumanoidArchetype, opts: { pos: Vec3Like; yaw?: number; mode?: CompanionMode; name?: string; seed?: number; look?: SpawnOpts['look'] }): Companion {
     return this.spawnHumanoid(who, opts, false, opts?.mode ?? 'follow');
   }
 

@@ -2,20 +2,34 @@
  * Dressing with meaning: gold channels, conduit runs, the white-point landmark, frozen atmosphere, corruption.
  */
 import * as THREE from 'three';
-import type { RectOpts } from '@/core/api';
+import type { CrystalOpts, RectOpts } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { RENDER_LAYERS } from '@/core/api/render';
 import type { Geo, V2, V3 } from './geo';
 import { filletPath } from './geo';
 import { KitCtx, LINE_WIDTH, Part, localRand } from './core';
+import { buildCrystals } from './crystal';
 
-export interface ChannelOpts { h?: number; width?: number; color?: number; intensity?: number; pulse?: boolean; vertical?: boolean }
+export interface ChannelOpts { h?: number; width?: number; color?: number; intensity?: number; pulse?: boolean; vertical?: boolean; glow?: boolean }
 
 export function buildChannel(ctx: KitCtx, points: Array<[number, number]>, o: ChannelOpts = {}): THREE.Object3D {
-  const h = ctx.num(o.h, 0), width = ctx.num(o.width, 0.055, 0.04, 2);
+  const h = ctx.num(o.h, 0);
   const pts = (points ?? []).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
   const part = new Part(ctx, 'channel', new THREE.Vector3());
   if (pts.length < 2) { ctx.warn('channel-pts', 'channel(): needs at least two points — skipped'); return part.done(); }
+  // polish 4: a fine, non-glowing inlaid gold line unless the zone opts in to light (`glow: true`, or `pulse: true`)
+  if (!(o.glow ?? o.pulse === true)) {
+    const w = ctx.num(o.width, 0.034, 0.016, 2) * 0.65;
+    const path = pts.map((p): V3 => [p[0], h + (o.vertical ? 0 : 0.007), -p[1]]);
+    if (o.vertical) {
+      const a = path[0], b = path[path.length - 1], dx = b[0] - a[0], dz = b[2] - a[2], l = Math.hypot(dx, dz) || 1;
+      part.g(ctx.goldLine()).ribbon(path, Math.max(0.018, w), [-dz / l, 0, dx / l], false, true);
+    } else {
+      part.g(ctx.goldLine()).ribbon(path, Math.max(0.02, w));
+    }
+    return part.done();
+  }
+  const width = ctx.num(o.width, 0.055, 0.04, 2);
   const over: Record<string, unknown> = {};
   if (o.color !== undefined) over.emissive = o.color;
   if (o.intensity !== undefined) over.emissiveIntensity = ctx.num(o.intensity, 3, 0, 40);
@@ -32,6 +46,28 @@ export function buildChannel(ctx: KitCtx, points: Array<[number, number]>, o: Ch
   } else {
     part.g(mat).ribbon(path, width);
   }
+  return part.done();
+}
+
+/**
+ * ADDED (polish 4): a fine gold line laid on a WALL face along PLAN points [x, n, h] — vertical pilaster lines,
+ * frames, any direction (the request: `channel({ vertical })` only runs horizontally). `facing` = the direction the
+ * wall face looks (plan degrees); the line sits 4 mm proud of it. Non-glowing gold by default, `glow: true` for a
+ * light line (`color`, `intensity` then apply).
+ */
+export function buildWallLine(ctx: KitCtx, points: Array<[number, number, number]>, o: { facing?: number; width?: number; glow?: boolean; color?: number; intensity?: number; closed?: boolean } = {}): THREE.Object3D {
+  const part = new Part(ctx, 'wallLine', new THREE.Vector3());
+  const a = (ctx.num(o.facing, 0) * Math.PI) / 180, f: V3 = [Math.sin(a), 0, -Math.cos(a)];
+  const pts = (points ?? []).filter((p) => Array.isArray(p) && p.every((v) => Number.isFinite(v))).map((p): V3 => [p[0] + f[0] * 0.004, p[2], -p[1] + f[2] * 0.004]);
+  if (pts.length < 2) { ctx.warn('wallLine-pts', 'wallLine(): needs at least two points — skipped'); return part.done(); }
+  const glow = o.glow === true;
+  const over: Record<string, unknown> = { lineWidth: ctx.num(o.width, 0.03, 0.01, 1) };
+  if (glow) {
+    over.emissiveIntensity = ctx.num(o.intensity, 1.9, 0, 40);
+    if (o.color !== undefined) over.emissive = o.color;
+  }
+  const mat = glow ? ctx.inlay('goldChannel', over) : ctx.goldLine();
+  part.g(mat).ribbon(pts, ctx.num(o.width, 0.03, 0.01, 1), f, o.closed === true);
   return part.done();
 }
 
@@ -213,10 +249,15 @@ function skipCorruptionDraws(rnd: () => number, R: number): number[] {
   return got;
 }
 
-export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: number; r: number; intensity?: number; onWall?: boolean; yawDeg?: number }): THREE.Object3D {
+export function buildCorruption(ctx: KitCtx, o: { x: number; n: number; h?: number; r: number; intensity?: number; onWall?: boolean; yawDeg?: number; style?: 'growth' | 'crystal'; size?: CrystalOpts['size']; light?: boolean }): THREE.Object3D {
   const R = ctx.num(o.r, 2, 0.3, 40), k = ctx.num(o.intensity, 1, 0, 4);
   const pos = ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0));
-  const rnd = localRand(...skipCorruptionDraws(ctx.rand, R), pos.x, pos.z);
+  const drawn = skipCorruptionDraws(ctx.rand, R);
+  if (o.style === 'crystal') {
+    // polish 4: grounded violet crystal clusters (see crystal.ts); the zone stream is advanced exactly as before
+    return buildCrystals(ctx, { x: o.x, n: o.n, h: o.h, r: R * 0.6, size: o.size, intensity: Math.min(3, k), onWall: o.onWall, yawDeg: o.yawDeg, light: o.light !== false });
+  }
+  const rnd = localRand(...drawn, pos.x, pos.z);
   const part = new Part(ctx, 'corruption', pos, ctx.yaw(ctx.num(o.yawDeg, 0)));
   const used: Geo[] = [];
   const G = (g: Geo): Geo => {

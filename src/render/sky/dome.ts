@@ -39,7 +39,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
     uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
     uHazeAmt: shared.uHazeAmt, uHazeFall: shared.uHazeFall, uGround: { value: 0 }, uGain: { value: 1 },
     uSat: { value: 1 }, uNebTint: { value: new THREE.Color(1, 1, 1) }, uStarDens: { value: 1 }, uRedGain: { value: 1 },
-    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uCoreTint: { value: new THREE.Color(1, 1, 1) }, uMatterTint: { value: new THREE.Color(1, 1, 1) }, uTint: { value: new THREE.Color(1, 1, 1) },
+    uEnclose: { value: 0 }, uEncCol: { value: new THREE.Color() }, uVeil: { value: 0 }, uWoundScale: { value: 1 }, uSwirl: { value: 1 }, uWoundCore: { value: 1 }, uCoreTint: { value: new THREE.Color(1, 1, 1) }, uMatterTint: { value: new THREE.Color(1, 1, 1) }, uTint: { value: new THREE.Color(1, 1, 1) }, uSkyTint: { value: new THREE.Color(1, 1, 1) },
   };
   // one program per quality tier, sharing every uniform; variants are created the first time they are needed
   const variants: Array<THREE.ShaderMaterial | null> = [null, null, null];
@@ -110,6 +110,7 @@ export function createSkyDome(shared: SharedUniforms): SkyDome {
       uniforms.uCoreTint.value.copy(s.coreTint);
       uniforms.uMatterTint.value.copy(s.matterTint);
       uniforms.uTint.value.copy(s.tint);
+      uniforms.uSkyTint.value.copy(s.skyTint);
       uniforms.uWoundScale.value = woundScale(activity);
     },
     get detail() { return detail; },

@@ -6,7 +6,7 @@
  * Draw calls: stone, gold, channel light, core, claws (instanced), filaments = 6. Owns one point light.
  */
 import * as THREE from 'three';
-import type { MaterialLibrary } from '@/core/api';
+import type { CrownmarkFiveOpts, MaterialLibrary } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { clamp01 } from '@/core/mathx';
 import { PropBase, TMP, ramp, revealBody, spring, uC, uF, type Glow } from './base';
@@ -20,7 +20,10 @@ const DEPTH = 0.13;
 const CLAW_OPEN = 1.25;
 const UP: readonly [number, number, number] = [Math.PI / 2, 0, 0];
 
-type Params = { glow: number; integrated: number };
+type Params = { glow: number; integrated: number; steady: number };
+
+/** ADDED (polish 4): options of `crownmarkFive` (see the contract's CrownmarkFiveOpts) */
+export type CrownmarkOpts = CrownmarkFiveOpts;
 
 export class CrownmarkFive extends PropBase<Params> {
   private readonly chan: Glow;
@@ -29,9 +32,10 @@ export class CrownmarkFive extends PropBase<Params> {
   private readonly filaments: THREE.ShaderMaterial;
   private readonly light: THREE.PointLight;
   private lastI = -1;
+  private lightScale = 1;
 
-  constructor(lib: MaterialLibrary | null) {
-    super('crownmarkFive', lib, { glow: 0.25, integrated: 0 }, { glow: spring(5, 0.8), integrated: spring(3.2, 0.78) });
+  constructor(lib: MaterialLibrary | null, opts: CrownmarkOpts = {}) {
+    super('crownmarkFive', lib, { glow: 0.25, integrated: 0, steady: 0 }, { glow: spring(5, 0.8), integrated: spring(3.2, 0.78), steady: spring(3, 0.9) });
     const P = new Parts();
     const v = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
 
@@ -197,18 +201,27 @@ export class CrownmarkFive extends PropBase<Params> {
 
     this.addSocket('core', 0, YC, 0);
     this.addSocket('top', 0, YC + TIPS[0], 0);
-    this.addCollider({ kind: 'cyl', r: 1.78, hy: 1.5 }, 0, 1.5, 0);
+    // polish 4: a monumental Crownmark (`scale`): the object, its light reach and its collider grow together
+    const k = typeof opts.scale === 'number' && Number.isFinite(opts.scale) ? Math.min(4, Math.max(0.5, opts.scale)) : 1;
+    if (k !== 1) {
+      this.object.scale.setScalar(k);
+      this.light.distance *= k;
+    }
+    this.lightScale = k * k;
+    this.addCollider({ kind: 'cyl', r: 1.78 * k, hy: 1.5 * k }, 0, 1.5 * k, 0);
     this.ready();
   }
 
   protected apply(_dt: number, time: number): void {
-    const g = clamp01(this.cur.glow), I = clamp01(this.cur.integrated);
-    const breathe = 1 + 0.05 * Math.sin(time * 1.3);
-    this.chan.set((0.1 + 2.2 * g + 0.45 * I) * breathe);
-    this.core.set(0.4 + 4.9 * g);
-    this.light.intensity = 5 + 40 * g;
-    this.filaments.uniforms.uReveal.value = ramp(I, 0.3, 1) * 1.001;
-    this.filaments.uniforms.uGain.value = 1.6 + 1.2 * g;
+    const g = clamp01(this.cur.glow), I = clamp01(this.cur.integrated), st = clamp01(this.cur.steady);
+    // polish 4: `steady` is light only — a calm, unwavering core and channel light (and the filaments lit) with
+    // the claws untouched (`integrated` folds them; the script forbids that before the consequence beat)
+    const breathe = 1 + 0.05 * (1 - st) * Math.sin(time * 1.3);
+    this.chan.set((0.1 + 2.2 * g + 0.45 * I + 1.2 * st) * breathe);
+    this.core.set(0.4 + 4.9 * g + 3.5 * st);
+    this.light.intensity = (5 + 40 * g + 30 * st) * this.lightScale;
+    this.filaments.uniforms.uReveal.value = Math.max(ramp(I, 0.3, 1), 0.85 * st) * 1.001;
+    this.filaments.uniforms.uGain.value = 1.6 + 1.2 * g + 0.8 * st;
     if (I === this.lastI) return;
     this.lastI = I;
     const { m, m2, q, v, s, e } = TMP;

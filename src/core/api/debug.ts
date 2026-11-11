@@ -125,6 +125,9 @@ export interface DebugApi {
    * show / hide the HUD. Polish 3: `hud(false)` is a clean frame for screenshots — it also hides the zone card,
    * toasts, subtitles, captions, the context prompt and the skip hint (`ui.setCleanFrame`), and a cinematic
    * restoring the HUD does not bring them back; `hud(true)` shows everything again.
+   * Polish 4: also a `ui.card(…, { style: 'context' })` (the information overlay the Z07 bridge sets over the
+   * hologram); the narrative cards ('witness', 'consequence', 'title', 'flash'), the status board and world text
+   * (`ui.worldText`, diegetic labels) still draw. To capture a context card, do not call `hud(false)`.
    */
   hud(visible: boolean): void;
   /** show physics/nav debug wireframes */

@@ -102,6 +102,11 @@ export interface PbrLayerParams {
   /** the photo replaces the material's `color` instead of being tinted by it (default false) */
   replaceColor?: boolean;
   /**
+   * ADDED (polish 4): a grid photo (deck plates): per-slab / per-tile offsets snap to 1/`snap` of a tile, and without
+   * slabs every tile of the photo is turned and shifted on its own, so a large floor never shows the photo's repeat
+   */
+  snap?: number;
+  /**
    * 0 … 1: how much of the albedo comes from the photo (default 1); the rest is the procedural family's albedo
    * under the same tint — softens a photo's own texture (the ashlar's pitting) toward the procedural marble
    */
@@ -211,18 +216,27 @@ AurTp aurTpAxis( vec2 uvm, vec2 gx, vec2 gy, float axisSeed ) {
 	{
 		float k = tpXSet.x;
 		float xs = tpX.x;
+		#if defined( AUR_PBR_SNAP ) && ! defined( AUR_PANEL )
+			// polish 4: no slabs — every tile of the photo gets its own turn and shift (plate-snapped, see below)
+			cellH = aurHash22( floor( uvm * xs ) + vec2( axisSeed * 37.0, 11.0 ) );
+		#endif
 		#ifdef AUR_PBR_ISO
 			mat2 R = aurRot2( floor( cellH.x * 4.0 ) * 1.5707963 );
 		#else
 			mat2 R = mat2( 1.0 );
 		#endif
-		vec2 xuv = R * uvm * xs + cellH * 7.31;
+		#ifdef AUR_PBR_SNAP
+			// polish 4: a grid photo (deck plates) shifts by whole cells only, so its seams stay on one lattice
+			vec2 xuv = R * uvm * xs + floor( cellH * 7.31 * AUR_PBR_SNAP ) / AUR_PBR_SNAP;
+		#else
+			vec2 xuv = R * uvm * xs + cellH * 7.31;
+		#endif
 		vec2 xdx = R * gx * xs, xdy = R * gy * xs;
 		vec4 xa = textureGrad( tpXAlbedo, xuv, xdx, xdy );
 		vec3 xn = textureGrad( tpXNormal, xuv, xdx, xdy ).xyz * 2.0 - 1.0;
 		vec4 xo = textureGrad( tpXOrm, xuv, xdx, xdy );
 		xn.xy = xn.xy * R; // back from the turned photo frame into the projection frame
-		#if defined( AUR_PBR_ISO ) && ! defined( AUR_PANEL ) && ! defined( AUR_PBR_EMIT )
+		#if defined( AUR_PBR_ISO ) && ! defined( AUR_PANEL ) && ! defined( AUR_PBR_EMIT ) && ! defined( AUR_PBR_SNAP )
 			// no slabs to hide the repeat: fade in a second, turned and rescaled sample along a macro field
 			mat2 R2 = aurRot2( 2.17 + axisSeed * 1.31 );
 			float s2 = xs * 0.731;
@@ -404,8 +418,10 @@ export function triplanarPatch(
   if (pbr) {
     const x = pbr.params;
     defines.AUR_PBR = 1;
-    key += `:x${x.isotropic ? 'i' : ''}${x.emissiveMask ? 'e' : ''}`;
+    const snap = x.snap && x.snap >= 1 ? Math.round(x.snap) : 0;
+    key += `:x${x.isotropic ? 'i' : ''}${x.emissiveMask ? 'e' : ''}${snap ? `s${snap}` : ''}`;
     if (x.isotropic) defines.AUR_PBR_ISO = 1;
+    if (snap) defines.AUR_PBR_SNAP = `${snap}.0`;
     uniforms.tpXAlbedo = pbr.uniforms.albedo;
     uniforms.tpXNormal = pbr.uniforms.normal;
     uniforms.tpXOrm = pbr.uniforms.orm;

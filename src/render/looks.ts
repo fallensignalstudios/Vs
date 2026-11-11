@@ -143,8 +143,9 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     grade: { tint: 0xeceaf2, saturation: 0.84, contrast: 1.2, lift: -0.008, shadowsTint: 0xb0b2d8, highlightsTint: 0xffe2bc },
     vignette: 0.54, grain: 0.34, chromaticAberration: 0.24,
     ao: { intensity: 3.4, radius: 1.1 },
-    ambient: { sky: 0x3e4452, ground: 0x0e0d0f, intensity: 0.3 },
-    envIntensity: 0.9,
+    // polish 4: a little more fill and probe light for the kit's strips that no longer glow
+    ambient: { sky: 0x3e4452, ground: 0x0e0d0f, intensity: 0.34 },
+    envIntensity: 1.0,
   }),
 
   // Z08 — quarantine crucible: luminous white-gold walls lit from their gold seams over a wet black floor
@@ -187,8 +188,9 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     grade: { tint: 0xf2f4f8, saturation: 0.8, contrast: 1.26, lift: -0.02, shadowsTint: 0x9aa6cc, highlightsTint: 0xfff0dc },
     vignette: 0.5, grain: 0.28, chromaticAberration: 0.2,
     ao: { intensity: 3.2, radius: 1.4 },
-    ambient: { sky: 0x5a5e66, ground: 0x0a0a0c, intensity: 0.28 },
-    envIntensity: 1.25,
+    // polish 4: a little more fill and probe light for the kit's strips that no longer glow
+    ambient: { sky: 0x5a5e66, ground: 0x0a0a0c, intensity: 0.32 },
+    envIntensity: 1.35,
   }),
 
   // Z11 — observation gallery: quiet and warm inside — its own grade is the soft one: low contrast, lifted
@@ -202,8 +204,9 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
     grade: { tint: 0xf4f0ec, saturation: 0.84, contrast: 0.98, lift: 0.02, shadowsTint: 0xbeb8da, highlightsTint: 0xffd6a4 },
     vignette: 0.58, grain: 0.38, chromaticAberration: 0.14,
     ao: { intensity: 2.8, radius: 1.0 },
-    ambient: { sky: 0x68686e, ground: 0x161418, intensity: 0.42 },
-    envIntensity: 1.05,
+    // polish 4: a little more fill and probe light for the kit's strips that no longer glow
+    ambient: { sky: 0x68686e, ground: 0x161418, intensity: 0.48 },
+    envIntensity: 1.15,
   }),
 
   // Z12 — outer-ring hangar: wide, blue-grey haze, neutral-cool; both fleets' light at wary distance.
@@ -220,14 +223,17 @@ export const LOOKS: Readonly<Record<LookName, Look>> = {
 
   // The historical sequence — a remembered image: desaturated gold-white, blooming, grainy.
   witness: look({
-    exposure: 1.25,
-    bloom: { intensity: 1.3, threshold: 0.7, radius: 0.85 },
-    fog: { color: 0xb8a67c, density: 0.018 },
-    grade: { tint: 0xffecc4, saturation: 0.22, contrast: 0.94, lift: 0.04, shadowsTint: 0xffe2b0, highlightsTint: 0xfff3d6 },
-    vignette: 0.65, grain: 0.75, chromaticAberration: 0.55,
-    ao: { intensity: 2.0, radius: 1.4 },
-    ambient: { sky: 0xfff0d0, ground: 0x8a7a5a, intensity: 0.85 },
-    envIntensity: 0.8,
+    // polish 4: a luminous SILVER-WHITE memory space, not a sepia print (critic: "a sepia plinth against stars",
+    // faces flattened at saturation 0.22): pale silver haze and fill, cool-white highlights, twice the saturation for
+    // skin, armour and the King's wound to read; still soft, glowing and grainy so it reads as remembered
+    exposure: 1.28,
+    bloom: { intensity: 1.15, threshold: 0.72, radius: 0.85 },
+    fog: { color: 0xc9ccd2, density: 0.016 },
+    grade: { tint: 0xf6f6f8, saturation: 0.48, contrast: 1.02, lift: 0.03, shadowsTint: 0xc8d2e2, highlightsTint: 0xfbf8f2 },
+    vignette: 0.55, grain: 0.55, chromaticAberration: 0.35,
+    ao: { intensity: 2.2, radius: 1.4 },
+    ambient: { sky: 0xf0f2f6, ground: 0x8c8e92, intensity: 0.85 },
+    envIntensity: 0.9,
   }),
 };
 

@@ -213,33 +213,107 @@ function shipClock(): number {
 export interface HullUniforms {
   uShipEmis: { value: number };
   uShipMinRough: { value: number };
+  /** ADDED (polish pass 4): the hull look's live values (see {@link HullLook}) */
+  uShipTint: { value: THREE.Vector3 };
+  uShipDesat: { value: number };
+  uShipMaxMetal: { value: number };
+  uShipRim: { value: THREE.Vector3 };
+  uShipFill: { value: THREE.Vector3 };
 }
 
 /**
- * Clone the template material for one ship: emissive engine texels, a roughness floor, softer environment
- * reflections, and (with `haze`) fog-exempt distance haze toward the sky colour.
+ * ADDED (polish pass 4): how a hull reads on screen, independent of the scene's lights. The files are dark,
+ * glossy and partly metallic: against a night sky, lit only by a far key, they read as black silhouettes with glow.
+ *  - `tint` / `desat`: grade the colour map (linear multiplier; 0..1 toward its own luminance) — e.g. the shuttle's
+ *    weathered tan bronze instead of dark brown;
+ *  - `maxMetal`: cap the metalness so the hull answers the key and the fill with diffuse light, not only with
+ *    reflections of a dark environment;
+ *  - `rim`: a fresnel edge light (linear RGB × strength) that draws the form against the sky;
+ *  - `fill`: a sky hemisphere fill (linear RGB × strength, brightest on up-facing plates) — the environment it flies in.
  */
-export function patchHull(base: THREE.MeshStandardMaterial, mask: 'amber' | 'blue', opts: { haze?: ShipHaze; minRough?: number; envIntensity?: number } = {}): { material: THREE.MeshStandardMaterial; uniforms: HullUniforms } {
+export interface HullLook {
+  tint?: readonly [number, number, number];
+  desat?: number;
+  maxMetal?: number;
+  rim?: readonly [number, number, number];
+  fill?: readonly [number, number, number];
+}
+
+/**
+ * ADDED (polish pass 4): extra shading for one hull — `glsl` (declarations) goes after `<common>`, `body` runs after
+ * the emissive map with `vShipLocal` (object-space position, raw file units), `vShipWorldN` (world normal),
+ * `vShipWorldP` (world position), `normal`
+ * (view space), `diffuseColor` and `totalEmissiveRadiance` in scope. `key` distinguishes the program.
+ */
+export interface HullShade {
+  key: string;
+  uniforms: Record<string, THREE.IUniform>;
+  glsl: string;
+  body: string;
+}
+
+const v3 = (t: readonly [number, number, number] | undefined, d: number): THREE.Vector3 => new THREE.Vector3(t?.[0] ?? d, t?.[1] ?? d, t?.[2] ?? d);
+
+/**
+ * Clone the template material for one ship: emissive engine texels, a roughness floor, softer environment
+ * reflections, the hull look ({@link HullLook}), optional far-field haze and optional extra shading.
+ */
+export function patchHull(
+  base: THREE.MeshStandardMaterial,
+  mask: 'amber' | 'blue',
+  opts: { haze?: ShipHaze; minRough?: number; envIntensity?: number; look?: HullLook; shade?: HullShade } = {},
+): { material: THREE.MeshStandardMaterial; uniforms: HullUniforms } {
   const m = base.clone();
   m.name = `ship:hull:${mask}${opts.haze ? ':far' : ''}`;
   m.envMapIntensity = opts.envIntensity ?? 0.5;
   m.fog = !opts.haze;
-  const uniforms: HullUniforms = { uShipEmis: { value: 0 }, uShipMinRough: { value: opts.minRough ?? 0.4 } };
+  const look = opts.look ?? {};
+  const uniforms: HullUniforms = {
+    uShipEmis: { value: 0 }, uShipMinRough: { value: opts.minRough ?? 0.4 },
+    uShipTint: { value: v3(look.tint, 1) }, uShipDesat: { value: look.desat ?? 0 }, uShipMaxMetal: { value: look.maxMetal ?? 1 },
+    uShipRim: { value: v3(look.rim, 0) }, uShipFill: { value: v3(look.fill, 0) },
+  };
   const haze = opts.haze;
+  const extra = opts.shade;
   m.onBeforeCompile = (shader) => {
-    shader.uniforms.uShipEmis = uniforms.uShipEmis;
-    shader.uniforms.uShipMinRough = uniforms.uShipMinRough;
+    for (const [k, u] of Object.entries(uniforms)) shader.uniforms[k] = u;
+    if (extra) for (const [k, u] of Object.entries(extra.uniforms)) shader.uniforms[k] = u;
+    const local = !!extra;
+    if (local) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vShipLocal;\nvarying vec3 vShipWorldN;\nvarying vec3 vShipWorldP;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\n\tvShipLocal = transformed;\n\tvShipWorldN = normalize(mat3(modelMatrix) * objectNormal);\n\tvShipWorldP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    }
     let frag = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uShipEmis;\nuniform float uShipMinRough;')
+      .replace('#include <common>', `#include <common>
+uniform float uShipEmis;
+uniform float uShipMinRough;
+uniform vec3 uShipTint;
+uniform float uShipDesat;
+uniform float uShipMaxMetal;
+uniform vec3 uShipRim;
+uniform vec3 uShipFill;
+${local ? 'varying vec3 vShipLocal;\nvarying vec3 vShipWorldN;\nvarying vec3 vShipWorldP;' : ''}
+${extra ? extra.glsl : ''}`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+	vec3 shipTex = diffuseColor.rgb;
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))), uShipDesat) * uShipTint;`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = max(roughnessFactor, uShipMinRough);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n\tmetalnessFactor = min(metalnessFactor, uShipMaxMetal);')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 	{
-		// the colour map's own engine texels (forge thresholds, linear): ${mask}
-		vec3 tc = diffuseColor.rgb;
+		// the colour map's own engine texels (forge thresholds, linear, before the look's grade): ${mask}
+		vec3 tc = shipTex;
 		${mask === 'amber'
           ? 'float glowMask = smoothstep(0.55, 0.75, tc.r) * smoothstep(0.12, 0.22, tc.g) * (1.0 - smoothstep(0.2, 0.32, tc.b)) * smoothstep(0.4, 0.55, tc.r - tc.b);'
           : 'float glowMask = smoothstep(0.55, 0.75, tc.b) * smoothstep(0.42, 0.56, tc.g) * smoothstep(0.0, 0.03, tc.b - tc.r);'}
 		totalEmissiveRadiance += tc * glowMask * uShipEmis;
+		// the hull look: a fresnel rim and a sky hemisphere fill (both scene-independent)
+		vec3 shipV = normalize(vViewPosition);
+		float shipFres = pow(1.0 - clamp(dot(normal, shipV), 0.0, 1.0), 3.0);
+		float shipHemi = 0.5 + 0.5 * dot(normal, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+		totalEmissiveRadiance += uShipRim * shipFres * (0.4 + 0.6 * shipHemi) + diffuseColor.rgb * uShipFill * (0.35 + 0.65 * shipHemi);
+		${extra ? extra.body : ''}
 	}`);
     if (haze) {
       for (const [k, u] of Object.entries(haze.uniforms)) shader.uniforms[k] = u;
@@ -259,6 +333,6 @@ export function patchHull(base: THREE.MeshStandardMaterial, mask: 'amber' | 'blu
     }
     shader.fragmentShader = frag;
   };
-  m.customProgramCacheKey = () => `ship:${mask}:${haze ? 'far' : 'near'}`;
+  m.customProgramCacheKey = () => `ship:${mask}:${haze ? 'far' : 'near'}:${extra ? extra.key : '-'}`;
   return { material: m, uniforms };
 }

@@ -115,8 +115,12 @@ function emitRib(part: Part, d: RibDims, style: RibStyle, lit: boolean, mat: Mat
     trim.boxOn(T * 1.53, 0.05, D * 1.25, x, 0.66, 0);
     part.g('goldDark').boxOn(T * 1.2, 0.2, D * 1.05, x, 0.71, 0);
   };
+  // polish 4: unlit by default — a fine gold line inlaid along the keel; `lit: true` restores the light seam
+  const goldKeel: V2[] = [[-T / 2 - 0.012, -0.018], [-T / 2 - 0.012, 0.018], [-T / 2 + 0.01, 0.018], [-T / 2 + 0.01, -0.018]];
   const seamRun = (i0: number, i1: number): void => {
-    if (lit && i1 - i0 >= 1) part.g(ctx.seam(dark)).sweep(seam, all.slice(i0, i1 + 1), true, true);
+    if (i1 - i0 < 1) return;
+    if (lit) part.g(ctx.seam(dark)).sweep(seam, all.slice(i0, i1 + 1), true, true);
+    else part.g('goldTrim').sweep(goldKeel, all.slice(i0, i1 + 1), true, true);
   };
 
   if (style === 'half') {
@@ -168,7 +172,7 @@ function ribColliders(part: Part, d: RibDims, style: RibStyle): void {
 export function buildRib(ctx: KitCtx, o: RibOpts): THREE.Object3D {
   const d = ribDims(ctx, o), style: RibStyle = o.style ?? 'arch';
   const part = new Part(ctx, 'rib', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0)), ctx.yaw(ctx.num(o.yawDeg, 0)));
-  emitRib(part, d, style, o.lit !== false, o.mat ?? 'whiteGold');
+  emitRib(part, d, style, o.lit === true, o.mat ?? 'whiteGold');
   if (!o.noCollider) ribColliders(part, d, style);
   return part.done();
 }
@@ -186,13 +190,13 @@ export function buildRibRow(ctx: KitCtx, o: RibOpts & { count: number; spacing: 
     if (!o.noCollider) ribColliders(part, d, style);
     if (style === 'broken') {
       // every broken rib fractures differently
-      emitRib(part, d, style, o.lit !== false, o.mat ?? 'whiteGold');
+      emitRib(part, d, style, o.lit === true, o.mat ?? 'whiteGold');
       part.done(row);
       continue;
     }
     if (!tpl) {
       const proto = new Part(ctx, 'rib-proto', new THREE.Vector3());
-      emitRib(proto, d, style, o.lit !== false, o.mat ?? 'whiteGold');
+      emitRib(proto, d, style, o.lit === true, o.mat ?? 'whiteGold');
       tpl = proto.template();
     }
     part.place(tpl, row);
@@ -210,12 +214,19 @@ export function buildColumn(ctx: KitCtx, o: { x: number; n: number; h?: number; 
     const w = r * 2;
     body.tbox(w * 1.35, 0.45, w * 1.35, 0.08, 0, 0, 0).taperOn(w, w, w * 0.74, w * 0.74, H - 0.75, 0, 0.45, 0, true);
     trim.boxOn(w * 1.05, 0.05, w * 1.05, 0, 0.45, 0).taperOn(w * 0.8, w * 0.8, w * 0.3, w * 0.3, 0.3, 0, H - 0.3, 0);
-    if (o.lit !== false) {
+    if (o.lit === true) {
       for (let i = 0; i < 4; i++) {
         const an = (i * Math.PI) / 2, k0 = 0.5 - 0.004, k1 = 0.37 + 0.004;
         const y0 = 0.9, y1 = H - 0.7, f = (y: number): number => (w * (k0 + ((k1 - k0) * (y - 0.45)) / (H - 0.75))) + 0.004;
         const p0: V3 = [bx(an) * f(y0), y0, bz(an) * f(y0)], p1: V3 = [bx(an) * f(y1), y1, bz(an) * f(y1)];
         part.g(glow).ribbon([p0, p1], 0.06, [bx(an), 0.02, bz(an)]);
+      }
+    } else {
+      // polish 4: unlit pylons carry a fine inlaid gold line on each face instead of the light strip
+      for (let i = 0; i < 4; i++) {
+        const an = (i * Math.PI) / 2, k0 = 0.5 - 0.004, k1 = 0.37 + 0.004;
+        const y0 = 0.9, y1 = H - 0.7, f = (y: number): number => (w * (k0 + ((k1 - k0) * (y - 0.45)) / (H - 0.75))) + 0.003;
+        part.g(ctx.goldLine()).ribbon([[bx(an) * f(y0), y0, bz(an) * f(y0)], [bx(an) * f(y1), y1, bz(an) * f(y1)]], 0.03, [bx(an), 0.02, bz(an)]);
       }
     }
     ctx.collider(part.pose.box(0, H / 2, 0, r * 1.05, H / 2, r * 1.05, { tag: 'column' }));

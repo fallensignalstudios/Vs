@@ -249,7 +249,7 @@ class DebugApiImpl implements DebugApi {
   hud(visible: boolean): void {
     const ui = this.game.ui;
     ui.setHudVisible(!!visible);
-    // a clean frame: zone card, toasts, subtitles, captions, prompts and the skip hint go too
+    // a clean frame: zone card, toasts, subtitles, captions, prompts, the skip hint and (polish 4) context cards go too
     if (typeof ui.setCleanFrame === 'function') ui.setCleanFrame(!visible);
   }
 

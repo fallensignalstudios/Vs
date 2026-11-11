@@ -82,7 +82,28 @@ export interface GlbArchetype {
   witness?: WitnessLook;
   /** the King's five-point halo is held behind the head (CharacterCreateOpts.halo, default true) */
   halo?: boolean;
+  /** POLISH 4: how the face is shaded (skin, greying, a dressing, hair strands) — see FaceLook */
+  face?: FaceLook;
 }
+
+/**
+ * POLISH 4. The face of a body that shows one (material.ts, on the head only). Every field is an amount 0..1.
+ */
+export interface FaceLook {
+  /** skin shading: light wrapping round the terminator, an oilier T-zone and wet lips, mottling, pores */
+  skin?: number;
+  /** grey strands at the temples */
+  greyTemples?: number;
+  /** salt-and-pepper through the beard */
+  greyBeard?: number;
+  /** strands and locks drawn over a sculpted grey hair mass */
+  strands?: number;
+  /** the pale strip on the left cheek drawn as a gauze dressing */
+  bandage?: number;
+  /** irises that meshed grey drawn brown */
+  brownEyes?: number;
+}
+const SKIN: FaceLook = { skin: 1 };
 
 /**
  * How a Witness V figure glows on a generated body — the procedural Witness's light without its translucency (the
@@ -94,6 +115,13 @@ export interface WitnessLook {
   /** the edge light: white at the head, warming to gold toward the hem, strongest at grazing angles */
   edge: number;
 }
+
+/**
+ * POLISH 4: Varo's engraving — the crowned-flame grooves are painted molten amber (hue ≈ 0.08, saturated, bright) in
+ * the base colour; measured on varo.glb, this lights the grooves (about 1.2 % of the atlas) and leaves the bronze,
+ * the crimson quilting and the face out. (MASK_DOMINION's 0.105 hue and 0.74 brightness caught 0.2 %.)
+ */
+export const MASK_VARO: GlowMask = { hue: 0.082, width: 0.045, sat: 0.6, val: 0.5, gain: 1.7 };
 
 /** amber-gold inlay and leaf engraving on ivory plate (the King): saturated gold only — the ivory stays out */
 export const MASK_GOLD: GlowMask = { hue: 0.11, width: 0.05, sat: 0.55, val: 0.62, gain: 1.1 };
@@ -115,29 +143,32 @@ const TROOP = { albedoCap: 0.62, env: 0.8, vary: true } as const;
  * armed), the Z08 `officer`, the King (`kingWitness`) and `vesryn` have their own hero-tier bodies with real faces.
  */
 export const GLB_ARCHETYPES: Partial<Record<HumanoidArchetype, GlbArchetype>> = {
-  tarrik: { ...HERO, model: 'tarrik', props: { melee: 'velkorran', ranged: 'cinderline', case: 'sealed_case' }, mask: MASK_DOMINION },
-  selene: { ...HERO, model: 'selene', props: { melee: 'verity', ranged: 'axiom', case: 'sealed_case' }, mask: MASK_REFORMATION, albedoCap: 0.42 },
-  lyessa: { ...HERO, model: 'lyessa', props: { ranged: 'rifle_dominion', case: 'sealed_case' }, mask: { ...MASK_DOMINION, sat: 0.5, val: 0.8, gain: 2.0 } },
-  tharne: { ...HERO, model: 'tharne', props: { case: 'sealed_case' }, mask: { ...MASK_REFORMATION, gain: 1.8 }, albedoCap: 0.5 },
-  lyric: { ...HERO, model: 'lyric', props: { case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.8 }, albedoCap: 0.4 },
+  tarrik: { ...HERO, model: 'tarrik', props: { melee: 'velkorran', ranged: 'cinderline', case: 'sealed_case' }, mask: MASK_DOMINION, face: SKIN },
+  selene: { ...HERO, model: 'selene', props: { melee: 'verity', ranged: 'axiom', case: 'sealed_case' }, mask: MASK_REFORMATION, albedoCap: 0.42, face: SKIN },
+  lyessa: { ...HERO, model: 'lyessa', props: { ranged: 'rifle_dominion', case: 'sealed_case' }, mask: { ...MASK_DOMINION, sat: 0.5, val: 0.8, gain: 2.0 }, face: SKIN },
+  tharne: { ...HERO, model: 'tharne', props: { case: 'sealed_case' }, mask: { ...MASK_REFORMATION, gain: 1.8 }, albedoCap: 0.5, face: SKIN },
+  lyric: { ...HERO, model: 'lyric', props: { case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.8 }, albedoCap: 0.4, face: SKIN },
   enforcer: { ...TROOP, model: 'enforcer', props: { shield: 'tower_shield', ranged: 'cinderline' }, mask: MASK_DOMINION },
   linkbound: { ...TROOP, model: 'linkbound', props: {}, mask: MASK_ECLIPSE },
   dominionSoldier: { ...TROOP, model: 'soldier_dominion', props: { ranged: 'rifle_dominion' }, mask: MASK_DOMINION },
   // Malik Varo: the generated hero body (bare head, crowned-flame engraving whose amber grooves the mask lights)
-  malik: { ...HERO, model: 'varo', props: { case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.5 }, ownFace: true },
-  varo: { ...HERO, model: 'varo', props: { ranged: 'rifle_dominion', case: 'sealed_case' }, mask: { ...MASK_DOMINION, gain: 1.8 }, ownFace: true },
+  // (polish 4: the grooves glow through MASK_VARO — softer on the injured man)
+  malik: { ...HERO, model: 'varo', props: { case: 'sealed_case' }, mask: { ...MASK_VARO, gain: 1.3 }, ownFace: true, face: SKIN },
+  varo: { ...HERO, model: 'varo', props: { ranged: 'rifle_dominion', case: 'sealed_case' }, mask: MASK_VARO, ownFace: true, face: SKIN },
   // the officer: black-bronze plate with thin amber trim; his infection is the shader's corruption tint, not the file
-  officer: { ...HERO, model: 'officer', props: {}, mask: { ...MASK_DOMINION, gain: 1.4 }, ownFace: true, albedoCap: 0.5 },
+  officer: { ...HERO, model: 'officer', props: {}, mask: { ...MASK_DOMINION, gain: 1.4 }, ownFace: true, albedoCap: 0.5, face: { skin: 1, greyTemples: 0.6 } },
   // Witness V: the King in ivory and gold (the plate scaled to 0.85, as the forge report asks for bright rooms), and
   // his chronicler in a charcoal coat — both lit from within, the King more than Vesryn
-  kingWitness: { ...HERO, model: 'king', props: {}, mask: MASK_GOLD, ownFace: true, albedoCap: 0.55, env: 0.7, tint: [0.85, 0.85, 0.85], witness: { luminous: 0.07, edge: 0.45 }, halo: true },
-  vesryn: { ...HERO, model: 'vesryn', props: {}, mask: MASK_NONE, ownFace: true, albedoCap: 0.5, env: 0.7, witness: { luminous: 0.05, edge: 0.28 } },
+  // (polish 4: the concept's grey temples and salt-and-pepper beard, and his brown eyes — the mesh came out dark and grey-eyed)
+  kingWitness: { ...HERO, model: 'king', props: {}, mask: MASK_GOLD, ownFace: true, albedoCap: 0.55, env: 0.7, tint: [0.85, 0.85, 0.85], witness: { luminous: 0.07, edge: 0.45 }, halo: true, face: { skin: 1, greyTemples: 0.9, greyBeard: 0.6, brownEyes: 0.85 } },
+  // (polish 4: loose strands over the sculpted grey hair, and the cheek's white stroke drawn as a gauze dressing)
+  vesryn: { ...HERO, model: 'vesryn', props: {}, mask: MASK_NONE, ownFace: true, albedoCap: 0.5, env: 0.7, witness: { luminous: 0.05, edge: 0.28 }, face: { skin: 1, strands: 1, bandage: 1 } },
   cross: { ...TROOP, vary: false, model: 'soldier_dominion', props: { ranged: 'cinderline' }, mask: MASK_DOMINION, tint: [1.08, 0.94, 0.86] },
   reformationSoldier: { ...TROOP, model: 'soldier_reformation', props: {}, mask: MASK_REFORMATION },
   reformationMarine: { ...TROOP, model: 'soldier_reformation', props: {}, mask: MASK_REFORMATION, tint: [0.84, 0.88, 0.96] },
   sol: { ...TROOP, vary: false, model: 'soldier_reformation', props: { ranged: 'axiom' }, mask: MASK_REFORMATION, tint: [1.06, 1.06, 1.1] },
-  survivor: { ...TROOP, model: 'survivor', props: {}, mask: MASK_NONE },
-  medic: { ...TROOP, model: 'survivor', props: { case: 'sealed_case' }, mask: MASK_NONE, tint: [1.22, 1.24, 1.22], extra: 'satchel' },
+  survivor: { ...TROOP, model: 'survivor', props: {}, mask: MASK_NONE, face: SKIN },
+  medic: { ...TROOP, model: 'survivor', props: { case: 'sealed_case' }, mask: MASK_NONE, tint: [1.22, 1.24, 1.22], extra: 'satchel', face: SKIN },
 };
 
 /** Per-prop painted-light masks (weapon edge glow). */

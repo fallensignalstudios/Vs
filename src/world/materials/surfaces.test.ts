@@ -134,6 +134,41 @@ describe('surface sets', () => {
     expect(env.count).toBe(1);
   });
 
+  it('polish 4: a set worn by a material still in the scene survives a zone change; a drawn material brings its set back', async () => {
+    installBrowser();
+    const zone = { loading: () => {}, ready: () => {} };
+    const inScene = new Set<SurfaceSetId>();
+    const s = new SurfaceSets({
+      quality: () => ({ size: 1024, anisotropy: 8 }),
+      onZone: (loading, ready) => { zone.loading = loading; zone.ready = ready; },
+      inUse: () => inScene,
+    }, '/');
+    zone.loading();
+    s.touch('bronze_plate'); s.touch('frost');
+    await s.settled(2000);
+    zone.ready();
+    // zone B never asks for bronze, but a scenic hull cached across zones still wears it
+    inScene.add('bronze_plate');
+    zone.loading();
+    zone.ready();
+    expect((s.uniforms('bronze_plate').info.value as THREE.Vector4).x).toBe(1);
+    expect((s.uniforms('frost').info.value as THREE.Vector4).x).toBe(0);
+    // a released set is fetched again the moment a material wearing it is drawn
+    s.drawn('frost');
+    await s.settled(2000);
+    expect((s.uniforms('frost').info.value as THREE.Vector4).x).toBe(1);
+  });
+
+  it('polish 4: a set with a size cap never loads larger than it (gold_inlay ≤ 512²)', async () => {
+    installBrowser();
+    const { s } = sets(1024);
+    s.touch('gold_inlay'); s.touch('marble_slab');
+    await s.settled(2000);
+    const info = s.info().sets;
+    expect(info.find((e) => e.id === 'gold_inlay')?.size).toBe(512);
+    expect(info.find((e) => e.id === 'marble_slab')?.size).toBe(1024);
+  });
+
   it('a set that fails to load keeps the procedural maps and warns once', async () => {
     const web = installBrowser();
     web.failFor.add('stone_worn_normal');
@@ -152,7 +187,8 @@ describe('materials wearing the sets', () => {
 
   it('map the families the brief names onto the generated sets', () => {
     const want: Partial<Record<keyof typeof MAT_DEFS, SurfaceSetId>> = {
-      whiteGold: 'stone_pale', whiteGoldPanel: 'stone_pale', whiteGoldFloor: 'marble_dark', blackStoneFloor: 'marble_dark',
+      // polish 4: the King-era walls are smooth marble slabs; the trims wear the engraved gold
+      whiteGold: 'marble_slab', whiteGoldPanel: 'marble_slab', goldTrim: 'gold_inlay', whiteGoldFloor: 'marble_dark', blackStoneFloor: 'marble_dark',
       blackStone: 'marble_dark', goldDark: 'metal_blackgold', domBronze: 'bronze_plate', refNavy: 'panel_navy',
       frostRime: 'frost', eclipseTissue: 'eclipse_tissue',
     };
@@ -164,6 +200,32 @@ describe('materials wearing the sets', () => {
     expect(pbrParams({ set: 'metal_blackgold' }).isotropic).toBe(false);
     expect(pbrParams({ set: 'marble_dark' }).isotropic).toBe(true);
     expect(pbrParams({ set: 'eclipse_tissue' }).emissiveMask).toBe(true);
+    // polish 4: the ashlar, the wet floor and the slab marble are reachable as surfaces
+    expect(SURFACE_FINISH.stone_pale?.pbr.set).toBe('stone_pale');
+    expect(SURFACE_FINISH.floor_wet_grey?.pbr.set).toBe('floor_wet_grey');
+    expect(SURFACE_FINISH.marble_slab?.pbr.set).toBe('marble_slab');
+  });
+
+  it('polish 4: pale walls are a dielectric with an even polish (the "tinfoil" fix)', () => {
+    for (const id of ['whiteGold', 'whiteGoldPanel'] as const) {
+      const d = MAT_DEFS[id];
+      expect(d.props.metalness, id).toBe(0);
+      expect(d.props.roughness as number, id).toBeGreaterThanOrEqual(0.35);
+      // the roughness may only wander a little (a large smudge amplitude mirrored the probe in blobs)
+      expect(d.tp?.roughAmp ?? 1, id).toBeLessThanOrEqual(0.12);
+      expect(d.pbr?.normal ?? 1, id).toBeLessThanOrEqual(0.05);
+      expect(d.pbr?.roughAmp ?? 1, id).toBeLessThanOrEqual(0.5);
+    }
+    // the ashlar clone is a dielectric too
+    expect(SURFACE_FINISH.stone_pale?.props.metalness).toBe(0);
+  });
+
+  it('polish 4: the hangar deck turns and shifts by whole plates; the engraved gold loads at most 512²', () => {
+    const p = pbrParams({ set: 'concrete_hangar' });
+    expect(p.isotropic).toBe(true);
+    expect(p.snap).toBe(6);
+    expect(SET_DEFAULTS.gold_inlay.maxSize).toBe(512);
+    expect(pbrParams({ set: 'marble_slab' }).snap).toBeUndefined();
   });
 
   it('a mapped material carries the photo layer and shares the set holders; the photo starts faded out', () => {

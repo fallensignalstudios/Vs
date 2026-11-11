@@ -51,10 +51,15 @@ interface QueuedBark {
   at: number;
 }
 
+/** who a speaker addresses: another figure (looked at in the eyes), a world point, or nobody */
+type Listener = { kind: 'actor'; actor: Actor } | { kind: 'point'; pos: Vec3Like } | { kind: 'none' } | { kind: 'default' };
+
 interface Stage {
   line: DialogueLine;
   actor: Actor | null;
   companion: Companion | null;
+  /** SayOpts.listener, resolved */
+  listener: Listener;
   /** false: no talk gesture (a drawn weapon stays out) — only the gaze and the moving mouth */
   gesture: boolean;
   /** true: the body keeps its facing; only the head turns to the listener */
@@ -67,6 +72,26 @@ interface Stage {
 
 const _eye = new THREE.Vector3();
 const GAZE_SOCKETS = ['eye', 'head'] as const;
+
+/**
+ * Where a figure looks when told to look at a point: a point below its waist (a floor marker, a figure's feet)
+ * is lifted to standing eye height (0.93 × its height) above that point; a raised point is looked at as given.
+ * The same rule as `Companion.face()` — so the head never ends a line staring at the listener's feet.
+ */
+export function eyeLevel(target: Vec3Like, self: Actor | null, out: Vec3Like): Vec3Like {
+  const h = self && Number.isFinite(self.height) && self.height > 0.5 ? self.height : 1.8;
+  const feet = self && Number.isFinite(self.pos?.y) ? self.pos.y : target.y;
+  out.x = target.x;
+  out.z = target.z;
+  out.y = target.y < feet + h * 0.5 ? target.y + h * 0.93 : target.y;
+  return out;
+}
+
+const finitePoint = (p: unknown): p is Vec3Like => {
+  if (!p || typeof p !== 'object') return false;
+  const v = p as { x?: unknown; y?: unknown; z?: unknown };
+  return typeof v.x === 'number' && typeof v.y === 'number' && typeof v.z === 'number' && Number.isFinite(v.x + v.y + v.z);
+};
 
 /**
  * Where a speaker looks at a listener: the listener's `eye` socket (else `head`), so the gaze meets a seated,
@@ -110,16 +135,28 @@ const asCompanion = (a: Actor | Companion | null | undefined): Companion | null 
   a && !isStub(a) && typeof (a as Companion).moveTo === 'function' ? (a as Companion) : null;
 
 /**
- * The facing target a zone gave a companion with `face()` before the line. The Companion contract has no reader
- * for it, so this looks at the implementation's `faceTo` field and treats anything else as "none".
+ * The facing target a zone gave a companion with `face()` before the line: `Companion.facing` (polish 3), or —
+ * for a hand-built companion without it — an implementation's `faceTo` field; anything else is "none".
  */
 function companionFacing(c: Companion | null): THREE.Vector3 | null {
-  const f = c ? (c as unknown as { faceTo?: unknown }).faceTo : null;
-  if (!f || typeof f !== 'object') return null;
-  const v = f as { x?: unknown; y?: unknown; z?: unknown };
-  if (typeof v.x !== 'number' || typeof v.y !== 'number' || typeof v.z !== 'number' || !Number.isFinite(v.x + v.y + v.z)) return null;
-  return new THREE.Vector3(v.x, v.y, v.z);
+  if (!c) return null;
+  const f = 'facing' in c ? c.facing : (c as unknown as { faceTo?: unknown }).faceTo;
+  return finitePoint(f) ? new THREE.Vector3(f.x, f.y, f.z) : null;
 }
+
+/** SayOpts.listener → who the speaker addresses (`undefined` = the default listener) */
+function resolveListener(l: SayOpts['listener'], speaker: Actor | null): Listener {
+  if (l === undefined) return { kind: 'default' };
+  if (l === null) return { kind: 'none' };
+  const a = asActor(l as Actor | Companion);
+  if (a && a !== speaker && finitePoint(a.pos)) return { kind: 'actor', actor: a };
+  if (a === speaker && a) return { kind: 'default' };
+  if (finitePoint(l)) return { kind: 'point', pos: { x: l.x, y: l.y, z: l.z } };
+  return { kind: 'default' };
+}
+
+/** a companion holding a scripted pose (polish 4: `play(…, { persist: true })`) keeps it through the line */
+const holdsPose = (c: Companion | null): boolean => !!c && typeof c.heldPose === 'string' && c.heldPose.length > 0;
 
 export class DialogueDirector {
   private stage: Stage | null = null;
@@ -211,9 +248,12 @@ export class DialogueDirector {
     if (voiced <= 0) audio.speak(String(speaker), channel);
     line.duration = voiced > 0 ? Math.max(voiced + VOICE_TAIL, opts?.duration ?? 0) : opts?.duration && opts.duration > 0 ? opts.duration : lineDuration(text);
 
+    const companion = asCompanion(opts?.actor);
     const stage: Stage = {
-      line, actor, companion: asCompanion(opts?.actor),
-      gesture: opts?.gesture !== false && opts?.keepWeapon !== true,
+      line, actor, companion,
+      listener: resolveListener(opts?.listener, actor),
+      // the talk clip needs empty hands and would end a scripted hold: those speakers only move their mouths
+      gesture: opts?.gesture !== false && opts?.keepWeapon !== true && !holdsPose(companion),
       keepFacing: opts?.keepFacing === true,
       prevFace: null,
       started: time.now, duration: line.duration,
@@ -242,12 +282,14 @@ export class DialogueDirector {
 
   /**
    * Speaking actor turns to the listener (unless `keepFacing`), looks at the listener's eyes and plays the talk
-   * gesture for the length of the line — or, with `gesture: false` / `keepWeapon`, only moves its mouth (the
-   * gesture would sheathe a drawn weapon). Afterwards a companion goes back to the facing target the zone gave
-   * it before the line (or none).
+   * gesture for the length of the line — or, with `gesture: false` / `keepWeapon` / a scripted hold, only moves its
+   * mouth (the gesture would sheathe a drawn weapon or end the hold). The listener is `SayOpts.listener` when
+   * given (a figure, a point, or `null` = nobody: no turn, no gaze), else the protagonist, else the nearest
+   * same-side figure. Afterwards a companion goes back to the facing target the zone gave it before the line (or
+   * none), and the head to that target at EYE height (never the foot-level point itself).
    *
-   * Order matters: `Companion.face()` also points the head at the (foot-level) position it is given, so the eye
-   * gaze is set AFTER it — otherwise every companion speaker would look at the listener's feet.
+   * Order matters: `Companion.face()` also points the head at the position it is given, so the eye gaze is set
+   * AFTER it.
    */
   private gesture(stage: Stage, on: boolean): void {
     const actor = stage.actor;
@@ -262,15 +304,22 @@ export class DialogueDirector {
       }
       const prev = stage.prevFace;
       if (companion && !stage.keepFacing) companion.face(prev);
-      else if (hasVisual) visual!.lookAt(prev);
+      else if (hasVisual && stage.listener.kind !== 'none') visual!.lookAt(prev ? eyeLevel(prev, actor, this.eye) : null);
       return;
     }
     stage.prevFace = companionFacing(companion);
-    const listener = this.listenerFor(actor);
-    if (listener) {
-      if (companion && !stage.keepFacing) companion.face(listener.pos);
-      gazePoint(listener, this.eye);
+    const l = stage.listener;
+    if (l.kind === 'point') {
+      if (companion && !stage.keepFacing) companion.face(l.pos);
+      eyeLevel(l.pos, actor, this.eye);
       if (hasVisual) visual!.lookAt(this.eye);
+    } else if (l.kind !== 'none') {
+      const listener = l.kind === 'actor' ? l.actor : this.listenerFor(actor);
+      if (listener) {
+        if (companion && !stage.keepFacing) companion.face(listener.pos);
+        gazePoint(listener, this.eye);
+        if (hasVisual) visual!.lookAt(this.eye);
+      }
     }
     if (!hasVisual) return;
     if (stage.gesture) visual!.play('talk', { loop: true });

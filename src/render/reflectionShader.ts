@@ -87,7 +87,11 @@ if ( uReflOn > 0.0 ) {
     aurCol += textureLod( uReflTex, aurUv - aurAlong * 0.5 - aurSide, aurLod ).rgb * 0.22;
     aurCol += textureLod( uReflTex, aurUv + aurAlong - aurSide * 0.5, aurLod ).rgb * 0.14;
     aurCol += textureLod( uReflTex, aurUv - aurAlong + aurSide * 0.5, aurLod ).rgb * 0.14;
-    radiance = mix( radiance, aurCol * max( uReflStrength, 1.0 ), aurW );
+    // polish 4: a strength above 1 lifts the reflectance where a dielectric reflects only a few percent (looking
+    // down at the floor) and fades to 1 toward grazing angles, where fresnel already reflects nearly everything:
+    // a wet-mirror floor that never blows out at the horizon
+    float aurGraze = pow( 1.0 - saturate( dot( nonPerturbedNormal, geometryViewDir ) ), 5.0 );
+    radiance = mix( radiance, aurCol * mix( max( uReflStrength, 1.0 ), 1.0, aurGraze ), aurW );
   }
 }
 #endif
@@ -127,7 +131,7 @@ export function patchFloorMaterial(material: THREE.Material, globals: Reflection
       .replace(ANCHOR, `${ANCHOR}\n${BODY}`);
   };
   material.customProgramCacheKey = function (this: THREE.Material): string {
-    return `${prevKey.call(this)}|aurRefl2`;
+    return `${prevKey.call(this)}|aurRefl3`;
   };
   material.needsUpdate = true;
   patched.set(material, locals);

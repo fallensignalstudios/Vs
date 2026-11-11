@@ -16,6 +16,7 @@
  * and distance, and an exhaust plume that grows with the engine level.
  */
 import { PALETTE } from '@/core/api/materials';
+import type { HullLook } from './glow';
 
 export type ShipModelId = 'dominionCapital' | 'reformationCarrier' | 'reformationDropship' | 'dominionShuttle';
 export type ShipFaction = 'dominion' | 'reformation';
@@ -67,6 +68,12 @@ export interface ShipModelSpec {
   /** which glowing texels of the colour map the hull's emissive mask lights (see glow.ts `patchHull`) */
   mask: 'amber' | 'blue';
   glow: readonly GlowElement[];
+  /**
+   * ADDED (polish pass 4): the hull's default look (glow.ts `HullLook`): the files are dark and glossy, so on their own
+   * they read as black silhouettes against the night — a cool rim and a little sky fill draw their form, and the
+   * shuttle's map is graded from dark brown toward its concept's weathered tan bronze. Callers may override it.
+   */
+  look?: HullLook;
 }
 
 const AMBER = PALETTE.domAmber;
@@ -91,6 +98,7 @@ export const SHIP_MODELS: Readonly<Record<ShipModelId, ShipModelSpec>> = {
   dominionCapital: {
     id: 'dominionCapital', faction: 'dominion', file: 'ship_dominion_capital.glb', lod: 'ship_dominion_capital.lod.bin',
     rawLength: 1.0, nominal: 600, yawToPlusX: Math.PI / 2, mask: 'amber',
+    look: { maxMetal: 0.6, rim: [0.05, 0.055, 0.065], fill: [0.12, 0.12, 0.13] },
     // four ring engine crowns in a diamond at the stern, openings facing −Z (disc centres from the manifest)
     glow: [
       ...crownEngine([0, 0, -0.48], 0.03, 0.16),
@@ -101,6 +109,7 @@ export const SHIP_MODELS: Readonly<Record<ShipModelId, ShipModelSpec>> = {
   reformationCarrier: {
     id: 'reformationCarrier', faction: 'reformation', file: 'ship_reformation_carrier.glb', lod: 'ship_reformation_carrier.lod.bin',
     rawLength: 1.0, nominal: 500, yawToPlusX: 0, mask: 'blue',
+    look: { tint: [1.25, 1.25, 1.28], maxMetal: 0.55, rim: [0.05, 0.06, 0.08], fill: [0.14, 0.15, 0.17] },
     // three stacked light bars on each flank of the stern quarter, facing sideways; the stern itself gets cold
     // exhaust planes at x = −0.5, one per bar height
     glow: [
@@ -122,6 +131,7 @@ export const SHIP_MODELS: Readonly<Record<ShipModelId, ShipModelSpec>> = {
   reformationDropship: {
     id: 'reformationDropship', faction: 'reformation', file: 'ship_reformation_dropship.glb', lod: 'ship_reformation_dropship.lod.bin',
     rawLength: 1.0, nominal: 22, yawToPlusX: Math.PI / 2, mask: 'blue',
+    look: { tint: [1.3, 1.3, 1.34], maxMetal: 0.5, rim: [0.07, 0.085, 0.11], fill: [0.16, 0.17, 0.19] },
     glow: [
       // the two engine pods on the wing roots: blue slits on their front faces, cold exhaust out of their backs
       { shape: 'bar', p: [0.215, 0.07, 0.032], axis: [0, 0, 1], tan: [1, 0, 0], size: [0.07, 0.016], color: BLUE_HOT, intensity: 2.2, mirror: true },
@@ -138,6 +148,8 @@ export const SHIP_MODELS: Readonly<Record<ShipModelId, ShipModelSpec>> = {
   dominionShuttle: {
     id: 'dominionShuttle', faction: 'dominion', file: 'ship_dominion_shuttle.glb', lod: 'ship_dominion_shuttle.lod.bin',
     rawLength: 0.936, nominal: 18, yawToPlusX: Math.PI / 2, mask: 'amber',
+    // the concept is a weathered tan bronze with gold filigree; the map reads dark brown in the hangar's cool light
+    look: { tint: [1.95, 1.9, 1.8], desat: 0.34, maxMetal: 0.5, rim: [0.08, 0.075, 0.07], fill: [0.15, 0.15, 0.155] },
     glow: [
       // four rear nozzles in a 2 × 2 block facing −Z
       ...crownEngine([0.088, -0.036, -0.452], 0.036, 0.22, true),

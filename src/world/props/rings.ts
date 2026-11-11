@@ -20,6 +20,8 @@ interface Ring {
   /** 0 = band section, 1 = blade section; index inside that section's instanced meshes */
   kind: 0 | 1; slot: number;
   r: number; ys: number; tilt: number;
+  /** polish 4: height of this ring's centre above the common centre (the concentric layout stacks them) */
+  dy: number;
   /** tilt-axis azimuth and its precession rate, in-plane angle and its speed (rad/s at spin 1) */
   az: number; prec: number; phi: number; speed: number;
 }
@@ -85,6 +87,12 @@ export class NestedRings extends PropBase<Params> {
   private readonly disc: THREE.Mesh;
   private common = 0;
   private readonly lightBase = new THREE.Color(PALETTE.goldLight);
+  /** polish 4: chrome rings carry cool white light points and seams, a little dimmer (the metal does the work) */
+  private lightGain = 1;
+  /** polish 4: the body's own emissive floor (set once from the options, never overwritten by a per-frame constant) */
+  private readonly bodyGlow: number;
+  /** polish 4: brightness scale of the axis column */
+  private readonly columnGain: number;
 
   constructor(lib: MaterialLibrary | null, opts: NestedRingsOpts = {}) {
     super('nestedRings', lib, { align: 0, spin: 1, energy: 0.3 }, { align: spring(1.5, 0.74), spin: spring(2, 1, 0, 4), energy: spring(3, 0.9) });
@@ -92,21 +100,33 @@ export class NestedRings extends PropBase<Params> {
     const R = num(opts.radius, 60, 4, 400);
     const H = (this.height = num(opts.height, Math.max(14, 0.3 * R), 0, 1000));
     const clearR = num(opts.clearRadius, 30, 0, 1000), clearH = num(opts.clearHeight, 6, 0, 1000);
+    // polish 4: 'chrome' = polished silver-white metal (the crownmark painting), 'concentric' = near-level rings
+    // nested round the axis, the outer ones higher, like a gyroscope round its light column
+    const chrome = opts.finish === 'chrome', concentric = opts.layout === 'concentric';
+    this.bodyGlow = num(opts.glow, chrome ? 0.015 : 0.07, 0, 4);
+    if (chrome) { this.lightBase.set(0xe6eefa); this.lightGain = 0.75; }
+    this.columnGain = num(opts.column, 1, 0, 8);
 
     const P = new Parts();
     const SECTIONS: ReadonlyArray<readonly [number, number]> = [[0.04, 0.011], [0.012, 0.042]];
     SECTIONS.forEach(([a, b], k) => sectionGeometry(P, `s${k}`, a, b));
-    this.body = this.mk.solid('whiteGold', { emissive: 0x8a8272, emissiveIntensity: 0.1 });
-    const gold = this.mk.solid('goldTrim');
+    this.body = chrome
+      ? this.mk.solid('goldTrim', { color: 0xeef0f3, roughness: 0.07, metalness: 1, surface: 'none', emissive: 0x9aa0a8, emissiveIntensity: this.bodyGlow, envMapIntensity: 1.6 })
+      : this.mk.solid('whiteGold', { emissive: 0x8a8272, emissiveIntensity: 0.1 });
+    const gold = this.mk.solid('goldTrim', chrome ? { roughness: 0.12, envMapIntensity: 1.4 } : {});
     const glow: Glow = this.mk.glow(0xffffff, 1, true);
     const counts = [0, 0];
     for (const [f, kind, ys, tiltDeg, az, prec, phi, speed] of LAYOUT) {
       const r = f * R;
       const [a, b] = SECTIONS[kind];
       // rings over the walkable area never dip below the clearance height
-      const reach = (H - clearH - b * ys * r - a * r) / r;
+      let dy = concentric ? (f - 0.55) * R * 0.42 : 0;
+      // (a stacked ring over the walkable area stays above the clearance too)
+      if (concentric && r - a * r < clearR) dy = Math.max(dy, clearH + b * ys * r + 0.5 - H);
+      const reach = (H + dy - clearH - b * ys * r - a * r) / r;
       const maxTilt = r - a * r < clearR ? Math.asin(clamp(reach, 0, 1)) : Math.PI / 2;
-      this.rings.push({ kind, slot: counts[kind]++, r, ys, tilt: Math.min((tiltDeg * Math.PI) / 180, maxTilt), az, prec, phi, speed });
+      const tilt = Math.min(((concentric ? Math.min(tiltDeg, 5) : tiltDeg) * Math.PI) / 180, maxTilt);
+      this.rings.push({ kind, slot: counts[kind]++, r, ys, tilt, dy, az, prec: concentric ? prec * 0.3 : prec, phi, speed });
     }
     SECTIONS.forEach((_, k) => {
       const make = (slot: string, mat: THREE.Material): THREE.InstancedMesh => {
@@ -157,7 +177,7 @@ export class NestedRings extends PropBase<Params> {
 	col = uColor * uGain;
 `,
     });
-    const top = H + R * 0.8, w = clamp(R * 0.0035, 0.12, 0.3);
+    const top = H + R * 0.8, w = num(opts.columnWidth, clamp(R * 0.0035, 0.12, 0.3), 0.02, 6);
     const column = new THREE.Mesh(new THREE.CylinderGeometry(w, w, top, 20, 1, true), this.axis);
     column.name = 'rings.axis';
     column.position.y = top / 2;
@@ -188,13 +208,13 @@ export class NestedRings extends PropBase<Params> {
       q.setFromAxisAngle(v.set(Math.cos(ring.az), 0, Math.sin(ring.az)), ring.tilt * (1 - ai));
       q2.setFromAxisAngle(v.set(0, 1, 0), ring.phi + d * lock);
       q.multiply(q2);
-      m.compose(v.set(0, this.height, 0), q, s.set(ring.r, ring.r * ring.ys, ring.r));
+      m.compose(v.set(0, this.height + ring.dy * (1 - ai), 0), q, s.set(ring.r, ring.r * ring.ys, ring.r));
       const set = this.meshes[ring.kind];
       set[0].setMatrixAt(ring.slot, m);
       // light pulses run from the outer ring to the inner one; alignment evens them out
       const wave = Math.pow(Math.max(0, Math.sin(time * 1.5 - i * 0.85)), 4);
       const level = (0.55 + 1.5 * e) * (1 + 0.9 * e * wave * (1 - 0.6 * lock)) + 0.6 * lock * e;
-      set[2].setColorAt(ring.slot, c.copy(this.lightBase).multiplyScalar(level));
+      set[2].setColorAt(ring.slot, c.copy(this.lightBase).multiplyScalar(level * this.lightGain));
     }
     for (const set of this.meshes) {
       set[0].instanceMatrix.needsUpdate = true;
@@ -202,8 +222,8 @@ export class NestedRings extends PropBase<Params> {
     }
     const al = clamp01(a);
     this.disc.rotation.z = this.common;
-    this.body.emissiveIntensity = 0.07 + 0.16 * e;
+    this.body.emissiveIntensity = this.bodyGlow * (1 + 2.3 * e);
     this.currents.uniforms.uGain.value = e * (0.25 + 1.6 * al);
-    this.axis.uniforms.uGain.value = 0.15 + e * (0.8 + 1.3 * al);
+    this.axis.uniforms.uGain.value = (0.15 + e * (0.8 + 1.3 * al)) * this.columnGain;
   }
 }

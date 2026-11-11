@@ -172,6 +172,22 @@ export interface VoiceOpts {
   offscreen?: boolean;
 }
 
+/**
+ * ADDED (polish 4). Options for AudioSystem.setMusic.
+ */
+export interface MusicOpts {
+  /**
+   * Play the state's recording ONCE, from its start to the end of its file (natural tail included), instead of
+   * looping it; then the state holds a quiet bed — its own generative pads and held tones, about 7 dB down, fading
+   * in under the last seconds of the recording — until the state changes. For a scene that may outlast its cue:
+   *   game.audio.setMusic('witness', 1.5, { once: true });    // Witness V: witness_elegy (118 s), then the bed
+   *   game.audio.setMusic('farewell', 2, { once: true });     // Z12: farewell_departure (109 s), then the bed
+   * Ignored by a state without a recording (the generative score has no end). A repeated call with the state that
+   * is already playing changes nothing (it does not restart the piece).
+   */
+  once?: boolean;
+}
+
 /** Options for AudioSystem.registerSample. */
 export interface AudioSampleOpts {
   /** linear gain relative to the level the id is authored at (default 1; the recording is loudness-matched first) */
@@ -204,7 +220,7 @@ export interface AudioSystem {
    * first downbeat is heard — while the outgoing rhythm stops and its tails fade underneath over
    * `fadeSeconds` (default 2). `'silence'` fades out. Unknown states warn once and mean `'silence'`.
    */
-  setMusic(state: MusicState, fadeSeconds?: number): void;
+  setMusic(state: MusicState, fadeSeconds?: number, opts?: MusicOpts): void;
   /** the state actually playing (an unknown id reads back as `'silence'`) */
   readonly music: MusicState;
   setAmbience(id: AmbienceId, fadeSeconds?: number): void;
@@ -289,6 +305,13 @@ export interface AudioSystem {
   voice(speaker: string, text: string, opts?: VoiceOpts): number;
   /** Cut the line being spoken, fading over `fadeSeconds` (default 0.15). No-op when nothing is playing. */
   stopVoice(fadeSeconds?: number): void;
+  /**
+   * ADDED (polish 4). How loud the voice-over line sounds right now: 0..1 of that recording's own loudest moment
+   * (an RMS envelope), or −1 when no recording is sounding (nothing said, a subtitle-only line, paused, muted,
+   * locked). The speaking figure's head motion follows it (generated bodies); gameplay rarely needs it.
+   * Optional so that test doubles need not implement it.
+   */
+  voiceLevel?(): number;
   /**
    * Fetch the recordings of these `[speaker, text]` lines ahead of time (compressed; each is decoded as it is
    * spoken). Lines without a recording are skipped. Works before unlock(). The promise always resolves.

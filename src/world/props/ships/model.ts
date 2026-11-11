@@ -14,7 +14,7 @@
  */
 import * as THREE from 'three';
 import { SHIP_MODELS, shipScale, type ShipModelId } from './catalog';
-import { buildGlow, patchHull, type GlowUniforms, type HullUniforms, type ShipHaze } from './glow';
+import { buildGlow, patchHull, type GlowUniforms, type HullLook, type HullShade, type HullUniforms, type ShipHaze } from './glow';
 import { requestShip, shipTemplate, type ShipTemplate } from './loader';
 
 export type ShipFrame = 'plusX' | 'minusZ';
@@ -39,6 +39,13 @@ export interface GeneratedShipOpts {
   lights?: number;
   /** emissive strength of the hull's glowing texels at engine level 1 (default 0.9; far-field 0.6) */
   texelGlow?: number;
+  /**
+   * ADDED (polish pass 4): the hull's look (tint, metal cap, rim, sky fill — glow.ts `HullLook`), merged over the
+   * model's default (catalog `look`); live with {@link GeneratedShip.setLook}
+   */
+  look?: HullLook;
+  /** ADDED (polish pass 4): extra hull shading (glow.ts `HullShade`), e.g. the Z05 carrier's battle damage */
+  shade?: HullShade;
 }
 
 /** projected-length fractions of the viewport below which level 1 / 2 take over */
@@ -116,9 +123,11 @@ export class GeneratedShip {
   private engineLevel: number;
   private lightLevel: number;
   private readonly texelGlow: number;
+  private lookNow: HullLook;
 
   constructor(id: ShipModelId, private readonly opts: GeneratedShipOpts = {}) {
     this.id = SHIP_MODELS[id] ? id : 'dominionShuttle';
+    this.lookNow = { ...(SHIP_MODELS[this.id].look ?? {}), ...(opts.look ?? {}) };
     this.scale = shipScale(this.id, opts.length);
     this.object.name = `ship:${this.id}`;
     this.engineLevel = clampLevel(opts.engines ?? 1, 1.5);
@@ -154,6 +163,18 @@ export class GeneratedShip {
     this.push();
   }
 
+  /**
+   * ADDED (polish pass 4): change the hull's look live (merged over the current one): e.g. a stronger rim while a
+   * ship crosses a night sky. Applies once loaded, and to a hull that loads later.
+   */
+  setLook(look: HullLook): void {
+    this.lookNow = { ...this.lookNow, ...look };
+    this.applyLook();
+  }
+
+  /** the hull's current look (model default merged with the options and setLook) */
+  get look(): HullLook { return { ...this.lookNow }; }
+
   /** the hull mesh (null until loaded) */
   get mesh(): THREE.Mesh | null { return this.hull; }
 
@@ -183,6 +204,18 @@ export class GeneratedShip {
     if (this.hullU) this.hullU.uShipEmis.value = this.texelGlow * Math.min(1, this.engineLevel) + 0.08 * this.lightLevel;
   }
 
+  private applyLook(): void {
+    const u = this.hullU;
+    if (!u) return;
+    const l = this.lookNow;
+    const set = (v: THREE.Vector3, t: readonly [number, number, number] | undefined, d: number): void => { v.set(t?.[0] ?? d, t?.[1] ?? d, t?.[2] ?? d); };
+    set(u.uShipTint.value, l.tint, 1);
+    set(u.uShipRim.value, l.rim, 0);
+    set(u.uShipFill.value, l.fill, 0);
+    u.uShipDesat.value = l.desat ?? 0;
+    u.uShipMaxMetal.value = l.maxMetal ?? 1;
+  }
+
   private attach(tpl: ShipTemplate): void {
     if (this.disposed || this.hull) return;
     const spec = SHIP_MODELS[this.id];
@@ -198,7 +231,7 @@ export class GeneratedShip {
     raw.position.copy(centre).negate();
     frame.add(raw);
 
-    const { material, uniforms: hullU } = patchHull(tpl.material, spec.mask, { haze: o.haze });
+    const { material, uniforms: hullU } = patchHull(tpl.material, spec.mask, { haze: o.haze, look: this.lookNow, shade: o.shade });
     this.owned.push(material);
     const hull = new THREE.Mesh(tpl.geometry, material);
     hull.name = `ship:${this.id}:hull`;
@@ -225,6 +258,7 @@ export class GeneratedShip {
     this.glowU = glowU;
     this.hullU = hullU;
     this.push();
+    this.applyLook();
     this.object.add(frame);
     this.object.updateMatrixWorld(true);
   }

@@ -10,7 +10,8 @@
  * (a clone of the escorted ship's procedural hull) stands in, so the escort still happens.
  */
 import * as THREE from 'three';
-import type { ShipModelId } from './catalog';
+import { SHIP_MODELS, type ShipModelId } from './catalog';
+import type { HullLook } from './glow';
 import { GeneratedShip } from './model';
 
 /** formation slots (×length): wingmen left / right, high astern, low outside, then an outer pair */
@@ -66,7 +67,9 @@ export class EscortFlight {
       const far = new THREE.Vector3(near.x + (26 + 4 * i) * L, near.y + (2.5 + i * 0.6) * L, near.z + side * (14 + 3 * i) * L);
       const holder = new THREE.Group();
       holder.name = `ship:escort${i}`;
-      const ship = new GeneratedShip(model, { length: shipLen, frame: 'plusX', origin: 'centre', engines: 1.1, lights: 1 });
+      // (polish pass 4: out in the night beyond the hangar only its key reaches them — a stronger rim and sky fill than
+      // the model's default draw their form instead of a black silhouette with glow)
+      const ship = new GeneratedShip(model, { length: shipLen, frame: 'plusX', origin: 'centre', engines: 1.1, lights: 1, look: escortLook(model) });
       holder.add(ship.object);
       if (fallback) {
         const stand = fallback();
@@ -117,6 +120,13 @@ export class EscortFlight {
     this.object.removeFromParent();
     this.object.clear();
   }
+}
+
+/** an escort's hull look: the model's own, with its rim and sky fill raised for open space */
+function escortLook(model: ShipModelId): HullLook {
+  const l = SHIP_MODELS[model]?.look ?? {};
+  const k = (t: readonly [number, number, number] | undefined, f: number, d: number): [number, number, number] => [(t?.[0] ?? d) * f, (t?.[1] ?? d) * f, (t?.[2] ?? d) * f];
+  return { rim: k(l.rim, 3.0, 0.06), fill: k(l.fill, 2.0, 0.12) };
 }
 
 function clampN(v: number | undefined, d: number, lo: number, hi: number): number {

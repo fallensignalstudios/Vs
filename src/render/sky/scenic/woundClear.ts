@@ -24,6 +24,8 @@ export const VOID_DOWN = woundVoidReach(0, -1) * woundScale(1);
 const MARGIN = 0.4 * DEG;
 /** a structure's own angular half-width, allowed for when its cap is read off the void's arc */
 const PAD = 1.5 * DEG;
+/** the lowest a structure under the void is ever capped (elevation) */
+export const CAP_FLOOR = 0.6 * DEG;
 
 export interface WoundCone { dir: THREE.Vector3; radius: number }
 
@@ -68,7 +70,9 @@ export function woundLimit(cone: WoundCone | null, x: number, z: number, top: nu
   if (hd < 1e-6 || ch < 1e-6) return { top, lit: !insideWound(cone, x, top, z, 1.1) };
   const daz = Math.acos(Math.max(-1, Math.min(1, (x * cone.dir.x + z * cone.dir.z) / (hd * ch))));
   const cap = woundCap(cone, daz);
-  const capTop = cap === null ? Number.POSITIVE_INFINITY : EYE + Math.tan(Math.max(cap, 1.5 * DEG)) * hd;
+  // (a floor so nothing is capped to a stub — under the polish-pass-4 Wound, whose lower arc sits just above the
+  // city's glow line, the cap comes out lower than the old 1.5° floor, which put spire tops inside the void)
+  const capTop = cap === null ? Number.POSITIVE_INFINITY : EYE + Math.tan(Math.max(cap, CAP_FLOOR)) * hd;
   if (top <= capTop) return { top, lit: !insideWound(cone, x, top, z, 1.1) };
   return { top: capTop, lit: !insideWound(cone, x, capTop, z, 1.1) };
 }

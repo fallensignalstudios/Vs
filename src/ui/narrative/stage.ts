@@ -179,6 +179,9 @@ export class Card {
   private current: CardSpec | null = null;
   private pending: CardSpec | null = null;
   private life = Infinity;
+  /** (polish 4) debug clean frame: a 'context' card is hidden (not cleared) while this is on */
+  private covered = false;
+  private hiddenNow = false;
 
   constructor() {
     const text = h('div', 'aur-card-text');
@@ -224,6 +227,23 @@ export class Card {
     this.present(spec);
   }
 
+  /**
+   * ADDED (polish 4). Debug clean frame (`__aurelion.hud(false)`): a 'context' card — an information overlay
+   * over gameplay — is hidden without losing its state or timer; the narrative styles ('witness', 'consequence',
+   * 'title') still draw, as they are part of the shot.
+   */
+  setCovered(covered: boolean): void {
+    this.covered = covered === true;
+    this.applyCover();
+  }
+
+  private applyCover(): void {
+    const hide = this.covered && this.el.dataset.style === 'context';
+    if (hide === this.hiddenNow) return;
+    this.hiddenNow = hide;
+    this.el.style.visibility = hide ? 'hidden' : '';
+  }
+
   /** ADDED. Drop the card (and one waiting to cross-fade in) at once — a zone change never inherits a card. */
   clear(): void {
     this.pending = null;
@@ -236,6 +256,7 @@ export class Card {
     this.current = spec;
     this.pending = null;
     this.el.dataset.style = spec.style;
+    this.applyCover();
     this.text.set(spec.text);
     this.sub.set(spec.sub);
     this.subEl.style.display = spec.sub ? '' : 'none';

@@ -56,6 +56,8 @@ export function createFallbackBuilder(game: Game, root: THREE.Group, seed: numbe
       root.add(obj);
       return obj;
     },
+    // (polish 4) without the kit a finish is the base material itself (the kit's maps are what the finish adds)
+    surfaceMaterial: (_finish, base) => game.mats.get(base ?? 'whiteGoldFloor'),
     collider: (desc: ColliderDesc): ColliderHandle => game.physics.addCollider(desc),
     surface: (desc: SurfaceDesc): SurfaceHandle => game.physics.addSurface(desc),
     onUpdate(fn: (dt: number, time: number) => void): void {
@@ -87,6 +89,11 @@ export function createFallbackBuilder(game: Game, root: THREE.Group, seed: numbe
   };
 
   const cache = real as Record<string | symbol, unknown>;
+  // (polish 4) static dressing a zone hands the kit to merge is still drawn without the kit: added to the root as is
+  cache.addStatic = <T extends THREE.Object3D>(obj: T): T => {
+    if (obj && (obj as THREE.Object3D).isObject3D) root.add(obj);
+    return obj;
+  };
   return new Proxy(cache, {
     get(t, p) {
       if (p in t) return t[p];

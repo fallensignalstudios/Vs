@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import type {
-  BarrierHandle, CeilingOpts, ColliderDesc, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
+  BarrierHandle, CeilingOpts, ColliderDesc, CrystalOpts, HazeOpts, InlayOpts, PipeOpts, PortalOpts, SlotOpts, TiersOpts, ColliderHandle, CoverOpts, DiscOpts, DoorHandle, DoorOpts, FloorOpts, Game, LightOpts, Marker,
   MatId, MaterialLibrary, PhysicsWorld, PropKind, PropOpts, RampOpts, RectOpts, RibOpts, ScriptHandle, SurfaceDesc, SurfaceFinish, SurfaceHandle,
   WallOpts, ZoneBuilder, ZoneEnvOpts,
 } from '@/core/api';
@@ -14,16 +14,26 @@ import { isStub } from '@/core/stub';
 import { KitCtx } from './core';
 import { buildCover } from './cover';
 import { buildBarrier, buildDoor } from './doors';
-import { buildChannel, buildConduit, buildCorruption, buildFrost, buildWhitePoint, type ChannelOpts } from './dressing';
+import { buildChannel, buildConduit, buildCorruption, buildFrost, buildWallLine, buildWhitePoint, type ChannelOpts } from './dressing';
 import { computeBounds, mergeStatics } from './finalize';
 import { applyEnv, applyShadowBudget, budgetLights, buildPanelLight, buildPoint, buildSpot, fitKeyLight } from './lights';
 import { buildProp } from './props';
 import { buildColumn, buildRib, buildRibRow } from './ribs';
 import { buildBlocker, buildBridge, buildDeck, buildDisc, buildFloor, buildRail, buildRamp, type DeckExtras } from './structure';
 import { buildCeiling, buildRingWall, buildWall, buildWalls } from './walls';
+import { buildPipes, buildPortal, buildSlot, buildTiers } from './relief';
+import { buildHaze } from './atmos';
+import { buildCrystals } from './crystal';
+import { buildInlay } from './decal';
 
-/** reflection strength of mirror-polished floors (render: > 1 boosts the reflected radiance; 1.5 is already strong) */
-const POLISHED_REFLECTION = 1.25;
+/**
+ * reflection strength of mirror-polished floors. Polish 4: the renderer now applies a strength above 1 as a boost of
+ * the floor's reflectance at steep angles (where a dielectric reflects only a few percent) fading to 1 at grazing
+ * angles, so a strong value reads as a wet mirror without blowing out the grazing reflection.
+ */
+const POLISHED_REFLECTION = 2.2;
+/** the 'wet' finish: lighter stone, so the reflection carries more of the look */
+const WET_REFLECTION = 3;
 
 export class ZoneBuilderImpl implements ZoneBuilder {
   readonly physics: PhysicsWorld;
@@ -115,7 +125,7 @@ export class ZoneBuilderImpl implements ZoneBuilder {
   disc(o: DiscOpts): THREE.Object3D { return buildDisc(this.ctx, o); }
   ramp(o: RampOpts): THREE.Object3D { return buildRamp(this.ctx, o); }
   deck(o: RectOpts & DeckExtras): THREE.Object3D { return buildDeck(this.ctx, o); }
-  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid'; finish?: SurfaceFinish }): THREE.Object3D { return buildBridge(this.ctx, o); }
+  bridge(o: { from: [number, number]; to: [number, number]; h?: number; width?: number; mat?: MatId; broken?: 'none' | 'far' | 'mid'; finish?: SurfaceFinish; lit?: boolean }): THREE.Object3D { return buildBridge(this.ctx, o); }
 
   surfaceMaterial(finish: SurfaceFinish, base: MatId = 'whiteGoldFloor'): THREE.Material {
     return this.ctx.mat(this.ctx.finish(base, finish));
@@ -148,6 +158,49 @@ export class ZoneBuilderImpl implements ZoneBuilder {
     else this.ctx.warn('add', 'add(): not an Object3D — ignored');
     return obj;
   }
+
+  // ---- ADDED (polish 4): merged static dressing, relief, atmosphere, crystals, inlays ---------------------
+  addStatic<T extends THREE.Object3D>(obj: T, opts?: { instance?: boolean }): T {
+    if (!obj || !(obj as THREE.Object3D).isObject3D) { this.ctx.warn('addStatic', 'addStatic(): not an Object3D — ignored'); return obj; }
+    if (!obj.parent) this.root.add(obj);
+    let n = 0;
+    // (a kept subtree, the merged container and already-merged meshes are left alone)
+    const visit = (o: THREE.Object3D): void => {
+      if (o.userData.kitKeep || o === this.statics || o.userData.kitMerged) return;
+      const m = o as THREE.Mesh;
+      if (m.isMesh && m.userData.kitStatic !== true) {
+        const skip = (m as unknown as THREE.SkinnedMesh).isSkinnedMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh
+          || Array.isArray(m.material) || !m.geometry?.getAttribute('position') || !!m.geometry.morphAttributes?.position;
+        if (!skip) {
+          m.userData.kitStatic = true;
+          m.userData.kitForeign = true;
+          if (opts?.instance) m.userData.kitInstance = true;
+          n++;
+        }
+      } else if (m.isMesh) n++;
+      for (const c of o.children) visit(c);
+    };
+    visit(obj);
+    if (!n) this.ctx.warn('addStatic-empty', 'addStatic(): no mergeable mesh found (skinned, multi-material and morphing meshes stay live)');
+    // after finalize() the pieces are merged at once (they form their own merged meshes)
+    if (this.ctx.finalized && n) {
+      const res = mergeStatics(this.ctx, this.statics);
+      this.mergedMeshes.push(...res.meshes);
+      this.stats.meshes = this.mergedMeshes.length;
+      this.stats.triangles += Math.round(res.triangles);
+      this.stats.merged += res.merged;
+    }
+    return obj;
+  }
+
+  pipes(points: Array<[number, number, number]>, o?: PipeOpts): THREE.Object3D { return buildPipes(this.ctx, points, o); }
+  slot(o: SlotOpts): THREE.Object3D { return buildSlot(this.ctx, o); }
+  portal(o: PortalOpts): THREE.Object3D { return buildPortal(this.ctx, o); }
+  tiers(o: TiersOpts): THREE.Object3D { return buildTiers(this.ctx, o); }
+  haze(o: HazeOpts): THREE.Object3D { return buildHaze(this.ctx, o); }
+  crystals(o: CrystalOpts): THREE.Object3D { return buildCrystals(this.ctx, o); }
+  inlay(o: InlayOpts): THREE.Mesh { return buildInlay(this.ctx, o); }
+  wallLine(points: Array<[number, number, number]>, o?: { facing?: number; width?: number; glow?: boolean; color?: number; intensity?: number; closed?: boolean }): THREE.Object3D { return buildWallLine(this.ctx, points, o); }
 
   keep<T extends THREE.Object3D>(obj: T): T {
     if (obj && (obj as THREE.Object3D).isObject3D) obj.userData.kitKeep = true;
@@ -197,8 +250,10 @@ export class ZoneBuilderImpl implements ZoneBuilder {
       const mesh = o as THREE.Mesh;
       if (typeof y !== 'number' || !mesh.isMesh || ctx.reflective.has(mesh)) return;
       ctx.reflective.set(mesh, y);
-      const rough = (mesh.material as THREE.MeshStandardMaterial).roughness;
-      const strength = typeof rough === 'number' && rough <= 0.15 ? POLISHED_REFLECTION : 1;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      const rough = mat.roughness;
+      // polish 4: the 'wet' finish mirrors like a wet floor (the relay-route painting)
+      const strength = mat.userData?.kitWet === true ? WET_REFLECTION : typeof rough === 'number' && rough <= 0.15 ? POLISHED_REFLECTION : 1;
       try { render?.registerReflectiveFloor(mesh, { y: y + this.root.getWorldPosition(new THREE.Vector3()).y, strength }); } catch (err) { ctx.warn('reflect', `registerReflectiveFloor failed: ${String(err)}`); }
     });
 

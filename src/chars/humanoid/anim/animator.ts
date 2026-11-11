@@ -27,6 +27,8 @@ interface Active {
   onEvent: ((name: string) => void) | undefined;
   ev: number;
   ended: boolean;
+  /** POLISH 4 (PlayOpts.persist): a held pose that stop() without an action leaves in place */
+  persist?: boolean;
 }
 
 interface Spring { x: number; v: number }
@@ -191,14 +193,14 @@ export class Animator {
       const s = opts?.startAt;
       t0 = s !== undefined && Number.isFinite(s) ? clamp(s, 0, clip.duration) : this.releaseStart(clip);
     }
-    const a: Active = { clip, name: action, time: t0, speed, upperOnly: opts?.upperOnly ?? clip.upperOnly, loop, onEvent: opts?.onEvent, ev: 0, ended: false };
+    const a: Active = { clip, name: action, time: t0, speed, upperOnly: opts?.upperOnly ?? clip.upperOnly, loop, onEvent: opts?.onEvent, ev: 0, ended: false, persist: opts?.persist === true };
     while (a.ev < clip.events.length && clip.events[a.ev].t < t0) a.ev++;
     const prev = this.shot;
     const lower = !a.upperOnly || (!loop && !!prev && !prev.upperOnly);
     this.transition(opts?.fade ?? (t0 > 0 ? Math.min(0.06, clip.fadeIn) : clip.fadeIn), lower);
     if (loop) {
       if (a.upperOnly) { this.over = a; this.overAuto = false; }
-      else { this.base = a; if (!this.overAuto) this.over = null; }
+      else { this.base = a; if (!this.overAuto && !this.over?.persist) this.over = null; }
     } else {
       this.shot = a;
       if (this.base && this.base.clip.transient) this.base = null;
@@ -223,9 +225,13 @@ export class Animator {
     const f = fade ?? 0.2;
     let cancelled: Active | null = null;
     if (action === undefined) {
-      if (this.shot || this.base || this.over) this.transition(f, true);
-      cancelled = this.shot;
-      this.shot = null; this.base = null; this.over = null; this.overAuto = false;
+      // (polish 4) a persisted held pose stays (a held one-shot, or a looping upper-body pose): only the rest goes
+      const keepShot = this.shot && this.shot.persist ? this.shot : null;
+      const keepOver = this.over && this.over.persist ? this.over : null;
+      if ((this.shot && !keepShot) || this.base || (this.over && !keepOver)) this.transition(f, !keepShot);
+      cancelled = keepShot ? null : this.shot;
+      this.shot = keepShot; this.base = null;
+      if (!keepOver) { this.over = null; this.overAuto = false; }
     } else {
       if (this.shot && this.shot.name === action) { this.transition(f, !this.shot.upperOnly); cancelled = this.shot; this.shot = null; }
       if (this.base && this.base.name === action) { this.transition(f, true); this.base = null; }

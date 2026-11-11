@@ -13,7 +13,8 @@ export const COVER_HIGH = 2.2;
 type CoverStyle = NonNullable<CoverOpts['style']>;
 
 function ancient(p: Part, w: number, d: number, H: number): void {
-  const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark'), inset = p.g('blackStone'), ch = p.g(p.ctx.channel());
+  // (polish 4: the channel lines are fine inlaid gold, not light)
+  const wg = p.g(p.ctx.agedStone()), trim = p.g('goldTrim'), dk = p.g('goldDark'), inset = p.g('blackStone'), ch = p.g(p.ctx.goldLine());
   // polish 3: a stepped plinth with a dark toe, a cap that oversails the body, corner stiles and framed panels —
   // the block reads as carved and assembled instead of as one pale box (the footprint and height are unchanged)
   dk.tbox(w + 0.02, 0.06, d + 0.02, 0.02, 0, 0, 0);

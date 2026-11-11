@@ -28,6 +28,7 @@ import { witnessHalo, type WitnessHalo } from './halo';
 import { Retargeter } from './retarget';
 import { flashStrength } from '@/chars/flash';
 import { corruptionCode, frostCode } from '@/chars/regions';
+import { isStub } from '@/core/stub';
 
 /** eye centre above the head joint / in front of it, in skull lengths (the `eye` socket uses the same) */
 const FACE_EYE_Y = 0.47, FACE_EYE_Z = 0.42;
@@ -40,6 +41,7 @@ const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _ax = new THREE.Vector
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qh = new THREE.Quaternion();
 const _m = new THREE.Matrix4(), _rootInv = new THREE.Matrix4();
 const _col = new THREE.Color();
+const _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
 /** how much a thigh holster follows the leg (the rest follows the pelvis) */
 const HOLSTER_LEG = 0.55;
@@ -114,9 +116,17 @@ export class GlbHumanoidVisual implements HumanoidVisual {
   private readonly headLook: BareHeadLook | null;
   /** CharacterCreateOpts.wounded (integration) */
   private readonly wounded: boolean;
+  /** CharacterCreateOpts.woundSide (polish 4) */
+  private readonly woundSide: 'left' | 'right';
   /** the King's halo is drawn (config `halo` and CharacterCreateOpts.halo) */
   private readonly wantHalo: boolean;
   private halo: WitnessHalo | null = null;
+  /** POLISH 4: speech — the voice's envelope (fast and slow followers) and how much the head moves with it */
+  private talkFast = 0;
+  private talkSlow = 0;
+  private talkW = 0;
+  private talkT = 0;
+  private readonly talkQ = new THREE.Quaternion();
 
   constructor(private readonly game: Game | null, archetype: HumanoidArchetype, private readonly cfg: GlbArchetype, private readonly lib: ModelLibrary, opts: CharacterCreateOpts = {}) {
     this.archetype = archetype;
@@ -124,6 +134,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const halfHuman = opts.halfHuman === true && archetype === 'linkbound';
     this.headLook = bareHeadFor(cfg, opts.bareHead || halfHuman);
     this.wounded = opts.wounded === true;
+    this.woundSide = opts.woundSide === 'right' ? 'right' : 'left';
     this.wantHalo = cfg.halo === true && opts.halo !== false;
     this.seed = Number.isFinite(opts.seed) ? Math.floor(opts.seed as number) : 0;
     this.variant = Number.isFinite(opts.variant) ? Math.floor(opts.variant as number) : 0;
@@ -217,7 +228,11 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const tpl = inst.template;
     let bodyLods = tpl.lods;
     const head = this.headLook ? this.mountHead(inst, this.headLook) : null;
-    if (head) { materials.push(head.material); inst.meshes.push(head.mesh); bodyLods = head.bodyLods; }
+    if (head) {
+      // (polish 4) a grafted civilian head is skin like any face
+      head.material.own.uSkin.value.x = 1;
+      materials.push(head.material); inst.meshes.push(head.mesh); bodyLods = head.bodyLods;
+    }
     const attach = new THREE.Group();
     attach.name = 'equipment';
     const body: Body = { inst, retarget, materials, attach, sockets: {}, props: [], extras: [], height: (tpl.entry.height ?? rig.height) * g, lod: null };
@@ -269,6 +284,15 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     // skull estimate — meshy rigs put the head joint low)
     const faceScale = 0.21 * Math.min(1.2, Math.max(0.85, body.height / g / 1.78));
     for (const m of body.materials) m.own.uFace.value.set(head.x / g, (head.y + skull * FACE_EYE_Y) / g + FACE_EYE_LIFT, (head.z - skull * FACE_EYE_Z) / g, faceScale);
+    // (polish 4) the arms for CorruptionOpts.arms: shoulder joint to grip, both sides averaged and mirrored to +X
+    if (rt.has('uArmL') && rt.has('uArmR')) {
+      const sL = rt.restPos('uArmL', new THREE.Vector3()), sR = rt.restPos('uArmR', new THREE.Vector3());
+      const hL = rig.hands.L.grip.clone().multiplyScalar(g), hR = rig.hands.R.grip.clone().multiplyScalar(g);
+      const sx = (Math.abs(sL.x) + Math.abs(sR.x)) / 2 / g, sy = (sL.y + sR.y) / 2 / g, sz = (sL.z + sR.z) / 2 / g;
+      const hx = (Math.abs(hL.x) + Math.abs(hR.x)) / 2 / g, hy = (hL.y + hR.y) / 2 / g, hz = (hL.z + hR.z) / 2 / g;
+      const radius = Math.min(0.15, Math.max(0.08, (rig.metrics.forearmRadius[0] + rig.metrics.forearmRadius[1]) / 2 + 0.06));
+      for (const m of body.materials) { m.own.uArmA.value.set(sx, sy, sz, 1); m.own.uArmB.value.set(hx, hy, hz, radius); }
+    }
     make('handL', 'handL', rig.hands.L.grip.clone().multiplyScalar(g));
     make('handR', 'handR', rig.hands.R.grip.clone().multiplyScalar(g));
   }
@@ -347,14 +371,23 @@ export class GlbHumanoidVisual implements HumanoidVisual {
    * blood / ash (shader uniforms, see material.ts), and the King's halo on the visible head.
    */
   private applyLook(body: Body): void {
-    const g = this.scale, w = this.cfg.witness, rt = body.retarget;
-    const sh = this.wounded ? rt.restPos(rt.has('uArmL') ? 'uArmL' : rt.chestRole, new THREE.Vector3()) : null;
+    const g = this.scale, w = this.cfg.witness, rt = body.retarget, f = this.cfg.face;
+    const arm = this.woundSide === 'right' ? 'uArmR' : 'uArmL';
+    const sh = this.wounded ? rt.restPos(rt.has(arm) ? arm : rt.chestRole, new THREE.Vector3()) : null;
     for (const m of body.materials) {
       if (w) m.own.uWitness.value.set(w.luminous, w.edge, body.height / g, 0);
+      // (polish 4) the face: skin, greying, strands, a dressing, brown irises (config FaceLook)
+      if (f) {
+        const k = m.own.uSkin.value;
+        m.own.uSkin.value.set(Math.max(k.x, f.skin ?? 0), f.greyTemples ?? 0, f.greyBeard ?? 0, f.strands ?? 0);
+        m.own.uFaceFx.value.set(f.bandage ?? 0, f.brownEyes ?? 0, 0, 0);
+      }
       if (sh) {
-        // the figure's LEFT shoulder (−X in rest space): centred a little above the joint, over the pauldron
-        m.own.uWound.value.set(1, -1, 0, 0);
-        m.own.uShoulder.value.set(sh.x / g - 0.02, sh.y / g + 0.02, sh.z / g, 0.16);
+        // the figure's LEFT shoulder (−X in rest space; `woundSide: 'right'` the other): centred a little above the
+        // joint and outside it, over the pauldron (polish 4: a larger break, to read at 3–6 m)
+        const side = this.woundSide === 'right' ? 1 : -1;
+        m.own.uWound.value.set(1, side, 0, 0);
+        m.own.uShoulder.value.set(sh.x / g + side * 0.02, sh.y / g + 0.02, sh.z / g, 0.2);
       }
     }
     const head = body.sockets.head;
@@ -440,6 +473,7 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     const L = this.shared.uLocal.value;
     if (opts?.mode !== undefined) L.y = corruptionCode(opts.mode);
     if (opts?.side !== undefined) L.z = opts.side === 'left' ? -1 : 1;
+    if (opts?.arms !== undefined) this.shared.uArmCorr.value = clamp01(opts.arms);
     if (!this.body) this.driver.setCorruption(a, opts);
     this.eachFallback((f) => { f.fm.uniforms.uCorruption.value = a; f.fm.uniforms.uLocal.value.copy(L); });
   }
@@ -538,7 +572,8 @@ export class GlbHumanoidVisual implements HumanoidVisual {
       if (!pin) continue;
       pin.w += (pin.target - pin.w) * (1 - Math.exp(-9 * dt));
       if (pin.w < 0.004 && pin.target === 0) { this.pins[side] = null; continue; }
-      rt.pullHand(side, _t.copy(pin.pos).applyMatrix4(_rootInv), pin.w);
+      // (polish 4: with the reach assist — a clasp or a console just out of the straight arm's reach is reached)
+      rt.pullHand(side, _t.copy(pin.pos).applyMatrix4(_rootInv), pin.w, true);
     }
     // two-handed items: the off hand closes on the visible weapon, which sits in the visible right hand
     if (eq.hasGrip2 && eq.heldR) {
@@ -554,9 +589,51 @@ export class GlbHumanoidVisual implements HumanoidVisual {
     }
     rt.setCurl(0, sv.curl[0]);
     rt.setCurl(1, sv.curl[1]);
+    this.speechMotion(dt, I.head);
     rt.apply();
     this.placeProps(b, dt, s);
     this.root.updateMatrixWorld(true);
+    // (polish 4) the skull's centre for the shader's head-ball fresnel and crease test
+    const hs = b.sockets.head;
+    if (hs) { hs.getWorldPosition(_v); this.shared.uHeadW.value.set(_v.x, _v.y, _v.z, 1); }
+  }
+
+  /**
+   * POLISH 4 — facial animation. The generated rigs have a head bone but no jaw, so a speaking figure moves its HEAD
+   * with the voice: a small nod on stressed syllables (rises of the voice-over's envelope over its slow average),
+   * a slight lift with sustained loudness, and a slow sway — at most about 2.5° — fading in and out with
+   * setSpeaking / the talk gesture. With no recording sounding (muted, a subtitle-only line) a soft syllable rhythm
+   * stands in. Applied in the driver's head frame on top of the animation and the gaze.
+   */
+  private speechMotion(dt: number, headIndex: number): void {
+    const b = this.body;
+    if (!b || headIndex === undefined || dt <= 0) return;
+    const want = clamp01(this.driver.speaking / 0.7);
+    this.talkW += (want - this.talkW) * (1 - Math.exp(-6 * dt));
+    if (this.talkW < 0.002) { this.talkW = 0; this.talkFast = this.talkSlow = 0; return; }
+    this.talkT += dt;
+    const au = this.game?.audio;
+    let lvl = -1;
+    if (au && !isStub(au) && typeof au.voiceLevel === 'function') {
+      const v = au.voiceLevel();
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 0) lvl = Math.min(1, v);
+    }
+    const t = this.talkT + this.seed * 1.37;
+    const env = lvl >= 0 ? lvl : 0.55 * Math.abs(Math.sin(t * 5.2) * Math.sin(t * 2.9 + 1.1));
+    this.talkFast += (env - this.talkFast) * (1 - Math.exp(-14 * dt));
+    this.talkSlow += (env - this.talkSlow) * (1 - Math.exp(-2.5 * dt));
+    const accent = Math.max(0, this.talkFast - this.talkSlow);
+    const w = this.talkW;
+    // driver head frame: +X the figure's right, +Y up, the figure faces −Z
+    // (a positive X turn lifts the face: a stress nods it down, sustained loudness lifts it a little)
+    const pitch = w * (-0.045 * accent + 0.012 * this.talkSlow + 0.006 * Math.sin(t * 1.3));
+    const yaw = w * 0.016 * Math.sin(t * 0.83 + 0.6);
+    const roll = w * 0.01 * Math.sin(t * 0.61 + 2.1);
+    _e.set(pitch, yaw, roll, 'YXZ');
+    this.talkQ.setFromEuler(_e);
+    const wq = this.acc.solver.wq[headIndex];
+    _q.copy(wq).multiply(this.talkQ).multiply(_q2.copy(wq).invert());
+    b.retarget.turn('head', _q);
   }
 
   /**

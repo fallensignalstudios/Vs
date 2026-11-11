@@ -21,6 +21,7 @@
  *      'zone:loading' → clears world-bound HUD (markers, prompt, hint, readout, elite frame, pinned actor) and
  *                       the scene's narrative staging (card, flash, status board, captions, subtitle, skip hint)
  *                       — so a zone exit or a debug goto never carries a card into the next zone
+ *    Polish 4: also the world-text labels (`worldText`), whose anchors belong to the zone.
  *  - UI sounds the UI plays itself (do not double them): uiMove / uiSelect / uiBack in menus, uiPrompt when a
  *    context action appears, uiObjective when the objective line changes, uiChoice / uiCommit on the choice
  *    panel. (The checkpoint toast is silent: the audio system already answers 'checkpoint:saved'.)
@@ -29,6 +30,7 @@
  *    changed it meanwhile). Menu presses it handles are consumed (including `pause`, so Esc never re-opens the
  *    pause menu it just closed).
  */
+import type * as THREE from 'three';
 import type { DialogueLine, Vec3Like, CaptionKind, MissionState, Difficulty } from './common';
 import type { Actor } from './combat';
 
@@ -124,6 +126,8 @@ export interface UiSystem {
    * turned off. Independent of `setHudVisible` (a cinematic restoring the HUD does not undo it); narrative cards,
    * flash text, the status board, letterbox, fades, the choice panel and menus still draw. Timers keep running
    * underneath. Optional so hand-built UI stand-ins stay valid.
+   * Polish 4: a 'context' card is hidden too (kept with its timer, shown again when the frame is no longer clean);
+   * the narrative styles ('witness', 'consequence', 'title') and world text still draw.
    */
   setCleanFrame?(on: boolean): void;
   /** ADDED (polish 3) — the state last set through setCleanFrame */
@@ -221,10 +225,60 @@ export interface UiSystem {
     opts?: { title?: string; placement?: 'centre' | 'lowerThird' | 'side' },
   ): void;
 
+  /**
+   * ADDED (polish 4) — WORLD TEXT: a legible screen-space copy of small in-world text (a hologram's lane labels,
+   * a projected text panel, signage) that would otherwise be a few pixels tall at 720p. The label follows a world
+   * point or a point on an object, is drawn at the size its world cap height projects to but never below `minPx`
+   * (at 720p; scaled with the viewport), on a dark backing plate. It hides by itself when its anchor object (or a
+   * parent) is invisible or out of the scene, behind the camera, off screen, beyond `maxDistance`, or seen from
+   * behind (`faces`). Diegetic, not HUD: it shows in cinematics and in the debug clean frame; menus and the death
+   * / loading screens cover it. Calling again with the same id updates it (cheap: only changed text touches the
+   * DOM — fine every frame); `null` fades it out; a zone change removes them all. Optional so UI stand-ins stay
+   * valid: call it as `game.ui.worldText?.(…)`.
+   *
+   *   // Z07: the threatStreams lane labels (the display reads from its front, local −Z; its +X is the viewer's left)
+   *   game.ui.worldText?.('z07-lane-top', { at: streams.object, offset: { x: 0.81, y: 1.825, z: 0 }, faces: { x: 0, y: 0, z: -1 },
+   *     text: 'DOMINION ARCS', tone: 'amber', align: 'left', size: 0.045 });
+   *   // Z11: a projected text panel (a quad that reads from +Z), with its fade
+   *   game.ui.worldText?.('z11-proj', { at: panel.object, faces: { x: 0, y: 0, z: 1 }, text: lines.join('\n'), tone: 'gold', opacity: panel.level });
+   */
+  worldText?(id: string, opts: WorldTextOpts | null): void;
+
   /** true while a menu/choice has focus and gameplay input should be ignored */
   readonly modalOpen: boolean;
   /** small monospace overlay for development (null hides) */
   debugText(text: string | null): void;
   /** advance all UI animation; `dt` in real seconds. Called once per tick by Game. */
   update(dt: number): void;
+}
+
+/** ADDED (polish 4). Options of `UiSystem.worldText`. */
+export interface WorldTextOpts {
+  /** a world point (copied), or an object the label follows every frame (its world transform applies to `offset`) */
+  at: Vec3Like | THREE.Object3D;
+  /** offset from `at`: in the object's LOCAL frame for an object anchor (its rotation and scale apply), in world space for a point */
+  offset?: Vec3Like;
+  /** the text; `\n` breaks lines. Drawn upper case in the HUD's condensed face. Empty = hidden. */
+  text: string;
+  /** cap height the text has in the world, in metres (default 0.05): the label grows as the camera comes closer */
+  size?: number;
+  /** the smallest the text is ever drawn: font size in CSS px at 720p, scaled with the viewport height (default 17: a cap of ~12 px at 1280×720) */
+  minPx?: number;
+  /** the largest it is drawn, same units (default 36) */
+  maxPx?: number;
+  /** dark backing plate behind the text (default true) */
+  plate?: boolean;
+  /** text colour: 'pale' (default, cool white), 'cold' (Reformation blue), 'amber' (Dominion), 'gold', 'violet' */
+  tone?: 'pale' | 'cold' | 'amber' | 'gold' | 'violet';
+  /** which edge of the text block sits on the anchor, vertically centred (default 'center') */
+  align?: 'left' | 'center' | 'right';
+  /**
+   * the direction the text faces, in the anchor object's local frame (world space for a point anchor): the label
+   * hides when the camera is behind that plane (a display that reads from one side only). Omitted = any side.
+   */
+  faces?: Vec3Like;
+  /** hide beyond this many metres from the camera (default 30) */
+  maxDistance?: number;
+  /** 0..1 multiplier on its opacity — follow a panel's own fade (default 1) */
+  opacity?: number;
 }

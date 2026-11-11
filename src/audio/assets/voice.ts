@@ -35,6 +35,34 @@ import { voLineId } from './voiceId';
 
 export type VoiceChannel = NonNullable<VoiceOpts['channel']>;
 
+/** POLISH 4: envelope frames per second (VoicePlayer.level) */
+const ENV_RATE = 100;
+const envelopes = new WeakMap<AudioBuffer, Float32Array>();
+/**
+ * RMS envelope of a clip at ENV_RATE, normalised to its loudest frame (0..1) with a gentle curve so quiet syllables
+ * still move: computed once per decoded clip and cached with it.
+ */
+export function envelopeOf(buffer: AudioBuffer): Float32Array {
+  const hit = envelopes.get(buffer);
+  if (hit) return hit;
+  const ch = buffer.numberOfChannels > 0 ? buffer.getChannelData(0) : new Float32Array(0);
+  const hop = Math.max(1, Math.round(buffer.sampleRate / ENV_RATE));
+  const n = Math.max(1, Math.ceil(ch.length / hop));
+  const env = new Float32Array(n);
+  let peak = 1e-6;
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    const a = i * hop, b = Math.min(ch.length, a + hop);
+    for (let j = a; j < b; j++) sum += ch[j] * ch[j];
+    const r = Math.sqrt(sum / Math.max(1, b - a));
+    env[i] = r;
+    if (r > peak) peak = r;
+  }
+  for (let i = 0; i < n; i++) env[i] = Math.sqrt(Math.min(1, env[i] / peak));
+  envelopes.set(buffer, env);
+  return env;
+}
+
 /** how far the score drops under a spoken line, −6 dB (ambience drops by 60 % of this) */
 const VOICE_DUCK = 0.5;
 /** the score comes back this slowly after a line (time constant, s): ~1.5 s to recover */
@@ -114,6 +142,23 @@ export class VoicePlayer {
   /** id of the line being spoken (or about to be), or null */
   get speaking(): string | null {
     return this.line ? this.line.id : null;
+  }
+
+  /**
+   * POLISH 4: how loud the line sounds right now, 0..1 of its own loudest moment (a 100 Hz RMS envelope computed once
+   * per clip), or −1 when no recording is sounding (nothing said, a subtitle-only line, held by pause, not started
+   * yet). Drives the speaking figure's head motion (src/chars/glb/visual.ts).
+   */
+  level(): number {
+    const line = this.line;
+    if (!line || line.cancelled || this.paused || !line.clip || !Number.isFinite(line.startedAt)) return -1;
+    const t = this.ac.currentTime - line.startedAt;
+    if (t < 0 || t >= line.clip.buffer.duration) return -1;
+    const env = envelopeOf(line.clip.buffer);
+    const i = t * ENV_RATE;
+    const k = Math.min(env.length - 1, Math.floor(i));
+    const f = i - k;
+    return env[k] + ((env[Math.min(env.length - 1, k + 1)] ?? env[k]) - env[k]) * f;
   }
 
   /**

@@ -7,7 +7,7 @@
  * the object-space materials and are never merged.
  */
 import * as THREE from 'three';
-import type { ColliderDesc, ColliderHandle, Game, MatId, PhysicsWorld, QualityProfile, SurfaceDesc, SurfaceFinish, SurfaceHandle } from '@/core/api';
+import type { ColliderDesc, ColliderHandle, Game, MatId, PhysicsWorld, QualityProfile, SurfaceDesc, SurfaceFinish, SurfaceHandle, WallFinish } from '@/core/api';
 import { PALETTE } from '@/core/api/materials';
 import { RENDER_LAYERS } from '@/core/api/render';
 import { mulberry32 } from '@/core/mathx';
@@ -244,19 +244,48 @@ export class KitCtx {
    * `stone_worn` / `concrete_hangar` photographic sets (rough: no mirror, no planar reflection).
    */
   finish(mat: MatId, finish: SurfaceFinish | undefined): MatRef {
-    if (finish !== 'worn' && finish !== 'hangar') {
+    const surface = finish === 'worn' ? 'stone_worn' : finish === 'hangar' ? 'concrete_hangar' : finish === 'wet' ? 'floor_wet_grey' : null;
+    if (!surface) {
       if (finish !== undefined && finish !== 'polished') this.warn(`finish:${String(finish)}`, `unknown finish "${String(finish)}" — using the polished top`);
       return mat;
     }
-    const surface = finish === 'worn' ? 'stone_worn' : 'concrete_hangar';
-    const key = `finish:${mat}:${finish}`;
+    return this.wearing(mat, surface, `finish:${mat}:${finish}`);
+  }
+
+  /**
+   * ADDED (polish 4): a wall in a {@link WallFinish}: `'slab'` (default) is the material itself (white-gold = smooth
+   * marble slabs now); `'ashlar'` is the coursed pale limestone of the integration wave (damaged and service areas).
+   */
+  wallFinish(mat: MatId, finish: WallFinish | undefined): MatRef {
+    if (finish !== 'ashlar') {
+      if (finish !== undefined && finish !== 'slab') this.warn(`wallFinish:${String(finish)}`, `unknown wall finish "${String(finish)}" — using the slab`);
+      return mat;
+    }
+    if (mat === 'blackStone' || mat === 'blackStoneFloor') return mat;
+    return this.wearing(mat, 'stone_pale', `wall:${mat}:ashlar`);
+  }
+
+  /** cached per-builder clone of `mat` wearing another photographic set */
+  private wearing(mat: MatId, surface: string, key: string): THREE.Material {
     let m = this.inlays.get(key);
     if (!m) {
       m = this.clone<THREE.Material>(mat, { surface });
-      m.name = `kit-finish:${mat}:${finish}`;
+      m.name = `kit-${key}`;
+      if (surface === 'floor_wet_grey') m.userData.kitWet = true;
       this.inlays.set(key, m);
     }
     return m;
+  }
+
+  /**
+   * ADDED (polish 4): fine inlaid gold — the paintings' lines in floors, rails and frames: thin, polished, metallic,
+   * NOT emissive (it shows by reflecting the room). Polygon-offset like every flush inlay. The glowing channel
+   * ({@link channel}) is now an explicit opt-in.
+   */
+  goldLine(): THREE.Material {
+    // a faint self-light (well under the bloom threshold) keeps the gold reading as gold in a dark room, the way the
+    // paintings' gold lines catch the light — it never glows or blooms
+    return this.inlay('goldTrim', { roughness: 0.16, emissive: 0xd0a04c, emissiveIntensity: 0.32 });
   }
 
   /** build-once cache (prop templates, shared textures) */

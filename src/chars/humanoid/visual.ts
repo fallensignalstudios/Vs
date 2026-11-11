@@ -299,6 +299,14 @@ export class HumanoidVisualImpl implements HumanoidVisual {
     return this.uniforms.uFlare.value;
   }
 
+  /**
+   * POLISH 4: 0..1 how much the figure is speaking right now — setSpeaking (smoothed) or the talk gesture (a
+   * generated body has no jaw bone: it moves its head with the voice instead, see glb/visual.ts)
+   */
+  get speaking(): number {
+    return Math.max(this.speak, this.animator.isPlaying('talk') ? 0.7 : 0);
+  }
+
   stop(action?: AnimAction, fade?: number): void {
     if (action === undefined || action === 'frozen') this.animator.paused = false;
     if (action === 'frozen') return;

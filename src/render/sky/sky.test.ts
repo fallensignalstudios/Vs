@@ -1,19 +1,22 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Game, SkyPreset } from '@/core/api';
-import type { Carrier } from './carrier';
-import { insideHull } from './carrierHull';
+import { CARRIER_MODEL_OFFSET, type Carrier } from './carrier';
+import { BOW_Z, HULL_LENGTH, RAM_BOTTOM, RAM_TOP, insideHull } from './carrierHull';
 import { WOUND_SCALE_MIN, woundScale } from './dome';
-import { DOME_FRAGMENT, WOUND_LOOK, WOUND_SOLID, woundCoreColor, woundEllipse, woundThroatHalfWidth, woundVoidOpacity, woundVoidReach } from './domeShader';
+import { DOME_FRAGMENT, WOUND_LOOK, WOUND_SOLID, woundCoreColor, woundEllipse, woundThroatHalfWidth, woundVoidOpacity, woundVoidReach, woundWander } from './domeShader';
 import { createSkySystem } from './index';
-import { battleFrame, battlePlaneCoords } from './fleet';
+import { battleFrame, battlePlaneCoords, createFleet } from './fleet';
+import { createSharedUniforms } from './shared';
+import { silhouette } from '@/world/props/ships/silhouettes';
+import { GENERATED_CAPITAL_LIGHTS } from './scenic/hulls';
 import { SKY_PRESETS, SKY_PRESET_IDS, SkyState, blendSkyStates, dirFromAzEl, rotateSkyState, slerpDir } from './presets';
 import { lancet } from './scenic/arch';
 import { CLIP_TOWER, clipTowerRadius } from './scenic/clipTower';
 import { GeoBuilder } from './scenic/geo';
 import { archPoint } from './scenic/megaRibs';
 import { num } from './scenic/opts';
-import { VOID_DOWN, insideWound, woundCap, woundCone } from './scenic/woundClear';
+import { CAP_FLOOR, VOID_DOWN, insideWound, woundCap, woundCone } from './scenic/woundClear';
 
 const DEG = Math.PI / 180;
 
@@ -61,8 +64,10 @@ describe('sky presets', () => {
   it('crashRib Wound is small and contained; woundVista Wound dominates the horizon, wholly above the city', () => {
     expect(SKY_PRESETS.crashRib.wound.radius).toBeLessThan(4);
     expect(SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(8);
-    // the disc's lower limb clears the horizon (and the spires capped under it): a clean, seam-free silhouette
-    expect(SKY_PRESETS.woundVista.wound.at[1] - SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(3);
+    // the disc's lower limb clears the horizon (and the spires capped under it): a clean, seam-free silhouette — but
+    // only just (polish pass 4: the painting's opening sits low over the city, its centre ≈ 1.1 radii above the skyline)
+    expect(SKY_PRESETS.woundVista.wound.at[1] - SKY_PRESETS.woundVista.wound.radius).toBeGreaterThan(2);
+    expect(SKY_PRESETS.woundVista.wound.at[1] / SKY_PRESETS.woundVista.wound.radius).toBeLessThan(1.35);
     // the red remnant is the one accent, and smaller than the Wound by far
     expect(SKY_PRESETS.woundVista.red.radius).toBeLessThan(SKY_PRESETS.woundVista.wound.radius * 0.6);
     expect(SKY_PRESETS.woundVista.sat).toBeLessThan(0.6);
@@ -186,13 +191,17 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
         expect(maxDrop).toBeLessThan(0.12);
       }
     }
-    // the boundary wanders with angle at low frequency (its wander 0 → 1) by about ±0.15 radii…
+    // the boundary wanders with angle at low frequency (its wander 0 → 1) by about a fifth of a radius…
     const half = (wob: number, ell = 1): number => {
       let rn = 0.4;
       while (woundVoidOpacity(rn, wob, ell) > 0.5) rn += 0.0005;
       return rn;
     };
-    expect(half(1) - half(0)).toBeGreaterThan(0.28);
+    expect(half(1) - half(0)).toBeGreaterThan(0.18);
+    // …swelling outward twice as far as it recedes, so it never bites a deep concave notch into the opening
+    expect(half(0.5) - half(0)).toBeLessThan(0.6 * (half(1) - half(0.5)));
+    expect(woundWander(0)).toBeCloseTo(-WOUND_LOOK.edgeWobble / 4, 9);
+    expect(woundWander(1)).toBeCloseTo(WOUND_LOOK.edgeWobble / 2, 9);
     // …around an opening that is an ellipse, wider than tall
     expect(woundEllipse(1, 0)).toBeCloseTo(WOUND_LOOK.edgeA, 9);
     expect(woundEllipse(0, -3)).toBeCloseTo(WOUND_LOOK.edgeB, 9);
@@ -240,7 +249,7 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
     // (the previous pass ringed the opening with five evenly spaced round knots, which read as LEDs)
     expect(DOME_FRAGMENT).not.toMatch(/woundKnot|knotAt/);
     // the clusters light the matter itself (its lit faces turn lavender-violet) and glow softly as an area
-    expect(DOME_FRAGMENT).toMatch(/matC = mix\(matC, LAVVIO \*/);
+    expect(DOME_FRAGMENT).toMatch(/matC = mix\(matC, mix\(LAVVIO, LAVGREY, /);
     expect(DOME_FRAGMENT).toMatch(/col \+= LAVVIO \* mt \* [\d.]+ \* vl/);
     // one forked filament (a main thread and two branches) along the lower-right lip; no more than a few threads
     const threads = DOME_FRAGMENT.match(/crackle\(pc, /g) ?? [];
@@ -248,7 +257,7 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
     expect(threads.length).toBeLessThanOrEqual(4);
   });
 
-  it('its throat carries the funnel down to the horizon: dark, streaked, narrowing, matter rather than void', () => {
+  it('its throat carries the funnel down to the horizon: its grooved wall, narrowing, matter rather than void', () => {
     // only where the Wound sinks into a city behind the skyline (the overlook); elsewhere it hangs in open space
     expect(new SkyState().setFromDef(SKY_PRESETS.woundVista).woundThroat).toBe(1);
     for (const id of SKY_PRESET_IDS.filter((i) => i !== 'woundVista')) expect(new SkyState().setFromDef(SKY_PRESETS[id]).woundThroat, id).toBe(0);
@@ -264,8 +273,11 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
     for (let k = 0; k < 1; k += 0.1) expect(woundThroatHalfWidth(k + 0.1)).toBeLessThanOrEqual(woundThroatHalfWidth(k) + 1e-12);
     expect(woundThroatHalfWidth(-1)).toBe(top);
     expect(woundThroatHalfWidth(2)).toBe(bottom);
-    // its colour is the void's rock (ink) lifted by its streaks: lighter than the void, darker than any smoke
-    expect(DOME_FRAGMENT).toMatch(/vec3 thC = ink \* \(0\.9\d? \+/);
+    // polish pass 4: right under the opening it IS the void's rim colour (so the lower arc never shows as a U-shaped
+    // edge), grading into the void's rock (ink) lifted by the grooves further down — no vertical curtain folds
+    expect(DOME_FRAGMENT).toMatch(/vec3 rimC = woundCore\(1\.0, grooveT\)/);
+    expect(DOME_FRAGMENT).toMatch(/vec3 thC = mix\(rimC, ink \* \(0\.9\d? \+/);
+    expect(DOME_FRAGMENT).not.toMatch(/tx \* 4\.2/);
     // it is matter, not void: only the horizon haze reads it (the white remnant's glare masks the void alone)
     expect(DOME_FRAGMENT).toContain('gWoundDark = max(voidA, throatA');
     expect(DOME_FRAGMENT).toContain('gWoundVoid = voidA * uWoundVis');
@@ -275,8 +287,10 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
   it('balances its matter on its own against the gallery grade (cool grey, not magenta)', () => {
     const s = new SkyState().setFromDef(SKY_PRESETS.woundVista);
     const m = s.matterTint;
-    // the gallery splits blue shadows from warm highlights, which turns mid-grey magenta: matter goes in green-heavy
-    expect(m.g).toBeGreaterThan(m.r * 1.15);
+    // the gallery splits blue shadows from warm highlights; polish pass 4 measured the painting's crust and smoke as a
+    // faintly violet grey (red ≈ green, blue a little higher), so matter goes in near neutral, blue held back a touch
+    expect(m.g / m.r).toBeGreaterThan(0.95);
+    expect(m.g / m.r).toBeLessThan(1.12);
     expect(m.g).toBeGreaterThan(m.b * 1.05);
     // Z10's silver-cold grade turns its smoke blue-white: it goes in a touch warm, to land on grey
     const z10 = new SkyState().setFromDef(SKY_PRESETS.coreChamber).matterTint;
@@ -298,7 +312,9 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
     // the furthest the void's faintest fringe reaches straight down, fully swollen, in Wound radii
     expect(VOID_DOWN).toBeCloseTo(woundVoidReach(0, -1) * woundScale(1), 9);
     const lowest = w.at[1] - w.radius * VOID_DOWN;
-    expect(lowest).toBeGreaterThan(3);
+    // (polish pass 4: just above the city's glow line, 1.1°, where the painting puts it)
+    expect(lowest).toBeGreaterThan(1.15);
+    expect(lowest).toBeLessThan(3);
     // scenic/woundClear caps whatever stands under the void just below that lowest point (and lower toward the sides)
     const cone = woundCone();
     const capAt = (dazDeg: number): number | null => {
@@ -307,6 +323,8 @@ describe('the Wound: a soft vortex (dome shader maths, mirrored on the CPU)', ()
     };
     expect(capAt(0)!).toBeLessThan(lowest);
     expect(capAt(0)!).toBeGreaterThan(lowest - 1.5);
+    // the floor a cap never goes under stays under the void's lowest point too
+    expect(CAP_FLOOR / DEG).toBeLessThan(lowest - 0.3);
     for (let daz = 0; daz < 20; daz += 0.5) {
       const c = capAt(daz);
       if (c === null) continue;
@@ -1050,3 +1068,84 @@ describe('scenic factory', () => {
     expect(names.has('domOxblood')).toBe(true);
   });
 });
+
+describe('polish pass 4: generated ships in the sky, the slate night', () => {
+  it('the fleet impostors are the generated capitals, with the procedural hulls as the fallback', () => {
+    const gen = createFleet(createSharedUniforms(), 7283);
+    expect(gen.generated).toBe(true);
+    const proc = createFleet(createSharedUniforms(), 7283, { procedural: true });
+    expect(proc.generated).toBe(false);
+    // same layout either way; lights at the generated files' real engines and running lights
+    expect(gen.ships.length).toBe(proc.ships.length);
+    const dom = gen.ships.find((sh) => sh.faction === 0)!;
+    const ref = gen.ships.find((sh) => sh.faction === 1)!;
+    const count = (sh: typeof dom, engine: boolean): number => sh.lights.filter((l) => l.engine === engine).length;
+    expect(count(dom, true)).toBe(GENERATED_CAPITAL_LIGHTS.dominionCapital.engines.length);
+    expect(count(ref, true)).toBe(GENERATED_CAPITAL_LIGHTS.reformationCapital.engines.length);
+    expect(count(ref, false)).toBe(GENERATED_CAPITAL_LIGHTS.reformationCapital.running.length);
+    for (const sh of gen.ships) for (const l of sh.lights) expect(Number.isFinite(l.x + l.y + l.w)).toBe(true);
+    const idx = gen.mesh.geometry.getIndex()!;
+    expect(idx.count).toBeGreaterThan(3000);
+    for (const v of gen.mesh.geometry.getAttribute('aLocal').array as Float32Array) expect(Number.isFinite(v)).toBe(true);
+    gen.dispose(); proc.dispose();
+  });
+
+  it('the generated carrier sits on the procedural ram: nothing lower, its lower bow at the ram face, its prow clear of the needle', () => {
+    const o = CARRIER_MODEL_OFFSET;
+    expect(o.scale).toBeCloseTo(HULL_LENGTH / 500, 9);
+    const sil = silhouette('reformationCarrier');
+    let lowest = Infinity, front = Infinity;
+    // the needle's tip in the hull frame at first contact (centre at collar + clearance − ram bottom), with the
+    // unstabilised nose-down pitch (0.06 rad) and a margin
+    const needleTop = CLIP_TOWER.top - (CLIP_TOWER.cut + 22 - RAM_BOTTOM);
+    for (let i = 0; i < sil.pos.length; i += 3) {
+      const y = sil.pos[i + 1] * o.scale + o.y, z = sil.pos[i + 2] * o.scale + o.z;
+      lowest = Math.min(lowest, y);
+      if (y <= RAM_TOP - 2) front = Math.min(front, z);
+      // anything ahead of the ram's face rides above the needle's tip even pitched nose-down
+      if (z < BOW_Z - 0.5) expect(y - Math.sin(0.06) * Math.abs(z), `vertex ${i / 3}`).toBeGreaterThan(needleTop + 1);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(RAM_BOTTOM);
+    expect(lowest).toBeLessThan(RAM_BOTTOM + 2);
+    expect(front).toBeCloseTo(BOW_Z, 6);
+  });
+
+  it('the overlook night is darker and slate, the remnants and the Wound untouched by it', () => {
+    const s = new SkyState().setFromDef(SKY_PRESETS.woundVista);
+    const t = s.skyTint;
+    expect(Math.max(t.r, t.g, t.b)).toBeLessThan(0.7);
+    expect(t.g).toBeGreaterThan(t.r * 1.15);
+    expect(t.g).toBeGreaterThan(t.b);
+    for (const id of SKY_PRESET_IDS.filter((i) => i !== 'woundVista')) {
+      const o = new SkyState().setFromDef(SKY_PRESETS[id]).skyTint;
+      expect([o.r, o.g, o.b], id).toEqual([1, 1, 1]);
+    }
+    // only the empty sky is tinted: applied before the red remnant is added and before the Wound is composited
+    const at = DOME_FRAGMENT.indexOf('col *= uSkyTint;');
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThan(DOME_FRAGMENT.indexOf('col += red.rgb * uRedGain;'));
+    expect(at).toBeLessThan(DOME_FRAGMENT.indexOf('col = woundComposite('));
+    const mid = blendSkyStates(new SkyState().setFromDef(SKY_PRESETS.hangar), s, 0.5, new SkyState());
+    expect(mid.skyTint.g).toBeCloseTo((1 + t.g) / 2, 9);
+  });
+
+  it('the funnel wall is grooved in concentric arcs, the violet stays lavender at full activity, the crackle is soft', () => {
+    // fine radial ripples (≈ 23 per radius), barely spiralling, broken into long arcs
+    expect(DOME_FRAGMENT).toMatch(/vec2 fd = rot2\(dir, 0\.35 \* lr/);
+    expect(DOME_FRAGMENT).toMatch(/rho \* 23\.0/);
+    expect(DOME_FRAGMENT).toMatch(/float arcs = /);
+    // the lining's streaks are those grooves, not a steep spiral
+    expect(DOME_FRAGMENT).toMatch(/fdr = mix\(0\.5, fsk, /);
+    expect(WOUND_LOOK.rings).toBeGreaterThan(0.7);
+    // the violet's growth with the activity is held back, and turns lavender-grey as it grows
+    expect(DOME_FRAGMENT).toMatch(/float vio = \(0\.4\d? \+ 0\.4 \* act\)/);
+    expect(DOME_FRAGMENT).toMatch(/mix\(LAVVIO, LAVGREY, 0\.25 \+ 0\.3 \* act\)/);
+    // the lip filament is a soft vein on the rock, not a lightning bolt
+    expect(DOME_FRAGMENT).toMatch(/glow \+= c \* flick \* 0\.2\d? \* \(0\.35 \+ 0\.65 \* matter\)/);
+    // loose chunks: clumped, in cells of at least a fifth of a radius (not confetti)
+    expect(DOME_FRAGMENT).toMatch(/float clump = /);
+    expect(DOME_FRAGMENT).toMatch(/splatRock\(cq \/ 0\.24/);
+    expect(DOME_FRAGMENT).not.toMatch(/cq \/ 0\.07/);
+  });
+});
+

@@ -93,6 +93,14 @@ export interface PlayOpts {
    * (the way the blow shoves the body; default PI = struck from the front).
    */
   dir?: number;
+  /**
+   * ADDED (polish 4). Humanoids, held upper-body poses (such as `verityCollapsed`): the pose
+   * survives `stop()` called WITHOUT an action — what a companion's stopAction() and mode changes do — and any
+   * full-body loop played over it; only `stop('<that action>')`, or another held upper-body pose, ends it.
+   * Z09: `selene.visual.play('verityCollapsed', { persist: true })` keeps Verity collapsed in her hand while she
+   * follows (the AI must also leave the pose alone: see the AI report).
+   */
+  persist?: boolean;
 }
 
 export interface ActionInfo {
@@ -199,10 +207,21 @@ export interface FrozenOpts {
  *    ragged line — the other half stays human. The rest of the figure keeps its own look. `side` picks the taken half (default 'right', the figure's right). Needs a face: see
  *    CharacterCreateOpts.halfHuman for the linkbound.
  * The mode (and side) are remembered until a later call passes another.
+ *
+ * POLISH 4 (generated bodies): the 'face' mode's irises have depth (a black pupil, violet fibres brightening toward
+ * it, a dark limbal ring, the light held inside the eye) and its veins are thick enough to read at 2 m.
  */
 export interface CorruptionOpts {
   mode?: 'body' | 'face' | 'halfFace';
   side?: 'left' | 'right';
+  /**
+   * ADDED (polish 4). Generated bodies, any mode (meant for 'face'): black patterns with light running in them,
+   * down BOTH arms from the shoulders — 0 none, 0.5 to the elbows, 1 to the fingertips. Animate it to make them
+   * "race down both arms" (Z06): e.g. ramp it 0 → 1 over ~1.2 s in the zone's update, snapping when skipping.
+   * Remembered until a later call passes another value, and independent of `amount` (pass `arms: 0` to clear it).
+   *   visual.setCorruption(0.8, { mode: 'face', arms: 1 })
+   */
+  arms?: number;
 }
 
 export interface CharacterCreateOpts {
@@ -246,8 +265,16 @@ export interface CharacterCreateOpts {
    * Blood runs beneath one eye»): the plate of the figure's LEFT shoulder cracked, chipped to the dark metal under it
    * and scorched; a run of blood from under the RIGHT eye down the cheek; ash greying the hair. A surface tint in
    * the body's shader (no geometry, no draw call); procedural figures ignore it.
+   * POLISH 4: made to read at 3–6 m (the Witness V framing): whole flakes of the shoulder plate gone to dark metal
+   * with bright torn edges, cracks running out across the plate, soot, dried blood down the front of the plate;
+   * the eye's blood is wider, runs to the jaw and is smeared round the eye; more ash in the hair.
    */
   wounded?: boolean;
+  /**
+   * ADDED (polish 4). With `wounded`: which shoulder is broken — 'left' (default, the figure's left) or 'right'.
+   * Put it on the side the camera sees: in a three-quarter view from the figure's right, use 'right'.
+   */
+  woundSide?: 'left' | 'right';
 }
 
 export interface CharacterFactory {
@@ -271,6 +298,9 @@ export interface CharacterFactory {
    * next create() returns them at once. Creature archetypes with a generated skin (the elite) load it too, so
    * it is worn from the first frame. Always resolves — a missing file is logged once and that archetype
    * keeps its procedural figure. Safe to call repeatedly; already-loaded models cost nothing.
+   * POLISH 4: `linkbound` also fetches the donor of the grafted human head (`halfHuman`), so a zone no longer adds
+   * 'survivor' to its `cast` for it. (A helmeted soldier made with `bareHead: true` still fetches its donor on
+   * create(): add 'survivor' to the cast if its first frames must not show the procedural stand-in.)
    */
   preload(archetypes: Archetype[]): Promise<void>;
 }

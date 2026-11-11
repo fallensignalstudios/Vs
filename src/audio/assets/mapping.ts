@@ -100,6 +100,11 @@ export interface TrackInfo {
    * For a recording that came out darker and boomier than intended.
    */
   lowShelf?: { hz: number; db: number };
+  /**
+   * POLISH 4: mean level (dBFS) of the part that loops (manifest loopStart → end) when it differs from the whole
+   * file's — the level is then set by what is heard on every later pass, not by an introduction heard once
+   */
+  loopMeanDb?: number;
 }
 
 const BAR_ATRIUM = 240 / 72;
@@ -132,7 +137,8 @@ export const TRACKS: Readonly<Record<TrackName, TrackInfo>> = {
   farewell_departure: { tonic: 41, tune: 0 },
   // Z09 overlook (88.4 s, 50 BPM): a heartbeat from the first second, the full texture at 38.4 s. Later passes loop
   // only that full section (manifest loopStart 38.4 → 86.4, 10 bars); the first pass plays the sparse reveal.
-  wound_vista: { tonic: 38, tune: 0 },
+  // (polish 4) its loop region measures −15.7 dB against the whole file's −16.8 (manifest notes): levelled by the loop
+  wound_vista: { tonic: 38, tune: 0, loopMeanDb: -15.7 },
 };
 
 /** How a MusicState is scored. */
@@ -209,8 +215,9 @@ export const SCORE_PLAN: Readonly<Record<MusicState, ScorePlan>> = {
 
   // Z08's end and Z09's descent: the generative held tone; the overlook's recording is what comes next
   quarantine: gen(0, 'wound_vista'),
-  // Z09 overlook (ADDED, integration): the Wound's heartbeat. The whole file is levelled by its mean, which includes
-  // the sparse reveal, so the looped full section (−15.7 dB) plays about 1 dB over this on later passes.
+  // Z09 overlook (ADDED, integration): the Wound's heartbeat. (Polish 4: levelled by its looped full section —
+  // TRACKS.wound_vista.loopMeanDb — so later passes sit at this level; the sparse reveal of the first pass plays
+  // about 1 dB under it, as a reveal should.)
   woundVista: rec('wound_vista', -23, { warm: 'core_witness' }),
   recognition: rec('core_witness', -25, { layers: RESOLVED_BELL }),
   // the clockwork of the alignment is free-time ticking over the drone, and follows intensity
@@ -244,6 +251,29 @@ export interface LoopSpec {
   gainDb?: number;
   /** playback low-shelf of the track (TrackInfo.lowShelf), or null */
   lowShelf?: { hz: number; db: number } | null;
+  /**
+   * POLISH 4 (`setMusic(state, fade, { once: true })`): play the first pass to the very end of the file (`end`, its
+   * natural tail included) and schedule no further pass
+   */
+  once?: boolean;
+  /** with `once`: where the file ends (s of the file) */
+  end?: number;
+}
+
+/**
+ * POLISH 4. A recording played once ends; the state then holds a quiet BED — the free-time layers of its own
+ * generative definition (pads, held tones, the sub; no percussion, no motifs), BED_DB below its usual level,
+ * fading in over BED_FADE seconds that start BED_LEAD seconds before the recording's last sample.
+ */
+export const BED_LAYERS: readonly string[] = ['pad', 'held', 'sub'];
+export const BED_DB = -7;
+export const BED_FADE = 7;
+export const BED_LEAD = 5;
+
+/** The loop of a recording played once: its first pass runs to the end of the file. */
+export function onceSpec(loop: LoopSpec, meta: TrackMeta, duration: number): LoopSpec {
+  const seconds = Number.isFinite(meta.seconds) && meta.seconds > 0 ? Math.min(meta.seconds, duration) : duration;
+  return { ...loop, once: true, end: Math.max(loop.intro + 1, seconds) };
 }
 
 /**
@@ -264,7 +294,8 @@ export function loopSpec(track: TrackName, meta: TrackMeta, region: RegionName =
   const from = clamp(Number.isFinite(meta.loopStart) ? meta.loopStart : 0, 0, Math.max(0, seconds - 2 * xfade));
   const to = seconds - xfade;
   const intro = hot && info.body !== undefined && info.body < to - 2 * xfade ? info.body : 0;
-  return { intro, from, to, xfade, rate, meanDb: Number.isFinite(meta.meanDb) ? meta.meanDb : -16, gainDb, lowShelf };
+  const meanDb = info.loopMeanDb !== undefined && Number.isFinite(info.loopMeanDb) ? info.loopMeanDb : Number.isFinite(meta.meanDb) ? meta.meanDb : -16;
+  return { intro, from, to, xfade, rate, meanDb, gainDb, lowShelf };
 }
 
 /** Seconds heard between the start of one pass and the next (after the first). */

@@ -10,7 +10,7 @@ import { clamp01 } from '@/core/mathx';
 import { ZONE_ORDER } from '@/core/api/common';
 import { isStub } from '@/core/stub';
 import type {
-  AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicState, SfxId, SfxOpts, Vec3Like, VoiceOpts,
+  AmbienceId, AudioDebugInfo, AudioSampleOpts, AudioSystem, Game, LoopHandle, MusicOpts, MusicState, SfxId, SfxOpts, Vec3Like, VoiceOpts,
 } from '@/core/api';
 import { AudioEngine } from './engine';
 import { forgetPrerender, prerender } from './prerender';
@@ -125,6 +125,8 @@ class AudioSystemImpl implements AudioSystem {
 
   // requested state (applied on unlock, and reported by the getters while there is no engine)
   private wantMusic: MusicState = 'silence';
+  /** (polish 4) the options the wanted state was asked with (`once`) */
+  private wantMusicOpts: MusicOpts | undefined = undefined;
   private wantAmbience: AmbienceId = 'none';
   private wantIntensity = 0;
   private wantMuffle = 0;
@@ -308,7 +310,7 @@ class AudioSystemImpl implements AudioSystem {
       e.music.setResolved(this.wantResolved);
       e.setIntensity(this.wantIntensity);
       e.setAmbience(this.wantAmbience, 1.5);
-      e.setMusic(this.wantMusic, 1.5);
+      e.setMusic(this.wantMusic, 1.5, this.wantMusicOpts);
       if (this.wantIrregular !== null) e.music.setIrregular(this.wantIrregular);
       e.setPaused(this.paused);
       e.music.setLead(this.lead === 'selene' ? 'reformation' : 'dominion');
@@ -337,19 +339,20 @@ class AudioSystemImpl implements AudioSystem {
     return l;
   }
 
-  setMusic(state: MusicState, fadeSeconds?: number): void {
+  setMusic(state: MusicState, fadeSeconds?: number, opts?: MusicOpts): void {
     let s = state;
     if (s !== 'silence' && !Object.prototype.hasOwnProperty.call(MUSIC, s)) {
       this.warnOnce(`music:${String(s)}`, `[audio] unknown music state "${String(s)}" — silence`);
       s = 'silence';
     }
+    if (s !== this.wantMusic) this.wantMusicOpts = opts?.once === true ? { once: true } : undefined;
     this.wantMusic = s;
     // before audio is unlocked: have the state's recording decoded by the time it is (the title theme)
     if (!this.engine && this.library && !this.game.flags.manual) {
       const track = scorePlan(s).track;
       if (track) void this.library.requestTrack(track);
     }
-    this.run('setMusic', (e) => e.setMusic(s, fadeSeconds));
+    this.run('setMusic', (e) => e.setMusic(s, fadeSeconds, opts));
   }
 
   get music(): MusicState {
@@ -399,6 +402,13 @@ class AudioSystemImpl implements AudioSystem {
 
   stopVoice(fadeSeconds?: number): void {
     this.run('stopVoice', (e) => e.stopVoice(fadeSeconds));
+  }
+
+  voiceLevel(): number {
+    const e = this.engine;
+    if (!e || this.disposed) return -1;
+    const v = e.vo.level();
+    return Number.isFinite(v) ? v : -1;
   }
 
   preloadVoices(lines: ReadonlyArray<readonly [string, string]>): Promise<void> {

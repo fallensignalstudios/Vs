@@ -74,15 +74,28 @@ float aurIris( vec3 d, vec3 n, float s ) {
 // where the veins show: the temples (beside and behind the eyes) and the neck (jaw line to collar, not the nape)
 float aurFaceVeinRegion( vec3 d, float s ) {
   vec3 t = vec3( abs( d.x ) - 0.062 * s, d.y - 0.022 * s, d.z - 0.025 * s );
-  float temple = smoothstep( 0.036 * s, 0.012 * s, length( t ) );
+  // (polish 4: a little wider at the temples (not onto hair over them) and down the neck, so they read at 2 m)
+  float temple = smoothstep( 0.04 * s, 0.014 * s, length( t ) );
   float y = d.y + 0.09 * s;
-  float band = smoothstep( 0.0, -0.02 * s, y ) * smoothstep( -0.135 * s, -0.09 * s, y );
-  float ring = smoothstep( 0.095 * s, 0.055 * s, length( vec2( d.x, d.z - 0.075 * s ) ) );
+  float band = smoothstep( 0.0, -0.02 * s, y ) * smoothstep( -0.15 * s, -0.095 * s, y );
+  float ring = smoothstep( 0.1, 0.06, length( vec2( d.x, d.z - 0.075 * s ) ) / s );
   float notNape = smoothstep( 0.13 * s, 0.07 * s, d.z );
   return max( temple, band * ring * notNape );
 }
 // the head above the jaw line (for the half face)
 float aurHead( vec3 d, float s ) {
   return smoothstep( -0.17 * s, -0.115 * s, d.y );
+}
+// POLISH 4: the skull as a ball round its centre (about 7.5 cm behind the eyes, a little below them) — face, scalp,
+// ears, jaw and the top of the neck; 0 on the shoulders and the collar
+float aurHeadBall( vec3 d, float s ) {
+  return smoothstep( 0.165 * s, 0.13 * s, length( vec3( d.x, ( d.y + 0.02 * s ) * 0.85, d.z - 0.075 * s ) ) );
+}
+// POLISH 4: an iris in polar form — x = distance from its centre in iris radii (6.2 mm at s = 1), y = angle;
+// z = 1 on forward-facing surfaces of the eye, 0 elsewhere
+vec3 aurIrisPolar( vec3 d, vec3 n, float s ) {
+  float front = smoothstep( 0.15, 0.55, -n.z ) * step( abs( d.z ), 0.06 * s );
+  vec2 q = vec2( abs( d.x ) - 0.031 * s, d.y );
+  return vec3( length( q ) / ( 0.0062 * s ), atan( q.y, q.x ), front );
 }
 `;

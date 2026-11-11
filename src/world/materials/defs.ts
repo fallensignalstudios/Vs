@@ -40,6 +40,7 @@ export function pbrParams(spec: PbrSpec): PbrLayerParams & { replaceColor: boole
     scale: spec.scale ?? d.tileMeters,
     isotropic: spec.isotropic ?? d.isotropic,
     emissiveMask: spec.emissiveMask ?? d.emissive,
+    snap: spec.snap ?? d.snap,
     replaceColor: spec.replaceColor ?? false,
     meanLuminance: SET_LUMINANCE_MEAN[spec.set],
   };
@@ -66,8 +67,21 @@ const BARE_STEEL = 0xaab3be;
 // Colour target (the four concept paintings): cool, bright white-silver marble walls with gold inlay; dark,
 // highly polished floors that mirror the lights and the gold lines; warm only in the gold.
 
-/** King-era walls, ribs and columns: pale ashlar pulled cool and silver, the procedural veining kept in it. */
+/** King-era ashlar (integration wave): pale coursed stone pulled cool and silver. Polish 4: kept for damaged and
+ *  service walls (`wall({ finish: 'ashlar' })`); the default King-era wall is now `MARBLE_WALL`. */
 const PALE_STONE: PbrSpec = { set: 'stone_pale', scale: 7.2, saturation: 0.12, tint: 0xf2f4f8, gain: 1.32, contrast: 0.75, blend: 0.6, photo: 0.55, normal: 0.1, roughAmp: 0.4 };
+/**
+ * Polish 4: King-era walls, ribs and columns — large smooth white-silver marble slabs with soft grey veining and a
+ * faint warm vein (the paintings). Polished stone is FLAT: the photo normal is almost off and the procedural family
+ * only adds a whisper of relief. (The "tinfoil" defect was not the normals: metalness 0.16 and a roughness that
+ * swung ±0.2 in 0.8 m smudges made the pale stone mirror the probe in blobs. Marble is a dielectric with an even
+ * satin polish: metalness 0, roughness 0.38 with a small variation.)
+ */
+const MARBLE_WALL: PbrSpec = { set: 'marble_slab', scale: 4.8, saturation: 0.45, tint: 0xf2f3f6, gain: 0.86, contrast: 1.9, blend: 0.16, photo: 1, normal: 0.04, roughAmp: 0.45 };
+/** Polish 4: the light-to-mid grey wet marble floor of the relay route (`finish: 'wet'`). */
+const WET_FLOOR: PbrSpec = { set: 'floor_wet_grey', scale: 5, saturation: 0.35, tint: 0xeef0f4, gain: 0.8, contrast: 1.5, blend: 0.06, normal: 0.05, roughAmp: 0.5, replaceColor: true };
+/** Polish 4: fine engraved gold on the trims — the photo's engraving as luminance and roughness only (the trim's own gold is the colour). */
+const ENGRAVED_GOLD: PbrSpec = { set: 'gold_inlay', scale: 0.6, saturation: 0, gain: 2.0, contrast: 0.45, blend: 0.2, normal: 0.25, roughAmp: 0.3 };
 /** Upper-hall floors: the dark marble lifted to a deep polished grey (the relay-route floor, darker). */
 // (polished stone is flat: the photo's normal stays faint, or the mirror reflection crinkles like wet asphalt)
 const UPPER_FLOOR: PbrSpec = { set: 'marble_dark', scale: 4.2, saturation: 0.5, tint: 0xe8e8ea, gain: 6.5, contrast: 0.62, blend: 0.1, normal: 0.12, roughAmp: 0.9 };
@@ -83,6 +97,14 @@ const CERAMIC_TP: TriplanarParams = {
   macro: { albedo: 0.1, rough: 0.07, scale: 23, hue: 0.4 },
   detail: { scale: 0.31, normal: 0.06, rough: 0.14, albedo: 0.03 },
 };
+/** Polish 4: the procedural layer under the marble walls — a faint relief and an even polish (see MARBLE_WALL). */
+const MARBLE_TP: TriplanarParams = {
+  ...CERAMIC_TP,
+  normal: 0.5,
+  roughAmp: 0.1,
+  macro: { albedo: 0.08, rough: 0.03, scale: 23, hue: 0.3 },
+  detail: { scale: 0.31, normal: 0.025, rough: 0.04, albedo: 0.02 },
+};
 
 const emissiveStrip = (base: number, emissive: number, intensity: number, mode: GlowMode, params: GlowParams): MatDef => ({
   base: 'standard',
@@ -94,22 +116,25 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
   // ------------------------------------------------------------------ King-era substrate — upper
   whiteGold: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.34, metalness: 0.16 },
+    // polish 4: polished marble — a dielectric with an even satin polish (was metalness 0.16: the "tinfoil")
+    props: { color: 0xffffff, roughness: 0.38, metalness: 0 },
     family: 'ceramic',
-    tp: CERAMIC_TP,
-    pbr: PALE_STONE,
+    tp: MARBLE_TP,
+    pbr: MARBLE_WALL,
   },
   whiteGoldPanel: {
     base: 'standard',
-    props: { color: 0xffffff, roughness: 0.34, metalness: 0.16 },
+    props: { color: 0xffffff, roughness: 0.38, metalness: 0 },
     family: 'ceramic',
-    pbr: PALE_STONE,
+    pbr: MARBLE_WALL,
     tp: {
-      ...CERAMIC_TP,
+      ...MARBLE_TP,
       panel: {
-        // polish 3: deeper seams with grime settled along them, more slab-to-slab variation, gold-leaf wear
-        w: 2.4, h: 3.6, seam: 0.006, bevel: 0.04, depth: 0.75, tint: 0.1, jitter: 1, dark: 0.78, grime: 0.3,
-        wear: { color: GOLD_LEAF, width: 0.035, strength: 0.75, roughness: 0.26, metalness: 1 },
+        // polish 4: large marble slabs with a dark shadow gap between them, each slab its own cut of the veining,
+        // a little gold leaf left in the joints (polish 3 had deeper grime for the ashlar)
+        // (3 × 4.5 m: large enough to read as slabs, not a tile grid)
+        w: 3, h: 4.5, seam: 0.0065, bevel: 0.03, depth: 0.6, tint: 0.07, jitter: 1, dark: 0.82, grime: 0.1,
+        wear: { color: GOLD_LEAF, width: 0.03, strength: 0.5, roughness: 0.26, metalness: 1 },
       },
     },
   },
@@ -135,6 +160,8 @@ export const MAT_DEFS: Record<MatId, MatDef> = {
     base: 'standard',
     props: { color: 0xf0c574, roughness: 0.22, metalness: 1 },
     family: 'polished',
+    // polish 4: a fine engraving in the gold (the paintings' trims are worked metal, not plain bars)
+    pbr: ENGRAVED_GOLD,
     tp: { scale: 1.5, normal: 0.8, roughAmp: 0.08, macro: { albedo: 0.05, rough: 0.04, scale: 13, hue: 0.25 }, detail: { scale: 0.23, normal: 0.04, rough: 0.04, albedo: 0.015 } },
   },
   goldDark: {
@@ -396,6 +423,11 @@ export const SURFACE_FINISH: Partial<Record<SurfaceSetId, { pbr: PbrSpec; props:
   stone_worn: { pbr: { set: 'stone_worn', scale: 3, saturation: 0.7, tint: 0xe6e9ee, gain: 1.15, blend: 0.2, roughAmp: 1, replaceColor: true }, props: { roughness: 0.6, metalness: 0 } },
   concrete_hangar: { pbr: { set: 'concrete_hangar', scale: 6, saturation: 0.6, blend: 0.12, roughAmp: 1, replaceColor: true }, props: { roughness: 0.62, metalness: 0.04 } },
   marble_dark: { pbr: BLACK_FLOOR, props: { roughness: 0.1, metalness: 0 } },
-  stone_pale: { pbr: PALE_STONE, props: { roughness: 0.34, metalness: 0.16 } },
+  // polish 4: the ashlar keeps its matte limestone, but as a dielectric (no metallic sheen)
+  stone_pale: { pbr: PALE_STONE, props: { roughness: 0.5, metalness: 0 } },
+  // ADDED (polish 4)
+  marble_slab: { pbr: MARBLE_WALL, props: { roughness: 0.38, metalness: 0 } },
+  floor_wet_grey: { pbr: WET_FLOOR, props: { roughness: 0.07, metalness: 0 } },
+  gold_inlay: { pbr: ENGRAVED_GOLD, props: {} },
   frost: { pbr: { set: 'frost', scale: 1.5, roughAmp: 1, blend: 0.2, replaceColor: true }, props: { roughness: 0.6, metalness: 0 } },
 };

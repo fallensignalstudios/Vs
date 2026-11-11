@@ -602,3 +602,149 @@ describe('integration wave: surface finishes', () => {
     warn.mockRestore();
   });
 });
+
+describe('polish 4: art direction', () => {
+  const matNames = (root: THREE.Object3D): string[] => {
+    const out: string[] = [];
+    root.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.Material | undefined; if ((o as THREE.Mesh).isMesh && m && !Array.isArray(m)) out.push(m.name); });
+    return out;
+  };
+  const glowing = (root: THREE.Object3D): boolean => matNames(root).some((n) => n.startsWith('kit-inlay:goldChannel') || n.startsWith('kit-inlay:whiteLight'));
+
+  it('no neon by default: ribs, pylons, ribbed walls, inlays, channels, ramps, bridges are fine gold; `lit` / `glow` opt back in', () => {
+    const plain = builder();
+    plain.b.ribRow({ x: 10, n: 4, span: 16, height: 10, count: 3, spacing: 6 });
+    plain.b.column({ x: 2, n: 2, style: 'pylon', height: 8 });
+    plain.b.wall({ from: [0, 0], to: [20, 0], height: 8, style: 'ribbed' });
+    plain.b.wall({ from: [0, 30], to: [20, 30], height: 8, style: 'conduit', mat: 'blackStone' });
+    plain.b.floor({ x: 10, n: 15, w: 20, d: 20, inlay: 'channels' });
+    plain.b.channel([[0, 5], [20, 5]], { width: 0.06, intensity: 2 });
+    plain.b.ramp({ x: 30, n: 5, w: 3, d: 10, h0: 0, h1: 2 });
+    plain.b.bridge({ from: [40, 0], to: [50, 0] });
+    plain.b.deck({ x: 60, n: 5, w: 6, d: 6, h: 3, rails: ['n'] });
+    plain.b.finalize();
+    expect(glowing(plain.root)).toBe(false);
+    expect(matNames(plain.root).some((n) => n.startsWith('kit-inlay:goldTrim'))).toBe(true);
+
+    const lit = builder();
+    lit.b.rib({ x: 10, n: 4, span: 16, height: 10, lit: true });
+    lit.b.finalize();
+    expect(glowing(lit.root)).toBe(true);
+    const ch = builder();
+    ch.b.channel([[0, 5], [20, 5]], { glow: true, intensity: 2 });
+    ch.b.finalize();
+    expect(glowing(ch.root)).toBe(true);
+    const fl = builder();
+    fl.b.floor({ x: 10, n: 15, w: 20, d: 20, inlay: 'radial', inlayGlow: true });
+    fl.b.finalize();
+    expect(glowing(fl.root)).toBe(true);
+  });
+
+  it("relief walls ('slab', 'framed') and the parapet rail add geometry, never colliders", () => {
+    const count = (style: 'plain' | 'slab' | 'framed'): { colliders: number; tris: number } => {
+      const { b } = builder();
+      b.wall({ from: [0, 0], to: [20, 0], height: 9, style, doors: [{ at: 10, width: 3, height: 3.5 }] });
+      b.finalize();
+      return { colliders: b.physics.counts.colliders, tris: b.stats.triangles };
+    };
+    const plain = count('plain'), slab = count('slab'), framed = count('framed');
+    expect(slab.colliders).toBe(plain.colliders);
+    expect(framed.colliders).toBe(plain.colliders);
+    expect(slab.tris).toBeGreaterThan(plain.tris + 500);
+    expect(framed.tris).toBeGreaterThan(plain.tris + 500);
+    // the parapet keeps the rail's footprint: a walker is stopped at the same line, sight passes over 1.1 m
+    const { b } = builder();
+    b.floor({ x: 0, n: 0, w: 20, d: 20 });
+    b.rail({ from: [-8, 2], to: [8, 2], style: 'parapet' });
+    b.finalize();
+    expect(-walk(b, b.P(0, -2, 0), b.P(0, 6, 0)).z).toBeLessThan(2 - 0.1 - 0.35);
+    expect(b.physics.lineOfSight({ x: 0, y: 1.4, z: 0 }, { x: 0, y: 1.4, z: -6 })).toBe(true);
+  });
+
+  it('pipes, slots, portals, tiers, crystals, haze and inlays are collider-free and merge by material', () => {
+    const { b, root } = builder();
+    const c0 = b.physics.counts.colliders, s0 = b.physics.counts.surfaces;
+    b.pipes([[2, 0.3, 0.4], [2, 0.3, 6], [8, 0.3, 6], [8, 0.3, 9]], { facing: 0, count: 2 });
+    b.slot({ x: 12, n: 0.3, yawDeg: 0, height: 5 });
+    b.slot({ x: 14, n: 0.3, yawDeg: 0, height: 5 });
+    b.portal({ x: 20, n: 0.3, yawDeg: 0, width: 3, height: 3.5, steps: 3, head: 'pointed' });
+    b.tiers({ x: 40, n: 20, yawDeg: 180, width: 16, levels: 2, stairs: 'both' });
+    b.crystals({ x: 50, n: 5, r: 1.5, size: 'large' });
+    b.corruption({ x: 54, n: 5, r: 2, style: 'crystal' });
+    b.haze({ x: 30, n: 10, w: 10, d: 10, height: 6 });
+    b.inlay({ x: 30, n: 30, kind: 'rose', r: 6 });
+    b.ceiling({ x: 30, n: 30, w: 20, d: 20, h: 12, style: 'skylight' });
+    b.finalize();
+    expect(b.physics.counts.colliders).toBe(c0);
+    expect(b.physics.counts.surfaces).toBe(s0);
+    // one crystal mesh for both growths (they share the material), with its core attribute
+    const crystals: THREE.Mesh[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh && ((o as THREE.Mesh).material as THREE.Material).name.startsWith('kit-crystal')) crystals.push(o as THREE.Mesh); });
+    expect(crystals.length).toBe(1);
+    expect(crystals[0].geometry.getAttribute('aCore')).toBeTruthy();
+    // both slots' glow panels merged into one draw call (vertex colours kept)
+    const glows: THREE.Mesh[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh && ((o as THREE.Mesh).material as THREE.Material).name === 'kit-relief-glow:1.05') glows.push(o as THREE.Mesh); });
+    expect(glows.length).toBe(1);
+    expect(glows[0].geometry.getAttribute('color')).toBeTruthy();
+    expect(root.getObjectByName('haze')).toBeTruthy();
+    expect(root.getObjectByName('inlay:rose')).toBeTruthy();
+    expect(root.getObjectByName('skylight-haze')).toBeTruthy();
+  });
+
+  it('addStatic merges a zone\'s own dressing: 40 meshes over 3 materials become 3 draw calls; repeats instance', () => {
+    const { b, root } = builder();
+    const mats = [b.mats.get('whiteGold'), b.mats.get('goldTrim'), new THREE.MeshStandardMaterial({ color: 0x334455 })];
+    const box = new THREE.BoxGeometry(0.4, 2, 0.4);
+    const g = new THREE.Group();
+    for (let i = 0; i < 40; i++) {
+      const m = new THREE.Mesh(i % 2 ? new THREE.CylinderGeometry(0.1, 0.1, 3, 8) : box.clone(), mats[i % 3]);
+      m.position.set(i, 1, -3);
+      g.add(m);
+    }
+    const kept = b.keep(new THREE.Mesh(box, mats[0]));
+    g.add(kept);
+    b.addStatic(g);
+    const crates = new THREE.Group();
+    for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(box, mats[2]); m.position.set(i * 2, 1, -9); crates.add(m); }
+    b.addStatic(crates, { instance: true });
+    b.finalize();
+    let live = 0, instanced = 0;
+    g.traverse((o) => { if ((o as THREE.Mesh).isMesh) live++; });
+    root.getObjectByName('kit-static')!.traverse((o) => { if ((o as THREE.InstancedMesh).isInstancedMesh) instanced++; });
+    expect(live).toBe(1); // only the kept mesh stays live in the group
+    expect(instanced).toBe(1);
+    const merged = root.getObjectByName('kit-static')!.children.filter((m) => (m as THREE.Mesh).isMesh && !(m as THREE.InstancedMesh).isInstancedMesh);
+    expect(merged.length).toBe(3);
+    expect(b.stats.merged).toBeGreaterThanOrEqual(46);
+    // after finalize() it merges at once
+    const late = new THREE.Group();
+    for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(box, mats[1]); m.position.set(i, 0, 5); late.add(m); }
+    b.addStatic(late);
+    let lateLive = 0;
+    late.traverse((o) => { if ((o as THREE.Mesh).isMesh) lateLive++; });
+    expect(lateLive).toBe(0);
+  });
+
+  it("finish 'wet' wears the grey wet marble and mirrors harder; walls default to marble slabs, 'ashlar' keeps the old stone", () => {
+    const f = fakeGame();
+    const regs: Array<{ strength?: number }> = [];
+    (f.game as unknown as { render: unknown }).render = {
+      quality: { level: 'high', shadows: true, maxShadowLights: 1, shadowMapSize: 1024, volumetrics: true },
+      registerReflectiveFloor: (_m: THREE.Mesh, o: { strength?: number }) => regs.push(o),
+      unregisterReflectiveFloor() {}, refreshEnvironment() {}, setLook() {},
+    };
+    const { b, root } = builder(f);
+    b.setEnv({ sky: 'coreChamber', look: {}, key: { dirFrom: [0.2, -1, 0.3] } });
+    b.floor({ x: 0, n: 0, w: 20, d: 20, reflective: true, finish: 'wet' });
+    b.floor({ x: 0, n: 40, w: 20, d: 20, h: 2, mat: 'blackStoneFloor', reflective: true });
+    b.wall({ from: [0, 0], to: [10, 0], finish: 'ashlar' });
+    b.finalize();
+    expect(matNames(root).some((n) => n.includes('finish:whiteGoldFloor:wet'))).toBe(true);
+    expect(matNames(root).some((n) => n.includes('wall:whiteGoldPanel:ashlar'))).toBe(true);
+    expect((b.mats as unknown as { surfaceOf(id: string): string | null }).surfaceOf('whiteGold')).toBe('marble_slab');
+    const strengths = regs.map((r) => r.strength ?? 1).sort();
+    expect(strengths[strengths.length - 1]).toBeGreaterThanOrEqual(2.5);
+    expect(strengths[0]).toBeGreaterThan(1.5);
+  });
+});

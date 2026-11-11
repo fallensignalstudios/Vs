@@ -43,6 +43,8 @@ const KITS: Partial<Record<HumanoidArchetype, CompanionKit>> = {
   lyessa: { ...RIFLE, damage: 10, interval: 1.45 },
   dominionSoldier: RIFLE,
   malik: RIFLE,
+  // (polish 4) Centurion Malik Varo armed (Z00 / Z01): his Dominion rifle is in hand as an NPC and after stopAction()
+  varo: RIFLE,
   reformationSoldier: { ...RIFLE, tracer: 'cold', muzzle: 'muzzleCold', sfx: 'axiomShot' },
   reformationMarine: { ...RIFLE, tracer: 'cold', muzzle: 'muzzleCold', sfx: 'axiomShot', damage: 8 },
   lyric: { ...NONE, loadout: { melee: false, ranged: false, prop: 'case' } },
@@ -60,8 +62,11 @@ export function companionHealth(who: HumanoidArchetype | string): { hp: number; 
   return { hp: 80, poise: 30 };
 }
 
-/** looping whole-body poses during which the body must not be moved by anything */
+/**
+ * Whole-body poses that hold until stopped, during which the body must not be moved by anything. `knockdown`
+ * (polish 4) is one too: the figure lies on its back until `stopAction()` / `play('getUp')` / an order.
+ */
 export const HELD_POSES: ReadonlySet<string> = new Set([
   'sit', 'sitTalk', 'sitInjured', 'kneel', 'kneelTend', 'lieInjured', 'trapped', 'cower', 'distress', 'grounding',
-  'liftPlate', 'holdConsole', 'holdPlane', 'tetherStop',
+  'liftPlate', 'holdConsole', 'holdPlane', 'tetherStop', 'knockdown',
 ]);

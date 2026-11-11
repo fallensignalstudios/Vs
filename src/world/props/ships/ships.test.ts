@@ -252,3 +252,73 @@ describe('generated ships: synchronous silhouettes (fleet impostors, far stand-i
     }
   });
 });
+
+describe('generated ships: polish pass 4 — hull look and readability', () => {
+  const run = (m: THREE.MeshStandardMaterial): { vertexShader: string; fragmentShader: string; uniforms: Record<string, THREE.IUniform> } => {
+    const lib = THREE.ShaderLib.physical;
+    const shader = { vertexShader: lib.vertexShader, fragmentShader: lib.fragmentShader, uniforms: THREE.UniformsUtils.clone(lib.uniforms) } as unknown as THREE.WebGLProgramParametersWithUniforms;
+    m.onBeforeCompile(shader, null as unknown as THREE.WebGLRenderer);
+    return shader as unknown as { vertexShader: string; fragmentShader: string; uniforms: Record<string, THREE.IUniform> };
+  };
+
+  it('every model has a look that lifts it off the night: a rim, a sky fill and a metal cap', () => {
+    for (const id of SHIP_MODEL_IDS) {
+      const l = SHIP_MODELS[id].look;
+      expect(l, id).toBeDefined();
+      expect(Math.max(...(l!.rim ?? [0, 0, 0])), id).toBeGreaterThan(0.02);
+      expect(Math.max(...(l!.fill ?? [0, 0, 0])), id).toBeGreaterThan(0.08);
+      expect(l!.maxMetal ?? 1, id).toBeLessThan(0.7);
+    }
+    // the shuttle's map is graded from dark brown toward its concept's lighter, less saturated tan
+    const sh = SHIP_MODELS.dominionShuttle.look!;
+    expect(sh.desat ?? 0).toBeGreaterThan(0.1);
+    expect(Math.min(...sh.tint!)).toBeGreaterThan(1.3);
+    // (red lifted least: less brown)
+    expect(sh.tint![0] / sh.tint![2]).toBeLessThan(1.12);
+  });
+
+  it('patches the look into the hull shader, before the engine mask reads the map', () => {
+    const base = new THREE.MeshStandardMaterial({ name: 'tpl' });
+    const { material, uniforms } = patchHull(base, 'amber', { look: { tint: [1.2, 1.1, 1.0], desat: 0.3, maxMetal: 0.5, rim: [0.1, 0.1, 0.1], fill: [0.2, 0.2, 0.2] } });
+    const sh = run(material);
+    expect(sh.fragmentShader).toMatch(/vec3 shipTex = diffuseColor\.rgb;/);
+    expect(sh.fragmentShader).toMatch(/vec3 tc = shipTex;/);
+    expect(sh.fragmentShader).toMatch(/metalnessFactor = min\(metalnessFactor, uShipMaxMetal\)/);
+    expect(sh.fragmentShader).toMatch(/uShipRim \* shipFres/);
+    expect(uniforms.uShipTint.value.toArray()).toEqual([1.2, 1.1, 1.0]);
+    expect(uniforms.uShipDesat.value).toBe(0.3);
+    expect(uniforms.uShipMaxMetal.value).toBe(0.5);
+    // the map grade happens before the emissive mask: the mask still sees the file's own texels
+    expect(sh.fragmentShader.indexOf('vec3 shipTex')).toBeLessThan(sh.fragmentShader.indexOf('vec3 tc = shipTex'));
+    // defaults: a neutral look
+    const plain = patchHull(base, 'blue');
+    expect(plain.uniforms.uShipTint.value.toArray()).toEqual([1, 1, 1]);
+    expect(plain.uniforms.uShipRim.value.toArray()).toEqual([0, 0, 0]);
+    expect(plain.uniforms.uShipMaxMetal.value).toBe(1);
+  });
+
+  it('takes an extra shading hook with object-space and world varyings, keyed in the program cache', () => {
+    const base = new THREE.MeshStandardMaterial({ name: 'tpl' });
+    const u = { uX: { value: 2 } };
+    const a = patchHull(base, 'blue', { shade: { key: 'k1', uniforms: u, glsl: 'uniform float uX;', body: 'totalEmissiveRadiance += vec3(uX) * vShipLocal.x;' } });
+    const sh = run(a.material);
+    expect(sh.vertexShader).toMatch(/vShipLocal = transformed;/);
+    expect(sh.vertexShader).toMatch(/vShipWorldN = /);
+    expect(sh.vertexShader).toMatch(/vShipWorldP = /);
+    expect(sh.fragmentShader).toMatch(/uniform float uX;/);
+    expect(sh.fragmentShader).toMatch(/vec3\(uX\) \* vShipLocal\.x/);
+    expect(sh.uniforms.uX).toBe(u.uX);
+    expect(a.material.customProgramCacheKey()).not.toBe(patchHull(base, 'blue').material.customProgramCacheKey());
+  });
+
+  it('GeneratedShip merges its look over the model default and changes it live', () => {
+    const g = new GeneratedShip('reformationDropship', { look: { rim: [0.3, 0.3, 0.3] } });
+    expect(g.look.rim).toEqual([0.3, 0.3, 0.3]);
+    expect(g.look.maxMetal).toBe(SHIP_MODELS.reformationDropship.look!.maxMetal);
+    g.setLook({ fill: [0.5, 0.5, 0.5] });
+    expect(g.look.fill).toEqual([0.5, 0.5, 0.5]);
+    expect(g.look.rim).toEqual([0.3, 0.3, 0.3]);
+    g.dispose();
+  });
+});
+

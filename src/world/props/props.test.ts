@@ -378,3 +378,65 @@ describe('holo canvas', () => {
     expect(alpha(1)).toBe(0.5);
   });
 });
+
+describe('polish 4 additions', () => {
+  const ringBox = (rings: Any): { lowest: number; maxTilt: number; heights: number[] } => {
+    let lowest = Infinity, maxTilt = 0;
+    const heights: number[] = [];
+    const box = new THREE.Box3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), up = new THREE.Vector3();
+    rings.object.traverse((c) => {
+      const im = c as THREE.InstancedMesh;
+      if (!im.isInstancedMesh || !im.name.endsWith('body')) return;
+      im.geometry.computeBoundingBox();
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        box.copy(im.geometry.boundingBox!).applyMatrix4(m);
+        lowest = Math.min(lowest, box.min.y);
+        m.decompose(p, q, s);
+        heights.push(p.y);
+        maxTilt = Math.max(maxTilt, up.set(0, 1, 0).applyQuaternion(q).angleTo(new THREE.Vector3(0, 1, 0)));
+      }
+    });
+    return { lowest, maxTilt, heights };
+  };
+
+  it("nestedRings 'concentric' keeps the rings near level and stacked, still clear of the platform; 'chrome' is polished metal", () => {
+    const hero = createHeroProps({ mats: createMaterialLibrary(null) } as never);
+    const rings = hero.nestedRings({ radius: 24, height: 9, clearRadius: 30, clearHeight: 6, layout: 'concentric', finish: 'chrome', column: 3 }) as Any;
+    for (let i = 0; i < 200; i++) rings.update(0.25, i * 0.25);
+    const r = ringBox(rings);
+    expect(r.maxTilt).toBeLessThan((5.5 * Math.PI) / 180);
+    expect(r.lowest).toBeGreaterThan(5.5);
+    expect(new Set(r.heights.map((h) => h.toFixed(2))).size).toBeGreaterThan(3);
+    let body: THREE.MeshStandardMaterial | null = null;
+    rings.object.traverse((c) => { const im = c as THREE.InstancedMesh; if (im.isInstancedMesh && im.name.endsWith('s0.body')) body = im.material as THREE.MeshStandardMaterial; });
+    expect(body!.metalness).toBe(1);
+    expect(body!.roughness).toBeLessThan(0.1);
+    // align still brings every ring into one plane
+    rings.params.align = 1;
+    for (let i = 0; i < 120; i++) rings.update(0.25, 60 + i * 0.25);
+    const a = ringBox(rings);
+    expect(Math.max(...a.heights) - Math.min(...a.heights)).toBeLessThan(0.05);
+  });
+
+  it('crownmarkFive: `steady` lights the core without folding the claws; `scale` grows object and collider together', () => {
+    const hero = createHeroProps(null);
+    const mark = hero.crownmarkFive() as Any;
+    mark.update(0.016, 0);
+    const claws = (o: THREE.Object3D): Float32Array => { let a = new Float32Array(); o.traverse((c) => { const im = c as THREE.InstancedMesh; if (im.isInstancedMesh) a = Float32Array.from(im.instanceMatrix.array); }); return a; };
+    const before = claws(mark.object);
+    let light = 0;
+    mark.object.traverse((c) => { if ((c as THREE.PointLight).isPointLight) light = (c as THREE.PointLight).intensity; });
+    mark.params.steady = 1;
+    mark.snap();
+    mark.update(0.016, 1);
+    let lit = 0;
+    mark.object.traverse((c) => { if ((c as THREE.PointLight).isPointLight) lit = (c as THREE.PointLight).intensity; });
+    expect(lit).toBeGreaterThan(light + 20);
+    expect(Array.from(claws(mark.object))).toEqual(Array.from(before));
+    const big = hero.crownmarkFive({ scale: 1.6 }) as Any;
+    expect(big.object.scale.x).toBeCloseTo(1.6);
+    const c = big.colliders![0];
+    expect((c.shape as { r: number }).r).toBeCloseTo(1.78 * 1.6);
+  });
+});

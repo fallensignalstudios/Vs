@@ -11,17 +11,29 @@
  * the needle simply gone. AFTER THE CLIP the pass goes down into the distortion (DESCENT_*): the ship is lost.
  *
  * Draw calls: hull, light cards, spark pool, debris chunks (the last two only around the clip).
+ *
+ * POLISH PASS 4 — THE GENERATED CARRIER. The hull on screen is the forge's `ship_reformation_carrier` (a
+ * GeneratedShip, nose −Z, scaled to the pass's 464 m), placed so that its lower bow sits exactly on the procedural
+ * ram's face and nothing of it hangs below the ram (`CARRIER_MODEL_OFFSET`): the staging — first contact at 0.8, the
+ * stump clear after — is the same geometry the tests check on the proxy. It carries the battle damage in its own
+ * shader (scorch, torn breaches glowing from embers inside, the fleet battle's rim light, the terminal's glow from
+ * below, the contact flash), the sky's far-field haze, and its own engine glow, which comes back with the jets
+ * (`setStabilized`). The procedural hull stays as the stand-in until the model is loaded, and for good if it cannot
+ * be; with the model shown only its ventral jets (light cards) remain.
  */
 import * as THREE from 'three';
 import type { CarrierActor, Vec3Like } from '@/core/api';
 import { DEG, clamp01, mulberry32, smoothstep } from '@/core/mathx';
-import { BOW_Z, HULL_HALF_BEAM, HULL_LENGTH, RAM_BOTTOM, buildCarrierHull, buildCarrierLights, type HullBox } from './carrierHull';
+import { BOW_Z, HULL_HALF_BEAM, HULL_LENGTH, RAM_BOTTOM, RAM_TOP, buildCarrierHull, buildCarrierLights, type HullBox } from './carrierHull';
 import { CLIP_TOWER, type ClipTipSlot } from './scenic/clipTower';
 import { KING } from './scenic/arch';
 import { GeoBuilder } from './scenic/geo';
 import { LightCards } from './scenic/lights';
 import { createScenicMaterial } from './scenic/material';
 import type { SharedUniforms } from './shared';
+import { GLSL_HAZE, GLSL_NOISE } from './glsl';
+import { GeneratedShip, type HullShade } from '@/world/props/ships';
+import { silhouette } from '@/world/props/ships/silhouettes';
 
 const CLIP = CLIP_TOWER.progress;
 /** the stabilised ram clears the collar by this much (the unstabilised bow hangs ≈ 16 m lower and still clears) */
@@ -70,6 +82,76 @@ const pointAt = (t: number, out: THREE.Vector3): THREE.Vector3 => {
   return out;
 };
 
+/** forge length of the generated carrier, metres (its silhouette's frame) */
+const MODEL_NOMINAL = 500;
+
+/**
+ * Where the generated carrier sits in the hull frame (nose −Z, metres) at the pass's length: lifted so its lowest
+ * point is the ram's bottom, and moved forward so that its lower bow (everything below the ram's top) starts at the
+ * ram's face. Computed once from the model's synchronous silhouette (the same frame as the GLB).
+ */
+export const CARRIER_MODEL_OFFSET: Readonly<{ x: number; y: number; z: number; scale: number }> = (() => {
+  const sil = silhouette('reformationCarrier');
+  const k = HULL_LENGTH / MODEL_NOMINAL;
+  let minY = Infinity;
+  for (let i = 1; i < sil.pos.length; i += 3) minY = Math.min(minY, sil.pos[i] * k);
+  const y = RAM_BOTTOM + 0.5 - minY;
+  let front = Infinity;
+  for (let i = 0; i < sil.pos.length; i += 3) if (sil.pos[i + 1] * k + y <= RAM_TOP - 2) front = Math.min(front, sil.pos[i + 2] * k);
+  const z = Number.isFinite(front) ? BOW_Z - front : 0;
+  return { x: 0, y: Number.isFinite(y) ? y : 0, z, scale: k };
+})();
+
+/** The generated carrier's battle damage and sky light, injected into its hull material (glow.ts `HullShade`). */
+function carrierShade(shared: SharedUniforms): HullShade {
+  return {
+    key: 'carrierDamage',
+    uniforms: {
+      uTime: shared.uTime, uBattleGlow: shared.uBattleGlow, uBattleDir: shared.uBattleDir,
+      uFlashPos: shared.uFlashPos, uFlashColor: shared.uFlashColor, uKeyDir: shared.uKeyDir, uKeyColor: shared.uKeyColor,
+      uCarrierM: { value: MODEL_NOMINAL }, uCarrierBreach: { value: 0.85 }, uCarrierUnder: { value: new THREE.Color(0.46, 0.40, 0.31) },
+    },
+    glsl: `${GLSL_NOISE}
+uniform float uTime;
+uniform vec3 uBattleGlow;
+uniform vec3 uBattleDir;
+uniform vec3 uFlashPos;
+uniform vec3 uFlashColor;
+uniform vec3 uKeyDir;
+uniform vec3 uKeyColor;
+uniform float uCarrierM;
+uniform float uCarrierBreach;
+uniform vec3 uCarrierUnder;`,
+    body: `
+		// battle damage (the procedural carrier's, in the file frame: long axis x): long tears with charred lips, the cavity
+		// behind glowing from embers deep inside
+		vec3 lm = vShipLocal * uCarrierM;
+		vec3 bp = vec3(lm.z * 0.030, lm.y * 0.045, lm.x * 0.0085);
+		float bwarp = vnoise(lm * 0.012 + 5.0);
+		float bb = fbm3(bp + bwarp * 0.9 + 3.7);
+		float bedge = 0.79 - 0.10 * uCarrierBreach;
+		float brag = (vnoise(vec3(lm.z * 0.35, lm.y * 0.35, lm.x * 0.10) + 9.0) - 0.5) * 0.07;
+		float bhole = smoothstep(bedge + 0.035, bedge + 0.05, bb + brag);
+		float blip = smoothstep(bedge - 0.02, bedge + 0.035, bb + brag) * (1.0 - bhole);
+		float bscorch = smoothstep(bedge - 0.19, bedge + 0.01, bb);
+		float bember = fbm3(lm * vec3(0.035, 0.10, 0.10) + 17.0);
+		float bpulse = 0.8 + 0.2 * sin(uTime * 0.9 + bember * 23.0);
+		vec3 bfire = mix(vec3(0.45, 0.035, 0.008), vec3(1.25, 0.46, 0.10), smoothstep(0.45, 0.85, bember)) * smoothstep(0.30, 0.75, bember) * bpulse;
+		diffuseColor.rgb *= (1.0 - 0.86 * bscorch) * (1.0 - bhole);
+		totalEmissiveRadiance *= 1.0 - bscorch;
+		totalEmissiveRadiance += bhole * bfire * 2.4 + blip * vec3(0.9, 0.16, 0.03) * 0.5 * smoothstep(0.5, 0.9, bember);
+		// sky light the zone's lamps cannot give a hull 500 m up: the sky's key, the fleet battle rimming it (wrapped, so
+		// the whole underside catches it), the terminal's warm glow from below, the contact flash
+		vec3 bn = normalize(vShipWorldN);
+		float bkey = max(dot(bn, uKeyDir), 0.0);
+		float brim = clamp((dot(bn, uBattleDir) + 0.6) / 1.6, 0.0, 1.0);
+		totalEmissiveRadiance += diffuseColor.rgb * (uKeyColor * bkey * 0.6 + uBattleGlow * brim * brim * 6.0 + uCarrierUnder * (0.25 + 0.75 * max(-bn.y, 0.0)) * 1.4);
+		vec3 bfl = uFlashPos - vShipWorldP;
+		float bfd2 = dot(bfl, bfl);
+		totalEmissiveRadiance += diffuseColor.rgb * uFlashColor * ((max(dot(bn, bfl) * inversesqrt(bfd2 + 1.0), 0.0) * 0.75 + 0.25) / (1.0 + bfd2 / 6400.0));`,
+  };
+}
+
 export interface Carrier extends CarrierActor {
   /** world-space effects (sparks, debris); parented next to `object` by the sky root */
   readonly effects: THREE.Object3D;
@@ -79,6 +161,10 @@ export interface Carrier extends CarrierActor {
   update(dt: number, keyDir: THREE.Vector3, reduceFlash: boolean): void;
   /** hide, rewind to progress 0 / stabilised 0, restore the tower tip, clear effects */
   reset(): void;
+  /** ADDED (polish pass 4): resolves true once the generated carrier replaced the procedural hull (false: it stays) */
+  readonly modelReady: Promise<boolean>;
+  /** true while the generated carrier is shown */
+  readonly generated: boolean;
   dispose(): void;
 }
 
@@ -98,6 +184,33 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
   hull.name = 'sky:carrierHull';
   const lights = buildCarrierLights(rand, shared);
   object.add(hull, lights);
+
+  // ---- the generated carrier (polish pass 4): replaces the procedural hull once its file is loaded
+  const off = CARRIER_MODEL_OFFSET;
+  const model = new GeneratedShip('reformationCarrier', {
+    frame: 'minusZ', origin: 'centre', length: HULL_LENGTH, minPx: 2, shadows: false, engines: 0.12, lights: 0.6, texelGlow: 0.5,
+    haze: {
+      glsl: GLSL_HAZE,
+      uniforms: {
+        uHaze: shared.uHaze, uHazeRed: shared.uHazeRed, uHazeWhite: shared.uHazeWhite, uRedDir: shared.uRedDir,
+        uWhiteDir: shared.uWhiteDir, uWoundDir: shared.uWoundDir, uHazeDensity: shared.uHazeDensity,
+      },
+      scale: 0.75,
+    },
+    look: { tint: [1.35, 1.35, 1.38], rim: [0.04, 0.045, 0.055], fill: [0.16, 0.165, 0.18] },
+    shade: carrierShade(shared),
+  });
+  model.object.name = 'sky:carrierModel';
+  model.object.position.set(off.x, off.y, off.z);
+  object.add(model.object);
+  let generated = false;
+  const modelReady = model.ready.then((ok) => {
+    if (ok) {
+      generated = true;
+      hull.visible = false;
+    }
+    return ok;
+  });
 
   // ---- world-space effects: they must not follow the hull after the impact
   const effects = new THREE.Group();
@@ -339,6 +452,8 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     forward,
     clipPoint,
     hullProxy: built.proxy,
+    modelReady,
+    get generated() { return generated; },
     length: HULL_LENGTH,
     clipProgress: CLIP,
     shadowFootprint: footprint,
@@ -394,6 +509,13 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
       const flick = soft ? 0.08 * Math.sin(clock * 3.1) : 0.18 * Math.sin(clock * 5.1) * Math.sin(clock * 1.7);
       g.z = (0.22 + flick) * (1 - 0.5 * stabilized) + 0.5 * stabilized;
       g.w = 1 - 0.55 * stabilized;
+      if (generated) {
+        // the model carries its own engines and running lights; the procedural cards keep the ventral jets and the
+        // embers venting from the breaches (the hull is placed over the procedural one, so they still sit on it)
+        model.engines = 0.12 + g.z * 0.9 + 0.25 * g.y;
+        model.lights = 0.35 + 0.4 * stabilized + (soft ? 0 : 0.15 * Math.sin(clock * 2.3));
+        g.x = 0; g.z = 0;
+      }
       if (stabilized < 1) applyPose();
       updateShadow(keyDir);
     },
@@ -408,7 +530,7 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
       syncTip();
     },
     dispose() {
-      built.geometry.dispose(); hullMat.dispose();
+      built.geometry.dispose(); hullMat.dispose(); model.dispose();
       lights.geometry.dispose(); lights.material.dispose();
       sparks.geometry.dispose(); sparks.material.dispose();
       chunkGeo.dispose(); chunkMat.dispose(); chunks.dispose();

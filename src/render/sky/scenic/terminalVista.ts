@@ -12,6 +12,11 @@
  * stays a clean absence (the hub citadel is a dark crown under its lower limb, not a star inside it).
  * Two draw calls (structure + lights), ≈ 200k triangles.
  *
+ * Polish pass 4 (the overlook painting's city): the mass reads DARK — the ranks of spires are black stone with a
+ * lit tip (the painting's distant spires are silhouettes lit only at their points), pale ivory is kept for the few
+ * tallest towers and the hero towers; the causeways' gold edges glow faintly, so the avenues read as fine lit lines
+ * converging on the hub; fewer lit openings, fewer scattered spires.
+ *
  * Local frame: origin = overlook floor, hub toward −Z.
  */
 import * as THREE from 'three';
@@ -103,7 +108,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   }
 
   // weathered pale stone dominates (the concept's white-gold city), black stone at the footings and between
-  const tones: SpireTone[] = ['white', 'white', 'mixed', 'mixed', 'black'];
+  const tones: SpireTone[] = ['mixed', 'black', 'black', 'mixed', 'white'];
   const styles: SpireStyle[] = ['needle', 'crown', 'rib', 'needle', 'crown', 'cluster', 'stepped', 'blade'];
   const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)];
   const spire = (x: number, z: number, h: number, r: number, tone: SpireTone, style: SpireStyle, base = yd): void => {
@@ -113,11 +118,14 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
     const hh = lim.top - base;
     if (hh < 24) return;
     const detail = dist < 1500 ? 1 : dist < 2600 ? (rand() < 0.5 ? 1 : 0) : 0;
-    // the city mass reads dark: only the tall spires stand pale against it (the painting's sparse ivory needles)
-    const tall = hh > R * 0.085;
-    const t: SpireTone = !lim.lit ? 'black' : tall ? (tone === 'black' ? 'mixed' : tone) : rand() < 0.62 ? 'black' : tone;
+    // the city mass reads dark: only the tallest spires stand pale against it (the painting's sparse ivory needles);
+    // the rest are black stone, lit only at their tips
+    const tall = hh > R * 0.1;
+    const t: SpireTone = !lim.lit ? 'black' : tall ? (tone === 'black' ? 'mixed' : tone) : rand() < 0.8 ? 'black' : 'mixed';
     addPier(b, cards, x, z, base, r, 640, rand, dist < 1700 ? 1 : 0, lim.lit);
     addSpire(b, cards, { x, y: base, z, h: hh, r: Math.min(r, hh * 0.09), tone: t, rand, detail, style, lit: lim.lit, rot: Math.atan2(x, z) });
+    // a light at the point (never inside the Wound: the cards' veto drops those)
+    if (lim.lit) cards.point(x, base + hh + 1.5, z, 2.6 + hh * 0.004, rand() < 0.75 ? KING.light : KING.white, 3.6 + rand() * 2.4);
   };
 
   // ---- the hub citadel: a crown of spires around the white point, kept under the Wound's lower limb
@@ -133,7 +141,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   // ---- junction spires and ranks along every arm
   for (const [x, z, fr] of junctions) spire(x + 60, z + 50, R * (0.1 + rand() * 0.07) * (1.15 - fr * 0.4), R * 0.0085, pick(tones), pick(styles));
   for (const arm of arms) {
-    const step = (320 + rand() * 80) / density;
+    const step = (380 + rand() * 90) / density;
     for (let d = R * 0.1; d < arm.len - 80; d += step * (0.8 + rand() * 0.5)) {
       const side = rand() < 0.5 ? -1 : 1;
       const [cx, cz] = armPoint(arm.a, d);
@@ -173,7 +181,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
     }
   }
   // scattered spires between the arms, and far silhouettes all around the horizon
-  const scatter = Math.round(30 * density);
+  const scatter = Math.round(18 * density);
   for (let i = 0; i < scatter; i++) {
     const a = (rand() - 0.5) * Math.PI * 1.7;
     const d = R * (0.12 + rand() * 0.6);
@@ -233,7 +241,7 @@ export function buildTerminalVista(shared: SharedUniforms, opts?: TerminalVistaO
   const group = new THREE.Group();
   group.name = 'scenic:terminalVista';
   const mesh = new THREE.Mesh(b.build(), createScenicMaterial(shared, {
-    name: 'ScenicVista', panel: [34, 17], gloss: 0.85, lowHaze: 1, lowStart: yd - 20, lowDepth: 460, windows: [5.5, 11, 0.55], nearFill: [0.23, 0.215, 0.2, 1300], weather: 1, ambientTint: [0.22, 0.18, 0.125],
+    name: 'ScenicVista', panel: [34, 17], gloss: 0.85, lowHaze: 1, lowStart: yd - 20, lowDepth: 460, windows: [5.5, 11, 0.32], nearFill: [0.23, 0.215, 0.2, 1300], weather: 1, ambientTint: [0.2, 0.17, 0.12],
   }));
   mesh.name = 'scenic:terminalVista:structure';
   mesh.frustumCulled = false;

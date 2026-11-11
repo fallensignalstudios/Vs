@@ -10,15 +10,17 @@
  *  - A state with no recording: the generative score, and any recording fades out.
  * Intensity moves the recording's level and opens its low-pass; a combat state entered while intensity is
  * already high starts its recording past the introduction.
+ *  - POLISH 4, `setMusic(state, fade, { once: true })`: the recording plays once, to the end of its file, and the
+ *    state then holds a quiet bed (mapping.ts BED_*) — its own generative pads and held tones — until it changes.
  */
 import { clamp } from '@/core/mathx';
-import type { MusicState } from '@/core/api';
+import type { MusicOpts, MusicState } from '@/core/api';
 import type { Mixer } from '../mixer';
 import type { MusicEngine } from '../music/engine';
 import { MUSIC } from '../music/defs';
 import type { MusicDef } from '../music/types';
 import type { AssetLibrary } from './library';
-import { TRACKS, loopSpec, overlayDef, planGain, planTone, scorePlan, type ScorePlan, type TrackName } from './mapping';
+import { BED_DB, BED_FADE, BED_LAYERS, BED_LEAD, TRACKS, loopSpec, onceSpec, overlayDef, planGain, planTone, scorePlan, type ScorePlan, type TrackName } from './mapping';
 import { TrackPlayer } from './player';
 
 /** cross-fade when a recording arrives after its state has already begun (s) */
@@ -37,6 +39,10 @@ export class RecordedScore {
   /** the recording that carries the current state right now (null: the generative score does) */
   private covering: TrackName | null = null;
   private applied = -1;
+  /** POLISH 4: the current state was asked for with `once` */
+  private once = false;
+  /** POLISH 4: the once-played recording has ended and the bed is on */
+  private bed = false;
 
   constructor(
     ac: BaseAudioContext,
@@ -53,13 +59,15 @@ export class RecordedScore {
   }
 
   /** Change the music state (see AudioSystem.setMusic). */
-  setState(state: MusicState, fadeSeconds = 2): void {
+  setState(state: MusicState, fadeSeconds = 2, opts?: MusicOpts): void {
     // (a script may assert its state every frame: only a change does anything)
     if (state === this.state) return;
     const fade = clamp(Number.isFinite(fadeSeconds) ? fadeSeconds : 2, 0.05, 30);
     const plan = scorePlan(state);
     this.state = state;
     this.plan = plan;
+    this.once = opts?.once === true;
+    this.bed = false;
     const lib = this.library;
     if (lib) {
       lib.pin([plan.track, plan.warm, this.covering]);
@@ -85,13 +93,15 @@ export class RecordedScore {
     if (!buffer || !meta || !def) return false;
     // (the audible intensity lags the one just asked for: either says the fight is on)
     const hot = Math.max(this.music.intensity, this.music.targetIntensity) >= HOT_ENTRY;
-    const loop = loopSpec(plan.track, meta, plan.region, hot);
-    if (!(loop.to - loop.from >= 1) || !(loop.to <= buffer.duration + 0.5)) return false;
+    const looped = loopSpec(plan.track, meta, plan.region, hot);
+    if (!(looped.to - looped.from >= 1) || !(looped.to <= buffer.duration + 0.5)) return false;
+    // (polish 4) played once: to the end of the file, then the bed (update)
+    const loop = this.once ? onceSpec(looped, meta, buffer.duration) : looped;
     const at = this.music.setState(this.state, fade, {
       key: `rec:${plan.track}`, def: overlayDef(def, plan.generativeLayers), tonic: TRACKS[plan.track].tonic,
     });
     const i = this.music.intensity;
-    this.player.play(`${plan.track}:${plan.region}`, buffer, loop, planGain(plan, loop, i), planTone(plan, i), at, fade);
+    this.player.play(`${plan.track}:${plan.region}${this.once ? ':once' : ''}`, buffer, loop, planGain(plan, loop, i), planTone(plan, i), at, fade);
     this.covering = plan.track;
     this.applied = i;
     lib.pin([plan.track, plan.warm]);
@@ -102,12 +112,23 @@ export class RecordedScore {
   update(dt: number, lookahead: number): void {
     this.library?.tick(dt);
     if (this.plan.track && !this.covering) this.enter(ARRIVAL_FADE);
+    if (this.covering && this.once && !this.bed) {
+      // (polish 4) the once-played recording is about to end: its state's quiet bed comes in under the last of it
+      const ac = this.player.ac;
+      if (ac.currentTime >= this.player.endsAt - BED_LEAD) {
+        this.bed = true;
+        const def = defOf(this.state);
+        const bed = def ? overlayDef(def, [...this.plan.generativeLayers, ...BED_LAYERS]) : null;
+        if (bed) this.music.setState(this.state, BED_FADE, { key: `bed:${this.covering}`, def: bed, tonic: TRACKS[this.covering].tonic, trimDb: BED_DB });
+      }
+    }
     if (this.covering) {
       const i = this.music.intensity;
       if (Math.abs(i - this.applied) >= INTENSITY_STEP) {
         this.applied = i;
         const meta = this.library?.trackMeta(this.covering);
         if (meta) {
+          // (once or looped: the level is set the same way, by the looped part's mean)
           const loop = loopSpec(this.covering, meta, this.plan.region);
           this.player.setLevel(planGain(this.plan, loop, i), planTone(this.plan, i));
         }

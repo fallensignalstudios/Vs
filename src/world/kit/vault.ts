@@ -255,7 +255,7 @@ function ribStations(ctx: KitCtx, o: CeilingOpts, d: number): number[] {
 }
 
 /** vertex-coloured unlit quads (HDR via the material colour), fogged like the rest of the hall */
-class HazeWriter {
+export class HazeWriter {
   private readonly pos: number[] = [];
   private readonly nor: number[] = [];
   private readonly col: number[] = [];
@@ -275,13 +275,22 @@ class HazeWriter {
     }
   }
 
-  /** `additive`: a glow laid over other surfaces (unfogged — fog would add its colour — and not reflected) */
-  mesh(ctx: KitCtx, glow: number, additive: boolean): THREE.Mesh {
+  get empty(): boolean { return this.pos.length === 0; }
+
+  /** ADDED (polish 4): the quads as geometry (position, normal, color) */
+  geometry(): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(this.pos), 3));
     g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(this.nor), 3));
     g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(this.col), 3));
     g.computeBoundingSphere();
+    g.computeBoundingBox();
+    return g;
+  }
+
+  /** `additive`: a glow laid over other surfaces (unfogged — fog would add its colour — and not reflected) */
+  mesh(ctx: KitCtx, glow: number, additive: boolean): THREE.Mesh {
+    const g = this.geometry();
     const m = additive
       ? new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })
       : new THREE.MeshBasicMaterial({ vertexColors: true, fog: true });

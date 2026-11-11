@@ -21,6 +21,18 @@ export interface GlbCharacters {
 }
 
 const warned = new Set<string>();
+/** POLISH 4: archetypes preloaded with the donor of a grafted bare head (see preloadModels) */
+const GRAFTED: ReadonlySet<string> = new Set(['linkbound']);
+
+/**
+ * The model files preload() fetches for these archetypes: bodies, props and (polish 4) the head donor of the
+ * archetypes drawn with a grafted head — the linkbound (`halfHuman`) — so zones no longer add 'survivor' to `cast`.
+ */
+export function preloadModels(archetypes: readonly Archetype[]): string[] {
+  const names = new Set<string>();
+  for (const a of archetypes) for (const n of modelsFor(a, GRAFTED.has(a))) names.add(n);
+  return [...names];
+}
 
 export function createGlbCharacters(game: Game | null): GlbCharacters {
   const library = new ModelLibrary(game);
@@ -41,9 +53,7 @@ export function createGlbCharacters(game: Game | null): GlbCharacters {
       }
     },
     preload(archetypes) {
-      const names = new Set<string>();
-      for (const a of archetypes) for (const n of modelsFor(a)) names.add(n);
-      return library.preload([...names]);
+      return library.preload(preloadModels(archetypes));
     },
   };
 }

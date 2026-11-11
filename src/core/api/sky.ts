@@ -29,7 +29,7 @@ export type SkyPreset =
   | 'frozenInterior'  // Z03–Z04: daylight inside the megastructure — bright cold haze, its own ribbed upper space overhead, no stars
   | 'battleCeiling'   // Z05: transparent ceiling, amber / blue-white / violet battle light, carrier crossing
   | 'breachDeep'      // Z06–Z08: enclosed; through glass a dark grey-blue nebula and the fleet battle low over the horizon
-  | 'woundVista'      // Z09: one enormous Crownmark arm; Wound fills much of the horizon (concept: Wound overlook)
+  | 'woundVista'      // Z09 (also Z11, Z12): one enormous Crownmark arm; Wound fills much of the horizon (concept: Wound overlook)
   | 'coreChamber'     // Z10: enclosed nested machinery volume; the Wound seen dimly through the dark shut view boundary
   | 'observation'     // Z11: red remnant left, hard white remnant right, Wound between
   | 'hangar';         // Z12: outer ring, both fleets wary at distance
@@ -49,6 +49,13 @@ export type SkyPreset =
  * into the distortion below the complex, nose-down, ≈ 560 m below the level pass by progress 1 (ease-in: barely
  * lower at 0.88, most of the drop in the last tenth). Drive progress to 1 and hide the carrier after the shot —
  * no anchor lowering needed.
+ *
+ * ADDED (polish pass 4, SKY & SHIPS) THE HULL. The carrier on screen is the generated Reformation carrier
+ * (public/models/ship_reformation_carrier.glb) at the pass's 464 m, placed on the procedural hull's ventral ram so
+ * the clip staging above is unchanged, with its battle damage (scorch, torn breaches glowing from inside), the fleet
+ * battle's rim light, the terminal's glow from below and the contact flash in its own shader, and its cold-blue engine
+ * glow coming back with `setStabilized`. The procedural hull stands in until the file is loaded (and for good if it
+ * cannot be). `await game.sky.carrier.modelReady` in an async build() to never show the stand-in.
  */
 export interface CarrierActor {
   readonly object: THREE.Object3D;
@@ -97,6 +104,10 @@ export interface CarrierActor {
    * The same objects are updated in place every frame.
    */
   readonly shadowFootprint: { readonly center: THREE.Vector3; readonly axis: THREE.Vector3; readonly halfLength: number; readonly halfWidth: number };
+  /** ADDED (polish pass 4): resolves true once the generated carrier replaced the procedural hull, false if it stays */
+  readonly modelReady: Promise<boolean>;
+  /** ADDED (polish pass 4): true while the generated carrier is shown */
+  readonly generated: boolean;
 }
 
 /** A directional light suggestion. `dir` is the unit vector pointing FROM the scene TOWARD the light. */
@@ -231,6 +242,11 @@ export interface ScenicFactory {
    * (the accretion swirl beyond the rim may sink behind them). Pass false for other skies.
    * Spires come in six families (needle, stepped crown, ribs, cluster, ziggurat, blade) of weathered pale stone and
    * black stone with gold trim; only the tall ones stand pale against a dark city mass.
+   * ADDED (polish pass 4, the overlook painting's city): the ranks of spires are black stone lit only at their tips
+   * (pale ivory is kept for the few tallest and the six hero towers), the causeways' gold edges glow faintly so the
+   * avenues read as fine lit lines converging on the hub, and there are fewer lit openings and scattered spires.
+   * Structures under the Wound's void are capped no lower than 0.6° over the horizon (the void's lower arc now sits
+   * just over the city's glow line).
    */
   terminalVista(opts?: { radius?: number; seed?: number; density?: number; drop?: number; corridor?: number; clearWound?: boolean }): THREE.Object3D;
   /**
@@ -269,6 +285,10 @@ export interface ScenicFactory {
    * be loaded). Engines default to 1 on capitals and 0.6 (hovering) on the small craft. Read and drive the live
    * state with {@link asScenicShip}; `await asScenicShip(ship)?.ready` in an async build() to never show the
    * stand-in.
+   * ADDED (polish pass 4, SHIPS): every generated hull reads against the night on its own — a cool fresnel rim, a sky
+   * fill and a metalness cap (the files are dark and glossy), and the shuttle's map is graded from dark brown toward
+   * its concept's weathered tan bronze. The defaults live in the ship catalog (`SHIP_MODELS[id].look`); the hero
+   * prop's escorts get a stronger rim. The sky's fleet impostors (the distant battle) are the generated capitals too.
    */
   ship(kind: 'dominionShuttle' | 'reformationTransport' | 'dominionCapital' | 'reformationCapital', opts?: { scale?: number }): THREE.Object3D;
   /**
@@ -298,6 +318,25 @@ export interface ScenicShipControls {
   lights: number;
   /** hull length in metres, including the object's own scale (the stand-in's while it is shown) */
   readonly length: number;
+  /**
+   * ADDED (polish pass 4): change the generated hull's look live, merged over its default (see {@link ScenicShipLook}),
+   * e.g. a stronger rim while the Z00 dropship crosses the night: `asScenicShip(ship)?.setLook({ rim: [0.12, 0.14, 0.18] })`.
+   * No effect on the procedural stand-in.
+   */
+  setLook(look: ScenicShipLook): void;
+}
+
+/**
+ * ADDED (polish pass 4): how a generated hull reads, independent of the scene's lights. Colours are linear RGB.
+ * `tint` multiplies the colour map, `desat` 0..1 greys it toward its luminance, `maxMetal` caps the metalness,
+ * `rim` is a fresnel edge light × strength, `fill` a sky hemisphere fill × strength.
+ */
+export interface ScenicShipLook {
+  tint?: readonly [number, number, number];
+  desat?: number;
+  maxMetal?: number;
+  rim?: readonly [number, number, number];
+  fill?: readonly [number, number, number];
 }
 
 /** ADDED (integration wave, SHIPS): the controls of a `sky.scenic.ship()` object; null for anything else. */
