@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import type { Actor, Routine, ZoneRuntime } from '@/core/api';
 import { asDevice, asScanHead } from '@/core/api';
 import { wrapAngle, yawTo } from '@/core/mathx';
-import { onZoneEvent, tutorialHint } from '../shared';
+import { onZoneEvent, tutorialHint, waitOr } from '../shared';
 import {
   DETECTED_RATE, HINT_DELAY, PAST_X, PLANE_A, PLANE_B, PROGRESS_STEP, SOURCE_LENS, TRACE_RANGE_HIGH,
   TRACE_RANGE_LOW, type PlaneSpec,
@@ -201,6 +201,23 @@ function planeCentre(z: ZoneRuntime, p: PlaneState, out: THREE.Vector3): THREE.V
   return out.copy(z.P(s.x0 + (s.x1 - s.x0) * t, s.n, 0));
 }
 
+/**
+ * Tharne's report names the bearing "East" (the four recorded lines differ only in the distance), so it is said
+ * only while that is true from where the lead stands: the projector within this many degrees of due east of her.
+ * The deck runs along the south wall, so a lead tucked in the north-east of the corridor has it to her SOUTH.
+ */
+const EAST_HALF_ARC = 65;
+/** after the trigger, how long Tharne waits for her to have the projector to her east before he only marks it */
+const EAST_WAIT = 6;
+
+/** is the projector within EAST_HALF_ARC of due east of the lead (plan bearing 90°)? */
+function sourceEastOfLead(z: ZoneRuntime): boolean {
+  const lens = lensPos(z, _lens);
+  const p = z.player.pos;
+  const bearing = (Math.atan2(lens.x - p.x, -(lens.z - p.z)) * 180) / Math.PI;
+  return Math.abs(wrapAngle(((bearing - 90) * Math.PI) / 180)) <= (EAST_HALF_ARC * Math.PI) / 180;
+}
+
 /** distance band for Tharne's report (the line is fixed text: one of four) */
 function reportLine(dist: number): string {
   if (dist < 15) return 'One projector drives both. East, service deck, ten meters.'; // NEW
@@ -254,20 +271,29 @@ export function* scanPlay(z: ZoneRuntime): Routine {
   if (!downCalled && S.sourceDown) z.bark('Tharne', 'Source down.', { actor: tharne }); // NEW
 }
 
-/** Tharne names the source: bearing and distance; the trace shows (briefly forced, as on his viewmaker) */
+/**
+ * Tharne names the source: bearing and distance; the trace shows (briefly forced, as on his viewmaker). The spoken
+ * bearing is always "East", so he says it once it is true from where she stands (`sourceEastOfLead`, waiting a
+ * few seconds for her to move); if she stays where the projector lies to her south, he marks it without a word.
+ */
 function* identify(z: ZoneRuntime): Routine {
   const game = z.game;
   const tharne = z.cast('tharne');
   const lyric = z.cast('lyric');
   const lens = lensPos(z, new THREE.Vector3());
-  yield* z.say('Tharne', reportLine(z.player.aimPoint(_chest).distanceTo(lens)), { actor: tharne });
-  yield* z.say('Selene', 'Show me.', { actor: z.player }); // NEW (one of her two-word replies)
+  yield waitOr(z, () => S.sourceDown || z.player.pos.x >= PAST_X || sourceEastOfLead(z), EAST_WAIT);
+  if (S.sourceDown || z.player.pos.x >= PAST_X) return;
+  const spoken = sourceEastOfLead(z);
+  if (spoken) {
+    yield* z.say('Tharne', reportLine(z.player.aimPoint(_chest).distanceTo(lens)), { actor: tharne });
+    yield* z.say('Selene', 'Show me.', { actor: z.player }); // NEW (one of her two-word replies)
+  }
   if (S.sourceDown) return;
   // he marks it on his viewmaker: the traces show for a few seconds wherever she stands
   S.forceTraceUntil = z.time + 4.5;
   game.ui.marker(SOURCE_ID, lens, { label: 'Source', kind: 'threat', hideWithin: 3 }); // NEW
   tutorialHint(z, 'z03Trace', 'The trace runs from a plane back to its source. A clear angle shows it; so does the tactical read.', 'scan', 9); // NEW
-  z.bark('Lyric', 'You could simply have said it was over there.', { actor: lyric }); // NEW (she needles him once)
+  if (spoken) z.bark('Lyric', 'You could simply have said it was over there.', { actor: lyric }); // NEW (she needles him once)
   yield 9;
   if (!S.sourceDown && z.player.pos.x < PAST_X) {
     tutorialHint(z, 'z03Disable', 'Disable the source by hand or with a shot — or pass on timing.', 'interact', 9); // NEW

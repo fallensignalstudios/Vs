@@ -43,7 +43,10 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
       s?.stopAction();
       if (s) s.mode = 'scripted';
     }
+    game.player.cancelAction?.();
     game.player.teleport(z.m('seleneHatch'), z.myaw('seleneHatch'));
+    // Verity collapsed in her hand until she comes down off the hatch (the blades ignite on «What kind?»)
+    game.player.playScripted('verityCollapsed');
     tharne?.teleport(z.m('tharneHatch'), z.myaw('tharneHatch'));
     lyric?.teleport(z.m('lyricHatch'), z.myaw('lyricHatch'));
     lyric?.actor.visual?.setCorruption(LYRIC_MARKS.arrive);
@@ -115,15 +118,18 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     game.player.teleport(z.m('seleneStep'), z.myaw('seleneStep'));
     const sel = z.m('seleneStep');
     c.twoShot(sel, z.m('lyricWall'), { side: 1, distance: 1.7, fov: 36 });
-    z.player.visual?.setLoadout({ melee: true });
-    game.player.playScripted('raiseWeapon', { faceTo: L });
+    // «blades flare»: the hilt comes up, the blades snap out of both ends and flare cold-white (draws Verity)
+    z.player.visual?.stop('verityCollapsed');
+    game.player.playScripted('igniteBlades', { faceTo: L });
     z.player.visual?.setGlow(1.6);
+    // the ignition ('hit' at 0.24 of the 1.15 s clip): the frost flash and the whirl ride it
+    yield 0.28;
     if (!z.skipping) {
       game.vfx.flash(z.player.aimPoint(_v), FROST, 1.2, 0.3);
       game.vfx.spawn('frostBurst', z.player.visual?.socket('handR').getWorldPosition(_w) ?? z.player.aimPoint(_w), { scale: 0.35 });
       game.audio.play('verityWhirl', { pos: sel, volume: 0.5, pitch: 1.2 });
     }
-    yield 0.6;
+    yield 0.32;
     yield* z.say('Selene', 'What kind?', { actor: z.player });
     c.shot(z.m('lyricWall'), { yawDeg: bearing(z.m('lyricWall'), sel) - 25, distance: 1.7, height: 1.6, lookHeight: 1.5, fov: 32 });
     yield* z.say('Lyric', 'The kind that know we came.', { actor: lyric });
@@ -137,6 +143,8 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     S.catching = false;
     holdOff(tharne, lyric);
     for (const s of [tharne, lyric]) if (s) s.actor.fixed = false;
+    z.player.visual?.stop('verityCollapsed');
+    z.player.visual?.setLoadout({ melee: true });
     z.player.visual?.setGlow(1);
     placeAtStart(z, tharne, lyric);
     z.setFlag('z03Landed', true);
@@ -249,6 +257,7 @@ export function* terminalScene(z: ZoneRuntime): Routine {
       s?.stopAction();
       if (s) s.mode = 'scripted';
     }
+    game.player.cancelAction?.();
     game.player.teleport(z.m('terminal'), z.myaw('terminal'));
     tharne?.teleport(z.m('tharneTerm'), z.myaw('tharneTerm'));
     lyric?.teleport(z.m('lyricTerm'), z.myaw('lyricTerm'));
