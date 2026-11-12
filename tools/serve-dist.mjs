@@ -82,7 +82,9 @@ const server = http.createServer((req, res) => {
       return;
     }
     const type = contentTypeOf(file) ?? 'application/octet-stream';
-    res.writeHead(200, { 'content-type': type, 'content-length': st.size, 'cache-control': 'no-store', ...(o.cors ? { 'access-control-allow-origin': '*' } : {}) });
+    // no-cache, not no-store: with no-store Chromium reports streamed fetch() bodies (the GLB loads) as
+    // net::ERR_ABORTED even though every byte arrives, which shows up as false page errors in captures.
+    res.writeHead(200, { 'content-type': type, 'content-length': st.size, 'cache-control': 'no-cache', ...(o.cors ? { 'access-control-allow-origin': '*' } : {}) });
     if (req.method === 'HEAD') {
       res.end();
       log(200, 0, req.url);
