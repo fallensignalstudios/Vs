@@ -37,8 +37,10 @@ export function* reunionScene(z: ZoneRuntime): Routine {
   const tharne = z.cast('tharne');
   const lyric = z.cast('lyric');
   const P = (x: number, n: number, h: number): THREE.Vector3 => z.P(x, n, h);
-  const say = (who: string, text: string, body: Companion | null | 'player'): Routine =>
-    z.say(who, text, { actor: body === 'player' ? z.player : body });
+  // polish 4: `to` = who the line is addressed to when it is not the lead (dialogue `listener`): a companion
+  // answering another companion turns to them and holds their eyes, instead of turning to Selene
+  const say = (who: string, text: string, body: Companion | null | 'player', to?: Companion | null): Routine =>
+    z.say(who, text, { actor: body === 'player' ? z.player : body, ...(to !== undefined ? { listener: to } : {}) });
 
   yield* z.cinematic('z11-reunion', function* (c: CineCtx): Routine {
     sheathe(z.player, tarrik);
@@ -46,7 +48,7 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     c.cut({ pos: P(11.9, 7.4, 1.72), look: P(11, -1.6, 1.55), fov: 40 });
     c.moveAsync({ pos: P(11.7, 6.4, 1.68), look: P(11, -1.6, 1.5), fov: 38 }, 4.4, 'inOut');
     if (!z.skipping) g.audio.play('liftMove', { pos: z.m('liftSelene') });
-    if (sp?.liftLight) sp.liftLight.intensity = 46;
+    if (sp?.liftLight) sp.liftLight.intensity = 34;
     yield 1.5;
     sp?.lift?.setState('open');
     sp?.lift?.setOpen(true);
@@ -178,28 +180,28 @@ export function* reunionScene(z: ZoneRuntime): Routine {
     if (tarrik) tarrik.actor.yaw = yawTo(tn2.x, tn2.z, lt.x, lt.z);
     const l = () => feet(z, lyessa ?? 'lyessaTalk');
     c.twoShot(l(), t(), { side: 1, distance: 1.9, fov: 32 });
-    yield* say('Lyessa', 'Cross wants the terminal.', lyessa);
-    yield* say('Lyessa', 'He has three Continuity teams coming down.', lyessa);
+    yield* say('Lyessa', 'Cross wants the terminal.', lyessa, tarrik);
+    yield* say('Lyessa', 'He has three Continuity teams coming down.', lyessa, tarrik);
     c.twoShot(t(), l(), { side: -1, distance: 1.9, fov: 32 });
-    yield* say('Tarrik', 'Keep them out.', tarrik);
-    yield* say('Tarrik', 'I need to understand what we just saw before Crownwatch tells me what it means.', tarrik);
+    yield* say('Tarrik', 'Keep them out.', tarrik, lyessa);
+    yield* say('Tarrik', 'I need to understand what we just saw before Crownwatch tells me what it means.', tarrik, lyessa);
     toward(c, lyessa, tarrik, 30, 1.9, 29);
-    yield* say('Lyessa', 'Only the terminal?', lyessa);
+    yield* say('Lyessa', 'Only the terminal?', lyessa, tarrik);
     // he could make this easier, but he does not
     toward(c, tarrik, lyessa, -30, 2.0, 29);
-    yield* say('Tarrik', 'No.', tarrik);
+    yield* say('Tarrik', 'No.', tarrik, lyessa);
     yield 0.5;
     toward(c, lyessa, tarrik, 25, 1.6, 26);
     yield 0.4;
-    yield* say('Lyessa', 'Fine.', lyessa);
+    yield* say('Lyessa', 'Fine.', lyessa, tarrik);
     c.twoShot(t(), l(), { side: -1, distance: 1.8, fov: 31 });
-    yield* say('Tarrik', 'If Crownwatch gives you a direct order to let them through?', tarrik);
+    yield* say('Tarrik', 'If Crownwatch gives you a direct order to let them through?', tarrik, lyessa);
     c.twoShot(l(), t(), { side: 1, distance: 1.8, fov: 31 });
-    yield* say('Lyessa', 'You told me to decide what I do.', lyessa);
+    yield* say('Lyessa', 'You told me to decide what I do.', lyessa, tarrik);
     toward(c, tarrik, lyessa, -30, 1.9, 28);
-    yield* say('Tarrik', 'Yes.', tarrik);
+    yield* say('Tarrik', 'Yes.', tarrik, lyessa);
     toward(c, lyessa, tarrik, 25, 1.7, 26);
-    yield* say('Lyessa', 'I’m deciding.', lyessa);
+    yield* say('Lyessa', 'I’m deciding.', lyessa, tarrik);
     // she turns back to hold the junction
     walkTo(z, lyessa, 'lyessaPost');
     yield 1.6;

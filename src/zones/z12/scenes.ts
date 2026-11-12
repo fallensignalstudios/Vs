@@ -14,8 +14,23 @@ import { FLIGHT_END, RISE, S, carry, humanoid, prepareFlights } from './state';
 
 type Body = Companion | 'player' | null;
 
-function sayer(z: ZoneRuntime): (who: string, text: string, body: Body) => Routine {
-  return (who, text, body) => z.say(who, text, { actor: body === 'player' ? z.player : body });
+/** how far each of them steps in toward the other for the forearm clasp (fraction of the gap to the midpoint) */
+const CLASP_STEP = 0.45;
+/**
+ * Lyric's single as she answers Tharne (she faces him, north-east): well off the line to him, from the east, so
+ * she is seen three-quarter against the Dominion berth and the open edge rather than the south wall
+ */
+const LYRIC_TO_THARNE = 62;
+/** where the two departure follow shots stand (plan x, n, h) */
+const FOLLOW_DOM: readonly [number, number, number] = [13.4, 3.2, 0.95];
+const FOLLOW_REF: readonly [number, number, number] = [21.4, 8.6, 1.5];
+
+/**
+ * A line by a body. Polish 4: `to` = who it is addressed to when that is not the lead (dialogue `listener`): a
+ * companion answering another companion turns to them and holds their eyes, instead of turning to Tarrik.
+ */
+function sayer(z: ZoneRuntime): (who: string, text: string, body: Body, to?: Companion | null) => Routine {
+  return (who, text, body, to) => z.say(who, text, { actor: body === 'player' ? z.player : body, ...(to !== undefined ? { listener: to } : {}) });
 }
 
 // =====================================================================================================================
@@ -55,23 +70,23 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     toward(c, z.player, selene, -35, 2.0, 29, 1.66);
     yield* say('Tarrik', 'Yes.', 'player');
     c.twoShot(at(selene, 'seleneMeet'), at(lyessa, 'lyessaMeet'), { side: 1, distance: 2.0, fov: 32 });
-    yield* say('Lyessa', 'What did he tell you?', lyessa);
+    yield* say('Lyessa', 'What did he tell you?', lyessa, selene);
     toward(c, selene, lyessa, 35, 2.0, 29, 1.58);
-    yield* say('Selene', 'The truth.', selene);
+    yield* say('Selene', 'The truth.', selene, lyessa);
     if (z.state.optional.O4) {
       // only if O4 was heard (ruling 11): otherwise “Gate Nine” means nothing
-      yield* say('Selene', 'I don’t know whether you were wrong at Gate Nine.', selene);
-      yield* say('Selene', 'I know you were wrong every day after.', selene);
+      yield* say('Selene', 'I don’t know whether you were wrong at Gate Nine.', selene, lyessa);
+      yield* say('Selene', 'I know you were wrong every day after.', selene, lyessa);
       toward(c, lyessa, selene, -35, 1.8, 27, 1.62);
       yield 0.6;
-      yield* say('Lyessa', 'So do I.', lyessa);
+      yield* say('Lyessa', 'So do I.', lyessa, selene);
       // she does not argue; it repairs nothing; it matters anyway
       yield 1.6;
     }
     // each companion chooses to go with their bearer
     c.twoShot(at(lyric, 'lyricMeet'), at(selene, 'seleneMeet'), { side: -1, distance: 1.8, fov: 32 });
-    yield* say('Selene', 'You don’t have to come.', selene);
-    yield* say('Lyric', 'I know.', lyric);
+    yield* say('Selene', 'You don’t have to come.', selene, lyric);
+    yield* say('Lyric', 'I know.', lyric, selene);
     // she waves Tharne off, manages two steps alone, sways, then lets him take her arm without comment
     c.shot(at(lyric, 'lyricMeet'), { yawDeg: 175, distance: 3.0, height: 1.5, lookHeight: 1.35, fov: 34 });
     lyric?.play('point');
@@ -79,8 +94,8 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     yield waitOr(z, () => z.skipping || atPost(z, lyric, 'lyricAlone', 0.35), 2.2);
     lyric?.play('limp', { loop: true });
     walkTo(z, tharne, 'lyricMeet');
-    yield* say('Lyric', 'Still coming.', lyric);
-    yield* say('Tharne', 'So am I.', tharne);
+    yield* say('Lyric', 'Still coming.', lyric, selene);
+    yield* say('Tharne', 'So am I.', tharne, selene);
     c.twoShot(at(lyessa, 'lyessaMeet'), T(), { side: -1, distance: 1.8, fov: 32 });
     yield* say('Tarrik', 'You don’t have to come.', 'player');
     yield* say('Lyessa', 'I know.', lyessa);
@@ -96,21 +111,21 @@ export function* concourseScene(z: ZoneRuntime): Routine {
     // Tharne can find no way round the two of them — and will not promise there is none
     c.twoShot(at(tharne, 'tharneMeet'), at(selene, 'seleneMeet'), { side: 1, distance: 1.9, fov: 32 });
     tharne?.play('point');
-    yield* say('Tharne', 'There is no evident mechanism for remote substitution.', tharne);
+    yield* say('Tharne', 'There is no evident mechanism for remote substitution.', tharne, selene);
     toward(c, selene, tharne, -35, 1.9, 29, 1.58);
-    yield* say('Selene', 'You don’t see one.', selene);
+    yield* say('Selene', 'You don’t see one.', selene, tharne);
     toward(c, tharne, selene, 35, 2.0, 29, 1.6);
-    yield* say('Tharne', 'No.', tharne);
-    yield* say('Tharne', 'The command grammar distributed to the active nodes can interrogate terminal state,', tharne);
-    yield* say('Tharne', 'model release conditions, and authenticate partial authority pathways.', tharne);
-    yield* say('Tharne', 'It should not be capable of executing final release without contrary concurrence.', tharne);
-    // (a speaking companion turns to the lead: frame Lyric from Tarrik's side so her face is seen, Tharne beyond)
-    toward(c, lyric, z.player, -32, 1.9, 28, 1.6);
-    yield* say('Lyric', 'Should.', lyric);
+    yield* say('Tharne', 'No.', tharne, selene);
+    yield* say('Tharne', 'The command grammar distributed to the active nodes can interrogate terminal state,', tharne, selene);
+    yield* say('Tharne', 'model release conditions, and authenticate partial authority pathways.', tharne, selene);
+    yield* say('Tharne', 'It should not be capable of executing final release without contrary concurrence.', tharne, selene);
+    // (polish 4: she answers Tharne — `listener` turns her to him — so she is framed on the line to him)
+    toward(c, lyric, tharne, LYRIC_TO_THARNE, 1.9, 28, 1.6);
+    yield* say('Lyric', 'Should.', lyric, tharne);
     toward(c, tharne, lyric, 35, 2.0, 29, 1.6);
-    yield* say('Tharne', 'Yes.', tharne);
-    toward(c, lyric, z.player, -32, 1.9, 28, 1.6);
-    yield* say('Lyric', 'That word is doing a remarkable amount of labor.', lyric);
+    yield* say('Tharne', 'Yes.', tharne, lyric);
+    toward(c, lyric, tharne, LYRIC_TO_THARNE, 1.9, 28, 1.6);
+    yield* say('Lyric', 'That word is doing a remarkable amount of labor.', lyric, tharne);
     // the alert over the concourse
     c.cut({ pos: z.P(FAREWELL.x, 3.2, 1.8), look: z.P(FAREWELL.x, 17.5, 4.6), fov: 46 });
     S.alert?.show(1, 0.3);
@@ -225,10 +240,11 @@ export function* farewellScene(z: ZoneRuntime): Routine {
     yield* say('Tarrik', 'No.', 'player');
     // “Tarrik offers his forearm in an old Dominion military gesture.” She looks at it, then at him.
     const clasp = mid.clone().setY(1.18);
-    // a step in, for the old Dominion gesture
-    g.player.teleport(T.clone().lerp(mid, 0.4), z.myaw('tarrikFarewell'));
-    selene?.teleport(Sx.clone().lerp(mid, 0.4), z.myaw('seleneFarewell'));
-    selene?.holdAt(Sx.clone().lerp(mid, 0.4), z.myaw('seleneFarewell'));
+    // a step in, for the old Dominion gesture (polish 4: a little deeper, 0.45, now that the chars reach assist
+    // brings each hand onto the other's forearm — the clasp closes instead of stopping fingertip to fingertip)
+    g.player.teleport(T.clone().lerp(mid, CLASP_STEP), z.myaw('tarrikFarewell'));
+    selene?.teleport(Sx.clone().lerp(mid, CLASP_STEP), z.myaw('seleneFarewell'));
+    selene?.holdAt(Sx.clone().lerp(mid, CLASP_STEP), z.myaw('seleneFarewell'));
     c.cut({ pos: mid.clone().add(new THREE.Vector3(0.05, 1.52, 1.9)), look: clasp.clone().setY(1.3), fov: 34 });
     humanoid(z.player)?.setHandTarget('R', clasp.clone().add(new THREE.Vector3(0.14, 0, 0)), 1);
     humanoid(selene?.actor)?.lookAt(clasp);
@@ -300,10 +316,11 @@ export function* releaseScene(z: ZoneRuntime): Routine {
 
 /**
  * A camera that stays put at `from` and follows a departing craft (eased aim; the field narrows as it recedes so
- * the craft and its escort keep their size in frame). It never ends by itself: it runs in a race with the line it
- * covers, so the line always decides when the shot ends (watched or skipped). Nothing moves while skipping.
+ * the craft and its escort keep their size in frame, never wider than `maxFov`). It never ends by itself: it runs
+ * in a race with the line it covers, so the line always decides when the shot ends (watched or skipped). Nothing
+ * moves while skipping.
  */
-function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: THREE.Vector3): Routine {
+function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: THREE.Vector3, maxFov = 58): Routine {
   const idle = (): boolean => false;
   if (!ship) {
     yield idle;
@@ -320,7 +337,7 @@ function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: 
     ship.getWorldPosition(aim);
     look.lerp(aim, 0.12);
     const dist = Math.max(1, from.distanceTo(look));
-    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(26 / dist)), 16, 58);
+    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(26 / dist)), 16, maxFov);
     c.cut({ pos: from, look: look.clone(), fov });
     yield;
   }
@@ -359,13 +376,16 @@ export function* departureScene(z: ZoneRuntime): Routine {
     // (integration wave: the escorts are the generated craft — see updateZ12). Same lines, same timing.
     yield { race: [
       z.say('Dominion Command', 'CROWNWATCH · SOVEREIGN PRIORITY · IMMEDIATE RETURN', { channel: 'system', offscreen: true }), // NEW (speaker label; the text is the book's)
-      // from behind, as his craft turns and heads out toward the Wound and the red remnant beyond it
-      follow(z, c, sp?.dom?.object ?? null, z.P(14.5, 2.0, 1.6)),
+      // from behind, as his craft turns and heads out toward the Wound and the red remnant beyond it (polish 4: the
+      // camera stands low behind the berth, looking north through the open edge — it used to look north-west and
+      // see mostly the hangar's west wall)
+      follow(z, c, sp?.dom?.object ?? null, z.P(FOLLOW_DOM[0], FOLLOW_DOM[1], FOLLOW_DOM[2]), 46),
     ] };
     yield { race: [
       z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true }), // NEW (speaker label; the text is the book's)
       // across the hangar, as hers goes out over the edge toward the white remnant and her escort closes in
-      follow(z, c, sp?.ref?.object ?? null, z.P(10.0, 8.0, 1.6)),
+      // (polish 4: from the causeway, low, looking north-east past her berth to the open edge, not at the east wall)
+      follow(z, c, sp?.ref?.object ?? null, z.P(FOLLOW_REF[0], FOLLOW_REF[1], FOLLOW_REF[2])),
     ] };
     // the two groups, diverging along opposite vectors over the open edge
     c.cut({ pos: z.P(21, 21.4, 1.4), look: z.P(21, 120, 24), fov: 58 });

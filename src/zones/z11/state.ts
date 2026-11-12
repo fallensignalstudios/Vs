@@ -109,10 +109,11 @@ export function buildObjects(b: ZoneBuilder, sp: Z11Space): void {
   S.wafer = { object: waf, place: { kind: 'hidden' } };
 
   // projections
-  S.proj = textPanel({ lines: [' '], width: 0.95, color: 0xcfe6ff, intensity: 1.9, px: 52, maxRows: 3 });
-  S.alert = textPanel({ lines: [' '], width: 2.6, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1 });
-  S.commT = textPanel({ lines: [' '], width: 0.5, color: AMBER, intensity: 2.0, px: 70, maxRows: 2 });
-  S.commS = textPanel({ lines: [' '], width: 0.5, color: 0xcfe6ff, intensity: 2.0, px: 70, maxRows: 2 });
+  // (polish 4: each with a legible screen-space twin — `ui.worldText` — over it, so the book's text reads at 720p)
+  S.proj = textPanel({ lines: [' '], width: 0.95, color: 0xcfe6ff, intensity: 1.9, px: 52, maxRows: 3, label: { id: 'z11-proj', tone: 'cold', size: 0.034 } });
+  S.alert = textPanel({ lines: [' '], width: 2.6, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1, label: { id: 'z11-alert', tone: 'amber', size: 0.08 } });
+  S.commT = textPanel({ lines: [' '], width: 0.5, color: AMBER, intensity: 2.0, px: 70, maxRows: 2, label: { id: 'z11-commT', tone: 'amber', size: 0.024 } });
+  S.commS = textPanel({ lines: [' '], width: 0.5, color: 0xcfe6ff, intensity: 2.0, px: 70, maxRows: 2, label: { id: 'z11-commS', tone: 'cold', size: 0.024 } });
   for (const p of [S.proj, S.alert, S.commT, S.commS]) b.keep(b.add(p.object));
 }
 
@@ -217,6 +218,7 @@ export function updateZ11(z: ZoneRuntime, dt: number): void {
     else tmp.copy(actor.pos).setY(actor.pos.y + 1.1);
     panel.object.position.set(tmp.x, tmp.y + 0.62, tmp.z);
   }
+  for (const p of [S.proj, S.alert, S.commT, S.commS]) p?.syncLabel(z.game.ui);
 }
 
 function place(item: Item, dt: number, snap: boolean): void {

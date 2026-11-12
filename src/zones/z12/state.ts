@@ -70,7 +70,8 @@ export function buildObjects(b: ZoneBuilder, sp: Z12Space): void {
     o.visible = false;
     b.keep(b.add(o));
   }
-  S.alert = textPanel({ lines: ['CEASEFIRE VIOLATION RISK: ELEVATED'], width: 3.4, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1 });
+  // (polish 4: with a legible screen-space twin — `ui.worldText` — so the alert reads at 720p)
+  S.alert = textPanel({ lines: ['CEASEFIRE VIOLATION RISK: ELEVATED'], width: 3.4, color: 0xff7a4a, intensity: 2.1, px: 60, maxRows: 1, label: { id: 'z12-alert', tone: 'amber', size: 0.1 } });
   S.alert.object.position.copy(b.P(21, 17.5, 5.2));
   b.keep(b.add(S.alert.object));
 }
@@ -121,6 +122,7 @@ export function updateZ12(z: ZoneRuntime, dt: number): void {
   S.alert?.update(dt, z.skipping);
   const cam = z.game.camera.camera;
   if (S.alert?.object.visible && cam) S.alert.object.quaternion.copy(cam.quaternion);
+  S.alert?.syncLabel(z.game.ui);
   if (S.t < 0) return;
   S.t = z.skipping ? FLIGHT_END : Math.min(FLIGHT_END, S.t + dt);
   for (const f of S.flights) fly(f, S.t);

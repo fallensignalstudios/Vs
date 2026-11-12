@@ -175,6 +175,7 @@ const Z11_DEF: ZoneDef = {
     z.game.player.setMovementLocked(false);
     if (z.player) z.player.fixed = false;
     S.sp?.set?.dispose();
+    for (const m of S.sp?.owned ?? []) m.dispose();
     resetZ11();
   },
 };

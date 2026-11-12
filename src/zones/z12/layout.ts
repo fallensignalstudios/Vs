@@ -30,6 +30,9 @@ const PADS: ReadonlyArray<readonly [number, number]> = [[0.6, 17.2], [24.8, 41.4
 const PAD_N0 = 6.4;
 const PAD_N1 = 22.7;
 
+/** the side walls' slots: mid-bay between the ribs (n 4, 13.5, 23), two to a bay */
+const SLOTS_N = [7.2, 10.3, 16.7, 19.8];
+
 /** escorts per craft (“Amber ships surround Tarrik, while blue-white vessels close around Selene.”) */
 export const ESCORTS = 4;
 
@@ -41,7 +44,9 @@ export const ESCORTS = 4;
 export const Z12_LOOK = {
   ...LOOKS.hangar,
   // graded like the Z09 overlook (woundGallery), which the woundVista sky is authored against (see Z11_LOOK)
-  exposure: 0.95,
+  // polish 4: up from 0.95 — without the neon ribs and the cream mega-rib arcades the hangar fell to ~0.6 of the
+  // painting's mean brightness (0.195)
+  exposure: 1.15,
   fog: { color: 0x0a0a10, density: 0.007 },
   grade: { tint: 0xeef0fc, saturation: 0.9, contrast: 1.16, lift: -0.01, shadowsTint: 0xb2baf6, highlightsTint: 0xffeedc },
   ambient: { sky: 0x666a7e, ground: 0x1a1816, intensity: 0.46 },
@@ -67,37 +72,45 @@ export function buildSpace(b: ZoneBuilder): Z12Space {
   const sp: Z12Space = { dom: null, ref: null, entry: null };
 
   // ---- shell: floor, three walls, the open edge ------------------------------------------------------------------
+  // polish 4 (the wound-overlook painting): wet near-black mirror marble with FINE inlaid gold (no glowing tubes),
+  // walls of gold-framed recessed marble panels, the painting's solid black-stone parapet with lit lantern posts at
+  // the open edge, unlit ribs with a fine gold keel, paired service pipes and tall soft slots on the walls, a deep
+  // stepped portal round the common door. Every new piece is collider-free; the rail keeps its collider.
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, mat: 'blackStoneFloor', inlay: 'grid', reflective: true });
   // the two berths are working decks: hangar concrete under each craft (visual skins a centimetre proud of the
   // walking surface). The King-era black marble with its gold grid stays as the common causeway between them,
   // where the two of them stand beneath the Wound (wound-overlook painting: dark mirror stone, gold lines).
   for (const [x0, x1] of PADS) {
     b.floor({ x: (x0 + x1) / 2, n: (PAD_N0 + PAD_N1) / 2, w: x1 - x0, d: PAD_N1 - PAD_N0, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'hangar' });
-    const xi = x0 < W / 2 ? x1 : x0; // the pad's causeway edge: a gold line along it
-    b.channel([[xi, PAD_N0 + 0.3], [xi, PAD_N1 - 0.3]], { width: 0.05, intensity: 1.6, h: 0.013 });
+    const xi = x0 < W / 2 ? x1 : x0; // the pad's causeway edge: a fine gold line along it
+    b.channel([[xi, PAD_N0 + 0.3], [xi, PAD_N1 - 0.3]], { width: 0.05, h: 0.013 });
   }
   farewellStar(b);
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'panelled', doors: [{ at: 4.5, width: 3, height: 3.5 }, { at: W / 2, width: 4, height: 4 }, { at: W - 4.5, width: 3, height: 3.5 }] });
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'ribbed' });
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'ribbed' });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'framed', doors: [{ at: 4.5, width: 3, height: 3.5 }, { at: W / 2, width: 4, height: 4 }, { at: W - 4.5, width: 3, height: 3.5 }] });
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'framed' });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'framed' });
   sp.entry = b.door({ x: W / 2, n: 0, width: 4, height: 4, open: true });
   sp.entry.setState('open');
   b.door({ x: 4.5, n: 0 }).setState('sealed'); // the Dominion corridor
   b.door({ x: W - 4.5, n: 0 }).setState('sealed'); // the Reformation corridor
+  // the common door they come in by: a deep stepped portal (collider-free; it never narrows the opening)
+  b.portal({ x: W / 2, n: 0.3, yawDeg: FACE.north, width: 4, height: 4, steps: 3, depth: 0.7, head: 'pointed' });
   b.floor({ x: W / 2, n: -2.5, w: 5, d: 5, inlay: 'none', reflective: false });
   b.wall({ from: [W / 2 - 2.5, -5], to: [W / 2 - 2.5, 0], height: 5 });
   b.wall({ from: [W / 2 + 2.5, -5], to: [W / 2 + 2.5, 0], height: 5 });
   b.wall({ from: [W / 2 - 2.5, -5], to: [W / 2 + 2.5, -5], height: 5, style: 'panelled' });
   b.ceiling({ x: W / 2, n: -2.5, w: 5, d: 5, h: 5, style: 'flat' });
-  // the edge: a stone lip with a gold line, a rail, and nothing beyond it but the ring and space
-  b.rail({ from: [0.6, D - 0.5], to: [W - 0.6, D - 0.5], height: 1.05, style: 'ancient' });
+  // the edge: the painting's balustrade — solid black stone, a fine gold line on its cap, lantern posts — on the
+  // same footprint and collider as the old rail; a gold line at its foot; nothing beyond but the ring and space
+  b.rail({ from: [0.6, D - 0.5], to: [W - 0.6, D - 0.5], height: 1.05, style: 'parapet' });
   b.blocker({ x: W / 2, n: D + 0.3, w: W, d: 0.6, height: 4 });
-  b.channel([[0.6, D - 0.95], [W - 0.6, D - 0.95]], { width: 0.08, intensity: 2.4 });
+  b.channel([[0.6, D - 0.95], [W - 0.6, D - 0.95]], { width: 0.08 });
   b.floor({ x: W / 2, n: D + 3, w: W + 10, d: 6, h: -0.6, inlay: 'none', reflective: false, noSurface: true });
-  // ribs carry the hangar's lattice; the last one frames the open edge
-  b.ribRow({ x: W / 2, n: 4, span: W - 1.2, height: WALL_H + 5, count: 3, spacing: 9.5, lit: true });
+  // ribs carry the hangar's lattice; the last one frames the open edge (polish 4: unlit — a fine gold keel line)
+  b.ribRow({ x: W / 2, n: 4, span: W - 1.2, height: WALL_H + 5, count: 3, spacing: 9.5 });
   b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H + 5.4, style: 'lattice' });
-  for (const x of [0.9, W - 0.9]) b.column({ x, n: D - 0.9, height: WALL_H + 3, style: 'pylon', lit: true });
+  for (const x of [0.9, W - 0.9]) b.column({ x, n: D - 0.9, height: WALL_H + 3, style: 'pylon' });
+  dressWalls(b);
 
   // ---- the two berths --------------------------------------------------------------------------------------------
   sp.dom = berth(b, 'dominionShuttle', DOM.x, DOM.n);
@@ -120,7 +133,7 @@ export function buildSpace(b: ZoneBuilder): Z12Space {
   // a soft cool fill at face height for the farewell (the shaft above leaves eyes in shadow)
   b.point({ x: FAREWELL.x, n: FAREWELL.n - 2.4, h: 1.9, color: 0xdfe6f4, intensity: 9, distance: 6.5 });
   b.point({ x: 3.5, n: D - 1.5, h: 5, color: 0xff6a4a, intensity: 24, distance: 16 }); // the red remnant's spill
-  b.panelLight({ x: W / 2, n: -4.6, w: 2.2, d: 2.4, h: 0.9, facing: 'north', intensity: 1.6 });
+  b.panelLight({ x: W / 2, n: -4.6, w: 2.2, d: 2.4, h: 0.9, facing: 'north', intensity: 1.0 });
 
   // ---- markers -----------------------------------------------------------------------------------------------------
   b.marker('start', W / 2 - 0.6, 1.4, 0, FACE.north);
@@ -181,25 +194,37 @@ function berth(b: ZoneBuilder, kind: 'dominionShuttle' | 'reformationTransport',
 
 /**
  * The farewell mark: a gold star in a ring inlaid in the causeway's black marble where they stand (the painting's
- * floor star). Channels only, so the mirror floor keeps its reflection under them.
+ * floor star). Polish 4: the shader inlay — fine polished gold that shows by reflecting the room, anti-aliased,
+ * one draw call each, kept out of the mirror pass so the floor still mirrors them (it was emissive channel tubes).
  */
 function farewellStar(b: ZoneBuilder): void {
   const { x, n } = FAREWELL;
-  const r = 2.3;
-  const ring: Array<[number, number]> = [];
-  for (let i = 0; i <= 40; i++) {
-    const a = (i / 40) * Math.PI * 2;
-    ring.push([x + Math.cos(a) * r, n + Math.sin(a) * r]);
+  // (a faint glow: on the near-black mirror the polished gold alone reads too dim from across the concourse)
+  b.inlay({ x, n, h: 0.004, kind: 'star', r: 3.2, points: 8, width: 0.05, glow: 0.45 });
+  b.inlay({ x, n, h: 0.004, kind: 'rings', r: 2.3, count: 1, width: 0.045, glow: 0.45 });
+  // a processional pair of gold lines up the causeway: from the common door to the star, and on from it to the edge
+  const gap = 3.6; // clear of the star's tips
+  for (const [a, z] of [[1.2, n - gap], [n + gap, D - 1.3]] as const) {
+    b.inlay({ x, n: (a + z) / 2, h: 0.004, kind: 'lines', w: 1.3, d: z - a, count: 2, width: 0.035, glow: 0.3 });
   }
-  b.channel(ring, { width: 0.045, intensity: 1.5, h: 0.004 });
-  // eight points: long on the cardinal axes, short between, drawn as one closed polyline
-  const star: Array<[number, number]> = [];
-  for (let i = 0; i <= 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + Math.PI / 2;
-    const rr = i % 2 === 0 ? (i % 4 === 0 ? r * 1.38 : r * 0.92) : r * 0.34;
-    star.push([x + Math.cos(a) * rr, n + Math.sin(a) * rr]);
+}
+
+/**
+ * Polish 4 — the walls' fine detail (collider-free, merged by material): tall soft slots in gold frames in every
+ * bay of the side walls and flanking the common door, and paired service pipes with brackets high on the south
+ * wall, dropping at both corners. Faces: south wall n 0.3, west wall x 0.3, east wall x W − 0.3 (+ the framed
+ * relief).
+ */
+function dressWalls(b: ZoneBuilder): void {
+  const f = 0.42; // a slot's foot on the framed wall face (the stiles stand proud of the 0.3 m half-thickness)
+  for (const n of SLOTS_N) {
+    b.slot({ x: f, n, h: 0.9, yawDeg: FACE.east, width: 0.42, height: 7.2, intensity: 1.2 });
+    b.slot({ x: W - f, n, h: 0.9, yawDeg: FACE.west, width: 0.42, height: 7.2, intensity: 1.2 });
   }
-  b.channel(star, { width: 0.04, intensity: 1.3, h: 0.004 });
+  for (const x of [W / 2 - 5.2, W / 2 + 5.2, 10.6, W - 10.6]) b.slot({ x, n: f, h: 0.9, yawDeg: FACE.north, width: 0.42, height: 6.4, intensity: 1.1 });
+  // the service runs: a pair high on the south wall, dropping to the deck at both corners
+  const pn = 0.36;
+  b.pipes([[1.4, pn, 0.35], [1.4, pn, 9.6], [W - 1.4, pn, 9.6], [W - 1.4, pn, 0.35]], { facing: FACE.north, count: 2, r: 0.07, boxes: [1, 2], mat: 'goldDark' });
 }
 
 function so(b: ZoneBuilder, from: string, name: string, dx: number, back = 0): void {
@@ -211,20 +236,15 @@ function so(b: ZoneBuilder, from: string, name: string, dx: number, back = 0): v
 /** far field: the ring receding both ways, both fleets holding at a wary distance */
 export function buildScenic(b: ZoneBuilder): void {
   const sc = b.game.sky.scenic;
+
   // integration wave: the terminal city far below the ring's open edge (the wound-overlook painting's dark city mass
   // and pale spires under the Wound, where the woundVista sky otherwise shows only a bare haze band); clearWound
   // keeps every spire under the void so the opening floats clear
   const city = sc.terminalVista({ radius: 3200, drop: 520, density: 0.6, seed: 1203 });
   city.position.copy(b.P(W / 2, D + 3, 0));
   b.add(city);
-  const west = sc.megaRibs({ count: 6, span: 150, height: 110, spacing: 95, seed: 1201 });
-  west.position.copy(b.P(-30, D + 60, -40));
-  west.rotation.y = b.yaw(-64);
-  b.add(west);
-  const east = sc.megaRibs({ count: 6, span: 150, height: 110, spacing: 95, seed: 1202 });
-  east.position.copy(b.P(W + 30, D + 60, -40));
-  east.rotation.y = b.yaw(64);
-  b.add(east);
+  // (polish 4: the two scenic mega-rib arcades are gone — cream arches with light lines on both sides, which the
+  // painting does not have; the gold-crowned fins on the right and the open dark city carry the far field)
   const domCap = sc.ship('dominionCapital');
   domCap.position.copy(b.P(-900, 2800, 260));
   domCap.rotation.y = b.yaw(80);

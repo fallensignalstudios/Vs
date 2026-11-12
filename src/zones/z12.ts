@@ -21,6 +21,7 @@ import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/ap
 import { walkTo } from './shared';
 import { lyricFace, sheathe } from './z11/framing';
 import { buildScenic, buildSpace } from './z12/layout';
+import { wetMirror } from './z11/vista';
 import { S, buildObjects, carry, resetZ12, updateZ12 } from './z12/state';
 import { concourseScene, departureScene, farewellScene, releaseScene, toShips } from './z12/scenes';
 
@@ -30,6 +31,8 @@ function build(b: ZoneBuilder): void {
   buildObjects(b, sp);
   buildScenic(b);
   b.finalize();
+  // polish 4: the causeway's black marble reads wet (stronger, crisper mirror than the kit default)
+  wetMirror(b, 3, 0.08);
 }
 
 type Stage = 'concourse' | 'farewell' | 'departure';
@@ -66,14 +69,16 @@ function* concourse(z: ZoneRuntime): Routine {
 
 /** `farewell`: the two of them, beneath the Wound */
 function* farewell(z: ZoneRuntime): Routine {
-  // the score's farewell cue (farewell_departure) carries through the release and the departure
-  z.game.audio.setMusic('farewell', 2);
+  // the score's farewell cue (farewell_departure) carries through the release and the departure. Polish 4: played
+  // ONCE (the scene runs ~133 s watched against the 109 s cue): after its natural end the state's own quiet bed
+  // holds under the closing cards instead of the cue's opening restarting (audio `{ once: true }`)
+  z.game.audio.setMusic('farewell', 2, { once: true });
   yield* farewellScene(z);
 }
 
 /** `departure`: release, the look back, the walk to the shuttle, the two craft leave; CP9 */
 function* departure(z: ZoneRuntime): Routine {
-  z.game.audio.setMusic('farewell', 2); // (already playing after `farewell`; a checkpoint or debug entry starts it)
+  z.game.audio.setMusic('farewell', 2, { once: true }); // (already playing after `farewell` — a repeat never restarts it; a checkpoint or debug entry starts it)
   yield* releaseScene(z);
   z.objective('Walk to the shuttle', 'domRampBottom'); // NEW
   yield z.untilNear('domRampBottom', 2.4);

@@ -8,6 +8,7 @@
  * lost when a panel is off screen or too small to read.
  */
 import * as THREE from 'three';
+import type { UiSystem, WorldTextOpts } from '@/core/api';
 
 export interface TextPanelOpts {
   /** text lines, top to bottom */
@@ -26,6 +27,12 @@ export interface TextPanelOpts {
   family?: string;
   /** most lines the panel will ever show (fixes its size; default 3) */
   maxRows?: number;
+  /**
+   * ADDED (polish 4): a legible screen-space twin of the text (`ui.worldText`): a dark plate over the panel that
+   * follows it, fades with it and never draws below the UI's minimum size, so the book's text reads at 720p.
+   * `size` = cap height in metres in the world (the label grows as the camera comes closer).
+   */
+  label?: { id: string; tone: NonNullable<WorldTextOpts['tone']>; size: number };
 }
 
 export interface TextPanel {
@@ -37,6 +44,8 @@ export interface TextPanel {
   /** current opacity 0…1 */
   readonly level: number;
   update(dt: number, snap: boolean): void;
+  /** polish 4: keep the screen-space label (if any) in step with the panel — call after `update` each frame */
+  syncLabel(ui: UiSystem | null | undefined): void;
   dispose(): void;
 }
 
@@ -119,11 +128,16 @@ export function textPanel(o: TextPanelOpts): TextPanel {
     tex.needsUpdate = true;
   };
   draw(o.lines);
+  // the screen-space label: what it last showed, so the UI is only told when something changed
+  let text = o.lines.join('\n').trim();
+  let shown: { text: string; opacity: number } | null = null;
+  let labelUi: UiSystem | null = null;
 
   return {
     object: mesh,
     setLines(lines) {
       draw(lines);
+      text = lines.join('\n').trim();
     },
     show(l, seconds = 0.5) {
       const next = Math.min(1, Math.max(0, Number.isFinite(l) ? l : 0));
@@ -143,7 +157,23 @@ export function textPanel(o: TextPanelOpts): TextPanel {
       mat.opacity = level * unsteady;
       mesh.visible = level > 0.002;
     },
+    syncLabel(ui) {
+      const l = o.label;
+      if (!l || !ui?.worldText) return;
+      labelUi = ui;
+      const opacity = Math.round(mat.opacity * 50) / 50;
+      if (!mesh.visible || opacity <= 0.02 || !text) {
+        if (shown) ui.worldText(l.id, null);
+        shown = null;
+        return;
+      }
+      if (shown && shown.text === text && shown.opacity === opacity) return;
+      shown = { text, opacity };
+      ui.worldText(l.id, { at: mesh, faces: { x: 0, y: 0, z: 1 }, text, tone: l.tone, size: l.size, opacity });
+    },
     dispose() {
+      if (o.label && shown) labelUi?.worldText?.(o.label.id, null);
+      shown = null;
       mesh.removeFromParent();
       mesh.geometry.dispose();
       mat.dispose();

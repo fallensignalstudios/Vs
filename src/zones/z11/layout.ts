@@ -2,7 +2,7 @@
  * Z11 · Observation gallery — the space (plan coordinates, origin at the south-west corner, x east, n north).
  *
  *   n 32 ── broad transparent wall (glass): red remnant left, white remnant right, the Wound between ──
- *        │  GALLERY 24 × 16 m  (x 0…24, n 16…32): black mirror floor, ivory walls, one framing rib,
+ *        │  GALLERY 24 × 16 m  (x 0…24, n 16…32): black mirror floor, framed marble walls, a black-stone parapet,
  *        │  `props.observationSet()` near the glass, long axis north–south: Tarrik west, Selene east
  *   n 16 ── south wall, side-passage door at x 6 ──────────── east wall: exit door at n 19.5 → Z12
  *        │  side passage 3 m wide (x 4.5…7.5, n 10…16)
@@ -16,7 +16,8 @@
 import * as THREE from 'three';
 import type { HeroProp, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { AMBER, BLUE, FACE, GOLD } from '../shared';
+import { AMBER, BLUE, FACE } from '../shared';
+import { buildWindow, clearGlass, wetMirror } from './vista';
 
 // =====================================================================================================================
 // Constants
@@ -53,14 +54,24 @@ export const Z11_LOOK = {
   ...LOOKS.observation,
   // graded like the Z09 overlook (woundGallery), which the woundVista sky is authored against: a cool white
   // balance and blue-leaning shadows turn its warm haze charcoal; a little more fill than Z09 for the faces
-  exposure: 0.95,
+  // polish 4: up from 0.95 — without the neon arch and the rust-lit roof the room fell to ~0.6 of the painting's
+  // mean brightness (0.195); the lanterns, slots and gold carry the light now
+  exposure: 1.15,
   fog: { color: 0x08080d, density: 0.008 },
+  // (polish 4: a neutral grade was tried — it turns the woundVista sky olive again; this cool one stays)
   grade: { tint: 0xeef0fc, saturation: 0.9, contrast: 1.16, lift: -0.01, shadowsTint: 0xb0b8f8, highlightsTint: 0xffeedc },
   ambient: { sky: 0x50546a, ground: 0x0d0c0f, intensity: 0.38 },
   envIntensity: 1.0,
 };
 /** the cool, neutral fill of the room's own lamps (the painting's silver stone); gold stays in the channels */
 const SILVER = 0xe6ebf4;
+/** polish 4: the lift cab's light — a pale warm white (it was the route gold, which turned the landing cream) */
+const LIFT_WARM = 0xfff0dc;
+/** polish 4: the slots' light — cool daylight white (landing), a faint warm white (gallery) */
+const SLOT_COOL = 0xeef2f8;
+const SLOT_WARM = 0xf7ecdc;
+/** polish 4: the city's turn about its centre (degrees; negative = clockwise seen from above) */
+const VISTA_TURN = -8;
 
 export interface Z11Space {
   lift: import('@/core/api').DoorHandle | null;
@@ -69,6 +80,8 @@ export interface Z11Space {
   barrierE: import('@/core/api').BarrierHandle | null;
   exit: import('@/core/api').DoorHandle | null;
   set: HeroProp<Record<string, number>> | null;
+  /** materials the zone created and disposes on unload (polish 4: the clear glass) */
+  owned: THREE.Material[];
 }
 
 // =====================================================================================================================
@@ -88,30 +101,39 @@ export function buildSpace(b: ZoneBuilder): Z11Space {
   });
   // the distant fleets stay quiet: a few far flashes (as the `observation` sky had them)
   game.sky.setBattleIntensity(0.08);
-  const sp: Z11Space = { lift: null, liftLight: null, barrierW: null, barrierE: null, exit: null, set: null };
+  const sp: Z11Space = { lift: null, liftLight: null, barrierW: null, barrierE: null, exit: null, set: null, owned: [] };
   buildLanding(b, sp);
   buildPassage(b);
   buildGallery(b, sp);
   buildMarkers(b);
   buildScenic(b);
   b.finalize();
+  // polish 4: the black marble reads wet (a stronger, crisper mirror than the kit default)
+  wetMirror(b, 3, 0.08);
   return sp;
 }
 
-/** the junction: lift, two corridors behind isolation barriers, the side passage north */
+/**
+ * The junction: lift, two corridors behind isolation barriers, the side passage north.
+ *
+ * Polish 4 (it still read cream): silver-white marble in gold-framed recessed panels instead of warm panelling, a
+ * deep stepped portal round the lift, tall cool slots flanking the lift and the passage, paired service pipes down
+ * the two corridors, a polished near-black mirror floor with fine gold; the lift's light is a pale warm white, not
+ * gold, and the room's fill is cool. Every new piece is collider-free; walls, doors and ribs keep their colliders.
+ */
 function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   const { x0, x1, n0, n1, h } = LAND;
   const cx = (x0 + x1) / 2;
-  b.floor({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, inlay: 'channels', reflective: false });
-  b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'panelled', doors: [{ at: LIFT.x - x0, width: 3, height: 3.5 }] });
-  b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'ribbed', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
-  b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'conduit', doors: [{ at: CORRIDOR_N - n0, width: 3, height: 3.5 }] });
-  b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'conduit', doors: [{ at: CORRIDOR_N - n0, width: 3, height: 3.5 }] });
-  b.ceiling({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, h, style: 'flat' });
+  b.floor({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, mat: 'blackStoneFloor', inlay: 'channels', reflective: true });
+  b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'framed', doors: [{ at: LIFT.x - x0, width: 3, height: 3.5 }] });
+  b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'framed', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
+  b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'slab', doors: [{ at: CORRIDOR_N - n0, width: 3, height: 3.5 }] });
+  b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'slab', doors: [{ at: CORRIDOR_N - n0, width: 3, height: 3.5 }] });
+  b.ceiling({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, h, style: 'flat', glow: 1.3 });
   // two ribs carry the landing's ceiling (the lift shaft rises behind the south one)
   b.ribRow({ x: cx, n: 2.4, span: x1 - x0 - 1.2, height: h - 0.2, count: 2, spacing: 5.2 });
 
-  // the lift: a gold-lit cab behind a King-era door
+  // the lift: a lit cab behind a King-era door, framed by a deep stepped portal
   const ln = LIFT.n0;
   b.floor({ x: LIFT.x, n: ln / 2, w: LIFT.w, d: -ln, inlay: 'crownmark', reflective: false });
   b.wall({ from: [LIFT.x - LIFT.w / 2, ln], to: [LIFT.x - LIFT.w / 2, 0], height: 4.2, style: 'plain' });
@@ -120,7 +142,11 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   b.ceiling({ x: LIFT.x, n: ln / 2, w: LIFT.w, d: -ln, h: 4.2, style: 'flat' });
   sp.lift = b.door({ x: LIFT.x, n: 0, yawDeg: FACE.north, style: 'ancient' });
   sp.lift.setState('sealed');
-  sp.liftLight = b.point({ x: LIFT.x, n: ln / 2, h: 3.2, color: GOLD, intensity: 18, distance: 7 });
+  b.portal({ x: LIFT.x, n: 0.3, yawDeg: FACE.north, width: 3, height: 3.5, steps: 3, depth: 0.55, step: 0.26, head: 'round' });
+  sp.liftLight = b.point({ x: LIFT.x, n: ln / 2, h: 3.2, color: LIFT_WARM, intensity: 14, distance: 7 });
+  // tall cool slots: either side of the lift and of the passage mouth
+  for (const x of [LIFT.x - 3.6, LIFT.x + 3.6]) b.slot({ x, n: n0 + 0.4, h: 0.7, yawDeg: FACE.north, width: 0.32, height: 3.9, color: SLOT_COOL, intensity: 0.85 });
+  for (const x of [PASSAGE.x + 3.0, PASSAGE.x + 7.4, PASSAGE.x + 11.8]) b.slot({ x, n: n1 - 0.4, h: 0.7, yawDeg: FACE.south, width: 0.32, height: 3.9, color: SLOT_COOL, intensity: 0.85 });
 
   // west corridor (the Dominion side) and east corridor (the Reformation side), each sealed by an isolation barrier
   for (const side of [-1, 1] as const) {
@@ -139,6 +165,9 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
     if (side < 0) sp.barrierW = bar;
     else sp.barrierE = bar;
     b.point({ x: xm, n: CORRIDOR_N, h: 2.6, color: side < 0 ? AMBER : BLUE, intensity: 14, distance: 8 });
+    // paired service pipes along the corridor's north wall, high under its ceiling
+    const pn = CORRIDOR_N + 1.5 - 0.3;
+    b.pipes([[xa + 0.35, pn, 3.35], [xb - 0.35, pn, 3.35]], { facing: FACE.south, count: 2, r: 0.045, mat: 'goldDark', boxes: false });
   }
 
   // the junction as people left it: a little faction kit on each side, a medical cache by the passage
@@ -148,7 +177,7 @@ function buildLanding(b: ZoneBuilder, sp: Z11Space): void {
   b.prop('refConsole', { x: 18.7, n: 1.6, yawDeg: 270 });
   b.prop('medKit', { x: 9.4, n: 9.2, yawDeg: 10 });
   b.prop('ancientBench', { x: 14.6, n: 9.1, yawDeg: 180 });
-  b.point({ x: cx, n: 5.4, h: 4.6, color: SILVER, intensity: 15, distance: 16 });
+  b.point({ x: cx, n: 5.4, h: 4.6, color: SILVER, intensity: 17, distance: 16 });
 }
 
 function buildPassage(b: ZoneBuilder): void {
@@ -160,30 +189,51 @@ function buildPassage(b: ZoneBuilder): void {
   b.panelLight({ x, n: (n0 + n1) / 2, w: 1.2, d: 3.4, h: h - 0.05, facing: 'down', color: SILVER, intensity: 1.6 });
 }
 
-/** the gallery: mirror floor, the glass wall, one rib framing it, the table and six chairs, the exit east */
+/**
+ * The gallery: mirror floor, the glass wall, the table and six chairs, the exit east.
+ *
+ * Polish 4 (the wound-overlook painting; the critic's Z11 list): the kit glass wall and the window rib stay for
+ * their colliders but are hidden — a clear pane runs from the floor over the north roof with no beams and no head
+ * band (./vista.ts), so the whole Wound reads from the door; the lit rib (the "neon window arch") and the
+ * rust-lit lattice roof are gone; the painting's black-stone parapet with lantern posts stands along the foot of
+ * the glass. Walls are gold-framed recessed marble panels, the doors are deep stepped portals, the warm wall seams
+ * are tall soft slots, the floor is wet black mirror marble with fine inlaid gold (two rails along the glass, the
+ * painting's star between the table and the window).
+ */
 function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   const { x0, x1, n0, n1, h } = GAL;
   const cx = (x0 + x1) / 2;
   b.floor({ x: cx, n: (n0 + n1) / 2, w: x1 - x0, d: n1 - n0, mat: 'blackStoneFloor', inlay: 'channels', reflective: true });
-  b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'panelled', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
-  b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'ribbed' });
-  b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'ribbed', doors: [{ at: EXIT_N - n0, width: 3, height: 3.5 }] });
-  // the broad transparent wall: one span with no mullions between its end frames (kit `mullionSpacing: 0`), so
-  // the Wound hangs in clear glass from every seat, as open as the painting's terrace
-  b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'glass', mullionSpacing: 0 });
-  // the ceiling comes forward in stone and turns to glass over the north half: the window curves overhead, so the
-  // whole Wound (its upper crust included) reads from the room's door as well as from the table
-  b.ceiling({ x: cx, n: (n0 + GLASS_ROOF_N) / 2, w: x1 - x0, d: GLASS_ROOF_N - n0, h, style: 'flat' });
-  b.ceiling({ x: cx, n: (GLASS_ROOF_N + n1) / 2, w: x1 - x0, d: n1 - GLASS_ROOF_N, h, style: 'glass' });
-  b.rib({ x: cx, n: n1 - 0.7, span: x1 - x0 - 0.6, height: h - 0.25, depth: 0.9, lit: true, yawDeg: FACE.north });
+  b.wall({ from: [x0, n0], to: [x1, n0], height: h, style: 'framed', doors: [{ at: PASSAGE.x - x0, width: PASSAGE.w, height: 3.5 }] });
+  b.wall({ from: [x0, n0], to: [x0, n1], height: h, style: 'framed' });
+  b.wall({ from: [x1, n0], to: [x1, n1], height: h, style: 'framed', doors: [{ at: EXIT_N - n0, width: 3, height: 3.5 }] });
+  // the broad transparent wall: the kit wall (one clear span, `mullionSpacing: 0`) and the rib that framed it stay
+  // for their colliders, exactly as before, but are not drawn — the window is drawn by ./vista.ts
+  const glassWall = b.wall({ from: [x0, n1], to: [x1, n1], height: h, style: 'glass', mullionSpacing: 0 });
+  const rib = b.rib({ x: cx, n: n1 - 0.7, span: x1 - x0 - 0.6, height: h - 0.25, depth: 0.9, yawDeg: FACE.north });
+  for (const o of [glassWall, rib]) {
+    b.keep(o);
+    o.visible = false;
+  }
+  // the ceiling comes forward in stone; north of it the roof is clear glass up to the window (./vista.ts), so the
+  // whole Wound, its upper crust included, reads from the room's door as well as from the table
+  b.ceiling({ x: cx, n: (n0 + GLASS_ROOF_N) / 2, w: x1 - x0, d: GLASS_ROOF_N - n0, h, style: 'flat', glow: 0.35 });
+  const glass = clearGlass(b);
+  sp.owned.push(glass);
+  buildWindow(b, { x0: x0 + 0.3, x1: x1 - 0.3, n: n1, h, roofN: GLASS_ROOF_N }, glass);
   b.door({ x: PASSAGE.x, n: n0, yawDeg: FACE.north, frameOnly: true });
-  // light as information: a gold line at the foot of the glass, and one from the door to the table
-  b.channel([[x0 + 0.8, n1 - 0.45], [x1 - 0.8, n1 - 0.45]], { width: 0.06, intensity: 2.2 });
-  b.channel([[PASSAGE.x, n0 + 0.6], [PASSAGE.x, n0 + 3.2], [TABLE.x - 2.4, TABLE.n - 3.2]], { width: 0.05, intensity: 1.8 });
-  // vertical seams on the side walls (warm light strips)
+  b.portal({ x: PASSAGE.x, n: n0 + 0.3, yawDeg: FACE.north, width: PASSAGE.w, height: 3.5, steps: 3, depth: 0.55, step: 0.26, head: 'pointed' });
+  // fine inlaid gold: a line at the foot of the parapet, one from the door to the table, a pair of rails along the
+  // glass and the painting's star between the table and the window
+  b.channel([[x0 + 0.8, n1 - 0.75], [x1 - 0.8, n1 - 0.75]], { width: 0.05 });
+  b.channel([[PASSAGE.x, n0 + 0.6], [PASSAGE.x, n0 + 3.2], [TABLE.x - 2.4, TABLE.n - 3.2]], { width: 0.045 });
+  // (a faint glow on the shader inlays: on the near-black mirror, polished gold alone reads too dim at night)
+  b.inlay({ x: cx, n: n1 - 1.55, kind: 'lines', w: 0.42, d: x1 - x0 - 2.4, yawDeg: FACE.east, count: 2, width: 0.03, glow: 0.3 });
+  b.inlay({ x: cx, n: TABLE.n + 3.05, kind: 'star', r: 1.15, points: 8, width: 0.035, glow: 0.35 });
+  // tall soft slots on the side walls where the warm light seams were
   for (const n of [19.5, 24.5, 29.0]) {
-    b.prop('wallSeam', { x: x0 + 0.42, n, yawDeg: FACE.east });
-    if (Math.abs(n - EXIT_N) > 2.5) b.prop('wallSeam', { x: x1 - 0.42, n, yawDeg: FACE.west });
+    b.slot({ x: x0 + 0.42, n, h: 0.7, yawDeg: FACE.east, width: 0.38, height: 5.2, color: SLOT_WARM, intensity: 1.05 });
+    if (Math.abs(n - EXIT_N) > 2.5) b.slot({ x: x1 - 0.42, n, h: 0.7, yawDeg: FACE.west, width: 0.38, height: 5.2, color: SLOT_WARM, intensity: 1.05 });
   }
 
   // the table and the six chairs (hero prop: sockets for the seats and the evidence)
@@ -218,6 +268,7 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   // exit: a short vestibule east, the white point the brightest thing on that wall
   sp.exit = b.door({ x: x1, n: EXIT_N, yawDeg: FACE.east });
   sp.exit.setState('locked');
+  b.portal({ x: x1 - 0.3, n: EXIT_N, yawDeg: FACE.west, width: 3, height: 3.5, steps: 3, depth: 0.6, step: 0.26, head: 'pointed' });
   b.floor({ x: x1 + 2.5, n: EXIT_N, w: 5, d: 4, inlay: 'none', reflective: false });
   b.wall({ from: [x1, EXIT_N - 2], to: [x1 + 5, EXIT_N - 2], height: 4.4 });
   b.wall({ from: [x1, EXIT_N + 2], to: [x1 + 5, EXIT_N + 2], height: 4.4 });
@@ -230,8 +281,10 @@ function buildGallery(b: ZoneBuilder, sp: Z11Space): void {
   b.spot({ x: TABLE.x - 0.3, n: TABLE.n - 1.6, h: h - 0.4, target: [TABLE.x, TABLE.n + 0.5, 0.8], angleDeg: 30, penumbra: 0.75, intensity: 240, color: 0xffe6c8, shadow: false });
   // the remnants' spill through the glass: red from the north-west (Tarrik's side), cold from the north-east (Selene's)
   // (high, so their highlight in the mirror floor falls by the glass, not across the room)
-  b.point({ x: 4.5, n: n1 + 2.5, h: 8.5, color: 0xff6040, intensity: 46, distance: 24 });
-  b.point({ x: 19.5, n: n1 + 2.5, h: 8.5, color: 0xc4d6ff, intensity: 34, distance: 24 });
+  // (polish 4: the red spill shorter and the cold one silver-white — together they had turned the side walls'
+  // marble lavender; the painting's marble is silver under the white remnant)
+  b.point({ x: 4.5, n: n1 + 2.5, h: 8.5, color: 0xff6040, intensity: 34, distance: 19 });
+  b.point({ x: 19.5, n: n1 + 2.5, h: 8.5, color: 0xe2e8f2, intensity: 30, distance: 24 });
   b.point({ x: PASSAGE.x + 0.5, n: n0 + 2.2, h: 3.2, color: SILVER, intensity: 12, distance: 10 });
 }
 
@@ -282,6 +335,8 @@ function buildScenic(b: ZoneBuilder): void {
   // (clearWound: nothing stands or shines inside the woundVista void, so the opening floats above the spires)
   const vista = game.sky.scenic.terminalVista({ radius: 2600, drop: 420, density: 0.65, seed: 1101 });
   vista.position.copy(b.P(GAL.x0 + 12, GAL.n1 + 2, 0));
+  // polish 4: turned a few degrees so the tall pale spire no longer stands just behind Tarrik's shoulder in his single
+  vista.rotation.y = THREE.MathUtils.degToRad(VISTA_TURN);
   b.add(vista);
   game.vfx.ambient('dust', b.P(12, 24, 3), { x: 22, y: 6, z: 14 }, 0.3);
   game.vfx.ambient('goldMotes', b.P(TABLE.x, TABLE.n, 2.4), { x: 6, y: 3, z: 5 }, 0.15);
