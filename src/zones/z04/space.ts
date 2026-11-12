@@ -20,9 +20,9 @@ import { S, resetState } from './state';
 /**
  * LOOKS.relay with more haze and less fill: the far end recedes into silver air and the key, the shafts and the
  * strips carry the room (the shared preset reads as an evenly lit white box at this scale). Integration: the fill
- * comes DOWN to 0.48 and the contrast goes UP to 1.2, over the preset's 1.14 (B's request — at 0.66 / 1.12 the
- * hall read pale and flat), so the silver-white walls model under the key and the polished floor reads dark; a
- * little more exposure and warm highlights keep the painting's daylight and the gold of the pipes and the ring.
+ * came down and the contrast up (B's request — at 0.66 / 1.12 the hall read pale and flat). Polish 4: under the
+ * bright coffers and over the wet grey floor the fill goes down again (0.36, contrast 1.26) and the warm sun through
+ * the glass carries the modelling; the shadows are a neutral grey, not the preset's blue.
  */
 const Z04_LOOK: DeepPartial<Look> = {
   ...LOOKS.relay,
