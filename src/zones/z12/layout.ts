@@ -244,7 +244,7 @@ export function buildScenic(b: ZoneBuilder): void {
   city.position.copy(b.P(W / 2, D + 3, 0));
   b.add(city);
   // (polish 4: the two scenic mega-rib arcades are gone — cream arches with light lines on both sides, which the
-  // painting does not have; the gold-crowned fins on the right and the open dark city carry the far field)
+  // painting does not have; the open dark city under the Wound carries the far field, framed by the parapet)
   const domCap = sc.ship('dominionCapital');
   domCap.position.copy(b.P(-900, 2800, 260));
   domCap.rotation.y = b.yaw(80);

@@ -22,7 +22,7 @@ const CLASP_STEP = 0.45;
  */
 const LYRIC_TO_THARNE = 62;
 /** where the two departure follow shots stand (plan x, n, h) */
-const FOLLOW_DOM: readonly [number, number, number] = [13.4, 3.2, 0.95];
+const FOLLOW_DOM: readonly [number, number, number] = [12.0, 4.0, 1.3];
 const FOLLOW_REF: readonly [number, number, number] = [21.4, 8.6, 1.5];
 
 /**
@@ -316,11 +316,10 @@ export function* releaseScene(z: ZoneRuntime): Routine {
 
 /**
  * A camera that stays put at `from` and follows a departing craft (eased aim; the field narrows as it recedes so
- * the craft and its escort keep their size in frame, never wider than `maxFov`). It never ends by itself: it runs
- * in a race with the line it covers, so the line always decides when the shot ends (watched or skipped). Nothing
- * moves while skipping.
+ * the craft and its escort keep their size in frame). It never ends by itself: it runs in a race with the line it
+ * covers, so the line always decides when the shot ends (watched or skipped). Nothing moves while skipping.
  */
-function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: THREE.Vector3, maxFov = 58): Routine {
+function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: THREE.Vector3): Routine {
   const idle = (): boolean => false;
   if (!ship) {
     yield idle;
@@ -337,7 +336,7 @@ function* follow(z: ZoneRuntime, c: CineCtx, ship: THREE.Object3D | null, from: 
     ship.getWorldPosition(aim);
     look.lerp(aim, 0.12);
     const dist = Math.max(1, from.distanceTo(look));
-    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(26 / dist)), 16, maxFov);
+    const fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan(26 / dist)), 16, 58);
     c.cut({ pos: from, look: look.clone(), fov });
     yield;
   }
@@ -379,7 +378,7 @@ export function* departureScene(z: ZoneRuntime): Routine {
       // from behind, as his craft turns and heads out toward the Wound and the red remnant beyond it (polish 4: the
       // camera stands low behind the berth, looking north through the open edge — it used to look north-west and
       // see mostly the hangar's west wall)
-      follow(z, c, sp?.dom?.object ?? null, z.P(FOLLOW_DOM[0], FOLLOW_DOM[1], FOLLOW_DOM[2]), 46),
+      follow(z, c, sp?.dom?.object ?? null, z.P(FOLLOW_DOM[0], FOLLOW_DOM[1], FOLLOW_DOM[2])),
     ] };
     yield { race: [
       z.say('Reformation Command', 'MESTRIA · CONTINUITY REVIEW · MANDATORY APPEARANCE', { channel: 'system', offscreen: true }), // NEW (speaker label; the text is the book's)
