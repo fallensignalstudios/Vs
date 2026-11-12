@@ -13,8 +13,8 @@
  * from QualityProfile), so the cheaper tiers do not merely branch around the expensive code — it is not in the
  * program at all (software rasterisers and some mobile compilers flatten uniform branches). Worst-case
  * value-noise evaluations per pixel, in the Wound's upper-left crust (its worst place: smoke, swirl, crust, violet
- * cluster, the funnel wall's grooves; the red nebula never reaches it): low ≈ 26, medium ≈ 50, high ≈ 60 (polish pass 4
- * added the grooves' warp and arcs and the crust's chunk grain), plus a few hashed rock cells (2 noises each). Inside the void, where the background is skipped, it costs ≈ 6; in the throat ≈ 4; out in the smoke (to
+ * cluster, the funnel wall's grooves; the red nebula never reaches it): low ≈ 28, medium ≈ 50, high ≈ 60 (polish pass 4
+ * added the grooves' warp and arcs and the crust's chunk grain; fix & ship gave low's ink a second octave and erosion), plus a few hashed rock cells (2 noises each). Inside the void, where the background is skipped, it costs ≈ 6; in the throat ≈ 4; out in the smoke (to
  * ≈ 2.8 radii) ≈ 16; along the debris lanes only their rock cells. Each body is skipped outside its own cone: red
  * nebula 4.6 radii; Wound 3 radii, reaching out along its debris lanes (≤ 6) only while the red remnant is up. No
  * extra pass, no texture. `uLite` (set per pass for small secondary targets: reflections, PMREM faces) drops the
@@ -797,10 +797,13 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     vec2 cd = rot2(dir, 0.5 * lr + spin * 1.5);
     float chunk = lite ? 0.5 : 0.5 * vnoise(vec3(pc * 13.0 + wb * 2.5, 45.0)) + 0.5 * vnoise(vec3(cd * 6.5, rho * 15.0 + 49.0));
     #else
+    // (fix & ship) low is a simplified medium, not a different look: the ink's splatter field is two octaves on a
+    // rotated lattice (one unrotated octave contoured into big square, stair-stepped blots) and one octave of erosion
+    // bites its edges, so its masses stay ragged and mid-sized; their edge is anti-aliased wider below
     float chunk = 0.5;
     float blob = fbm3(vec3(pc * 2.8, 4.0));
-    float sp = vnoise(vec3(pc * 6.5, 11.0));
-    float ero = 0.5;
+    float sp = fbm2(FBM_ROT * vec3(pc * 4.6, 11.0));
+    float ero = vnoise(FBM_ROT * vec3(pc * 11.0, 21.0));
     float cur = vnoise(vec3(p.x * 8.0, p.y * 0.9, 33.0));
     #endif
     // on the right flank (and down the throat's sides) the matter hangs in vertical curtains; where it reaches in over
@@ -824,7 +827,11 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     float inkF = sp + 0.46 * (ero - 0.5) + 0.22 * (band - 0.5) + 0.22 * (blob - 0.5) - 0.12 * smoothstep(0.0, -0.12, x)
                - 0.1 * smoothstep(0.6 * outR, 1.2 * outR, xU) + 0.09 * (ulw * ulw - 0.5) + 0.05 * (rgt - 0.5)
                - 0.22 * lining * (1.0 - 0.6 * ulw * ulw) - 0.06 * smoothstep(0.3, 0.8, down) - 0.06 * sr - 0.05 * ur - 0.04 * rgt;
+    #if SKY_DETAIL >= 1
     float aaI = max(fwidth(inkF) * 0.8, 0.004);
+    #else
+    float aaI = max(fwidth(inkF) * 1.5, 0.012);
+    #endif
     inkA = smoothstep(0.66 - aaI, 0.66 + aaI, inkF);
     #if SKY_DETAIL >= 2
     // grit: pure-black specks scattered through the matter, crowded just outside the opening (1.15 – 1.4 R)
@@ -975,7 +982,14 @@ vec3 woundComposite(vec3 col, vec3 d, float rn, vec3 e, float px, float R) {
     vec2 cq = rot2(p, sa);
     vec2 Wq = rot2(Lw, sa), Rq = rot2(Lr, sa);
     vec2 dq = rot2(dir, sa);
-    vec4 r = splatRock(cq / 0.24, fl * 0.7, 0.2, 23.0, pxn / 0.24, dq);
+    #if SKY_DETAIL >= 1
+    const float CELL = 0.24, CFILL = 0.7, CAA = 1.0;
+    #else
+    // (fix & ship) low draws one layer standing in for medium's two: smaller cells, sparser, a softer edge — never the
+    // big black stickers of the coarse layer alone
+    const float CELL = 0.15, CFILL = 0.5, CAA = 1.8;
+    #endif
+    vec4 r = splatRock(cq / CELL, fl * CFILL, 0.2, 23.0, CAA * pxn / CELL, dq);
     col = mix(col, ink * 2.0, r.w * 0.3);
     col = mix(col, rockShade(r.yz, Wq, Rq, warmth, cool, ink), r.x);
     occ += r.x * (1.0 - occ);

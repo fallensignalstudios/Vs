@@ -352,5 +352,9 @@ export interface AudioDebugInfo {
    * ADDED (polish 3). Voice-over files: listed in the manifest, fetched (compressed, checked), decoded right now
    * (a small LRU), and the ids of listed files found missing or broken (those lines are subtitled only).
    */
-  voiceOver: { listed: number; fetched: number; decoded: number; broken: string[] };
+  voiceOver: {
+    listed: number; fetched: number; decoded: number; broken: string[];
+    /** ADDED (ship). Only in a packed build (`npm run build:ship`): lines in the packs' index, packs fetched, packs that failed. */
+    packs?: { indexed: number; loaded: string[]; failed: string[] };
+  };
 }

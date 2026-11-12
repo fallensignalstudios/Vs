@@ -18,9 +18,14 @@ const OFF: SayOpts = { offscreen: true };
 
 /**
  * The Witness's grade: the silver-white memory look (LOOKS.witness) with a little more colour, so skin, armour and the
- * King's wound read inside the luminous haze.
+ * King's wound read inside the luminous haze. (fix & ship) A tighter, higher bloom: at the look's own 1.15 / 0.72 the
+ * whole star and its haze bloomed the opening shot to white; now the star keeps its form and the haze its depth.
  */
-const WITNESS_LOOK = { ...LOOKS.witness, grade: { ...LOOKS.witness.grade, saturation: 0.56 } };
+const WITNESS_LOOK = {
+  ...LOOKS.witness,
+  bloom: { intensity: 0.8, threshold: 0.95, radius: 0.78 },
+  grade: { ...LOOKS.witness.grade, saturation: 0.6 },
+};
 
 /** show the Witness and hide the chamber (or the reverse); the hidden list is kept so a restore is exact */
 export function showWitness(z: ZoneRuntime, on: boolean): void {

@@ -78,6 +78,30 @@ const LATER = Symbol('later');
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/**
+ * (ship) Where a line's recording sits in the shipped build's voice packs (`tools/pack-vo.mjs`):
+ * `audio/vo/packs/<pack>.bin`, `length` bytes from `offset` — the original mp3, byte for byte.
+ */
+export type PackRef = readonly [pack: string, offset: number, length: number];
+
+/**
+ * (ship) Read `vo/packs/index.json` (`id → [pack, offset, length]`). Malformed entries are skipped; null when
+ * there is no usable index — then every line is fetched as its own file (dev, tests, an unpacked build).
+ */
+export function parsePackIndex(j: unknown): Map<string, PackRef> | null {
+  if (!isRecord(j)) return null;
+  const out = new Map<string, PackRef>();
+  for (const [id, v] of Object.entries(j)) {
+    if (!Array.isArray(v) || v.length !== 3) continue;
+    const [pack, offset, length] = v as unknown[];
+    if (typeof pack !== 'string' || !/^[A-Za-z0-9_-]{1,32}$/.test(pack)) continue;
+    if (typeof offset !== 'number' || !Number.isInteger(offset) || offset < 0) continue;
+    if (typeof length !== 'number' || !Number.isInteger(length) || length <= 0) continue;
+    out.set(id, [pack, offset, length]);
+  }
+  return out.size ? out : null;
+}
+
 /** Wrap both the promise and the callback form of decodeAudioData; resolves null on any failure. */
 function decode(ctx: BaseAudioContext, bytes: ArrayBuffer): Promise<AudioBuffer | null> {
   return new Promise((resolve) => {
@@ -148,6 +172,12 @@ export class AssetLibrary {
   /** zones whose voice files have been asked for (and whether the zone-less ones have been) */
   private readonly prefetched = new Set<string>();
   private readonly brokenVoices: string[] = [];
+  /** (ship) the voice packs' index, when the build has one (null: one file per line) */
+  private packIndex: Map<string, PackRef> | null = null;
+  /** (ship) one load per pack: resolves when its lines have their bytes (or are known broken) */
+  private readonly packLoads = new Map<string, Promise<boolean>>();
+  private readonly packsLoaded: string[] = [];
+  private readonly packsFailed: string[] = [];
 
   constructor(opts: LibraryOpts) {
     const b = opts.baseUrl ?? '/';
@@ -209,9 +239,13 @@ export class AssetLibrary {
     return this.musicLoad;
   }
 
-  /** Load `vo/manifest.json` (once). Resolves null when no voice-over has been generated. */
+  /**
+   * Load `vo/manifest.json` (once). Resolves null when no voice-over has been generated. The packs' index
+   * (`vo/packs/index.json`, shipped builds only) is asked for alongside; without it lines are single files.
+   */
   loadVoices(): Promise<Readonly<Record<string, VoiceMeta>> | null> {
-    this.voiceLoad ??= this.manifest('vo/manifest.json').then((j) => {
+    this.voiceLoad ??= Promise.all([this.manifest('vo/manifest.json'), this.manifest('vo/packs/index.json')]).then(([j, idx]) => {
+      this.packIndex = j ? parsePackIndex(idx) : null;
       const out: Record<string, VoiceMeta> = {};
       for (const [id, v] of Object.entries(j ?? {})) {
         if (!isRecord(v) || typeof v.file !== 'string' || typeof v.seconds !== 'number' || !(v.seconds > 0)) continue;
@@ -396,6 +430,15 @@ export class AssetLibrary {
     const e = this.entry(this.clips, id);
     if (e.state === 'missing') return Promise.resolve(false);
     if (e.state === 'ready' || e.bytes) return Promise.resolve(true);
+    const ref = this.packIndex?.get(id);
+    if (ref) {
+      // shipped build: the line's bytes come out of its pack (one fetch for the whole pack)
+      e.fetching ??= this.loadPack(ref[0]).then(() => e.state !== 'missing' && (e.state === 'ready' || e.bytes !== null)).catch(() => false).then((ok) => {
+        e.fetching = null;
+        return ok;
+      });
+      return e.fetching;
+    }
     e.fetching ??= (async (): Promise<boolean> => {
       const r = await this.get(`vo/${meta.file}`);
       let bytes: ArrayBuffer | null = null;
@@ -437,6 +480,13 @@ export class AssetLibrary {
       this.prefetched.add('');
       for (const [id, m] of Object.entries(manifest)) if (!m.zone && !m.zones?.length) want.add(id);
     }
+    // (ship) packed build: start every pack these lines live in at once; the per-line walk below then only waits
+    const packs = new Set<string>();
+    for (const id of want) {
+      const ref = this.packIndex?.get(id);
+      if (ref) packs.add(ref[0]);
+    }
+    for (const p of packs) void this.loadPack(p);
     const list = [...want];
     let next = 0;
     const worker = async (): Promise<void> => {
@@ -489,15 +539,61 @@ export class AssetLibrary {
     }
   }
 
-  /** Voice-over bookkeeping (debug overlays, tests). */
-  voiceStats(): { listed: number; fetched: number; decoded: number; broken: string[] } {
+  /**
+   * (ship) Fetch one voice pack (once; shared between callers) and give every line in it its own copy of its
+   * bytes, checked like a single file. The pack itself is not kept. A pack that cannot be had leaves its lines
+   * unrecorded (subtitled), as a missing single file would. Resolves false then; never rejects.
+   */
+  private loadPack(pack: string): Promise<boolean> {
+    let p = this.packLoads.get(pack);
+    if (p) return p;
+    p = (async (): Promise<boolean> => {
+      const index = this.packIndex;
+      if (!index) return false;
+      const r = await this.get(`vo/packs/${pack}.bin`);
+      let bytes: ArrayBuffer | null = null;
+      try {
+        bytes = r ? await r.arrayBuffer() : null;
+      } catch {
+        bytes = null;
+      }
+      for (const [id, [name, offset, length]] of index) {
+        if (name !== pack) continue;
+        const meta = this.voices?.[id];
+        if (!meta) continue;
+        const e = this.entry(this.clips, id);
+        if (e.state === 'missing' || e.state === 'ready' || e.bytes) continue;
+        if (!bytes) {
+          this.voiceBroken(id, e, `voice pack ${pack} not found`);
+          continue;
+        }
+        if (offset + length > bytes.byteLength) {
+          this.voiceBroken(id, e, `voice pack ${pack} is truncated`);
+          continue;
+        }
+        const clip = bytes.slice(offset, offset + length);
+        const why = audioProblem(clip, meta.seconds);
+        if (why) this.voiceBroken(id, e, why);
+        else e.bytes = clip;
+      }
+      (bytes ? this.packsLoaded : this.packsFailed).push(pack);
+      return bytes !== null;
+    })().catch(() => false);
+    this.packLoads.set(pack, p);
+    return p;
+  }
+
+  /** Voice-over bookkeeping (debug overlays, tests). `packs` only in a packed (shipped) build. */
+  voiceStats(): { listed: number; fetched: number; decoded: number; broken: string[]; packs?: { indexed: number; loaded: string[]; failed: string[] } } {
     let fetched = 0;
     let decoded = 0;
     for (const e of this.clips.values()) {
       if (e.state === 'ready') decoded++;
       if (e.state !== 'missing' && (e.bytes || e.state === 'ready')) fetched++;
     }
-    return { listed: this.voices ? Object.keys(this.voices).length : 0, fetched, decoded, broken: [...this.brokenVoices] };
+    const out = { listed: this.voices ? Object.keys(this.voices).length : 0, fetched, decoded, broken: [...this.brokenVoices] };
+    if (!this.packIndex) return out;
+    return { ...out, packs: { indexed: this.packIndex.size, loaded: [...this.packsLoaded], failed: [...this.packsFailed] } };
   }
 
   /** What is in memory (debug overlays, the sandbox). */

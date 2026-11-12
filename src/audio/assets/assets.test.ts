@@ -728,6 +728,7 @@ describe('the AudioSystem façade', () => {
       // the manifests are asked for at boot — once
       expect(asked.filter((u) => u.endsWith('music/manifest.json'))).toHaveLength(1);
       expect(asked.filter((u) => u.endsWith('vo/manifest.json'))).toHaveLength(1);
+      expect(asked.filter((u) => u.endsWith('vo/packs/index.json'))).toHaveLength(1); // (ship) the packs' index, alongside
       audio.setMusic('title');
       audio.unlock();
       const ctx = made as unknown as FakeContext;
@@ -741,7 +742,7 @@ describe('the AudioSystem façade', () => {
       expect(audio.voice('Tarrik', 'Hold the line.')).toBe(0);
       game.events.emit('dialogue:line', { line: { speaker: 'Tarrik', text: 'Hold the line.', channel: 'radio' } });
       await expect(audio.preloadVoices([['Tarrik', 'Hold the line.']])).resolves.toBeUndefined();
-      expect(asked.length).toBe(2);
+      expect(asked.length).toBe(3);
       expect(ctx.problems).toEqual([]);
       audio.dispose();
     } finally {
@@ -769,7 +770,7 @@ describe('the AudioSystem façade', () => {
       const game = fakeGame({ manual: true });
       const audio = createAudioSystem(game);
       await new Promise((r) => setTimeout(r, 0));
-      expect(asked).toEqual(['vo/manifest.json']); // the score waits until asked for; the voice manifest does not
+      expect(asked).toEqual(['vo/manifest.json', 'vo/packs/index.json']); // the score waits until asked for; the voice manifest (and the packs' index) does not
       game.events.emit('zone:loading', { zone: 'Z03' });
       for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
       expect(asked.filter((u) => u.endsWith('.mp3')).sort()).toEqual([`vo/${a}.mp3`, `vo/${b}.mp3`].sort());

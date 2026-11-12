@@ -7,6 +7,7 @@ import '@fontsource/barlow-condensed/500.css';
 import '@fontsource/barlow-condensed/600.css';
 import { GameImpl, parseUrlFlags } from '@/core/game';
 import { installFlow } from '@/core/flow';
+import { installHostingHints } from '@/core/hosting';
 import { reportError } from '@/core/events';
 import type { CheckpointId, ZoneId } from '@/core/api';
 
@@ -19,8 +20,11 @@ async function boot(): Promise<void> {
   window.addEventListener('unhandledrejection', (e) => reportError('promise', e.reason));
 
   const game = new GameImpl(canvas, uiRoot, flags);
-  (window as any).__game = game;
+  // (ship) The debug API ships in the build but is only reachable with ?debug=1 (always in dev).
+  if (import.meta.env.DEV || flags.debug) (window as any).__game = game;
+  else delete (globalThis as { __aurelion?: unknown }).__aurelion;
   installFlow(game);
+  installHostingHints(game);
   await game.init();
 
   document.getElementById('boot')?.remove();

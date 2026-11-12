@@ -135,6 +135,12 @@ export interface InputSystem {
    */
   readonly lookMode: 'locked' | 'drag' | 'stick';
   /**
+   * ADDED (ship). true when pointer lock is not to be had (no API, or a click's request threw / was rejected /
+   * got 'pointerlockerror' — a sandboxed iframe): mouse look is RMB drag + arrow keys. A quiet re-lock refused
+   * after a menu does not count; acquiring the lock clears it. Optional so test doubles need not provide it.
+   */
+  readonly pointerLockDenied?: boolean;
+  /**
    * ADDED. true while a standard-mapping gamepad is connected. It becomes the active `device` on its first
    * deliberate input (a button press or a stick pushed out from rest — never a resting level), and `device`
    * returns to 'kbm' on any key / mouse input or when the pad is unplugged.

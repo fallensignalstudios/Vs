@@ -24,6 +24,31 @@ function warnOnce(msg: string): void {
 }
 
 const finite = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+
+/**
+ * ADDED (fix & ship): a zone's own white balance for the far field, multiplied over whatever preset is showing (and
+ * through its crossfades) until the next `sky.reset()` — every zone load resets the sky, so it never leaks. Lets a zone
+ * whose grade differs from the one a shared preset was authored against keep the same night: Z09's neutral stone grade
+ * would otherwise turn the woundVista night (authored under Z11 / Z12's cool grades) olive. sRGB hex, white = neutral.
+ * `tint`: everything in space (sky, remnants, the Wound); `skyTint`: the empty sky alone; `matterTint`: the Wound's
+ * smoke, crust and dust; `haze`: the horizon haze (and every scenic piece that dissolves into it).
+ */
+export interface SkyBalance {
+  tint?: SkyBalanceColor;
+  skyTint?: SkyBalanceColor;
+  matterTint?: SkyBalanceColor;
+  haze?: SkyBalanceColor;
+}
+/** an sRGB hex (≤ white), or linear RGB multipliers (may exceed 1, each clamped to 0…4) */
+export type SkyBalanceColor = number | readonly [number, number, number];
+const BALANCE_KEYS = ['tint', 'skyTint', 'matterTint', 'haze'] as const;
+
+/** Set (or clear, with null) the zone's far-field white balance; false when `sky` is not the engine's sky system. */
+export function setSkyBalance(sky: SkySystem, balance: SkyBalance | null): boolean {
+  if (!(sky instanceof SkySystemImpl)) return false;
+  sky.setBalance(balance);
+  return true;
+}
 const DETAIL: Record<string, number> = { low: 0, medium: 1, high: 2, ultra: 2 };
 
 class SkySystemImpl implements SkySystem {
@@ -59,6 +84,8 @@ class SkySystemImpl implements SkySystem {
   private closedTarget = 0;
   private closedNow = 0;
   private closedRate = 1 / 3;
+  /** the zone's white balance over the preset (linear multipliers), null = none */
+  private balance: Record<(typeof BALANCE_KEYS)[number], THREE.Color> | null = null;
 
   constructor(private readonly game: Game) {
     this.root.name = 'sky';
@@ -113,7 +140,26 @@ class SkySystemImpl implements SkySystem {
     this.publishTargets();
   }
 
+  /** see setSkyBalance(); applied in pushUniforms over the blended state */
+  setBalance(balance: SkyBalance | null): void {
+    if (!balance) this.balance = null;
+    else {
+      const b = { tint: new THREE.Color(1, 1, 1), skyTint: new THREE.Color(1, 1, 1), matterTint: new THREE.Color(1, 1, 1), haze: new THREE.Color(1, 1, 1) };
+      for (const k of BALANCE_KEYS) {
+        const v = balance[k];
+        if (typeof v === 'number' && Number.isFinite(v)) b[k].setHex(v);
+        else if (Array.isArray(v) && v.length === 3 && v.every((x) => Number.isFinite(x))) {
+          const c = (x: number): number => Math.min(Math.max(x, 0), 4);
+          b[k].setRGB(c(v[0]), c(v[1]), c(v[2]));
+        }
+      }
+      this.balance = b;
+    }
+    this.pushUniforms();
+  }
+
   reset(): void {
+    this.balance = null;
     this.yaw = 0;
     this.closedTarget = 0;
     this.closedNow = 0;
@@ -184,6 +230,7 @@ class SkySystemImpl implements SkySystem {
       this.closedNow = Math.abs(d) <= m ? this.closedTarget : this.closedNow + Math.sign(d) * m;
     }
     this.pushUniforms();
+    if (!this.carrier.requested && this.wantsCarrier()) this.carrier.prefetch();
     const soft = this.reduceFlash();
     this.dome.setDetail(this.detail());
     this.battle.update(step, this.view, this.battleNow, soft);
@@ -199,6 +246,22 @@ class SkySystemImpl implements SkySystem {
     this.carrier.dispose();
     this.scenic.dispose();
     this.root.removeFromParent();
+  }
+
+  /**
+   * (fix & ship) The Z05 carrier's file is fetched on entering Z04 (a zone ahead, so Z05's bounded wait for it
+   * normally finds it there) or Z05 itself, or whenever the battle sky is up — never at boot.
+   */
+  private wantsCarrier(): boolean {
+    if (this.preset === 'battleCeiling') return true;
+    try {
+      const m = this.game.mission;
+      if (!m || isStub(m)) return false;
+      const id = m.currentZone?.id;
+      return id === 'Z04' || id === 'Z05';
+    } catch {
+      return false;
+    }
   }
 
   /** dome shading tier from the render quality profile (high when render-core is a stub) */
@@ -236,6 +299,7 @@ class SkySystemImpl implements SkySystem {
 
   private pushUniforms(): void {
     const v = rotateSkyState(this.cur, this.yaw, this.view);
+    if (this.balance) for (const k of BALANCE_KEYS) v[k].multiply(this.balance[k]);
     applySharedState(this.shared, v);
     this.dome.apply(v, this.activityNow, EASE.inOut(this.closedNow));
     this.hazeColor.copy(v.haze);

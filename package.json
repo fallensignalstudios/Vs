@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
+    "build:ship": "npm run build && node tools/pack-vo.mjs",
+    "serve:ship": "node tools/serve-dist.mjs --port 4173 --prefix /a/b/game/",
+    "ship:plan": "node tools/publish-plan.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

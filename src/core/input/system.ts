@@ -156,6 +156,11 @@ export class InputSystemImpl implements InputSystem {
     return this.lock.locked;
   }
 
+  /** (ship) pointer lock cannot be had here (see PointerLock.unavailable): mouse look is RMB drag */
+  get pointerLockDenied(): boolean {
+    return this.lock.unavailable && !this.lock.locked;
+  }
+
   get lookMode(): 'locked' | 'drag' | 'stick' {
     return this._device === 'gamepad' ? 'stick' : this.lock.locked ? 'locked' : 'drag';
   }

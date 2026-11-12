@@ -351,3 +351,42 @@ describe('vfx system on a stub game', () => {
     expect(warn).toHaveBeenCalled();
   });
 });
+
+describe('(fix & ship) soft round motes', () => {
+  it('packs a particle near-fade distance for the vertex shader (0 when unset)', async () => {
+    const core = new ParticleCore(fakeAtlas());
+    const faded = core.register({ layer: 'add', sprite: 'dot', life: 2, size: 0.03, color: [[0xffffff, 1]], nearFade: 2.6 });
+    const plain = core.register({ layer: 'add', sprite: 'dot', life: 2, size: 0.03, color: [[0xffffff, 1]] });
+    const slot = core.allocSlot(0, 0, 0, null);
+    core.spawn(faded, slot, 0, 1, 0, 0, 0, 0, 1);
+    core.spawn(plain, slot, 0, 1, 0, 0, 0, 0, 1);
+    core.update(DT);
+    const mesh = core.group.children.find((m) => m.name === 'vfx-particles-add') as THREE.Mesh;
+    const vel = mesh.geometry.getAttribute('iVel') as THREE.InterleavedBufferAttribute;
+    const ys = [vel.getY(0), vel.getY(1)].sort();
+    expect(ys[0]).toBe(0);
+    expect(ys[1]).toBeCloseTo(2.6, 5);
+    const { PARTICLE_VERT } = await import('./shaders');
+    expect(PARTICLE_VERT).toMatch(/nearA = smoothstep\(iVel\.y \* 0\.35, iVel\.y, viewDepth\)/);
+  });
+
+  it('witnessMote draws soft round motes only, fading near the lens', () => {
+    const def = EFFECT_LIBRARY.witnessMote;
+    const motes = def.emitters?.[0]?.p;
+    expect(motes?.sprite).toBe('dot');
+    expect(motes?.nearFade).toBeGreaterThan(1.5);
+    for (const e of def.emitters ?? []) expect([e.p.sprite].flat()).not.toContain('diamond');
+  });
+
+  it('goldMotes are soft round dots, smaller and sparser, gone close to the camera', async () => {
+    const { AmbientVolumes } = await import('./ambient');
+    const { spriteIndex } = await import('./atlas');
+    const amb = new AmbientVolumes(fakeAtlas());
+    const h = amb.create('goldMotes', { x: 0, y: 0, z: 0 }, { x: 18, y: 10, z: 18 }, 1, 1) as unknown as { uniforms: Record<string, THREE.IUniform>; mesh: THREE.Mesh };
+    expect(h.uniforms.uFrame.value).toBe(spriteIndex('dot'));
+    expect((h.uniforms.uLook.value as THREE.Vector3).x).toBeLessThanOrEqual(0.05);
+    expect((h.uniforms.uNear.value as THREE.Vector2).y).toBeGreaterThan(3);
+    expect((h.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount).toBeLessThanOrEqual(320);
+    amb.clear();
+  });
+});

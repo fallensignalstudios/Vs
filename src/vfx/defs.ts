@@ -67,6 +67,11 @@ export interface ParticleDef {
   bounce?: number;
   /** fade the sprite where it meets the floor (cheap soft-particle substitute) */
   floorFade?: boolean;
+  /**
+   * ADDED (fix & ship): metres from the camera inside which the sprite fades out (gone at 35 % of it), so drifting
+   * motes never swell into big shapes in front of the lens. 0 / unset = none. Not on the `stretch` layer.
+   */
+  nearFade?: number;
   /** 0..1 brightness flicker depth */
   flicker?: number;
   /** camera billboard (default), flat on the effect plane, or upright (Y-locked) */

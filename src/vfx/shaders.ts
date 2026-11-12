@@ -2,7 +2,7 @@
  * GLSL for the four particle layers. One vertex shader (billboard / ground / upright / velocity-stretched via
  * defines) and one fragment shader (additive / premultiplied alpha / lit-soft via defines).
  * Instance layout (16 floats): iPosSize(xyz,size) iColor(rgb HDR, alpha) iMisc(rot, frame, aspect|length, facing)
- * iVel(velocity xyz | glow, floorY).
+ * iVel(velocity xyz | glow, near-fade metres, -, floorY).
  */
 
 export const PARTICLE_VERT = /* glsl */ `
@@ -62,7 +62,12 @@ void main() {
   vec2 cell = vec2(mod(frame, uGrid.x), floor(frame / uGrid.x));
   vUv = (cell + uv) / uGrid;
   vQuad = corner;
-  vColor = vec4(iColor.rgb, iColor.a * thin);
+  float nearA = 1.0;
+#ifndef STRETCH
+  // (fix & ship) motes that drift up to the lens fade out instead of swelling into big shapes
+  if (iVel.y > 0.0) nearA = smoothstep(iVel.y * 0.35, iVel.y, viewDepth);
+#endif
+  vColor = vec4(iColor.rgb, iColor.a * thin * nearA);
   vWorld = world;
   vCenter = center;
 #ifdef STRETCH

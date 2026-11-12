@@ -1142,10 +1142,92 @@ describe('polish pass 4: generated ships in the sky, the slate night', () => {
     expect(DOME_FRAGMENT).toMatch(/mix\(LAVVIO, LAVGREY, 0\.25 \+ 0\.3 \* act\)/);
     // the lip filament is a soft vein on the rock, not a lightning bolt
     expect(DOME_FRAGMENT).toMatch(/glow \+= c \* flick \* 0\.2\d? \* \(0\.35 \+ 0\.65 \* matter\)/);
-    // loose chunks: clumped, in cells of at least a fifth of a radius (not confetti)
+    // loose chunks: clumped, in cells of at least a fifth of a radius at medium and up (not confetti)
     expect(DOME_FRAGMENT).toMatch(/float clump = /);
-    expect(DOME_FRAGMENT).toMatch(/splatRock\(cq \/ 0\.24/);
+    expect(DOME_FRAGMENT).toMatch(/const float CELL = 0\.24, CFILL = 0\.7, CAA = 1\.0;/);
+    expect(DOME_FRAGMENT).toMatch(/splatRock\(cq \/ CELL, fl \* CFILL, 0\.2, 23\.0, CAA \* pxn \/ CELL, dq\)/);
     expect(DOME_FRAGMENT).not.toMatch(/cq \/ 0\.07/);
+  });
+
+  it('(fix & ship) low is a simplified medium: smaller soft chunks, a rotated two-octave ink field with erosion, wider AA', () => {
+    const low = DOME_FRAGMENT.slice(DOME_FRAGMENT.indexOf('float chunk = 0.5;'));
+    // the low branch's ink field: two octaves on a rotated lattice (no single unrotated octave → no square blots)
+    expect(low).toMatch(/float sp = fbm2\(FBM_ROT \* vec3\(pc \* 4\.6, 11\.0\)\);/);
+    expect(low).toMatch(/float ero = vnoise\(FBM_ROT \* vec3\(pc \* 11\.0, 21\.0\)\);/);
+    expect(DOME_FRAGMENT).not.toMatch(/float sp = vnoise\(vec3\(pc \* 6\.5/);
+    // a wider anti-aliased ink edge below medium
+    expect(DOME_FRAGMENT).toMatch(/#else\s+float aaI = max\(fwidth\(inkF\) \* 1\.5, 0\.012\);/);
+    // one layer of loose chunks in smaller cells (0.15 R, not 0.24), sparser, with a softer edge
+    expect(DOME_FRAGMENT).toMatch(/const float CELL = 0\.15, CFILL = 0\.5, CAA = 1\.8;/);
+  });
+});
+
+describe('(fix & ship) zone sky balance', () => {
+  it('multiplies the preset over its crossfades, only for the zone that set it, and a reset clears it', async () => {
+    const { setSkyBalance } = await import('./index');
+    const sky = createSkySystem(fakeGame());
+    sky.setPreset('woundVista');
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    const base = sky.hazeColor.clone();
+    expect(setSkyBalance(sky, { haze: [0.5, 1, 2], tint: 0xffffff })).toBe(true);
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    expect(sky.hazeColor.r).toBeCloseTo(base.r * 0.5, 6);
+    expect(sky.hazeColor.g).toBeCloseTo(base.g, 6);
+    expect(sky.hazeColor.b).toBeCloseTo(base.b * 2, 6);
+    // it survives a preset change (it is the zone's, not the preset's)…
+    sky.setPreset('woundVista', { blendSeconds: 0 });
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    expect(sky.hazeColor.b).toBeCloseTo(base.b * 2, 6);
+    // …and is gone after the next zone load's reset
+    sky.reset();
+    sky.setPreset('woundVista');
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    expect(sky.hazeColor.r).toBeCloseTo(base.r, 6);
+    expect(sky.hazeColor.b).toBeCloseTo(base.b, 6);
+    // garbage is ignored (white), and a non-engine sky is refused
+    setSkyBalance(sky, { haze: [NaN, 1, 1] as unknown as [number, number, number] });
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    expect(sky.hazeColor.r).toBeCloseTo(base.r, 6);
+    expect(setSkyBalance({} as never, { haze: 0x808080 })).toBe(false);
+    sky.dispose();
+  });
+});
+
+describe('(fix & ship) the Z05 carrier loads lazily', () => {
+  it('is not requested at boot nor under other skies; the battle sky, showing it or awaiting modelReady requests it', () => {
+    const sky = createSkySystem(fakeGame());
+    const c = sky.carrier as Carrier;
+    expect(c.requested).toBe(false);
+    expect(sky.root.getObjectByName('sky:carrierModel')).toBeUndefined();
+    for (const p of ['crashRib', 'frozenInterior', 'woundVista'] as SkyPreset[]) {
+      sky.setPreset(p);
+      sky.update(0.016, new THREE.PerspectiveCamera());
+    }
+    expect(c.requested).toBe(false);
+    sky.setPreset('battleCeiling');
+    sky.update(0.016, new THREE.PerspectiveCamera());
+    expect(c.requested).toBe(true);
+    expect(sky.root.getObjectByName('sky:carrierModel')).toBeDefined();
+    sky.dispose();
+
+    const a = createSkySystem(fakeGame()).carrier as Carrier;
+    expect(a.requested).toBe(false);
+    a.visible = true;
+    expect(a.requested).toBe(true);
+    const b = createSkySystem(fakeGame()).carrier as Carrier;
+    expect(b.requested).toBe(false);
+    expect(b.modelReady).toBeInstanceOf(Promise);
+    expect(b.requested).toBe(true);
+  });
+
+  it('is requested on entering Z04 or Z05 (by the mission\'s zone), not elsewhere', () => {
+    for (const [id, want] of [['Z03', false], ['Z04', true], ['Z05', true], ['Z12', false]] as const) {
+      const sky = createSkySystem(fakeGame({ mission: { currentZone: { id }, loading: false, runtime: null } }));
+      sky.setPreset('frozenInterior');
+      sky.update(0.016, new THREE.PerspectiveCamera());
+      expect((sky.carrier as Carrier).requested, id).toBe(want);
+      sky.dispose();
+    }
   });
 });
 

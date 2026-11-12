@@ -25,6 +25,12 @@ export class PointerLock {
   locked = false;
   /** the last request was refused (or the API is missing): the input system is in drag-look mode */
   denied = false;
+  /**
+   * (ship) the lock is not to be had here: the API is missing, or a request the player made (a canvas click,
+   * not a quiet re-lock after a menu) threw, was rejected or got 'pointerlockerror' — typically a sandboxed
+   * iframe. Sticky until a lock is actually acquired. Drives the one-line drag-look hint.
+   */
+  unavailable = false;
 
   private pending = false;
   private pendingLeft = 0;
@@ -43,6 +49,7 @@ export class PointerLock {
   ) {
     if (canvas && typeof canvas.requestPointerLock !== 'function') {
       this.denied = true;
+      this.unavailable = true;
       this.strikes = MAX_STRIKES;
     }
   }
@@ -58,6 +65,7 @@ export class PointerLock {
     const { canvas, doc } = this;
     if (!canvas || !doc || typeof canvas.requestPointerLock !== 'function') {
       this.denied = true;
+      if (canvas) this.unavailable = true;
       return;
     }
     if (this.locked || this.pending) return;
@@ -107,6 +115,7 @@ export class PointerLock {
     const now = !!doc && !!canvas && doc.pointerLockElement === canvas;
     if (now && !this.locked) {
       this.denied = false;
+      this.unavailable = false;
       this.strikes = 0;
       this.onAcquire();
     }
@@ -120,6 +129,7 @@ export class PointerLock {
     this.pending = false;
     this.denied = true;
     if (this.soft) return;
+    this.unavailable = true;
     this.strikes++;
     this.cooldown = RETRY_COOLDOWN;
   }

@@ -161,10 +161,21 @@ export interface Carrier extends CarrierActor {
   update(dt: number, keyDir: THREE.Vector3, reduceFlash: boolean): void;
   /** hide, rewind to progress 0 / stabilised 0, restore the tower tip, clear effects */
   reset(): void;
-  /** ADDED (polish pass 4): resolves true once the generated carrier replaced the procedural hull (false: it stays) */
+  /**
+   * ADDED (polish pass 4): resolves true once the generated carrier replaced the procedural hull (false: it stays).
+   * (fix & ship) Reading it starts the model's download if nothing has yet.
+   */
   readonly modelReady: Promise<boolean>;
   /** true while the generated carrier is shown */
   readonly generated: boolean;
+  /**
+   * ADDED (fix & ship): start fetching the generated carrier now (idempotent). The file is no longer fetched at boot:
+   * the sky asks for it on entering Z04 or Z05, and showing the carrier or reading `modelReady` asks too; the
+   * procedural hull stands in until it arrives.
+   */
+  prefetch(): void;
+  /** true once the generated carrier has been asked for */
+  readonly requested: boolean;
   dispose(): void;
 }
 
@@ -186,8 +197,28 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
   object.add(hull, lights);
 
   // ---- the generated carrier (polish pass 4): replaces the procedural hull once its file is loaded
+  // (fix & ship) created on demand — `prefetch()` — so its file is not fetched in every session at boot
   const off = CARRIER_MODEL_OFFSET;
-  const model = new GeneratedShip('reformationCarrier', {
+  let model: GeneratedShip | null = null;
+  let generated = false;
+  let disposed = false;
+  let settleReady: (ok: boolean) => void = () => {};
+  const modelReady = new Promise<boolean>((res) => { settleReady = res; });
+  const prefetch = (): void => {
+    if (model || disposed) return;
+    model = makeModel();
+    model.object.name = 'sky:carrierModel';
+    model.object.position.set(off.x, off.y, off.z);
+    object.add(model.object);
+    model.ready.then((ok) => {
+      if (ok && !disposed) {
+        generated = true;
+        hull.visible = false;
+      }
+      settleReady(ok && !disposed);
+    }, () => settleReady(false));
+  };
+  const makeModel = (): GeneratedShip => new GeneratedShip('reformationCarrier', {
     frame: 'minusZ', origin: 'centre', length: HULL_LENGTH, minPx: 2, shadows: false, engines: 0.12, lights: 0.6, texelGlow: 0.5,
     haze: {
       glsl: GLSL_HAZE,
@@ -199,17 +230,6 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     },
     look: { tint: [1.35, 1.35, 1.38], rim: [0.04, 0.045, 0.055], fill: [0.16, 0.165, 0.18] },
     shade: carrierShade(shared),
-  });
-  model.object.name = 'sky:carrierModel';
-  model.object.position.set(off.x, off.y, off.z);
-  object.add(model.object);
-  let generated = false;
-  const modelReady = model.ready.then((ok) => {
-    if (ok) {
-      generated = true;
-      hull.visible = false;
-    }
-    return ok;
   });
 
   // ---- world-space effects: they must not follow the hull after the impact
@@ -452,8 +472,10 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     forward,
     clipPoint,
     hullProxy: built.proxy,
-    modelReady,
+    get modelReady() { prefetch(); return modelReady; },
     get generated() { return generated; },
+    get requested() { return model !== null; },
+    prefetch,
     length: HULL_LENGTH,
     clipProgress: CLIP,
     shadowFootprint: footprint,
@@ -461,7 +483,8 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
     get visible() { return object.visible; },
     set visible(v: boolean) {
       object.visible = !!v;
-      if (!v) clearEffects();
+      if (v) prefetch();
+      else clearEffects();
     },
     get progress() { return progress; },
     get stabilized() { return stabilized; },
@@ -509,7 +532,7 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
       const flick = soft ? 0.08 * Math.sin(clock * 3.1) : 0.18 * Math.sin(clock * 5.1) * Math.sin(clock * 1.7);
       g.z = (0.22 + flick) * (1 - 0.5 * stabilized) + 0.5 * stabilized;
       g.w = 1 - 0.55 * stabilized;
-      if (generated) {
+      if (generated && model) {
         // the model carries its own engines and running lights; the procedural cards keep the ventral jets and the
         // embers venting from the breaches (the hull is placed over the procedural one, so they still sit on it)
         model.engines = 0.12 + g.z * 0.9 + 0.25 * g.y;
@@ -530,7 +553,9 @@ export function createCarrier(shared: SharedUniforms, seed: number, tips: ClipTi
       syncTip();
     },
     dispose() {
-      built.geometry.dispose(); hullMat.dispose(); model.dispose();
+      disposed = true;
+      built.geometry.dispose(); hullMat.dispose(); model?.dispose();
+      settleReady(false);
       lights.geometry.dispose(); lights.material.dispose();
       sparks.geometry.dispose(); sparks.material.dispose();
       chunkGeo.dispose(); chunkMat.dispose(); chunks.dispose();

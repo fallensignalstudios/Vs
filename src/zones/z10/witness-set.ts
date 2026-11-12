@@ -71,15 +71,35 @@ function glowTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+/** value noise + fbm shared by the memory's shaders (cheap: the sky, the star and the Wound are each one draw) */
+const GLSL_MEMORY_NOISE = /* glsl */ `
+  float hash( vec3 p ) { return fract( sin( dot( p, vec3( 12.9898, 78.233, 45.164 ) ) ) * 43758.5453 ); }
+  float vnoise( vec3 p ) {
+    vec3 i = floor( p ); vec3 f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
+    return mix( mix( mix( hash( i ), hash( i + vec3( 1, 0, 0 ) ), f.x ), mix( hash( i + vec3( 0, 1, 0 ) ), hash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+                mix( mix( hash( i + vec3( 0, 0, 1 ) ), hash( i + vec3( 1, 0, 1 ) ), f.x ), mix( hash( i + vec3( 0, 1, 1 ) ), hash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+  }
+  // octaves on a rotated lattice (no square value-noise contours)
+  const mat3 MROT = mat3( 0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64 );
+  float fbm4( vec3 p ) {
+    float s = 0.0, a = 0.5;
+    for ( int i = 0; i < 4; i++ ) { s += a * vnoise( p ); p = MROT * p * 2.03 + 17.1; a *= 0.5; }
+    return s / 0.9375;
+  }
+`;
+
 /**
- * Witness V is remembered, not seen: the bridge stands in a soft silver haze instead of a starfield (palest just above
- * the horizon, deeper toward the zenith, slow veils) that the whole blue-white star floods with light. When the
- * star tears, its light goes out of the haze — red to the west, hard white to the east, a cold grey above. Linear HDR
- * out (the post chain grades and tone-maps it); fog-free; drawn behind everything (radius 3200, inside the far plane).
+ * Witness V is remembered, not seen: the bridge stands in a silver memory of a sky (fix & ship: depth instead of a flat
+ * grey void, after the crownmark painting's backdrop). A vertical gradient — a luminous band of haze over the horizon
+ * deepening to a slate zenith — with banks of cloud lying low in it, lit along their rims; distant, pale, curved
+ * spires standing out of the haze on both flanks and two great arcs high up, all of it desaturated silver. The whole
+ * blue-white star floods it with light; when the star tears, its light goes out of the haze — red to the west, hard
+ * white to the east. Linear HDR out (the post chain grades and tone-maps it); fog-free; drawn behind everything
+ * (radius 3200, inside the far plane); one draw call.
  */
 function memoryDome(own: <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(x: T) => T, starDir: THREE.Vector3): THREE.Mesh {
   const mat = own(new THREE.ShaderMaterial({
-    uniforms: { uDir: { value: starDir.clone().normalize() }, uStar: { value: 1 }, uSunder: { value: 0 } },
+    uniforms: { uDir: { value: starDir.clone().normalize() }, uStar: { value: 1 }, uSunder: { value: 0 }, uTime: { value: 0 } },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
       void main() {
@@ -90,26 +110,66 @@ function memoryDome(own: <T extends THREE.BufferGeometry | THREE.Material | THRE
       uniform vec3 uDir;
       uniform float uStar;
       uniform float uSunder;
+      uniform float uTime;
       varying vec3 vDir;
-      float hash( vec3 p ) { return fract( sin( dot( p, vec3( 12.9898, 78.233, 45.164 ) ) ) * 43758.5453 ); }
-      float vnoise( vec3 p ) {
-        vec3 i = floor( p ); vec3 f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
-        return mix( mix( mix( hash( i ), hash( i + vec3( 1, 0, 0 ) ), f.x ), mix( hash( i + vec3( 0, 1, 0 ) ), hash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
-                    mix( mix( hash( i + vec3( 0, 0, 1 ) ), hash( i + vec3( 1, 0, 1 ) ), f.x ), mix( hash( i + vec3( 0, 1, 1 ) ), hash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+      ${GLSL_MEMORY_NOISE}
+      // a tall curved spire rising out of the haze: base azimuth, height and base half-width (radians), lean (its tip
+      // drifts by lean radians of azimuth); returns coverage and, in edge, how near its star-side edge the point is
+      float spire( float az, float el, float az0, float h, float w, float lean, out float edge ) {
+        float t = clamp( el / h, 0.0, 1.0 );
+        float c = az0 + lean * t * t;
+        float hw = w * 1.3 * pow( 1.0 - t, 0.9 ) + 0.002;
+        float da = az - c;
+        float aa = max( fwidth( az ) * 1.5, 0.0015 );
+        float m = ( 1.0 - smoothstep( hw - aa, hw + aa, abs( da ) ) ) * smoothstep( -0.03, 0.0, el ) * ( 1.0 - smoothstep( h - 0.02, h, el ) );
+        // the side facing the star (azimuth 0) catches its light
+        edge = smoothstep( hw * 0.35, hw, -da * sign( c + 1e-4 ) ) * m;
+        return m;
       }
       void main() {
         vec3 d = normalize( vDir );
-        float up = smoothstep( -0.02, 0.8, d.y );
-        vec3 horizon = vec3( 0.16, 0.165, 0.178 );
-        vec3 zenith = vec3( 0.036, 0.04, 0.052 );
-        vec3 col = mix( horizon, zenith, pow( up, 0.6 ) );
-        col = mix( col, vec3( 0.08, 0.082, 0.09 ), smoothstep( 0.0, -0.35, d.y ) );
-        // soft veils of haze drifting across the memory
-        float v = vnoise( d * vec3( 2.2, 6.0, 2.2 ) ) * 0.6 + vnoise( d * 7.5 ) * 0.4;
-        col *= 0.84 + 0.3 * v;
-        // the whole star floods the haze round it with blue-white light
+        float el = asin( clamp( d.y, -1.0, 1.0 ) );
+        float az = atan( d.x, -d.z );
+        float up = clamp( d.y, 0.0, 1.0 );
+        // the vertical gradient: luminous haze over the horizon, deepening to a slate zenith
+        vec3 col = mix( vec3( 0.165, 0.17, 0.185 ), vec3( 0.07, 0.074, 0.088 ), smoothstep( 0.0, 0.3, up ) );
+        col = mix( col, vec3( 0.02, 0.023, 0.032 ), smoothstep( 0.3, 0.95, up ) );
+        // high thin veils drifting across it
+        float veil = fbm4( d * vec3( 1.7, 4.2, 1.7 ) + vec3( uTime * 0.003, 9.0, 0.0 ) );
+        col *= 0.8 + 0.4 * veil;
+        // two great pale arcs far out in the haze, high over the bridge
+        float arc1 = 1.0 - smoothstep( 0.0, 0.006, abs( dot( d, normalize( vec3( 0.0, 0.42, 1.0 ) ) ) - 0.5 ) );
+        float arc2 = 1.0 - smoothstep( 0.0, 0.004, abs( dot( d, normalize( vec3( 0.55, 0.3, 1.0 ) ) ) - 0.62 ) );
+        float arcs = max( arc1, 0.7 * arc2 ) * smoothstep( 0.12, 0.35, up ) * ( 1.0 - smoothstep( 0.75, 0.95, up ) );
+        col = mix( col, vec3( 0.2, 0.203, 0.215 ), arcs * 0.45 );
+        // distant curved spires standing out of the haze on both flanks, bowing inward toward the star
+        float e = 0.0, et = 0.0, sp = 0.0, m;
+        m = spire( az, el, -0.46, 0.66, 0.030, 0.09, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, 0.50, 0.58, 0.026, -0.08, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, -0.80, 0.80, 0.042, 0.14, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, 0.86, 0.74, 0.038, -0.13, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, -1.22, 0.52, 0.030, 0.07, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, 1.30, 0.60, 0.034, -0.09, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, -1.75, 0.70, 0.040, 0.10, et ); sp = max( sp, m ); e = max( e, et );
+        m = spire( az, el, 1.85, 0.66, 0.036, -0.10, et ); sp = max( sp, m ); e = max( e, et );
+        // pale stone dissolving into the haze toward its base, its star-side edge lit
+        float lit = 0.6 * uStar * ( 1.0 - uSunder ) + 0.25;
+        vec3 stone = vec3( 0.16, 0.162, 0.17 ) + vec3( 0.2, 0.205, 0.22 ) * e * lit;
+        col = mix( col, stone, sp * mix( 0.4, 0.9, smoothstep( 0.02, 0.4, el ) ) );
+        // the luminous cloudy backdrop: banks of cloud lying low in the sky, in front of the spires' feet, lit along
+        // their rims (brightest toward the star)
+        float n = fbm4( d * vec3( 2.6, 7.0, 2.6 ) + vec3( uTime * 0.006, 0.0, 0.0 ) );
+        float bank = smoothstep( -0.04, 0.06, d.y ) * ( 1.0 - smoothstep( 0.22, 0.55, d.y ) );
+        float body = smoothstep( 0.44, 0.62, n ) * bank;
+        float rim = ( smoothstep( 0.40, 0.50, n ) - smoothstep( 0.52, 0.66, n ) ) * bank;
+        float toStar = pow( max( dot( d, uDir ), 0.0 ), 3.0 );
+        col = mix( col, col * 0.4 + vec3( 0.014, 0.015, 0.02 ), body * 0.88 );
+        col += vec3( 0.22, 0.225, 0.24 ) * rim * ( 0.5 + 1.2 * toStar * uStar * ( 1.0 - uSunder ) );
+        // below the horizon: a pale mist floor
+        col = mix( col, vec3( 0.085, 0.088, 0.098 ), smoothstep( 0.0, -0.3, d.y ) );
+        // the whole star floods the haze round it with blue-white light (held back: the star keeps its form)
         float s = max( dot( d, uDir ), 0.0 );
-        col += vec3( 0.6, 0.76, 1.0 ) * ( pow( s, 18.0 ) * 0.6 + pow( s, 3.0 ) * 0.1 ) * uStar;
+        col += vec3( 0.6, 0.76, 1.0 ) * ( pow( s, 24.0 ) * 0.28 + pow( s, 4.0 ) * 0.05 ) * uStar;
         // torn: the light goes out of the haze; red bleeds from the west, a hard white from the east
         float k = uSunder;
         col *= 1.0 - 0.42 * k;
@@ -124,6 +184,105 @@ function memoryDome(own: <T extends THREE.BufferGeometry | THREE.Material | THRE
   dome.frustumCulled = false;
   dome.renderOrder = -10;
   return dome;
+}
+
+/**
+ * The whole star (fix & ship): a limb-darkened, granulated blue-white disc instead of a flat HDR fill, at an intensity
+ * the Witness's bloom does not blow to white — it keeps its form (a bright core, a darker limb, a mottled face).
+ */
+function starMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uGain: { value: 1 }, uTime: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vN;
+      varying vec3 vView;
+      varying vec3 vObj;
+      void main() {
+        vec4 w = modelMatrix * vec4( position, 1.0 );
+        vN = normalize( mat3( modelMatrix ) * normal );
+        vView = normalize( cameraPosition - w.xyz );
+        vObj = normalize( position );
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uGain;
+      uniform float uTime;
+      varying vec3 vN;
+      varying vec3 vView;
+      varying vec3 vObj;
+      ${GLSL_MEMORY_NOISE}
+      void main() {
+        float mu = clamp( dot( normalize( vN ), normalize( vView ) ), 0.0, 1.0 );
+        // limb darkening, then a granulated face with brighter faculae drifting slowly
+        float limb = 0.32 + 0.68 * pow( mu, 0.55 );
+        float g = fbm4( vObj * 7.0 + vec3( 0.0, uTime * 0.01, 0.0 ) );
+        float fac = smoothstep( 0.58, 0.75, fbm4( vObj * 2.6 + 31.0 ) );
+        float face = ( 0.82 + 0.3 * ( g - 0.5 ) + 0.22 * fac ) * limb;
+        vec3 c = mix( vec3( 0.55, 0.68, 0.95 ), vec3( 0.86, 0.93, 1.0 ), smoothstep( 0.2, 0.9, mu ) );
+        gl_FragColor = vec4( c * face * 1.2 * uGain, 1.0 );
+      }`,
+    fog: false,
+  });
+}
+
+/**
+ * The Wound in the memory (fix & ship): the sky's soft vortex, not a hard black disc — a near-black void with a
+ * wandering soft edge, a grey-lavender crust of smoke and ink-dark rock streaked along a slow spiral, breaking up
+ * into smoke outward, and a few faint violet glints. Transparent, fog-free, one quad facing the bridge.
+ */
+function woundMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uOpen: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime;
+      uniform float uOpen;
+      varying vec2 vUv;
+      ${GLSL_MEMORY_NOISE}
+      void main() {
+        vec2 p = vUv * 2.0 - 1.0;
+        float r = length( p ) * 2.2;          // 1 = the void's edge
+        float a = atan( p.y, p.x );
+        // spiral coordinates: the crust is dragged round and in
+        float sw = a + 1.6 / max( r, 0.25 ) + uTime * 0.03;
+        vec3 q = vec3( cos( sw ) * r, sin( sw ) * r, r * 0.8 );
+        float wob = fbm4( vec3( cos( a ) * 1.5, sin( a ) * 1.5, 3.0 + uTime * 0.01 ) );
+        float edge = 1.0 + 0.12 * ( wob - 0.5 );
+        float aa = max( fwidth( r ) * 1.5, 0.004 );
+        // the void: near-black, faint grooves just inside its rim
+        float inside = 1.0 - smoothstep( edge - 0.06 - aa, edge + 0.04 + aa, r );
+        float groove = 0.5 + 0.5 * sin( r * 46.0 + 3.0 * wob );
+        vec3 voidC = vec3( 0.006, 0.006, 0.009 ) * ( 1.0 + 1.4 * smoothstep( 0.6, 1.0, r ) * groove );
+        // the crust: smoke and rock from the rim out to ≈ 2 radii, thinning into smoke
+        float n = fbm4( q * 2.4 + 5.0 );
+        float fine = fbm4( q * 6.5 + 11.0 );
+        float out1 = smoothstep( edge - 0.05, edge + 0.25, r );
+        // lit from the upper left (where the red remnant's light and the star's last light fall), as in the sky: the crust
+        // reaches furthest and is brightest there, short and dim on the lower right
+        float lit = 0.5 + 0.5 * dot( p / max( length( p ), 1e-4 ), vec2( -0.707, 0.707 ) );
+        float reach = 1.0 - smoothstep( 1.05 + 0.45 * lit, 1.7 + 0.55 * lit, r + 0.5 * ( n - 0.5 ) );
+        float matter = smoothstep( 0.38, 0.6, n + 0.25 * ( fine - 0.5 ) ) * out1 * reach;
+        float lum = ( 0.04 + 0.13 * smoothstep( 0.4, 0.8, fine ) * ( 1.0 - smoothstep( 1.0, 2.0, r ) ) ) * ( 0.45 + 0.75 * lit );
+        vec3 smoke = mix( vec3( 0.07, 0.068, 0.078 ), vec3( 0.2, 0.19, 0.23 ), smoothstep( 0.06, 0.16, lum ) ) * ( lum / 0.12 );
+        // ink-dark rock fused into it (soft-edged, never cut out)
+        float ink = smoothstep( 0.6, 0.68, fine + 0.3 * ( n - 0.5 ) ) * out1 * ( 1.0 - smoothstep( 1.4, 1.9, r ) );
+        vec3 crust = mix( smoke, vec3( 0.01, 0.01, 0.013 ), ink * 0.9 );
+        // faint violet glints in the crust near the rim
+        float gl = smoothstep( 0.78, 0.86, vnoise( q * 18.0 + 3.0 ) ) * matter * ( 1.0 - smoothstep( 1.0, 1.5, r ) );
+        crust += vec3( 0.35, 0.24, 0.6 ) * gl * 0.5;
+        vec3 col = mix( crust, voidC, inside );
+        float alpha = max( inside, max( matter * 0.92, ink * 0.95 ) );
+        // a soft outer veil of smoke round all of it
+        alpha = max( alpha, 0.35 * smoothstep( 2.2, 1.2, r ) * smoothstep( 0.3, 0.6, n ) );
+        gl_FragColor = vec4( col, alpha * uOpen );
+      }`,
+    transparent: true, depthWrite: false, fog: false,
+  });
 }
 
 export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
@@ -216,13 +375,14 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   // --- the star, its halo, the two remnants and the Wound (far beyond the glass; they ignore fog) ---
   const eye = P(b, 0, -4, FLOOR + 1.6);
   const dir = skyDir(0, STAR.el);
-  const starMat = own(new THREE.MeshBasicMaterial({ color: new THREE.Color(0.62, 0.8, 1.0).multiplyScalar(3.4), fog: false }));
+  const starMat = own(starMaterial());
   const star = new THREE.Mesh(own(new THREE.SphereGeometry(STAR.radius, 48, 32)), starMat);
   star.position.copy(eye).addScaledVector(dir, STAR.dist);
   star.frustumCulled = false;
   group.add(star);
-  const haloMat = own(new THREE.MeshBasicMaterial({ map: own(glowTexture()), color: new THREE.Color(0.7, 0.86, 1).multiplyScalar(1.6), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  const halo = new THREE.Mesh(own(new THREE.PlaneGeometry(STAR.radius * 5.2, STAR.radius * 5.2)), haloMat);
+  // (fix & ship) a tighter, dimmer corona: the old one (×1.6 over 5.2 radii) veiled the whole frame white
+  const haloMat = own(new THREE.MeshBasicMaterial({ map: own(glowTexture()), color: new THREE.Color(0.7, 0.86, 1).multiplyScalar(0.55), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  const halo = new THREE.Mesh(own(new THREE.PlaneGeometry(STAR.radius * 3.6, STAR.radius * 3.6)), haloMat);
   halo.position.copy(star.position).addScaledVector(dir, -STAR.radius * 1.2);
   halo.lookAt(eye);
   halo.frustumCulled = false;
@@ -241,7 +401,9 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
     m.frustumCulled = false;
     group.add(m);
   }
-  const wound = new THREE.Mesh(own(new THREE.CircleGeometry(1, 64)), own(new THREE.MeshBasicMaterial({ color: 0x000000, fog: false })));
+  // (fix & ship) the sky's soft vortex, not a black disc: a quad whose void is the old disc (radius 1 × scale)
+  const wound = new THREE.Mesh(own(new THREE.PlaneGeometry(4.4, 4.4)), own(woundMaterial()));
+  wound.renderOrder = -5;
   wound.position.copy(eye).addScaledVector(skyDir(0, 12), STAR.dist * 0.92);
   wound.lookAt(eye);
   wound.scale.setScalar(0.001);
@@ -379,8 +541,13 @@ export function updateWitnessSet(z: ZoneRuntime, W: WitnessSet, dt: number): voi
   const du = (W.dome.material as THREE.ShaderMaterial).uniforms;
   du.uStar.value = W.cur.star * (1 - s);
   du.uSunder.value = s;
+  du.uTime.value += dt;
+  (W.star.material as THREE.ShaderMaterial).uniforms.uTime.value = du.uTime.value;
   W.wound.visible = W.cur.wound > 0.005;
   W.wound.scale.setScalar(Math.max(0.001, W.cur.wound * 300));
+  const wu = (W.wound.material as THREE.ShaderMaterial).uniforms;
+  wu.uTime.value = du.uTime.value;
+  wu.uOpen.value = Math.min(1, W.cur.wound * 1.6);
   W.portal.visible = W.cur.portal > 0.005;
   W.portal.scale.set(1, Math.max(0.001, W.cur.portal), 1);
   W.blade.visible = W.cur.blade > 0.02;

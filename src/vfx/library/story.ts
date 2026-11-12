@@ -163,8 +163,9 @@ export const STORY: Record<string, EffectDef> = {
       // resolve
       { p: flashGlow(C.white, 7, 5.5, 0.6, { color: [[C.white, 7], [C.goldLight, 3], [C.goldLight, 0]], fadeOut: 0.3, floorFade: true }), burst: 1, at: 1.85, offset: [0, 1.2, 0] },
       { p: star(C.white, 10, 2.6, 0.2, { tint: 0 }), burst: 1, at: 1.85, offset: [0, 1.2, 0] },
-      { p: motes(C.white, 4, { sprite: ['diamond', 'dot', 'star'], life: [1.6, 2.8], size: [0.05, 0.08, 0.03], drag: 2.2, gravity: -0.15, flicker: 0.4, color: [[C.white, 4], [C.goldLight, 3], [C.gold, 0]] }), burst: [70, 80], at: 1.85, shape: 'sphere', radius: 0.4, vel: 'radial', speed: [2, 9], offset: [0, 1.2, 0] },
-      { p: motes(C.goldLight, 3, { sprite: 'diamond', life: [1.4, 2.4], gravity: -0.5, flicker: 0.3 }), rate: 34, at: 1.9, until: 3.0, shape: 'disc', radius: 3.5, vel: 'none', up: [0.2, 0.7], offset: [0, 0.1, 0] },
+      // (fix & ship) round motes, not diamonds (they read as square confetti in Z10)
+      { p: motes(C.white, 4, { sprite: ['dot', 'dot', 'star'], life: [1.6, 2.8], size: [0.04, 0.065, 0.025], drag: 2.2, gravity: -0.15, flicker: 0.4, color: [[C.white, 4], [C.goldLight, 3], [C.gold, 0]] }), burst: [70, 80], at: 1.85, shape: 'sphere', radius: 0.4, vel: 'radial', speed: [2, 9], offset: [0, 1.2, 0] },
+      { p: motes(C.goldLight, 3, { sprite: 'dot', life: [1.4, 2.4], gravity: -0.5, flicker: 0.3, nearFade: 2 }), rate: 26, at: 1.9, until: 3.0, shape: 'disc', radius: 3.5, vel: 'none', up: [0.2, 0.7], offset: [0, 0.1, 0] },
     ],
     events: [
       { at: 0, kind: 'decal', decal: 'goldRing', size: 12, life: 5.5 },
@@ -184,7 +185,7 @@ export const STORY: Record<string, EffectDef> = {
     emitters: [
       { p: motes(C.violetLight, 2.6, { life: [0.8, 1.6], size: [0.06, 0.05, 0.02], attract: 0.9, turb: 1.5, turbFreq: 0.7, unison: true }), rate: 26, until: 1.5, shape: 'disc', radius: 5, vel: 'none', offset: [0, 0.3, 0] },
       { p: { layer: 'add', sprite: 'flare', life: 0.5, size: [3, 8, 9], sizeRand: 1, aspect: 0.3, color: [[C.white, 3.5], [C.goldLight, 1.6], [C.goldLight, 0]], fadeIn: 0.1, fadeOut: 0.3, rot: 0, tint: 0 }, burst: 1, at: 2.05, offset: [0, 0.1, 0] },
-      { p: motes(C.goldLight, 3.5, { sprite: 'diamond', life: [0.8, 1.6], drag: 2 }), burst: [26, 30], at: 2.15, shape: 'line', height: 0, radius: 0, vel: 'cone', cone: PI, speed: [0.5, 3], offset: [0, 0.2, 0] },
+      { p: motes(C.goldLight, 3.5, { sprite: 'dot', life: [0.8, 1.6], drag: 2, nearFade: 2 }), burst: [26, 30], at: 2.15, shape: 'line', height: 0, radius: 0, vel: 'cone', cone: PI, speed: [0.5, 3], offset: [0, 0.2, 0] },
     ],
     events: [
       { at: 0, kind: 'shape', shape: { kind: 'iris', life: 2.6, color: [C.goldLight, 1.4], color2: [C.white, 2.6], radius: [6, 6], attack: 0.2, detail: 24 } },
@@ -237,12 +238,16 @@ export const STORY: Record<string, EffectDef> = {
     ],
   },
 
-  /** Witness motes: slow white-gold memory light, drifting around a point. Sustained, default 3 s. */
+  /**
+   * Witness motes: slow white-gold memory light, drifting around a point. Sustained, default 3 s.
+   * (fix & ship) soft round motes, smaller and fewer, fading out near the lens — no diamonds (they read as confetti
+   * and, close to a camera, as one big white diamond mid-frame).
+   */
   witnessMote: {
     sustain: 3,
     emitters: [
-      { p: motes(C.goldLight, 3.2, { sprite: ['diamond', 'dot', 'dot'], life: [2.0, 3.2], size: [0.035, 0.06, 0.02], orbit: 0.5, turb: 0.35, turbFreq: 0.3, gravity: -0.12, flicker: 0.35, color: [[C.white, 3.2], [C.goldLight, 2.6], [C.gold, 0]] }), rate: 14, shape: 'sphere', radius: 1.5, vel: 'none' },
-      { p: flashGlow(C.goldLight, 0.9, 2.4, 1.6, { color: [[C.goldLight, 0.9], [C.goldLight, 0.7], [C.gold, 0]], fadeIn: 0.4, fadeOut: 0.5 }), burst: 1, every: 1.3 },
+      { p: motes(C.goldLight, 3.0, { sprite: 'dot', life: [2.0, 3.2], size: [0.024, 0.04, 0.015], orbit: 0.5, turb: 0.35, turbFreq: 0.3, gravity: -0.12, flicker: 0.35, nearFade: 2.6, color: [[C.white, 3.0], [C.goldLight, 2.4], [C.gold, 0]] }), rate: 9, shape: 'sphere', radius: 1.5, vel: 'none' },
+      { p: flashGlow(C.goldLight, 0.9, 2.4, 1.6, { color: [[C.goldLight, 0.9], [C.goldLight, 0.7], [C.gold, 0]], fadeIn: 0.4, fadeOut: 0.5, nearFade: 3 }), burst: 1, every: 1.3 },
     ],
   },
 };

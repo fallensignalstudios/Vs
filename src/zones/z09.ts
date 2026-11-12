@@ -20,6 +20,7 @@
  */
 import type { Beat, Look, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
+import { setSkyBalance, type SkyBalance } from '@/render/sky';
 import { setDoor, standardExit, walkTo } from './shared';
 import { blankRelics, disposeRelics, ensureRelics, overlookScene, recognitionScene, updateRelics, type Relics } from './z09/scenes';
 import { OVERLOOK, buildFlow, buildScenic, buildSpace, updateFlow, wetFloors, type FlowLines, type Z09Space } from './z09/space';
@@ -41,6 +42,13 @@ const Z09_LOOK: Look = {
   grade: { ...LOOKS.woundGallery.grade, tint: 0xf3f2f1, shadowsTint: 0xc2c5cf },
   ambient: { ...LOOKS.woundGallery.ambient, sky: 0x4c4d56, intensity: 0.34 },
 };
+/**
+ * ONE grade for the overlook (fix & ship). The woundVista night is authored against Z11 / Z12's cool grades; under
+ * Z09_LOOK's neutral stone grade it went olive and the Wound's crust khaki. So the stone keeps the neutral grade and the
+ * far field alone is balanced back (linear multipliers over the preset, Z09 only — Z11 / Z12 are untouched): a
+ * violet-slate night and horizon haze, a violet-black void, the crust held to lavender-grey rather than mauve.
+ */
+const Z09_SKY: SkyBalance = { tint: [0.98, 0.8, 1.5], matterTint: [0.8, 1.04, 0.84], haze: [0.95, 0.85, 1.4] };
 /** the overlook scene starts when the lead steps onto the apron past the bend */
 const OVERLOOK_TRIGGER = { x: OVERLOOK.x - 4, n: 7, w: 9, d: 12 } as const;
 
@@ -69,6 +77,7 @@ function build(b: ZoneBuilder): void {
   S = blank();
   b.game.sky.reset();
   b.game.sky.setHeading(0); // the overlook faces north: the Wound over the rail, red left, white right
+  setSkyBalance(b.game.sky, Z09_SKY); // (cleared by the next zone load's sky.reset())
   b.setEnv({
     sky: 'woundVista', look: Z09_LOOK, ambience: 'woundGallery', music: 'quarantine',
     // steep, from the white remnant's side (north-east): the mirror floor keeps the glint out of the usual view

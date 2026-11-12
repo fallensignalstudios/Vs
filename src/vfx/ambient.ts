@@ -25,6 +25,8 @@ interface KindDef {
   /** sway phase shared by all particles (they move together) */
   unison: boolean;
   additive: boolean;
+  /** camera distance (m) over which particles fade in: [gone, full]; default [0.5, 1.8] */
+  near?: readonly [number, number];
 }
 
 const KINDS: Record<AmbientKind, KindDef> = {
@@ -33,7 +35,9 @@ const KINDS: Record<AmbientKind, KindDef> = {
   frostMotes: { sprite: 'star', color: 0xcfeeff, intensity: 2.4, size: 0.075, count: 520, drift: [0, -0.012, 0], sway: 0.03, swayFreq: 0.2, twinkle: 0.85, twinkleFreq: 0.9, spin: 0.1, unison: false, additive: true },
   violetMotes: { sprite: 'dot', color: 0x8a4cff, intensity: 3, size: 0.07, count: 300, drift: [0, 0.04, 0], sway: 0.4, swayFreq: 0.55, twinkle: 0.35, twinkleFreq: 1.3, spin: 0, unison: true, additive: true },
   ash: { sprite: 'chip0', color: 0x1c1a19, intensity: 1, size: 0.075, count: 560, drift: [0.12, -0.32, 0.05], sway: 0.4, swayFreq: 0.5, twinkle: 0, twinkleFreq: 1, spin: 1.4, unison: false, additive: false },
-  goldMotes: { sprite: 'diamond', color: 0xffc56b, intensity: 2.6, size: 0.07, count: 460, drift: [0, 0.07, 0], sway: 0.1, swayFreq: 0.3, twinkle: 0.6, twinkleFreq: 0.8, spin: 0.25, unison: false, additive: true },
+  // (fix & ship) soft round motes with a falloff, smaller and sparser, and none close to the lens: the outlined diamond
+  // read as square orange confetti
+  goldMotes: { sprite: 'dot', color: 0xffc56b, intensity: 2.4, size: 0.045, count: 300, drift: [0, 0.07, 0], sway: 0.1, swayFreq: 0.3, twinkle: 0.6, twinkleFreq: 0.8, spin: 0, unison: false, additive: true, near: [1.6, 4.5] },
   snow: { sprite: 'dot', color: 0xf2f7ff, intensity: 1.1, size: 0.065, count: 1200, drift: [0.18, -0.6, 0.06], sway: 0.3, swayFreq: 0.6, twinkle: 0.2, twinkleFreq: 1, spin: 0, unison: false, additive: true },
 };
 
@@ -49,6 +53,7 @@ uniform vec3 uWrap;
 uniform vec3 uDrift;
 uniform vec4 uMotion; // sway amp, sway freq, twinkle depth, twinkle freq
 uniform vec3 uLook;   // size, spin, unison
+uniform vec2 uNear;   // camera distance where particles are gone, fully faded in
 uniform float uTime;
 uniform float uFrame;
 uniform vec2 uGrid;
@@ -83,7 +88,7 @@ void main() {
   vUv = (cell + uv) / uGrid;
   vec3 e = abs(q) * 2.0;
   float edge = 1.0 - smoothstep(0.72, 1.0, max(e.x, max(e.y, e.z)));
-  float nearFade = smoothstep(0.5, 1.8, dist);
+  float nearFade = smoothstep(uNear.x, uNear.y, dist);
   float tw = 1.0 - uMotion.z * (0.5 + 0.5 * sin(uTime * uMotion.w + aSeed.w * 91.0));
   vAlpha = edge * nearFade * tw * shrink * shrink;
   #include <logdepthbuf_vertex>
@@ -156,6 +161,7 @@ class Volume implements VfxHandle {
       uDrift: { value: new THREE.Vector3(def.drift[0], def.drift[1], def.drift[2]) },
       uMotion: { value: new THREE.Vector4(def.sway, def.swayFreq, def.twinkle, def.twinkleFreq) },
       uLook: { value: new THREE.Vector3(def.size, def.spin, def.unison ? 1 : 0) },
+      uNear: { value: new THREE.Vector2(def.near?.[0] ?? 0.5, def.near?.[1] ?? 1.8) },
       uColor: { value: new THREE.Vector3(_c.r, _c.g, _c.b).multiplyScalar(def.intensity) },
       uTime: { value: 0 }, uFade: { value: 0 }, uPixel: { value: 0.001 },
     };

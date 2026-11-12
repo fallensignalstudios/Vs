@@ -39,7 +39,7 @@ export interface CompiledParticle {
   stretch: number;
   turb: number; turbFreq: number; unison: boolean;
   attract: number; orbit: number; follow: boolean;
-  bounce: number; floorFade: boolean; flicker: number;
+  bounce: number; floorFade: boolean; flicker: number; nearFade: number;
   facing: number; tint: number; glow: number;
   /** any force that needs the slot origin */
   needsOrigin: boolean;
@@ -78,6 +78,7 @@ function compile(def: ParticleDef, index: number): CompiledParticle {
     turb: def.turb ?? 0, turbFreq: def.turbFreq ?? 1, unison: def.unison ?? false,
     attract, orbit, follow,
     bounce: def.bounce ?? 0, floorFade: def.floorFade ?? false, flicker: def.flicker ?? 0,
+    nearFade: Number.isFinite(def.nearFade) && (def.nearFade ?? 0) > 0 ? (def.nearFade as number) : 0,
     facing: def.facing === 'ground' ? 1 : def.facing === 'upright' ? 2 : 0,
     tint: def.tint ?? 1, glow: def.glow ?? 0,
     needsOrigin: attract !== 0 || orbit !== 0 || follow,
@@ -514,7 +515,7 @@ export class ParticleCore {
     } else {
       buf[o + 10] = d.aspect; buf[o + 11] = d.facing;
       const cool = 1 - t;
-      buf[o + 12] = d.glow * cool * cool; buf[o + 13] = 0; buf[o + 14] = 0;
+      buf[o + 12] = d.glow * cool * cool; buf[o + 13] = d.nearFade; buf[o + 14] = 0;
       buf[o + 15] = d.floorFade ? this.slotFloor[slot] : NO_FLOOR;
     }
   }
