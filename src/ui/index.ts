@@ -29,7 +29,7 @@ import { subtitleSeconds, type HitKind } from './logic';
 import { MenuInput, ModalStack } from './menu';
 import { StatusBoard, type BoardOpts, type BoardRow } from './narrative/board';
 import { ChoicePanel } from './narrative/choice';
-import { Card, FlashText, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor } from './narrative/stage';
+import { Card, FlashText, Letterbox, ScreenFade, SkipHint, type CardStyle, type FadeColor, type ScreenBox } from './narrative/stage';
 import { Subtitles } from './narrative/subtitles';
 import { WorldText } from './narrative/worldtext';
 import { CompleteScreen, DeathScreen, LoadingScreen, type LoadingOpts } from './screens/overlays';
@@ -71,6 +71,7 @@ class UiSystemImpl implements UiSystem {
   private readonly choiceW: ChoicePanel;
   private readonly wtext: WorldText;
   private readonly view: Viewport = { w: 1280, h: 720, u: 1 };
+  private readonly cardBox: ScreenBox = { l: 0, t: 0, r: 0, b: 0 };
   private readonly loading: LoadingScreen;
   private readonly death: DeathScreen;
   private readonly complete: CompleteScreen;
@@ -367,20 +368,24 @@ class UiSystemImpl implements UiSystem {
       this.loading.update(d);
       this.choiceW.update(d);
     });
+    const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
     this.run('hud', () => {
-      const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
       const clean = this.clean;
       this.hud.update(d, this.hudWanted && !screen && !this.choiceW.open && !clean, !screen && !clean, !screen && !this.choiceW.open && !clean);
       this.talk.setCovered(this.death.shown || this.pause.shown || clean);
       this.skip.setCovered(clean);
-      this.cardW.setCovered(clean);
+      // (fix & ship) the narrative card, the one-flash text and the status board never show through a screen
+      this.cardW.setCovered(clean, screen);
+      const scr = screen ? '1' : '0';
+      if (this.root.dataset.screen !== scr) this.root.dataset.screen = scr;
     });
     this.run('narrative', () => {
-      // world text is part of the scene: only the full-screen screens cover it (not the HUD switch, not a clean frame)
+      // world text is part of the scene: only the full-screen screens cover it (not the HUD switch, not a clean frame);
+      // (fix & ship) a label never sits under a narrative card that is up: it fades until the card has gone
       if (this.wtext.size > 0) {
-        const screen = this.title.covering || this.loading.covering || this.complete.covering || this.death.shown || this.pause.shown;
         measureViewport(this.root, this.view);
-        this.wtext.update(d, this.view.w, this.view.h, screen);
+        const avoid = this.cardW.avoidBox(this.root, this.view.w, this.view.h, this.view.u, this.cardBox);
+        this.wtext.update(d, this.view.w, this.view.h, screen, avoid);
       }
       this.letterboxW.update(d);
       this.fadeW.update(d);

@@ -288,6 +288,22 @@ export class KitCtx {
     return this.inlay('goldTrim', { roughness: 0.16, emissive: 0xd0a04c, emissiveIntensity: 0.32 });
   }
 
+  /**
+   * ADDED (fix & ship): plain polished gold for tubes — pipes, conduits, frost conduits. The trims' engraved gold
+   * (`goldTrim` wears the `gold_inlay` engraving) reads as a threaded rod on a round pipe; a pipe is smooth metal.
+   * Solid (casts shadows, merges with every other plain-gold tube of the builder).
+   */
+  plainGold(): THREE.Material {
+    const key = 'plain:goldTrim';
+    let m = this.inlays.get(key);
+    if (!m) {
+      m = this.clone<THREE.Material>('goldTrim', { surface: 'none', roughness: 0.2 });
+      m.name = 'kit-plain:goldTrim';
+      this.inlays.set(key, m);
+    }
+    return m;
+  }
+
   /** build-once cache (prop templates, shared textures) */
   cached<T>(key: string, make: () => T): T {
     if (!this.templates.has(key)) this.templates.set(key, make());

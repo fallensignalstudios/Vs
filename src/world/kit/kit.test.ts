@@ -726,6 +726,49 @@ describe('polish 4: art direction', () => {
     expect(lateLive).toBe(0);
   });
 
+  it('addStatic and finalize never bake a hidden mesh (or one under a hidden parent): it stays live and hidden', () => {
+    const { b, root } = builder();
+    const mat = b.mats.get('goldTrim');
+    const box = new THREE.BoxGeometry(0.4, 2, 0.4);
+    const g = new THREE.Group();
+    const shown = new THREE.Mesh(box.clone(), mat);
+    const hidden = new THREE.Mesh(box.clone(), mat);
+    hidden.visible = false;
+    const sub = new THREE.Group();
+    sub.visible = false;
+    const underHidden = new THREE.Mesh(box.clone(), mat);
+    sub.add(underHidden);
+    g.add(shown, hidden, sub);
+    b.addStatic(g);
+    // a kit piece the zone hides before the bake (a prop shown later by a script) is not baked either
+    const crate = b.prop('crate', { x: 4, n: 4 });
+    crate.visible = false;
+    let crateMeshes = 0;
+    crate.traverse((o) => { if ((o as THREE.Mesh).isMesh) crateMeshes++; });
+    b.finalize();
+    const statics = root.getObjectByName('kit-static')!;
+    let bakedVerts = 0;
+    statics.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) bakedVerts += m.geometry.getAttribute('position').count * ((o as THREE.InstancedMesh).count ?? 1); });
+    // the visible box was merged away; the hidden two are still in the scene graph, hidden, unmerged
+    expect(shown.parent).toBeNull();
+    expect(hidden.parent).toBe(g);
+    expect(underHidden.parent).toBe(sub);
+    expect(hidden.visible).toBe(false);
+    expect(hidden.userData.kitStatic).not.toBe(true);
+    expect(underHidden.userData.kitStatic).not.toBe(true);
+    let crateLive = 0;
+    crate.traverse((o) => { if ((o as THREE.Mesh).isMesh) crateLive++; });
+    expect(crateMeshes).toBeGreaterThan(0);
+    expect(crateLive).toBe(crateMeshes);
+    expect(bakedVerts).toBeGreaterThan(0);
+    // shown later by a script: it draws as itself; a later merge pass leaves it alone
+    sub.visible = true;
+    const late = new THREE.Group();
+    late.add(new THREE.Mesh(box.clone(), mat));
+    b.addStatic(late);
+    expect(underHidden.parent).toBe(sub);
+  });
+
   it("finish 'wet' wears the grey wet marble and mirrors harder; walls default to marble slabs, 'ashlar' keeps the old stone", () => {
     const f = fakeGame();
     const regs: Array<{ strength?: number }> = [];

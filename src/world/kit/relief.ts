@@ -56,7 +56,9 @@ export function buildPipes(ctx: KitCtx, points: Array<[number, number, number]>,
   const pts = (points ?? []).filter((p) => Array.isArray(p) && p.every((v) => Number.isFinite(v))).map((p): V3 => [p[0], p[2], -p[1]]);
   const part = new Part(ctx, 'pipes', new THREE.Vector3());
   if (pts.length < 2) { ctx.warn('pipes-pts', 'pipes(): needs at least two points — skipped'); return part.done(); }
-  const pipe = part.g(o.mat ?? 'goldTrim'), dark = part.g('goldDark'), trim = part.g('goldTrim');
+  // fix & ship: the pipes themselves are plain polished gold (the engraved trim gold made them look like threaded
+  // rod); `mat` still picks any other material; the junction boxes' trim keeps the engraving
+  const pipe = part.g(o.mat === undefined || o.mat === 'goldTrim' ? ctx.plainGold() : o.mat), dark = part.g('goldDark'), trim = part.g('goldTrim');
   const n = pts.length;
   // the across direction at each vertex: perpendicular to the run and to the facing
   const across: V3[] = pts.map((_, i) => {

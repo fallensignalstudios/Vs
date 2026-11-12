@@ -18,9 +18,27 @@ export interface MergeResult {
   merged: number;
 }
 
+/**
+ * fix & ship: a hidden subtree (the mesh or any parent invisible when the bake runs) is never baked — a merged mesh
+ * always draws, so the hidden piece would show. Its static marks are dropped: it stays a live object that a script
+ * can show later, and a later merge pass (addStatic after finalize) does not bake it either.
+ */
+function releaseHidden(o: THREE.Object3D): void {
+  o.traverse((c) => {
+    if (c.userData.kitStatic === true) {
+      c.userData.kitStatic = false;
+      c.userData.kitHiddenAtBake = true;
+    }
+  });
+}
+
 function collectStatics(root: THREE.Object3D, out: THREE.Mesh[], expanded = new Map<THREE.BufferGeometry, THREE.BufferGeometry>()): void {
   for (const child of root.children) {
     if (child.userData.kitKeep) continue;
+    if (!child.visible) {
+      releaseHidden(child);
+      continue;
+    }
     const mesh = child as THREE.Mesh;
     if (mesh.isMesh && !(mesh as unknown as THREE.InstancedMesh).isInstancedMesh && !(mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh
       && mesh.userData.kitStatic === true && !Array.isArray(mesh.material) && mesh.geometry?.getAttribute('position')) {

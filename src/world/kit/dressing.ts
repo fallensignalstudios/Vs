@@ -77,7 +77,8 @@ export function buildConduit(ctx: KitCtx, points: Array<[number, number, number]
   const part = new Part(ctx, 'conduit', new THREE.Vector3());
   if (pts.length < 2) { ctx.warn('conduit-pts', 'conduit(): needs at least two points — skipped'); return part.done(); }
   const seg = r > 0.2 ? 12 : 7;
-  part.g('goldTrim').tube(filletPath(pts, r * 3.2, 4), r, seg, true);
+  // (fix & ship: a pipe is plain polished gold — the engraved trim gold reads as a threaded rod on a tube)
+  part.g(ctx.plainGold()).tube(filletPath(pts, r * 3.2, 4), r, seg, true);
   // collars at the authored vertices, brackets and glowing bands along the straights
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i];
@@ -153,7 +154,7 @@ export function buildWhitePoint(ctx: KitCtx, o: { x: number; n: number; h: numbe
   return group;
 }
 
-export function buildFrost(ctx: KitCtx, o: RectOpts & { height?: number; density?: number; collider?: boolean }): THREE.Object3D {
+export function buildFrost(ctx: KitCtx, o: RectOpts & { height?: number; density?: number; collider?: boolean; glow?: boolean }): THREE.Object3D {
   const w = ctx.num(o.w, 6, 0.3), d = ctx.num(o.d, 0.8, 0.2), H = ctx.num(o.height, 4, 0.5), density = ctx.num(o.density, 0.6, 0.05, 2);
   const part = new Part(ctx, 'frost', ctx.P(ctx.num(o.x, 0), ctx.num(o.n, 0), ctx.num(o.h, 0)), ctx.yaw(ctx.num(o.yawDeg, 0)));
   // `r` is the zone's shared stream: the draws below keep exactly the count and order they always had (prop
@@ -162,12 +163,15 @@ export function buildFrost(ctx: KitCtx, o: RectOpts & { height?: number; density
   const ice = part.g('frostIce'), rime = part.g('frostRime');
   const at = (g: Geo, t: number, off: number, y: number): Geo => g.push().move(alongX ? t : off, y, alongX ? off : t);
   const across = Math.max(0.05, Wd / 2 - 0.12);
-  // glowing conduits the ice has grown around
+  // conduits the ice has grown around: plain polished gold under a fine sleeve of rime. Fix & ship: NO GLOW BY
+  // DEFAULT (the lit sleeves were the most neon-looking thing in Z03); `glow: true` brings the lit sleeve back
   const nc = Math.max(1, Math.round(L / 3.5));
   for (let i = 0; i < nc; i++) {
     const t = -L / 2 + (L * (i + 0.5)) / nc + (r() - 0.5) * 0.6, x = alongX ? t : 0, z = alongX ? 0 : t;
-    part.g('goldTrim').cyl(0.05, 0.05, H, 6, x, 0, z);
-    part.g('whiteLight').cyl(0.062, 0.062, H * 0.5, 6, x, H * (0.18 + r() * 0.2), z);
+    part.g(ctx.plainGold()).cyl(0.05, 0.05, H, 6, x, 0, z);
+    const y0 = H * (0.18 + r() * 0.2);
+    if (o.glow === true) part.g('whiteLight').cyl(0.062, 0.062, H * 0.5, 6, x, y0, z);
+    else part.g('frostRime').cyl(0.056, 0.056, H * 0.5, 6, x, y0, z);
   }
   // crystalline growth (polish 3): thick faceted slabs — standing from the floor, hanging from above — each
   // fringed with prism crystals along its free edge, a cluster of crystals fanning out of its root, a rime crust

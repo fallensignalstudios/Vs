@@ -163,6 +163,17 @@ export const FLASH_SECONDS = 0.14;
 const FLASH_SOFT_SECONDS = 0.9;
 const FLASH_SOFT_FADE = 0.22;
 
+/** ADDED (fix & ship): a screen rectangle in CSS px (left, top, right, bottom) */
+export interface ScreenBox {
+  l: number;
+  t: number;
+  r: number;
+  b: number;
+}
+
+/** the card text's font size per style, in UI units (styles/narrative.css) */
+const CARD_FONT: Partial<Record<CardStyle, number>> = { context: 30, witness: 27, consequence: 36, title: 70 };
+
 interface CardSpec {
   text: string;
   sub: string;
@@ -181,6 +192,8 @@ export class Card {
   private life = Infinity;
   /** (polish 4) debug clean frame: a 'context' card is hidden (not cleared) while this is on */
   private covered = false;
+  /** (fix & ship) a full-screen screen (pause, death, …) is up: every card style hides and its timer holds */
+  private screened = false;
   private hiddenNow = false;
 
   constructor() {
@@ -232,13 +245,16 @@ export class Card {
    * over gameplay — is hidden without losing its state or timer; the narrative styles ('witness', 'consequence',
    * 'title') still draw, as they are part of the shot.
    */
-  setCovered(covered: boolean): void {
+  setCovered(covered: boolean, screen = false): void {
     this.covered = covered === true;
+    this.screened = screen === true;
     this.applyCover();
   }
 
   private applyCover(): void {
-    const hide = this.covered && this.el.dataset.style === 'context';
+    // (fix & ship) the pause menu and the other full-screen screens are translucent: the card must not show through
+    // them (it overlapped the pause menu's text), so under a screen every style hides, not only 'context'
+    const hide = this.screened || (this.covered && this.el.dataset.style === 'context');
     if (hide === this.hiddenNow) return;
     this.hiddenNow = hide;
     this.el.style.visibility = hide ? 'hidden' : '';
@@ -264,8 +280,50 @@ export class Card {
     this.fader.show(true);
   }
 
+  /**
+   * ADDED (fix & ship): the screen box world labels keep clear of while the card is up, in the coordinates of
+   * `root` (the UI root); null while no card shows. Measured from the card when the browser lays it out, else
+   * estimated from its style and text (headless tests); widened by the inner part of the card's soft plate.
+   */
+  avoidBox(root: HTMLElement, w: number, vh: number, u: number, out: ScreenBox): ScreenBox | null {
+    if (!this.fader.visible || this.fader.level <= 0.02 || this.hiddenNow) return null;
+    let r: { left: number; top: number; width: number; height: number } | null = null;
+    let origin: { left: number; top: number } = { left: 0, top: 0 };
+    try {
+      r = this.el.getBoundingClientRect();
+      origin = root.getBoundingClientRect();
+    } catch {
+      r = null;
+    }
+    if (r && r.width > 1 && r.height > 1) {
+      out.l = r.left - origin.left;
+      out.t = r.top - origin.top;
+      out.r = out.l + r.width;
+      out.b = out.t + r.height;
+    } else {
+      const style = (this.el.dataset.style ?? 'context') as CardStyle;
+      const font = (CARD_FONT[style] ?? 30) * u;
+      const boxW = Math.min(1040 * u, 0.84 * w);
+      const text = this.current?.text ?? this.pending?.text ?? '';
+      const lines = Math.max(1, Math.ceil((text.length * font * 0.62) / Math.max(1, boxW)));
+      const half = (lines * font * 1.5 + (this.current?.sub ? 50 * u : 0)) / 2;
+      const cy = vh * (style === 'witness' ? 0.71 : 0.5);
+      out.l = (w - boxW) / 2;
+      out.r = (w + boxW) / 2;
+      out.t = cy - half;
+      out.b = cy + half;
+    }
+    // the plate reaches 40 / 70 u past the text; its outer half is faint enough to read a label through
+    out.l -= 20 * u;
+    out.r += 20 * u;
+    out.t -= 35 * u;
+    out.b += 35 * u;
+    return out;
+  }
+
   update(dt: number): void {
-    if (this.current && this.life !== Infinity) {
+    // a card's timer holds while a screen covers it (the scene under the pause menu is frozen too)
+    if (this.current && this.life !== Infinity && !this.screened) {
       this.life -= dt;
       if (this.life <= 0) {
         this.current = null;

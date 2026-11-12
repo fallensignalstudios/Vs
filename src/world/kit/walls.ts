@@ -158,12 +158,16 @@ function emitWall(part: Part, ox: number, oz: number, ry: number, L: number, o: 
   part.unframe();
 }
 
+/** fix & ship: the vault / flat ceilings' light troughs at this fraction of `glow` (they still read as light bars) */
+const TROUGH_DIM = 0.45;
+
 /**
  * Polish 4: a soft light trough along local Z (centred on x, at height y, facing `dir` on Y): three strips across
  * (dim edges, bright middle) and fades at both ends — a recessed soft light, not a neon bar.
  */
 function softStrip(hz: HazeWriter, x: number, y: number, w: number, len: number, dir: 1 | -1): void {
-  const xs = [x - w / 2, x - w * 0.18, x + w * 0.18, x + w / 2], kx = [0.25, 1, 1, 0.25];
+  // (fix & ship: a softer fall-off across: the edges barely lit, so the trough reads as a glow, not a bar)
+  const xs = [x - w / 2, x - w * 0.12, x + w * 0.12, x + w / 2], kx = [0.08, 1, 1, 0.08];
   const zs = [-len / 2, -len / 2 + Math.min(1.2, len * 0.15), len / 2 - Math.min(1.2, len * 0.15), len / 2], kz = [0.35, 1, 1, 0.35];
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
     hz.quad([xs[i], y, zs[j]], [xs[i + 1], y, zs[j]], [xs[i + 1], y, zs[j + 1]], [xs[i], y, zs[j + 1]], [0, dir, 0],
@@ -368,7 +372,7 @@ export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
       softStrip(soft, s * (hw - 0.26), -0.105, 0.28, d - 0.8, -1);
     }
     const group = part.done();
-    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20), group);
+    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20) * TROUGH_DIM, group);
     return group;
   }
   if (style === 'flat') {
@@ -386,7 +390,7 @@ export function buildCeiling(ctx: KitCtx, o: CeilingOpts): THREE.Object3D {
       softStrip(soft, lx, -0.125, 0.32, d - 1, -1);
     }
     const group = part.done();
-    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20), group);
+    glowMesh(ctx, soft, ctx.num(o.glow, 1.6, 0, 20) * TROUGH_DIM, group);
     return group;
   }
   // lattice / glass: open grid of beams, optionally glazed

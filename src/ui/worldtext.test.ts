@@ -218,3 +218,74 @@ describe('clean frame and cards (polish 4)', () => {
     expect(card.style.visibility).toBe('hidden');
   });
 });
+
+describe('cards over world text and under screens (fix & ship)', () => {
+  const LONG = 'The fleets are not allies, but their local cooperation has become a ceasefire before either government can authorize one.';
+
+  it('a label that would sit under a card fades while the card is up and comes back after; one clear of it stays', () => {
+    const r = rig();
+    r.cam.camera.position.set(0, 1.6, 4);
+    r.cam.camera.lookAt(0, 1.6, 0);
+    // one label at the screen centre (where a context card sits), one near the top edge
+    r.ui.worldText!('under', { at: { x: 0, y: 1.6, z: 0 }, text: 'REFORMATION TRACKS', align: 'left' });
+    r.ui.worldText!('clear', { at: { x: 0, y: 2.9, z: 0 }, text: 'DOMINION ARCS' });
+    r.step(0.5);
+    const [under, clear] = labels(r.root);
+    expect(under!.style.visibility).toBe('visible');
+    expect(clear!.style.visibility).toBe('visible');
+    r.ui.card(LONG, { style: 'context', seconds: 7 });
+    r.step(0.5);
+    expect(under!.style.visibility).toBe('hidden');
+    expect(clear!.style.visibility).toBe('visible');
+    // the card times out and fades: the label returns
+    r.step(8);
+    expect(r.root.find('aur-card')!.style.display).toBe('none');
+    expect(under!.style.visibility).toBe('visible');
+    // a witness card sits low (71 %): a centre label is clear of it, a low one is not
+    r.ui.worldText!('low', { at: { x: 0, y: 1.6 - 0.62, z: 0 }, text: 'LOW' });
+    r.step(0.5);
+    const low = labels(r.root)[2]!;
+    expect(low.style.visibility).toBe('visible');
+    r.ui.card('Witness V', { style: 'witness' });
+    r.step(1);
+    expect(low.style.visibility).toBe('hidden');
+    expect(under!.style.visibility).toBe('visible');
+    // a context card hidden by the debug clean frame does not push labels away
+    r.ui.card(null);
+    r.step(1.5);
+    r.ui.setCleanFrame!(true);
+    r.ui.card(LONG, { style: 'context' });
+    r.step(1);
+    expect(under!.style.visibility).toBe('visible');
+  });
+
+  it('the pause menu covers every card style (hidden, timer held) and marks the root for the board and flash; all return on resume', () => {
+    const r = rig();
+    const card = r.root.find('aur-card')!;
+    r.ui.card(LONG, { style: 'context', seconds: 3 });
+    r.step(1);
+    expect(card.style.display).toBe('flex');
+    r.ui.showPause({ onResume() {}, onRestartCheckpoint() {}, onQuitToTitle() {} });
+    r.step(0.5);
+    expect(card.style.visibility).toBe('hidden');
+    expect(r.root.find('aur')!.dataset.screen).toBe('1');
+    // ten seconds in the menu do not use up the card's three
+    r.step(10);
+    r.ui.hidePause();
+    r.step(0.1);
+    expect(r.root.find('aur')!.dataset.screen).toBe('0');
+    expect(card.style.visibility || '').toBe('');
+    expect(card.style.display).toBe('flex');
+    r.step(2.5);
+    expect(card.style.display).toBe('none');
+    // a witness card hides under the pause menu as well
+    r.ui.card('Witness V', { style: 'witness' });
+    r.step(1);
+    r.ui.showPause({ onResume() {}, onRestartCheckpoint() {}, onQuitToTitle() {} });
+    r.step(0.2);
+    expect(card.style.visibility).toBe('hidden');
+    r.ui.hidePause();
+    r.step(0.1);
+    expect(card.style.visibility || '').toBe('');
+  });
+});

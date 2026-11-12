@@ -904,3 +904,19 @@
 .aur-wt[data-tone='amber'] { --wt: #ffcd8a; --wt-edge: rgba(255, 170, 70, 0.4); }
 .aur-wt[data-tone='gold'] { --wt: #f2dca6; --wt-edge: rgba(230, 200, 130, 0.42); }
 .aur-wt[data-tone='violet'] { --wt: #dccbff; --wt-edge: rgba(170, 130, 255, 0.42); }
+
+/* fix & ship: the full-screen screens (pause, death, completion, title, loading) are translucent; the narrative
+   card, the one-flash text and the status board must never show through them (the card overlapped the pause
+   menu's text). The card also hides itself (and holds its timer) in code; the board's rows keep their own
+   visibility, so opacity — not visibility — is what hides the whole stack. */
+.aur[data-screen='1'] .aur-card,
+.aur[data-screen='1'] .aur-flash,
+.aur[data-screen='1'] .aur-board {
+  opacity: 0 !important;
+}
+
+/* fix & ship: a context card is an information overlay over live gameplay (bright displays, holograms, signage):
+   a denser plate than the narrative cards, so its lines read over a busy frame */
+.aur-card[data-style='context']::before {
+  background: radial-gradient(ellipse at 50% 50%, rgba(3, 5, 8, 0.84), rgba(3, 5, 8, 0.58) 42%, rgba(3, 5, 8, 0) 70%);
+}

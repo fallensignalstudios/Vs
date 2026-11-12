@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import type { Game, Vec3Like, WorldTextOpts } from '@/core/api';
 import { isStub } from '@/core/stub';
 import { Num, Txt, h, warnOnce } from '../dom';
+import type { ScreenBox } from './stage';
 
 /** the viewport height the pixel sizes are given for */
 export const WORLD_TEXT_REF_H = 720;
@@ -86,6 +87,28 @@ export function worldTextPx(size: number, dist: number, fovDeg: number, vh: numb
   const projected = (size * focal) / Math.max(0.05, Number.isFinite(dist) ? dist : 0.05) / CAP;
   return Math.min(hi, Math.max(lo, projected));
 }
+
+/**
+ * The screen box of a label's plate at (x, y) and `px`, estimated without a layout read: Barlow Condensed upper case
+ * with 0.07 em tracking runs about 0.6 em a character, plus the plate's 0.62 em side padding; 1.22 line height plus
+ * 0.5 em of vertical padding a line.
+ */
+export function labelBox(l: { text: { value: string }; align: Align }, at: { x: number; y: number; px: number }, out: ScreenBox = _box): ScreenBox {
+  const lines = l.text.value.split('\n');
+  let chars = 0;
+  for (const ln of lines) chars = Math.max(chars, ln.length);
+  const bw = (chars * 0.6 + 1.24) * at.px;
+  const bh = (lines.length * 1.22 + 0.5) * at.px;
+  const x0 = at.x + (ALIGN_X[l.align] / 100) * bw;
+  out.l = x0;
+  out.r = x0 + bw;
+  out.t = at.y - bh / 2;
+  out.b = at.y + bh / 2;
+  return out;
+}
+
+const overlaps = (a: ScreenBox, b: ScreenBox): boolean => a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
+const _box: ScreenBox = { l: 0, t: 0, r: 0, b: 0 };
 
 export class WorldText {
   readonly el: HTMLElement;
@@ -203,14 +226,18 @@ export class WorldText {
     return { x: _s.x, y: _s.y, px: worldTextPx(l.size, dist, cam.fov, vh, l.minPx, l.maxPx) };
   }
 
-  update(dt: number, w: number, vh: number, covered: boolean): void {
+  /**
+   * `avoid` (fix & ship): the box of a narrative card that is up — a label whose plate would sit under it fades out
+   * until the card has gone (the card paints above world text, and neither stays readable through the other).
+   */
+  update(dt: number, w: number, vh: number, covered: boolean, avoid: ScreenBox | null = null): void {
     if (this.labels.size === 0) return;
     const camSys = this.game.camera;
     const cam = camSys && !isStub(camSys) ? (camSys.camera as THREE.PerspectiveCamera | undefined) : undefined;
     const camOk = !!cam && (cam as THREE.PerspectiveCamera).isPerspectiveCamera === true;
     for (const l of [...this.labels.values()]) {
       const at = !covered && !l.removing && camOk ? this.place(l, cam!, w, vh) : null;
-      const want = at ? 1 : 0;
+      const want = at && !(avoid && overlaps(labelBox(l, at), avoid)) ? 1 : 0;
       l.vis += Math.sign(want - l.vis) * Math.min(Math.abs(want - l.vis), dt * 6);
       if (l.removing && l.vis <= 0) {
         l.el.remove();

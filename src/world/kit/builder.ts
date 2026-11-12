@@ -146,7 +146,8 @@ export class ZoneBuilderImpl implements ZoneBuilder {
   channel(points: Array<[number, number]>, o?: ChannelOpts): THREE.Object3D { return buildChannel(this.ctx, points, o); }
   conduit(points: Array<[number, number, number]>, o?: { r?: number; glow?: boolean; collider?: boolean }): THREE.Object3D { return buildConduit(this.ctx, points, o); }
   whitePoint(o: { x: number; n: number; h: number; intensity?: number }): THREE.Object3D { return buildWhitePoint(this.ctx, o); }
-  frost(o: RectOpts & { height?: number; density?: number; collider?: boolean }): THREE.Object3D { return buildFrost(this.ctx, o); }
+  // (fix & ship: `glow` opts back into the lit conduit sleeves; the API type gains it with the next contract edit)
+  frost(o: RectOpts & { height?: number; density?: number; collider?: boolean; glow?: boolean }): THREE.Object3D { return buildFrost(this.ctx, o); }
   corruption(o: Parameters<ZoneBuilder['corruption']>[0]): THREE.Object3D { return buildCorruption(this.ctx, o); }
   prop(kind: PropKind, o: PropOpts): THREE.Object3D { return buildProp(this.ctx, kind, o); }
   point(o: LightOpts): THREE.PointLight { return buildPoint(this.ctx, o); }
@@ -164,9 +165,11 @@ export class ZoneBuilderImpl implements ZoneBuilder {
     if (!obj || !(obj as THREE.Object3D).isObject3D) { this.ctx.warn('addStatic', 'addStatic(): not an Object3D — ignored'); return obj; }
     if (!obj.parent) this.root.add(obj);
     let n = 0;
-    // (a kept subtree, the merged container and already-merged meshes are left alone)
+    // (a kept subtree, the merged container and already-merged meshes are left alone; fix & ship: so is anything
+    // hidden — an invisible mesh, or one under an invisible parent, stays live and hidden instead of being baked
+    // into a merged mesh that always draws)
     const visit = (o: THREE.Object3D): void => {
-      if (o.userData.kitKeep || o === this.statics || o.userData.kitMerged) return;
+      if (o.userData.kitKeep || o === this.statics || o.userData.kitMerged || !o.visible) return;
       const m = o as THREE.Mesh;
       if (m.isMesh && m.userData.kitStatic !== true) {
         const skip = (m as unknown as THREE.SkinnedMesh).isSkinnedMesh || (m as unknown as THREE.InstancedMesh).isInstancedMesh

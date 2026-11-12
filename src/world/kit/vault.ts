@@ -77,7 +77,8 @@ interface Seam { t0: number; t1: number; z0: number; z1: number; crown: boolean 
 export function emitClosedVault(ctx: KitCtx, part: Part, o: CeilingOpts, w: number, d: number, springH: number): void {
   const hw = w / 2, hd = d / 2;
   const R = ctx.num(o.rise, Math.max(2, w * 0.24), 0.5, w);
-  const glow = ctx.num(o.glow, 3.2, 0, 20);
+  // (fix & ship: default 3.2 → 1.8 — the seams read as light bars in Z01; zones that set `glow` keep their value)
+  const glow = ctx.num(o.glow, 1.8, 0, 20);
   // integration wave: daylight-white haze (the paintings' upper space is a cool bright haze, not amber)
   const hazeColor = ctx.num(o.hazeColor, 0xf6f0e6);
   const fam = familyOf(o.mat);

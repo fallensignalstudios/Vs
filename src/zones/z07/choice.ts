@@ -135,6 +135,13 @@ function* bridgeCinematic(z: ZoneRuntime): Routine {
     // the fleets stop wasting weapons on each other
     game.sky.setBattleIntensity(0.12);
     z.story('threatExchangeOpen');
+    // fix & ship: while the author's context cards are up the display steps back (its glyph rows ran through the
+    // card's lines; its lane labels fade on their own while a card covers them). Cosmetic only: the end state below
+    // brings it back to full either way
+    if (!z.skipping) {
+      if (S.streams) S.streams.params.visible = 0.3;
+      for (const p of S.streamLabels) p.show(0.3, 0.8);
+    }
     // CORE: the author's two sentences, exact
     if (!z.skipping) game.ui.card('The fleets are not allies, but their local cooperation has become a ceasefire before either government can authorize one.', { style: 'context', seconds: 7 });
     yield 7.4;

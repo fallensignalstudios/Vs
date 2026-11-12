@@ -91,17 +91,28 @@ export function buildHaze(ctx: KitCtx, o: HazeOpts): THREE.Object3D {
   return mesh;
 }
 
+/** fix & ship: the skylight's panes are this much larger than `coffer` asks (fewer, larger panes) */
+const PANE_SCALE = 1.6;
+/** fix & ship: the panes' brightness against `glow` (frosted daylight, not a light panel) */
+const PANE_GLOW = 0.72;
+/** fix & ship: the pale self-light on the skylight's beams (the light they hold bounces off them) */
+const MULLION_BOUNCE = 0.42;
+
 /**
  * `ceiling({ style: 'skylight' })` — bright closed-ceiling haze: deep coffers open onto light boxes. Local frame as in
  * buildCeiling: X across (the short side), Z along, Y up from the beam soffits at the ceiling height.
  */
 export function emitSkylight(ctx: KitCtx, part: Part, o: CeilingOpts, w: number, d: number): void {
   const hw = w / 2, hd = d / 2, fam = familyOf(o.mat);
-  const glow = ctx.num(o.glow, 2.6, 0, 20), color = ctx.num(o.hazeColor, 0xf6f2ea);
-  const cof = ctx.num(o.coffer, 4.5, 1.5, 20);
+  // fix & ship: daylight through frosted glass, not a grid of office light panels — fewer, larger panes (the
+  // `coffer` size is stretched by PANE_SCALE), a dimmer and flatter pane (PANE_GLOW, a soft falloff to the edges)
+  // and beams lit by the light they hold (a pale bounce on the mullions), so pane and mullion are close in value
+  const glow = ctx.num(o.glow, 2.6, 0, 20) * PANE_GLOW, color = ctx.num(o.hazeColor, 0xf6f2ea);
+  const cof = ctx.num(o.coffer, 4.5, 1.5, 20) * PANE_SCALE;
   const nx = Math.max(1, Math.round(w / cof)), nz = Math.max(1, Math.round(d / cof));
-  const bw = 0.42, deep = 1.1, box = 0.5, cx = w / nx, cz = d / nz;
-  const beam = part.g(fam.frame), trim = part.g('goldTrim'), gold = part.g(ctx.goldLine());
+  const bw = 0.34, deep = 1.1, box = 0.5, cx = w / nx, cz = d / nz;
+  const beamMat = fam.dark ? fam.frame : ctx.variant(fam.frame, { emissive: 0xe6e2da, emissiveIntensity: MULLION_BOUNCE });
+  const beam = part.g(beamMat), lid = part.g(fam.frame), trim = part.g('goldTrim'), gold = part.g(ctx.goldLine());
   // beams: deep, with a gold line along each soffit edge
   for (let i = 0; i <= nx; i++) {
     const x = -hw + cx * i;
@@ -120,20 +131,24 @@ export function emitSkylight(ctx: KitCtx, part: Part, o: CeilingOpts, w: number,
     trim.box(0.72, 0.03, d + 0.72, s * (hw + 0.1), -0.3, 0);
     trim.box(w + 0.72, 0.03, 0.72, 0, -0.3, s * (hd + 0.1));
   }
-  // the light: every coffer is a box of bright haze (brightest in its middle), its sides lit from above
+  // the light: every coffer is a frosted pane over a box of haze — flat and even, easing off toward its edges (a
+  // 4 × 4 grid of brightness: no hot centre), its sides lit almost as bright as the pane so the box does not read
   const hz = new HazeWriter(color);
   const top = deep + box;
+  const ks = [0.8, 0.95, 1, 0.95, 0.8];
   for (let i = 0; i < nx; i++) {
     for (let k = 0; k < nz; k++) {
       const x0 = -hw + cx * i + bw / 2, x1 = -hw + cx * (i + 1) - bw / 2, z0 = -hd + cz * k + bw / 2, z1 = -hd + cz * (k + 1) - bw / 2;
-      const xm = (x0 + x1) / 2, zm = (z0 + z1) / 2, e = 0.68;
-      // back of the box: four quads round the bright centre
-      hz.quad([x0, top, z0], [xm, top, z0], [xm, top, zm], [x0, top, zm], [0, -1, 0], [e, e, 1, e]);
-      hz.quad([xm, top, z0], [x1, top, z0], [x1, top, zm], [xm, top, zm], [0, -1, 0], [e, e, e, 1]);
-      hz.quad([xm, top, zm], [x1, top, zm], [x1, top, z1], [xm, top, z1], [0, -1, 0], [1, e, e, e]);
-      hz.quad([x0, top, zm], [xm, top, zm], [xm, top, z1], [x0, top, z1], [0, -1, 0], [e, 1, e, e]);
-      // the light box's sides above the beams: lit by the haze, a little dimmer where they meet the beams
-      const lo = 0.5, hi = 0.85;
+      const xs = [x0, x0 + (x1 - x0) * 0.2, (x0 + x1) / 2, x1 - (x1 - x0) * 0.2, x1];
+      const zs = [z0, z0 + (z1 - z0) * 0.2, (z0 + z1) / 2, z1 - (z1 - z0) * 0.2, z1];
+      for (let a = 0; a < 4; a++) {
+        for (let c = 0; c < 4; c++) {
+          hz.quad([xs[a], top, zs[c]], [xs[a + 1], top, zs[c]], [xs[a + 1], top, zs[c + 1]], [xs[a], top, zs[c + 1]], [0, -1, 0],
+            [ks[a] * ks[c], ks[a + 1] * ks[c], ks[a + 1] * ks[c + 1], ks[a] * ks[c + 1]]);
+        }
+      }
+      // the light box's sides above the beams: lit by the pane, only a little dimmer where they meet the beams
+      const lo = 0.66, hi = 0.8;
       hz.quad([x0, deep, z0], [x1, deep, z0], [x1, top, z0], [x0, top, z0], [0, 0, 1], [lo, lo, hi, hi]);
       hz.quad([x0, deep, z1], [x1, deep, z1], [x1, top, z1], [x0, top, z1], [0, 0, -1], [lo, lo, hi, hi]);
       hz.quad([x0, deep, z0], [x0, deep, z1], [x0, top, z1], [x0, top, z0], [1, 0, 0], [lo, lo, hi, hi]);
@@ -144,5 +159,5 @@ export function emitSkylight(ctx: KitCtx, part: Part, o: CeilingOpts, w: number,
   mesh.name = 'skylight-haze';
   part.group.add(mesh);
   // a closed lid over the light boxes (so nothing beyond ever shows)
-  beam.box(w + 1.2, 0.3, d + 1.2, 0, top + 0.16, 0);
+  lid.box(w + 1.2, 0.3, d + 1.2, 0, top + 0.16, 0);
 }
