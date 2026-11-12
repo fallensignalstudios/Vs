@@ -35,11 +35,11 @@ export const TYPES = {
   jpeg: 'image/jpeg',
   png: 'image/png',
   svg: 'image/svg+xml',
-  glb: 'model/gltf-binary',
-  bin: 'application/octet-stream',
+  // .glb and .bin are not served by the page host: tools/pack-b64.mjs ships them as base64 `.txt` (src/core/binfetch.ts)
+  txt: 'text/plain',
   wasm: 'application/wasm',
 };
-const TEXT = new Set(['html', 'js', 'css', 'json', 'svg']);
+const TEXT = new Set(['html', 'js', 'css', 'json', 'svg', 'txt']);
 
 export function contentTypeOf(file) {
   const ext = path.extname(file).slice(1).toLowerCase();
@@ -98,7 +98,7 @@ function main() {
     k.bytes += f.bytes;
     if (!TYPES[ext]) problems.push(`no declared media type for ${f.rel}`);
     if (/(^|\/)\./.test(f.rel)) problems.push(`dotfile in dist: ${f.rel}`);
-    if (/\.(md|map|txt|log|ts|tsx|mjs|cjs|py|sh)$/i.test(f.rel)) problems.push(`not a game file: ${f.rel}`);
+    if (/\.(md|map|log|ts|tsx|mjs|cjs|py|sh)$/i.test(f.rel) || (/\.txt$/i.test(f.rel) && !/\.(glb|bin)\.txt$/i.test(f.rel))) problems.push(`not a game file: ${f.rel}`);
     const cap = TEXT.has(ext) ? LIMITS.textBytes : LIMITS.binaryBytes;
     if (f.bytes > cap) problems.push(`${f.rel} is ${(f.bytes / 1e6).toFixed(2)} MB (limit ${cap / 1e6} MB)`);
     if (f.bytes === 0) problems.push(`empty file: ${f.rel}`);

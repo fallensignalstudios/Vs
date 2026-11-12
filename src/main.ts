@@ -1,3 +1,4 @@
+import '@/core/binfetch-install';
 import '@fontsource/cinzel/400.css';
 import '@fontsource/cinzel/600.css';
 import '@fontsource/barlow/400.css';
