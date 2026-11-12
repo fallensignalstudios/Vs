@@ -49,7 +49,8 @@ const LOG_N = 15.3;
 /** the survivor-bend look, moved from sepia to cool neutral (see build) */
 const Z02_LOOK = {
   ...LOOKS.survivorBend,
-  exposure: 0.94,
+  // (polish 4: a touch brighter — the slabs, the slots and the wet floor carry the relay route's daylight)
+  exposure: 0.99,
   fog: { color: 0x2e3034, density: 0.022 },
   grade: { ...LOOKS.survivorBend.grade, tint: 0xf2f3f6, saturation: 0.82, contrast: 1.07, lift: 0.006, shadowsTint: 0xb0bcd2, highlightsTint: 0xfff3e4 },
   ambient: { sky: 0x7c8088, ground: 0x24211e, intensity: 0.46 },
@@ -96,17 +97,21 @@ function build(b: ZoneBuilder): void {
   buildMarkers(b);
   buildScenic(b);
   buildWear(b);
+  buildRelief(b);
   b.finalize();
 }
 
 /** floor, outer walls with the entry and the far doorway, ribs over both legs, the vault */
 function buildShell(b: ZoneBuilder): void {
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
+  // polish 4 (relay-route painting): the light wet grey marble floor; walls in large smooth slabs (the long south
+  // and east walls, under their pipes and lit slots) and gold-framed recessed panels (west, north round the far
+  // doorway). The colliders are the plain walls' (relief is geometry only).
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, finish: 'wet' });
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'framed', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
   b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east }).setState('sealed');
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed' });
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'ribbed' });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'conduit', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'slab' });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'slab' });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'framed', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
   // ribs across the south leg (marching east) and across the north leg (marching north)
   b.ribRow({ x: 3.5, n: ALC_N0 / 2, span: ALC_N0 + 0.4, height: RIB_H, count: 4, spacing: 6, yawDeg: FACE.east, alongDeg: FACE.east });
   b.ribRow({ x: (ALC_X1 + W) / 2, n: 3.6, span: W - ALC_X1 + 0.4, height: RIB_H, count: 3, spacing: 6 });
@@ -154,7 +159,8 @@ function buildAlcove(b: ZoneBuilder): void {
     m.scale.set(r * (1.6 + rnd()), r * 0.7, r * 1.1);
     strip.add(m);
   }
-  b.add(strip);
+  // (polish 4: static dressing merged into the kit's per-material meshes — one draw call, not one per nodule)
+  b.addStatic(strip);
 }
 
 /** the side loop round the alcove's far side, and the casualty-log relay in it */
@@ -255,11 +261,36 @@ function buildWear(b: ZoneBuilder): void {
   // (two patches either side of the gold route channel, which stays on top of the polished slab)
   b.floor({ x: 28.0, n: 3.0, w: 3.4, d: 5.0, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'worn' });
   b.floor({ x: 23.8, n: 2.3, w: 2.4, d: 3.6, h: 0.012, thickness: 0.1, inlay: 'none', noSurface: true, finish: 'worn' });
-  // (between the pilasters and the rib legs of the south leg, clear of the medical stop where Varo sits)
+  // (between the rib legs of the south leg, clear of the medical stop where Varo sits; polish 4: the kit's
+  // bracketed `pipes()`)
   for (const x of [12.4, 16.6]) {
-    for (const dx of [0, 0.3]) {
-      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, WALL_H - 2.2 - dx], [x + dx + 0.5, 0.44, WALL_H - 1.6 - dx], [x + dx + 0.5, 0.44, WALL_H - 0.2]], { r: 0.07 });
-    }
+    b.pipes([[x, 0.36, 0.15], [x, 0.36, WALL_H - 2.2], [x + 0.55, 0.36, WALL_H - 1.6], [x + 0.55, 0.36, WALL_H - 0.2]], { facing: FACE.north, r: 0.065, bracket: 1.5, boxes: [1] });
+  }
+  // the east wall of the north leg: a run up beside the bend's debris
+  b.pipes([[W - 0.36, 11.6, 0.15], [W - 0.36, 11.6, WALL_H - 0.2]], { facing: FACE.west, r: 0.06, bracket: 1.6, boxes: false });
+}
+
+/**
+ * Polish 4 (relay-route painting): detail and daylight from within. Tall softly lit slots in the slab walls' bays
+ * (window glow), a deep stepped portal round the far doorway, and the atrium's daylight as haze pouring in through
+ * the threshold and pale haze high under the vault. Collider-free, merged by material.
+ */
+function buildRelief(b: ZoneBuilder): void {
+  // south leg: between the rib legs (x 3.5 / 9.5 / 15.5 / 21.5), clear of the medical stop and the pipe runs
+  for (const x of [6.6, 19.2]) b.slot({ x, n: 0.36, h: 1.5, yawDeg: FACE.north, width: 0.4, height: 5.6, intensity: 1.3 });
+  // north leg, east wall
+  for (const n of [7.8, 15.2]) b.slot({ x: W - 0.36, n, h: 1.5, yawDeg: FACE.west, width: 0.4, height: 5.6, intensity: 1.3 });
+  // the far doorway: a deep portal, its crest above the threshold's light
+  b.portal({ x: EXIT_X, n: D - 0.3, yawDeg: FACE.south, width: 3, height: 3.5, steps: 3, depth: 0.9, step: 0.3, crest: false });
+  // the atrium's daylight, pouring in through the threshold and lying along the north leg
+  b.haze({ x: EXIT_X, n: D - 3.2, h: 0, w: 4.2, d: 6.4, height: 4.6, density: 0.07, falloff: -0.2, color: 0xf4f1ea, intensity: 0.9, soft: 0.4 });
+  // pale haze high in the room (open air, under the wall tops)
+  b.haze({ x: W / 2, n: D / 2, h: 3.8, w: W - 1.6, d: D - 1.6, height: WALL_H - 4, density: 0.025, falloff: -0.9, color: 0xe6e9ee, intensity: 0.8 });
+  // the atrium beyond the threshold: daylight haze filling its open well (inside the shaft, clear of the tiers),
+  // so the far galleries recede into light instead of a night well
+  // (two soft boxes, one turned 45°: together an octagon of haze, so no box edge reads as a wall of light)
+  for (const yawDeg of [0, 45]) {
+    b.haze({ x: EXIT_X, n: D + 84, h: -40, w: 96, d: 96, height: 140, yawDeg, density: 0.0075, falloff: 0.2, color: 0xeef0f2, intensity: 1.5, soft: 0.42 });
   }
 }
 

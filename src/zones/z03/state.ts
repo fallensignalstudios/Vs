@@ -3,7 +3,7 @@
  * `ZoneDef.dispose()`: nothing here survives a zone load.
  */
 import type * as THREE from 'three';
-import type { Actor, BeamHandle, DoorHandle, HologramProp, Interactable, ScanPlaneHandle } from '@/core/api';
+import type { Actor, BeamHandle, DeviceHandle, DoorHandle, HologramProp, Interactable, ScanPlaneHandle } from '@/core/api';
 import type { PlaneSpec } from './layout';
 
 /** one scan plane and what the zone tracks about it */
@@ -44,8 +44,11 @@ export interface Z03State {
   holoProgress: number;
   // --- the scanner ---
   planes: PlaneState[];
-  /** the projector on the service deck: a physical, destructible device actor */
+  /** the projector on the service deck: a physical, destructible device actor (the AI's passive scan head) */
   source: Actor | null;
+  device: DeviceHandle | null;
+  /** true while a restore takes the projector down quietly (no caption, no sound) */
+  restoring: boolean;
   sourceDown: boolean;
   sourceIx: Interactable | null;
   /** Tharne has named the source (traces may now show from a valid angle) */
@@ -71,7 +74,7 @@ function blank(): Z03State {
     exit: null, hatch: null, hatchLight: null, hatchTarget: 0, hatchOpen: 0,
     tether: null, tetherTarget: 0, tetherLen: 1, stir: null, stirTarget: 0, stirLevel: 0,
     holo: null, holoVisible: 0, holoProgress: 0,
-    planes: [], source: null, sourceDown: false, sourceIx: null, identified: false, detections: 0, tension: 0, forceTraceUntil: -Infinity,
+    planes: [], source: null, device: null, restoring: false, sourceDown: false, sourceIx: null, identified: false, detections: 0, tension: 0, forceTraceUntil: -Infinity,
     tremble: null, catching: false, handsHeld: false,
   };
 }

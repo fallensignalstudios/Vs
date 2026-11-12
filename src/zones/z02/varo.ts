@@ -181,10 +181,11 @@ export function* varoScene(z: ZoneRuntime): Routine {
     // the reverse: low beyond the black mass, his head bowed over it
     const limb = z.m('limb');
     malik?.actor.visual?.lookAt(limb);
-    // (from the west along the wall, beyond the mass: the black tissue low in the foreground, Varo bowed over
-    // it, Tarrik kneeling beyond)
-    c.cut({ pos: limb.clone().add(new THREE.Vector3(-1.3, 0.95, -0.15)), look: limb.clone().add(new THREE.Vector3(0.45, 0.45, -0.05)), fov: 48 });
-    c.dof(1.9, 0.5);
+    // (polish 4, recomposed as HIS view: from just before his bowed face, down onto what is left of his arm under
+    // its black tissue on the wet floor by the wall — the mass fills the frame; Lyessa, Tarrik and the rib's pale
+    // foot all stay outside it)
+    c.cut({ pos: z.P(varo.x - 0.25, -varo.z + 0.05, 1.05), look: z.P(limb.x + 0.02, -limb.z, 0.05), fov: 40 });
+    c.dof(1.15, 0.45);
     yield* z.say(VARO, 'Was I…', { actor: malik });
     c.dof(null);
     malik?.actor.visual?.lookAt(null);

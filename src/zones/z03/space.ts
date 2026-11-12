@@ -63,21 +63,28 @@ export function buildSpace(b: ZoneBuilder): void {
 
 /** floor, long walls, ribs, the enclosed vault, the exit */
 function buildShell(b: ZoneBuilder): void {
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, surfaceMaterial: 'ice' });
-  b.wall({ from: [BAY_X0, D], to: [W, D], height: WALL_H, style: 'conduit' });
-  b.wall({ from: [BAY_X0, 0], to: [W, 0], height: WALL_H, style: 'conduit' });
+  // polish 4 (relay-route painting): the relay route's light grey WET marble — here a film of meltwater over the
+  // stone — and smooth marble-slab walls carrying paired gold pipes (the north wall's run behind the frost)
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, surfaceMaterial: 'ice', finish: 'wet' });
+  b.wall({ from: [BAY_X0, D], to: [W, D], height: WALL_H, style: 'slab' });
+  b.wall({ from: [BAY_X0, 0], to: [W, 0], height: WALL_H, style: 'framed' });
   b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
   // full ribs carry the vault; their legs stand in the long walls, ice-clad
   b.ribRow({ x: RIB_X0, n: D / 2, span: D + 0.3, height: RIB_H, count: RIB_COUNT, spacing: RIB_SPACING, yawDeg: FACE.east, alongDeg: FACE.east, style: 'frozen' });
-  // one enclosed vault over the corridor and the bay (bays line up with x = −14, −6, 2, 10 … 42)
+  // one enclosed vault over the corridor and the bay. Polish 4: half as many light seams — the vault's own ribs
+  // stand every second bay (x = −14, 2, 18, 34, on the rib row's 18 and 34), so each seam runs 16 m between them —
+  // and softer (the painting's light is daylight in the air, not lines in the ceiling)
   b.ceiling({
     x: (BAY_X0 + W) / 2, n: D / 2, w: W - BAY_X0, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE,
-    bay: RIB_SPACING, bayPhase: 1, hazeColor: 0xe2e9f0, glow: 1.5,
+    bay: RIB_SPACING * 2, bayPhase: 1, hazeColor: 0xdfe6ee, glow: 0.75,
   });
+  buildRelief(b);
 
   // exit: door, a short lit vestibule, the white point above with two lit pylons leading the eye up to it
   S.exit = b.door({ x: W, n: EXIT_N, yawDeg: FACE.east });
   S.exit.setState('locked');
+  // polish 4: the exit sits at the back of a deep stepped portal, gold-lined (seen from the corridor)
+  b.portal({ x: W - 0.3, n: EXIT_N, yawDeg: FACE.west, width: 3, height: 3.5, steps: 2, step: 0.22, depth: 0.75, head: 'pointed' });
   b.floor({ x: W + 3, n: EXIT_N, w: 6, d: 4.4, inlay: 'none' });
   b.wall({ from: [W, EXIT_N - 2.2], to: [W + 6, EXIT_N - 2.2], height: 5 });
   b.wall({ from: [W, EXIT_N + 2.2], to: [W + 6, EXIT_N + 2.2], height: 5 });
@@ -87,6 +94,36 @@ function buildShell(b: ZoneBuilder): void {
   b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3, intensity: 1.8 });
   b.column({ x: W - 0.9, n: EXIT_N - 2.6, height: 8, style: 'pylon', lit: true });
   b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8, style: 'pylon', lit: true });
+}
+
+/** wall faces (the walls are 0.6 m thick, centred on their lines) */
+const SOUTH_FACE = 0.3;
+const NORTH_FACE = D - 0.3;
+
+/**
+ * Polish 4 — the relay route's fine architectural detail, all collider-free: paired gold pipes with brackets and
+ * junction boxes up the south wall above the service path and in the gaps between the north wall's frost curtains
+ * (the ice grows round them), and tall soft-lit slots of cold daylight in the south wall between the ribs.
+ */
+function buildRelief(b: ZoneBuilder): void {
+  const pr = { r: 0.1, spacing: 0.34, bracket: 2.6 } as const;
+  // the south wall: above the ramp up, along the deck, above the ramp down (foot at the path's height there)
+  const pathH = (x: number): number =>
+    x < RAMP_UP_X0 ? 0 : x < DECK_X0 ? (DECK_H * (x - RAMP_UP_X0)) / (DECK_X0 - RAMP_UP_X0) : x <= DECK_X1 ? DECK_H : x < RAMP_DN_X1 ? (DECK_H * (RAMP_DN_X1 - x)) / (RAMP_DN_X1 - DECK_X1) : 0;
+  for (const [x, jog] of [[15.6, 0.7], [23.6, -0.7], [31.6, 0.7], [40.4, -0.7]] as const) {
+    const h0 = pathH(x) + 0.55;
+    b.pipes([[x, SOUTH_FACE, h0], [x, SOUTH_FACE, 6.2], [x + jog, SOUTH_FACE, 6.9], [x + jog, SOUTH_FACE, WALL_H - 0.3]], { ...pr, facing: FACE.north, boxes: [0] });
+  }
+  // the north wall, in the gaps between the frost curtains (between a rib leg and the next curtain)
+  for (const x of [12.3, 20.5, 29.5, 37.8, 45.4]) {
+    b.pipes([[x, NORTH_FACE, 0.55], [x, NORTH_FACE, WALL_H - 0.3]], { ...pr, facing: FACE.south, boxes: [0] });
+  }
+  // the frozen air under the vault holds the daylight: a pale cold haze, densest up in the vault
+  b.haze({ x: (BAY_X0 + W) / 2 + 4, n: D / 2, h: 5.5, w: W - BAY_X0 - 8, d: D - 1, height: WALL_H + VAULT_RISE - 5.5, density: 0.022, falloff: -0.75, color: 0xe4ecf4, intensity: 0.9 });
+  // tall slots of cold daylight in the south wall, between the ribs, over the path
+  for (const x of [13.0, 29.6, 37.4]) {
+    b.slot({ x, n: SOUTH_FACE, h: pathH(x) + 1.0, yawDeg: FACE.north, width: 0.36, height: 4.6, color: 0xe8f0f8, intensity: 1.15 });
+  }
 }
 
 /**
@@ -172,9 +209,9 @@ function buildBay(b: ZoneBuilder): void {
 function buildService(b: ZoneBuilder): void {
   const w = DECK_N1 - DECK_N0;
   const nMid = (DECK_N0 + DECK_N1) / 2;
-  b.ramp({ x: (RAMP_UP_X0 + DECK_X0) / 2, n: nMid, w, d: DECK_X0 - RAMP_UP_X0, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true });
-  b.deck({ x: (DECK_X0 + DECK_X1) / 2, n: nMid, w: DECK_X1 - DECK_X0, d: w, h: DECK_H, solidBelow: true, rails: ['n'], inlay: 'channels' });
-  b.ramp({ x: (DECK_X1 + RAMP_DN_X1) / 2, n: nMid, w, d: RAMP_DN_X1 - DECK_X1, h0: 0, h1: DECK_H, yawDeg: FACE.west, rails: true });
+  b.ramp({ x: (RAMP_UP_X0 + DECK_X0) / 2, n: nMid, w, d: DECK_X0 - RAMP_UP_X0, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true, finish: 'wet' });
+  b.deck({ x: (DECK_X0 + DECK_X1) / 2, n: nMid, w: DECK_X1 - DECK_X0, d: w, h: DECK_H, solidBelow: true, rails: ['n'], inlay: 'channels', finish: 'wet' });
+  b.ramp({ x: (DECK_X1 + RAMP_DN_X1) / 2, n: nMid, w, d: RAMP_DN_X1 - DECK_X1, h0: 0, h1: DECK_H, yawDeg: FACE.west, rails: true, finish: 'wet' });
   // the route is offered in gold: a channel leads from the arrival pocket to the ramp foot and along the deck
   b.channel([[4.6, 8.6], [RAMP_UP_X0 - 0.4, nMid + 0.6]], { width: 0.07 });
   b.channel([[DECK_X0 + 0.4, DECK_N1 - 0.35], [DECK_X1 - 0.4, DECK_N1 - 0.35]], { h: DECK_H, width: 0.06 });

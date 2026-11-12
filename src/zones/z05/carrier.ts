@@ -305,10 +305,13 @@ function* passScene(z: ZoneRuntime): Routine {
     c.cut({ pos: z.P(CX - 22, CN - 2, 1.7), look: carrier.clipPoint.clone(), fov: 36 });
     yield waitOr(z, () => z.skipping || carrier.progress >= 0.88, 6);
     // … then continues past the complex and falls into the distortion below (the sky's pass descends after the
-    // clip): a locked frame on the rim of the ceiling the hull goes down through and does not come back over
+    // clip): a locked frame on the rim of the ceiling the hull goes down through and does not come back over.
+    // (polish 4) Aimed at the generated hull itself as the cut lands, a little above it, at a longer lens: the
+    // damaged carrier fills the top of the ceiling and sinks through the frame toward the atrium's rim.
     const eye = z.P(CX - 22, CN - 2, 1.7);
-    const dir = carrier.position.clone().sub(eye).setY(0).normalize();
-    c.cut({ pos: eye, look: eye.clone().addScaledVector(dir, 100).setY(eye.y + 72), fov: 56 });
+    const hull = carrier.position;
+    const aim = hull.clone().setY(eye.y + (hull.y - eye.y) * 1.06);
+    c.cut({ pos: eye, look: aim, fov: 34 });
     yield 4.8;
     // the trajectory ends on «CARRIER SIGNAL LOST» — the overlay now holds the full 19 characters (polish 3), so
     // the over-shoulder frame below reads it in the scene, not only on the strip after; she lets the plane go

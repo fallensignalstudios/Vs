@@ -14,10 +14,8 @@ import {
   COL_N, COL_R, COL_X, D, DECK, DECK_H, DOOR_H, DOOR_W, ENFORCER_POSTS, ENTRY_X, EXIT_X, POCKET, RAMP_S, RAMP_W, RIB_H,
   RIB_X, RX_A, RX_B, SCAN_S, SCAN_YAW, SCREEN_H, W, WALL_H,
 } from './layout';
+import { buildCrates, buildHaze, buildPipes, buildSlots } from './art';
 import { S, resetState } from './state';
-
-/** x of the paired gold pipe runs on the long walls: between the rib legs, clear of the doors */
-const PIPE_X = [3.6, 14.5, 25.6, 36.4, 47.5, 58.4] as const;
 
 /**
  * LOOKS.relay with more haze and less fill: the far end recedes into silver air and the key, the shafts and the
@@ -28,11 +26,15 @@ const PIPE_X = [3.6, 14.5, 25.6, 36.4, 47.5, 58.4] as const;
  */
 const Z04_LOOK: DeepPartial<Look> = {
   ...LOOKS.relay,
-  exposure: 1.06,
-  fog: { color: 0xa4adba, density: 0.012 },
-  grade: { ...LOOKS.relay.grade, contrast: 1.2, highlightsTint: 0xffefda },
-  ambient: { ...LOOKS.relay.ambient, intensity: 0.48 },
+  exposure: 1.0,
+  // polish 4: warmer sunlit air (the painting's haze is a warm grey-white, not a cold blue); with the wet grey floor
+  // and the bright coffers the hall reads pale, so the fill comes down again and the sun carries the modelling
+  fog: { color: 0xb3b0aa, density: 0.012 },
+  grade: { ...LOOKS.relay.grade, tint: 0xf8f6f2, saturation: 0.9, contrast: 1.26, shadowsTint: 0xbcc4d2, highlightsTint: 0xffefda },
+  ambient: { ...LOOKS.relay.ambient, sky: 0xaeaeac, intensity: 0.36 },
 };
+/** polish 4: the sun through the east glass — a warm daylight, not the cold white of the integration wave */
+const SUN = 0xfff0da;
 
 export function build(b: ZoneBuilder): void {
   resetState();
@@ -41,13 +43,14 @@ export function build(b: ZoneBuilder): void {
   b.setEnv({
     sky: 'frozenInterior', look: Z04_LOOK, ambience: 'relayOverlook', music: 'approachSelene',
     // high from the east, through the glass wall: column shadows fall west across the floor (≥ 40° over the mirror floor)
-    key: { dirFrom: [30, 6, 34], intensity: 2.4, color: 0xf4f6ff },
+    key: { dirFrom: [30, 6, 34], intensity: 3.1, color: SUN },
   });
   buildShell(b);
   buildHighRoute(b);
   buildServicePath(b);
   buildCover(b);
   buildDressing(b);
+  buildCrates(b);
   buildLight(b);
   buildMarkers(b);
   buildReplay(b);
@@ -57,35 +60,25 @@ export function build(b: ZoneBuilder): void {
 
 /** floor, walls, ribs and vault; the entry from Z03 and the exit to Z05 inside a great gold ring */
 function buildShell(b: ZoneBuilder): void {
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
+  // polish 4: the relay route's light-to-mid grey WET marble (the painting's floor), mirroring the pipes and the gold
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, finish: 'wet' });
   const door = (at: number) => [{ at, width: DOOR_W, height: DOOR_H }];
-  // integration (relay-route painting): the long walls are pale panelled stone carrying paired gold pipe runs —
-  // the 'ribbed' style's tall lit seams read as neon strips the painting does not have
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'panelled', doors: door(ENTRY_X) });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'panelled', doors: door(EXIT_X) });
-  // paired gold conduits climb the north wall either side of the ring (concept: the pipes framing the far door)
-  for (const x of [EXIT_X - 7.4, EXIT_X + 7.4]) {
-    for (const dx of [-0.38, 0.38]) b.conduit([[x + dx, D - 0.5, 0.2], [x + dx, D - 0.5, WALL_H - 1]], { r: 0.13 });
-  }
-  // … and between the rib legs along both long walls (on the deck's floor where it backs onto the north wall)
-  for (const x of PIPE_X) {
-    for (const [n, side] of [[0.5, 'S'], [D - 0.5, 'N']] as const) {
-      if (side === 'N' && Math.abs(x - EXIT_X) < 9) continue;
-      const h0 = side === 'N' && x > DECK.x0 ? DECK_H + 0.1 : 0.2;
-      for (const dx of [-0.36, 0.36]) b.conduit([[x + dx, n, h0], [x + dx, n, WALL_H - 1]], { r: 0.12 });
-    }
-  }
-  // the west wall behind the colonnade: the same pale panelling, its pipe pairs between the column bays
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled' });
-  for (const n of [9.5, 17.5, 25.5, 33.5]) {
-    for (const dn of [-0.36, 0.36]) b.conduit([[0.6, n + dn, 0.2], [0.6, n + dn, WALL_H - 1]], { r: 0.12 });
-  }
+  // polish 4 (relay-route painting): the long walls are smooth marble slabs in gold-framed recessed panels, carrying
+  // paired gold pipes with brackets and junction boxes (./art.ts) — no tile grid, no lit seams
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'framed', doors: door(ENTRY_X) });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'framed', doors: door(EXIT_X) });
+  // the west wall behind the colonnade: the same framed slabs, its pipe pairs between the column bays
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'framed' });
+  buildPipes(b);
+  buildSlots(b);
   // the right side is open to the megastructure: glass from floor to vault, in wide daylight panes (the painting's
   // open side — the hazy ribs and towers beyond read through 6 m bays, not a 3 m grille)
   b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'glass', mullionSpacing: 6 });
   // the ribs are pale structure, not light (their lit seams were the neon arcs over the hall)
   for (const x of RIB_X) b.rib({ x, n: D / 2, span: D - 1.4, height: RIB_H, yawDeg: FACE.east, lit: false });
-  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: RIB_H + 0.3, style: 'vault' });
+  // polish 4: the upper hall is bright closed-ceiling haze — deep coffers open onto warm daylight (no sky, no stars)
+  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: RIB_H + 0.3, style: 'skylight', coffer: 5.5, glow: 2.0, hazeColor: 0xfff0dc, hazeBelow: false });
+  buildHaze(b);
 
   // entry: the Z03 corridor end, sealed once she is through
   S.entry = b.door({ x: ENTRY_X, n: 0 });
@@ -125,19 +118,19 @@ function goldRing(b: ZoneBuilder): void {
 function buildHighRoute(b: ZoneBuilder): void {
   const w = DECK.x1 - DECK.x0;
   const d = DECK.n1 - DECK.n0;
-  b.ramp({ x: RAMP_S.x, n: RAMP_S.n, w: RAMP_S.w, d: RAMP_S.d, h0: 0, h1: DECK_H, yawDeg: FACE.north, rails: true });
+  b.ramp({ x: RAMP_S.x, n: RAMP_S.n, w: RAMP_S.w, d: RAMP_S.d, h0: 0, h1: DECK_H, yawDeg: FACE.north, rails: true, finish: 'wet' });
   b.deck({
-    x: DECK.x0 + w / 2, n: DECK.n0 + d / 2, w, d, h: DECK_H, solidBelow: true, rails: ['s', 'w'], inlay: 'channels',
+    x: DECK.x0 + w / 2, n: DECK.n0 + d / 2, w, d, h: DECK_H, solidBelow: true, rails: ['s', 'w'], inlay: 'channels', finish: 'wet',
     railGaps: [
       { side: 's', at: RAMP_S.x - DECK.x0, width: RAMP_S.w },
       { side: 'w', at: RAMP_W.n - DECK.n0, width: RAMP_W.w },
       { side: 'w', at: (POCKET.n0 + POCKET.n1) / 2 - DECK.n0, width: POCKET.n1 - POCKET.n0 },
     ],
   });
-  b.ramp({ x: RAMP_W.x, n: RAMP_W.n, w: RAMP_W.w, d: RAMP_W.d, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true });
+  b.ramp({ x: RAMP_W.x, n: RAMP_W.n, w: RAMP_W.w, d: RAMP_W.d, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true, finish: 'wet' });
   b.deck({
     x: (POCKET.x0 + POCKET.x1) / 2, n: (POCKET.n0 + POCKET.n1) / 2, w: POCKET.x1 - POCKET.x0, d: POCKET.n1 - POCKET.n0,
-    h: DECK_H, solidBelow: true, rails: ['s', 'w'], inlay: 'none',
+    h: DECK_H, solidBelow: true, rails: ['s', 'w'], inlay: 'none', finish: 'wet',
   });
   // cover on the deck: the oblique shot at receiver B is taken from behind it
   b.coverLow({ x: 51.5, n: 26, w: 3, d: 2, h: DECK_H, yawDeg: FACE.east, style: 'reformation' });
@@ -152,11 +145,8 @@ function buildHighRoute(b: ZoneBuilder): void {
  * floor and from the scan head; it opens between the second and third columns and at both ends.
  */
 function buildServicePath(b: ZoneBuilder): void {
-  for (const n of COL_N) {
-    b.column({ x: COL_X, n, r: COL_R, height: RIB_H, style: 'faceted', lit: false });
-    // paired gold conduits up the room face of every column
-    for (const dn of [-0.42, 0.42]) b.conduit([[COL_X + COL_R + 0.12, n + dn, 0.2], [COL_X + COL_R + 0.12, n + dn, RIB_H - 1]], { r: 0.12 });
-  }
+  // (their paired gold pipes are in ./art.ts)
+  for (const n of COL_N) b.column({ x: COL_X, n, r: COL_R, height: RIB_H, style: 'faceted', lit: false });
   const screen = (n0: number, n1: number) => b.wall({ from: [COL_X, n0], to: [COL_X, n1], height: SCREEN_H, thickness: 0.5, style: 'panelled' });
   screen(COL_N[0] + COL_R, COL_N[1] - COL_R);
   screen(COL_N[2] + COL_R, COL_N[3] - COL_R);
@@ -225,8 +215,10 @@ function buildDressing(b: ZoneBuilder): void {
 
 /** a dozen lights: the key, two shafts down the central bay and on B, faction and route accents */
 function buildLight(b: ZoneBuilder): void {
-  b.spot({ x: 30, n: 21, h: RIB_H - 1.5, target: [30, 21.5, 0], angleDeg: 24, intensity: 1500, shaft: true, color: 0xf6f4ee });
-  b.spot({ x: 15, n: 27.5, h: RIB_H - 1.5, target: [16, 27, 0], angleDeg: 17, intensity: 1100, shaft: true, color: 0xf6f4ee });
+  b.spot({ x: 30, n: 21, h: RIB_H - 1.5, target: [30, 21.5, 0], angleDeg: 24, intensity: 1500, shaft: true, color: SUN });
+  b.spot({ x: 15, n: 27.5, h: RIB_H - 1.5, target: [16, 27, 0], angleDeg: 17, intensity: 1100, shaft: true, color: SUN });
+  // polish 4: the sun through the east glass — a long warm shaft slanting down across the deck onto the floor
+  b.spot({ x: W + 6, n: 15, h: 17, target: [38, 13, 0], angleDeg: 13, penumbra: 0.6, intensity: 2600, shaft: true, color: SUN });
   // Selene's side holds at the entry: cold Reformation light
   b.point({ x: ENTRY_X, n: 3.2, h: 3, color: BLUE, intensity: 16, distance: 10 });
   // the Dominion line: amber from their own lamps behind the shields

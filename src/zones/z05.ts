@@ -23,7 +23,7 @@ import type { Beat, ZoneDef } from '@/core/api';
 import { spawnCast } from './z05/cast';
 import { aftermath, carrierBeat } from './z05/carrier';
 import { meeting } from './z05/duel';
-import { buildSpace } from './z05/space';
+import { awaitCarrier, buildSpace } from './z05/space';
 import { disposeState, freshState, updateZone } from './z05/state';
 
 const beats: Beat[] = [
@@ -37,9 +37,11 @@ const Z05_DEF: ZoneDef = {
   title: 'Meeting Atrium',
   art: 'wound-overlook',
   cast: ['tarrik', 'selene', 'lyessa', 'tharne', 'lyric', 'dominionSoldier'],
-  build(b) {
+  async build(b) {
     freshState();
     buildSpace(b);
+    // (polish 4) the generated carrier, never the procedural stand-in, at the pass and the descent
+    await awaitCarrier(b);
   },
   beats,
   /** carried moves, the carrier's pass, the key light under its shadow, the battle light */

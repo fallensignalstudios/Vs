@@ -13,7 +13,8 @@
  * and UI string written for the game is tagged `// NEW`.
  *
  * FILES: this module stays under ~600 lines; the self-contained fixed beat on the right rib (the gauntlet
- * insert) lives in ./z01/gauntlet.ts — a zone's own helper folder is `src/zones/zNN/`.
+ * insert) lives in ./z01/gauntlet.ts — a zone's own helper folder is `src/zones/zNN/`. The set dressing (faction
+ * gear, and polish 4's pipes, slots, portals, rails and haze) is in ./z01/dressing.ts.
  */
 import * as THREE from 'three';
 import type {
@@ -24,6 +25,7 @@ import {
   AMBER, BLUE, FACE, IVORY, barker, encounterMusic, onZoneEvent, setDoor, standardExit, sustainDrops, tutorialHint,
   walkTo, waitOr,
 } from './shared';
+import { buildFactionGear, buildPipes, buildRelief, type Z01Layout } from './z01/dressing';
 import { attachCrack, gauntletBeat, resetGauntlet, updateGauntlet } from './z01/gauntlet';
 
 // =====================================================================================================================
@@ -63,6 +65,9 @@ const E1_CAP = 4;
 /** Lyessa's suppressing bursts: seconds between them */
 const SUPPRESS_EVERY = 6.5;
 
+/** the numbers ./z01/dressing.ts lays its dressing out by */
+const LAYOUT: Z01Layout = { W, D, WALL_H, EXIT_N, ENTRY_N, APERTURE_H, DECK_H, LANE_N, DECK_MID_N };
+
 /** speaker label for the soldier who is nameless until Z02 (also in ./z01/gauntlet.ts) */
 const MALIK = 'Soldier';
 
@@ -100,25 +105,28 @@ function build(b: ZoneBuilder): void {
   buildFlank(b);
   buildCover(b);
   buildRibPocket(b);
-  buildFactionGear(b);
+  buildFactionGear(b, LAYOUT);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
-  buildPipes(b);
+  buildPipes(b, LAYOUT);
+  buildRelief(b, LAYOUT);
   b.finalize();
 }
 
 /** floor, walls, the rib row and vault, entry and exit */
 function buildShell(b: ZoneBuilder): void {
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
-  // west wall: sealed entry
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
+  // polish 4 (relay-route painting): the light wet grey marble, mirroring the room and its fine gold lines
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, finish: 'wet' });
+  // west wall: sealed entry (polish 4: gold-framed recessed panels, a stepped portal round the sealed door)
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'framed', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
   b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east }).setState('sealed');
-  // long walls
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'conduit' });
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed' });
+  // long walls (polish 4: the gallery's north wall in framed panels, the south wall in large smooth slabs under
+  // its pipes and lit slots; the colliders are the plain walls')
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'framed' });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'slab' });
   // east wall in two tiers: the exit below, the service aperture above
-  b.wall({ from: [W, 0], to: [W, D], height: APERTURE_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [W, 0], to: [W, D], height: APERTURE_H, style: 'framed', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
   b.wall({ from: [W, 0], to: [W, D], h: APERTURE_H, height: WALL_H - APERTURE_H, style: 'plain', doors: [{ at: APERTURE_N, width: 3.6, height: 2.2 }] });
 
   // seven ribs carry the vault; their legs stand against the long walls. The vault is ENCLOSED: it springs from
@@ -151,9 +159,13 @@ function buildShell(b: ZoneBuilder): void {
 /** the left (north) flank: ramp up, +2 m gallery, ramp down behind the formation */
 function buildFlank(b: ZoneBuilder): void {
   const d = D - DECK_N0;
-  b.ramp({ x: DECK_X0 - RAMP_RUN / 2, n: DECK_MID_N, w: d, d: RAMP_RUN, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true });
-  b.deck({ x: (DECK_X0 + DECK_X1) / 2, n: DECK_MID_N, w: DECK_X1 - DECK_X0, d, h: DECK_H, solidBelow: true, rails: ['s'], inlay: 'channels' });
-  b.ramp({ x: DECK_X1 + RAMP_RUN / 2, n: DECK_MID_N, w: d, d: RAMP_RUN, h0: 0, h1: DECK_H, yawDeg: FACE.west, rails: true });
+  // (polish 4: the gallery wears the hall's wet grey marble too)
+  b.ramp({ x: DECK_X0 - RAMP_RUN / 2, n: DECK_MID_N, w: d, d: RAMP_RUN, h0: 0, h1: DECK_H, yawDeg: FACE.east, rails: true, finish: 'wet' });
+  b.deck({ x: (DECK_X0 + DECK_X1) / 2, n: DECK_MID_N, w: DECK_X1 - DECK_X0, d, h: DECK_H, solidBelow: true, inlay: 'channels', finish: 'wet' });
+  // its edge: the painting's walkway balustrade — solid white stone, a gold line under the cap, lit posts. Same
+  // line, height and collider as the deck's own south rail it replaces (the kit builds both through one rail run)
+  b.rail({ from: [DECK_X0, DECK_N0 + 0.17], to: [DECK_X1, DECK_N0 + 0.17], h: DECK_H, height: 1.1, style: 'parapet', mat: 'whiteGold' });
+  b.ramp({ x: DECK_X1 + RAMP_RUN / 2, n: DECK_MID_N, w: d, d: RAMP_RUN, h0: 0, h1: DECK_H, yawDeg: FACE.west, rails: true, finish: 'wet' });
   // one piece of cover on the gallery so the flank is a route, not a shooting gallery
   b.coverLow({ x: 27.5, n: DECK_N0 + 1.5, h: DECK_H, yawDeg: FACE.east, style: 'ancient' });
   // gold route light along the gallery edge: the flank is an offered path
@@ -190,33 +202,6 @@ function buildRibPocket(b: ZoneBuilder): void {
   b.corruption({ x: face - 0.45, n: 2.5, r: 0.8, intensity: 0.4 });
   b.blocker({ x: face - 0.4, n: 2.5, w: 0.8, d: 2.4, height: 1.2 });
   b.prop('debrisSmall', { x: face - 1.3, n: 0.8, yawDeg: 40 });
-}
-
-/** Reformation security equipment at the far end; a little Dominion kit where the squad came in */
-function buildFactionGear(b: ZoneBuilder): void {
-  // east end: the drones' support gear (cold blue-white, modular, visibly temporary)
-  b.prop('refSensorMast', { x: 44.5, n: 2.2, yawDeg: 290 });
-  b.prop('refSensorMast', { x: 52.5, n: 19.2, yawDeg: 250 });
-  b.prop('refConsole', { x: 52.8, n: 13.4, yawDeg: 270 });
-  b.prop('refCrate', { x: 51.6, n: 3.2, yawDeg: 12, variant: 1 });
-  b.prop('refCrate', { x: 53.2, n: 3.6, yawDeg: -8, variant: 0 });
-  b.prop('refCrate', { x: 39.6, n: 16.4, yawDeg: 84, variant: 2 });
-  b.prop('refAmmoCase', { x: 37.2, n: 7.6, yawDeg: 30 });
-  b.prop('refLamp', { x: 45.5, n: 19.4, yawDeg: 240 });
-  b.prop('refLamp', { x: 50.5, n: 1.6, yawDeg: 300 });
-  b.prop('cableBundle', { x: 49, n: 14.6, yawDeg: 60 });
-  b.prop('refCrate', { x: 37.2, n: DECK_MID_N + 1.6, h: DECK_H, yawDeg: 6, variant: 1 });
-  // ancient furniture and wreckage
-  b.prop('ancientPylon', { x: 16.5, n: 1.6 });
-  b.prop('ancientPylon', { x: 40.5, n: 1.6 });
-  b.prop('ancientBench', { x: 6.5, n: 18.6, yawDeg: 180 });
-  b.prop('fallenPlate', { x: 30.5, n: 16.8, yawDeg: 25 });
-  b.prop('rubblePile', { x: 33.5, n: 1.8 });
-  b.prop('debrisSmall', { x: 18, n: 10.5 });
-  b.prop('debrisSmall', { x: 44, n: 9.5, yawDeg: 120 });
-  // the squad's own: one field cache by the entry
-  b.prop('domFieldCache', { x: 3.2, n: 16.4, yawDeg: 120 });
-  b.prop('domAmmoCase', { x: 4.6, n: 5.2, yawDeg: 70 });
 }
 
 /** a dozen lights at most: the key, two shafts, faction accents (BRIEF §4: warm / cool contrast) */
@@ -282,20 +267,6 @@ function buildScenic(b: ZoneBuilder): void {
   // (no far-field structure: the enclosed vault hides the sky; the hall's haze, dust and motes carry the depth)
   game.vfx.ambient('dust', b.P(W / 2, D / 2, 5), { x: W, y: 10, z: D }, 0.5);
   game.vfx.ambient('goldMotes', b.P(22, 11, 4), { x: 26, y: 8, z: 14 }, 0.25);
-}
-
-/**
- * Integration wave (relay-route painting): twin gold service pipes climb the south wall between the ribs and jog
- * over under the vault, as the painting's walls do. Visual only, tight to the wall face (the recovery pocket at
- * x = 28 and the growth are left alone).
- */
-function buildPipes(b: ZoneBuilder): void {
-  // (between the wall pilasters, clear of the rib legs)
-  for (const x of [7.6, 16.0, 33.4, 38.0, 47.6]) {
-    for (const dx of [0, 0.3]) {
-      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, WALL_H - 3.4 - dx], [x + dx + 0.55, 0.44, WALL_H - 2.7 - dx], [x + dx + 0.55, 0.44, WALL_H - 0.2]], { r: 0.075 });
-    }
-  }
 }
 
 // =====================================================================================================================

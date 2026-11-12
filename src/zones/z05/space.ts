@@ -27,6 +27,9 @@ const LOOK = {
 
 /** half-angle (deg) of a 6 m bridge's gap in the platform rim */
 const RIM_GAP = 5.4;
+/** the meeting ground (offset from C) and the radius of the gold star inlaid there (clear of the shaft parapet) */
+const MEET: readonly [number, number] = [-15, 0];
+const STAR_R = 3.8;
 
 export function buildSpace(b: ZoneBuilder): void {
   const game = b.game;
@@ -49,21 +52,44 @@ export function buildSpace(b: ZoneBuilder): void {
   b.finalize();
 }
 
+/** longest a load waits for the generated carrier (it is usually in long before Z05; the stand-in covers a miss) */
+const CARRIER_WAIT_MS = 12000;
+
+/**
+ * (polish 4) Wait for the generated Reformation carrier (SKY & SHIPS) so the pass and its descent never show the
+ * procedural stand-in. Bounded: a slow or failed load leaves the stand-in, which is what the sky shows anyway.
+ */
+export async function awaitCarrier(b: ZoneBuilder): Promise<void> {
+  const ready = b.game.sky.carrier?.modelReady;
+  if (!ready) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([ready.catch(() => false), new Promise<boolean>((res) => { timer = setTimeout(() => res(false), CARRIER_WAIT_MS); })]);
+  if (timer !== undefined) clearTimeout(timer);
+}
+
 /** the Ø72 disc with the Ø18 shaft opening, its rim, the keel under it, and the pylon ring */
 function buildPlatform(b: ZoneBuilder): void {
   b.disc({
     x: CX, n: CN, r: R_PLAT, inner: R_SHAFT, inlay: 'radial', reflective: true, thickness: 0.8, mat: 'blackStoneFloor',
     rim: { gapsDeg: [[-RIM_GAP, RIM_GAP], [90 - RIM_GAP, 90 + RIM_GAP], [180 - RIM_GAP, 180 + RIM_GAP], [270 - RIM_GAP, 270 + RIM_GAP]] },
   });
-  // eight lit King-era pylons stand round the platform, off the bridge bearings
+  // eight King-era pylons stand round the platform, off the bridge bearings (polish 4: pale stone with fine gold
+  // lines, as the painting's buttresses — no light strips)
   for (let i = 0; i < 8; i++) {
     const [x, n] = pol(30.5, 22.5 + i * 45);
-    b.column({ x, n, r: 0.75, height: 13, style: 'pylon', lit: true });
+    b.column({ x, n, r: 0.75, height: 13, style: 'pylon' });
   }
-  // a gold channel ring halfway out: route light round the shaft
+  // a fine inlaid gold ring halfway out round the shaft (it reflects the battle; it does not glow)
   const ring: Array<[number, number]> = [];
   for (let i = 0; i <= 48; i++) ring.push(pol(21, (i / 48) * 360));
-  b.channel(ring, { width: 0.08, intensity: 1.6 });
+  b.channel(ring, { width: 0.08 });
+  // the terrace's gold star (wound-overlook painting): an eight-point compass of fine inlaid gold on the meeting
+  // ground, where the two lines face each other and the duel is fought
+  const [sx, sn] = at(MEET[0], MEET[1]);
+  // (on the black mirror the gold has little to reflect: a faint glow keeps the lines the painting's bright gold)
+  b.inlay({ x: sx, n: sn, h: 0.004, kind: 'star', r: STAR_R, points: 4, width: 0.07, glow: 0.55 });
+  b.inlay({ x: sx, n: sn, h: 0.005, kind: 'star', r: STAR_R * 0.62, points: 4, yawDeg: 45, width: 0.05, glow: 0.45 });
+  b.inlay({ x: sx, n: sn, h: 0.006, kind: 'rings', r: STAR_R * 1.1, count: 2, inner: 0.92, width: 0.04, glow: 0.4 });
   b.add(keel());
 }
 
@@ -71,6 +97,12 @@ function buildPlatform(b: ZoneBuilder): void {
 function buildShaft(b: ZoneBuilder): void {
   const gap = (Math.asin(1.7 / R_PARAPET) * 180) / Math.PI;
   b.ringWall({ x: CX, n: CN, r: R_PARAPET, height: 1.1, thickness: 0.4, style: 'plain', mat: 'blackStone', gapsDeg: [[270 - gap, 270 + gap]], segments: 40 });
+  // polish 4 (wound-overlook painting): small lit lantern slots in the black-stone parapet's outer face, every 30°
+  for (let brg = 0; brg < 360; brg += 30) {
+    if (Math.abs(brg - 270) < gap + 4) continue;
+    const [lx, ln] = pol(R_PARAPET + 0.2, brg);
+    b.slot({ x: lx, n: ln, h: 0.2, yawDeg: brg, width: 0.13, height: 0.66, depth: 0.06, mat: 'blackStone', color: 0xffdcaa, intensity: 2.2 });
+  }
   const [wx0, wn] = at(-R_SHAFT - 0.3, 0);
   const [wx1] = at(-R_LIFT + 0.2, 0);
   b.bridge({ from: [wx0, wn], to: [wx1, wn], width: 3 });
@@ -107,7 +139,7 @@ function gate(b: ZoneBuilder, bearingDeg: number): ReturnType<ZoneBuilder['door'
   const [cx, cn] = pol(r, bearingDeg);
   const half = 5;
   b.wall({ from: [cx - tx * half, cn - tn * half], to: [cx + tx * half, cn + tn * half], height: 7.5, style: 'ribbed', mat: 'blackStone', doors: [{ at: half, width: 5, height: 5 }] });
-  for (const s of [-1, 1]) b.column({ x: cx + tx * (half + 0.9) * s, n: cn + tn * (half + 0.9) * s, r: 0.6, height: 9.5, style: 'pylon', lit: true, mat: 'blackStone' });
+  for (const s of [-1, 1]) b.column({ x: cx + tx * (half + 0.9) * s, n: cn + tn * (half + 0.9) * s, r: 0.6, height: 9.5, style: 'pylon', mat: 'blackStone' });
   const [bx, bn] = pol(r + 6.5, bearingDeg);
   for (const s of [-1, 1]) {
     const [sx, sn] = [cx + tx * 3.4 * s, cn + tn * 3.4 * s];
@@ -145,7 +177,8 @@ function buildExit(b: ZoneBuilder): void {
   // the white point sits just above platform level, so it reads from the meeting ground as the way out
   b.whitePoint({ x: wx + 0.5, n: CN, h: 2.4, intensity: 2.0 });
   for (const s of [-1, 1]) b.column({ x: wx + 0.9, n: CN + s * 3.5, h: -EXIT_DROP, height: 8.4, style: 'pylon', lit: true });
-  b.channel([pol(R_PLAT - 6, 270), pol(R_RAMP0, 270)], { width: 0.07, intensity: 1.4 });
+  // the one guiding light on the platform: the way down after the handoff (polish 4: an explicit opt-in glow)
+  b.channel([pol(R_PLAT - 6, 270), pol(R_RAMP0, 270)], { width: 0.07, glow: true, intensity: 1.3 });
 }
 
 /** faction gear is temporary clutter at each bridge head; ancient wreckage east of the shaft */

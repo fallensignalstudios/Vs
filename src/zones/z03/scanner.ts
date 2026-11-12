@@ -13,8 +13,8 @@
  * path gives that angle). The lesson: a good angle plus an interpretable trace, not scanning every wall.
  */
 import * as THREE from 'three';
-import type { Actor, Routine, ZoneRuntime } from '@/core/api';
-import { asDevice, asScanHead } from '@/core/api';
+import type { Routine, ZoneRuntime } from '@/core/api';
+import { asScanHead } from '@/core/api';
 import { wrapAngle, yawTo } from '@/core/mathx';
 import { onZoneEvent, tutorialHint, waitOr } from '../shared';
 import {
@@ -42,58 +42,61 @@ export function lensPos(z: ZoneRuntime, out = new THREE.Vector3()): THREE.Vector
 /**
  * Spawn the projector and both planes (idempotent). `z03Detected` restores the faster pattern, `z03SourceDown`
  * the powered-down projector with dark planes — a checkpoint or debug entry lands in the state play left.
+ *
+ * (polish 4) The projector is the AI's PASSIVE scan head (`ai.devices.scanHead({ passive })`): a destructible
+ * device actor with no sweep or detection of its own — the planes do the seeing, the zone turns the head. A
+ * shot, a blow or the close interaction (`handle.disable`) takes it down once; the device system spawns the
+ * break and emits `device:disabled` (which pays the lead's Echo), and the zone answers that event.
  */
 export function setupScanner(z: ZoneRuntime): void {
   if (S.planes.length) return;
   const game = z.game;
   const lens = lensPos(z);
   const fast = z.flag('z03Detected') === true;
-  const visual = game.chars.create('scanHead');
-  const actor = game.actors.spawn({
-    archetype: 'scanHead', name: 'Scan projector', team: 'reformation', // NEW (tactical-read label)
-    pos: z.m('source'), yaw: z.myaw('source'), hp: SOURCE_HP, poise: 20, radius: 0.45, height: 2,
-    visual, fixed: true, corpseSeconds: Infinity, dissolveOnDeath: false, material: 'metal',
-    tags: ['device', 'objective', 'source', 'z03Source'],
+  const head = game.ai.devices.scanHead({
+    id: SOURCE_ID, pos: z.m('source'), yaw: z.myaw('source'), passive: true, hp: SOURCE_HP,
+    name: 'Scan projector', radius: 0.45, tags: ['z03Source'], // NEW (tactical-read label)
   });
+  const actor = head.actor;
+  S.device = head;
   S.source = actor;
   z.onDispose(() => {
-    if (S.source === actor) S.source = null;
+    if (S.source === actor) {
+      S.source = null;
+      S.device = null;
+    }
   });
   for (const spec of [PLANE_A, PLANE_B]) S.planes.push(makePlane(z, spec, lens, fast));
-  tintPlanes(z);
-  onZoneEvent(z, 'actor:died', ({ actor: a, killer }) => {
-    if (a === S.source) takeDownSource(z, killer, true);
+  onZoneEvent(z, 'device:disabled', (e) => {
+    if (e.id === SOURCE_ID) sourceDown(z);
   });
   S.sourceIx = z.interact({
     id: SOURCE_ID, at: z.m('source'), prompt: 'Power down the projector', hold: 1.2, radius: 2.3, markerRange: 6, // NEW
     enabled: () => !S.sourceDown,
-    onDone: () => takeDownSource(z, game.player.actor, false),
+    onDone: () => S.device?.disable(game.player.actor),
   });
-  if (z.flag('z03SourceDown') === true) quietDown(z);
+  if (z.flag('z03SourceDown') === true) {
+    // a restore: the device goes down without a word (no lead to pay, no caption)
+    S.restoring = true;
+    head.disable(null);
+    S.restoring = false;
+    quietDown(z);
+  }
 }
 
 /**
- * (integration) The planes' colour: a saturated cold blue (linear RGB, × the shader's own 1.1). The engine draws a
- * scan plane pale blue-white, which over this zone's pale frozen stone reads as a sheet of glass; the relay-route
- * painting's plane is a blue LIGHT sheet with a hot edge. `ai.devices.scanPlane` takes no colour yet (requested),
- * so the zone re-tints the sheets it made through their ShaderMaterial's `uColor` uniform — a no-op if the visual
- * ever changes shape. Only Z03 makes scan planes.
+ * The planes' colour: a saturated cold blue light sheet with a hot edge (linear RGB, HDR — it blooms). The engine
+ * draws a scan plane pale blue-white, which over this zone's pale frozen stone reads as a sheet of glass; the
+ * relay-route painting's plane is a blue LIGHT sheet. (polish 4: the AI's `scanPlane({ color })`; until then the
+ * zone re-tinted the sheets through their shader uniform.)
  */
 const PLANE_RGB = [0.12, 0.5, 1.8] as const;
-
-function tintPlanes(z: ZoneRuntime): void {
-  z.game.scene.getObjectByName('vfx-scanplanes')?.traverse((o) => {
-    const mat = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
-    const u = mat?.uniforms?.uColor?.value as unknown;
-    if (u instanceof THREE.Vector3) u.set(PLANE_RGB[0], PLANE_RGB[1], PLANE_RGB[2]);
-  });
-}
 
 function makePlane(z: ZoneRuntime, spec: PlaneSpec, lens: THREE.Vector3, fast: boolean): PlaneState {
   const st: PlaneState = { spec, handle: null, phase: spec.phase, rate: fast ? DETECTED_RATE : 1, trace: null, dir: 0, captionAt: -Infinity };
   st.handle = z.game.ai.devices.scanPlane({
     id: spec.id, from: z.P(spec.x0, spec.n, 0), to: z.P(spec.x1, spec.n, 0), width: spec.width, height: spec.height,
-    period: spec.period, phase: spec.phase, source: lens.clone(), onDetect: () => onDetected(z),
+    period: spec.period, phase: spec.phase, source: lens.clone(), onDetect: () => onDetected(z), color: PLANE_RGB,
   });
   if (fast) st.handle.setRate(DETECTED_RATE);
   return st;
@@ -112,33 +115,26 @@ function onDetected(z: ZoneRuntime): void {
 }
 
 /**
- * The projector goes down — destroyed (shot / struck) or powered down by hand. Both planes go dark and stay
- * dark; `device:disabled` pays the lead's Echo as any device does.
+ * The projector went down — destroyed (shot / struck) or powered down by hand (`device:disabled` from the device
+ * system, which already spawned the break and paid the Echo). Both planes go dark and stay dark.
  */
-export function takeDownSource(z: ZoneRuntime, by: Actor | null, destroyed: boolean): void {
+function sourceDown(z: ZoneRuntime): void {
   if (S.sourceDown) return;
+  quietDown(z);
+  if (S.restoring) return;
   const game = z.game;
   const lens = lensPos(z, _lens);
-  quietDown(z, destroyed);
-  game.vfx.spawn('deviceBreak', lens, destroyed ? undefined : { scale: 0.6 });
   game.audio.play('emitterBreak', { pos: lens });
   game.events.emit('caption', { text: 'Scan projector down', kind: 'scan', pos: lens }); // NEW
-  game.events.emit('device:disabled', { id: SOURCE_ID, kind: 'scanHead', by });
 }
 
-/** the end state of a takedown without presentation (restores, and the core of takeDownSource) */
-function quietDown(z: ZoneRuntime, destroyed = false): void {
+/** the end state of a takedown without presentation (restores, and the core of sourceDown) */
+function quietDown(z: ZoneRuntime): void {
   S.sourceDown = true;
   z.setFlag('z03SourceDown', true);
   for (const p of S.planes) {
     p.handle?.setActive(false);
     p.trace?.setIntensity(0);
-  }
-  const a = S.source;
-  if (a && !destroyed) {
-    asDevice(a.visual)?.setDisabled(true);
-    a.targetable = false;
-    a.tags.delete('objective');
   }
   if (S.sourceIx) S.sourceIx.enabled = false;
   z.game.ui.marker(SOURCE_ID, null);
@@ -210,10 +206,10 @@ export function updateScanner(z: ZoneRuntime, dt: number): void {
   }
 }
 
-/** centre of a plane on the floor: the AI's own value when it exposes one, else the zone's copy of its phase */
+/** centre of a plane on the floor: the AI's own (`ScanPlaneHandle.center`), else the zone's copy of its phase */
 function planeCentre(z: ZoneRuntime, p: PlaneState, out: THREE.Vector3): THREE.Vector3 {
-  const own = (p.handle as unknown as { center?: unknown } | null)?.center;
-  if (own instanceof THREE.Vector3) return out.copy(own);
+  const c = p.handle?.center;
+  if (c) return out.set(c.x, c.y, c.z);
   const t = 0.5 - 0.5 * Math.cos(p.phase * Math.PI * 2);
   const s = p.spec;
   return out.copy(z.P(s.x0 + (s.x1 - s.x0) * t, s.n, 0));

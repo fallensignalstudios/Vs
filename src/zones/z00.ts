@@ -14,7 +14,8 @@
  * SCRIPT: SCRIPT_SOURCE.md § Z00. The author's lines are exact (curly apostrophes are the book's); every line
  * and UI string written for the game is tagged `// NEW`. No soldier is named in Z00.
  *
- * FILES: ./z00/context.ts (the five context cards), ./z00/obstruction.ts (arm + plate), ./z00/smoke.ts.
+ * FILES: ./z00/context.ts (the five context cards), ./z00/obstruction.ts (arm + plate), ./z00/smoke.ts,
+ * ./z00/dressing.ts (the bulkhead's broken crest, the pipe runs, polish 4's slots, portal and haze).
  */
 import * as THREE from 'three';
 import { asScenicShip } from '@/core/api';
@@ -27,6 +28,7 @@ import {
   updateObstruction,
 } from './z00/obstruction';
 import { smokeColumn, type SmokeColumn } from './z00/smoke';
+import { buildPipes, buildRelief, dressBulkhead, type Z00Layout } from './z00/dressing';
 
 // =====================================================================================================================
 // Constants
@@ -64,6 +66,9 @@ const RIB: [number, number] = [14, 21.2];
 const SHIP_PASS = 4.5;
 const SHIP_END = 6.2;
 
+/** the numbers ./z00/dressing.ts lays its dressing out by */
+const LAYOUT: Z00Layout = { W, D, WALL_H, EXIT_N, VAULT_D, BULK_X, BULK_H, GAP_N, GAP_W, EDGE_N };
+
 /** speaker label for the squad until Z02 names one of them */
 const SOLDIER = 'Dominion Soldier';
 
@@ -77,13 +82,18 @@ interface Z00 {
   shipT: number;
   shipActive: boolean;
   sweep: THREE.SpotLight | null;
+  /** (polish 4, SKY & SHIPS' answer) the ship's light inside the vestibule, aimed back over the jammed plate */
+  sweepIn: THREE.SpotLight | null;
+  /** the blue haze the sweep lights in the doorway's funnel (its colour uniform, and the colour at full) */
+  sweepHaze: { value: THREE.Color } | null;
+  sweepHazeColor: THREE.Color;
   smoke: SmokeColumn[];
   key: THREE.DirectionalLight | null;
   keyBase: number;
 }
 let S: Z00 = blank();
 function blank(): Z00 {
-  return { ship: null, shipT: 0, shipActive: false, sweep: null, smoke: [], key: null, keyBase: 0 };
+  return { ship: null, shipT: 0, shipActive: false, sweep: null, sweepIn: null, sweepHaze: null, sweepHazeColor: new THREE.Color(), smoke: [], key: null, keyBase: 0 };
 }
 
 // =====================================================================================================================
@@ -105,10 +115,11 @@ function build(b: ZoneBuilder): void {
   buildShell(b);
   buildBreach(b);
   buildBulkhead(b);
-  dressBulkhead(b);
+  dressBulkhead(b, LAYOUT);
   buildDoorway(b);
   buildPocket(b);
-  buildPipes(b);
+  buildPipes(b, LAYOUT);
+  buildRelief(b, LAYOUT);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -119,16 +130,20 @@ function build(b: ZoneBuilder): void {
 
 /** floor, the intact walls, the ribs and the surviving half of the vault */
 function buildShell(b: ZoneBuilder): void {
-  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true });
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled' });
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed' });
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
-  b.wall({ from: [0, D], to: [BREACH_X0, D], height: WALL_H, style: 'conduit' });
-  b.wall({ from: [BREACH_X1, D], to: [W, D], height: WALL_H, style: 'conduit' });
-  // four ribs carry the vault; the two over the breach side are fractured
-  b.rib({ x: 3, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east, lit: true });
+  // polish 4 (relay-route painting): the light wet grey marble floor, mirroring the room; its inlay is fine gold
+  b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, finish: 'wet' });
+  // polish 4: the King-era walls in large smooth marble slabs (south) and gold-framed recessed panels (the
+  // shelter's west wall, the doorway's east wall); the colliders are the plain walls' (style is geometry only)
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'framed' });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'slab' });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'framed', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [0, D], to: [BREACH_X0, D], height: WALL_H, style: 'conduit', finish: 'ashlar' });
+  b.wall({ from: [BREACH_X1, D], to: [W, D], height: WALL_H, style: 'conduit', finish: 'ashlar' });
+  // four ribs carry the vault; the two over the breach side are fractured (polish 4: no light seams — the
+  // paintings' ribs carry fine gold, not neon)
+  b.rib({ x: 3, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east });
   b.rib({ x: 10.2, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east, style: 'broken' });
-  b.rib({ x: 19.6, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east, lit: true });
+  b.rib({ x: 19.6, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east });
   b.rib({ x: 25.6, n: D / 2, span: D - 1, height: RIB_H, yawDeg: FACE.east, style: 'broken' });
   b.ceiling({ x: W / 2, n: VAULT_D / 2, w: W, d: VAULT_D, h: RIB_H + 0.3, style: 'vault' });
 }
@@ -137,9 +152,9 @@ function buildShell(b: ZoneBuilder): void {
 function buildBreach(b: ZoneBuilder): void {
   b.rib({ x: RIB[0], n: RIB[1], span: BREACH_X1 - BREACH_X0 + 1, height: 18, yawDeg: FACE.north, style: 'broken', noCollider: true });
   // broken wall stubs along the breach and the rubble line; the edge itself is blocked off
-  b.wall({ from: [BREACH_X0, D], to: [BREACH_X0 + 3.6, D], height: 2.4, style: 'plain' });
-  b.wall({ from: [BREACH_X1 - 2.8, D], to: [BREACH_X1, D], height: 1.6, style: 'plain' });
-  b.wall({ from: [11.5, D - 0.2], to: [13.4, D - 0.2], height: 0.9, style: 'plain' });
+  b.wall({ from: [BREACH_X0, D], to: [BREACH_X0 + 3.6, D], height: 2.4, style: 'plain', finish: 'ashlar' });
+  b.wall({ from: [BREACH_X1 - 2.8, D], to: [BREACH_X1, D], height: 1.6, style: 'plain', finish: 'ashlar' });
+  b.wall({ from: [11.5, D - 0.2], to: [13.4, D - 0.2], height: 0.9, style: 'plain', finish: 'ashlar' });
   b.blocker({ x: (BREACH_X0 + BREACH_X1) / 2, n: (EDGE_N + D) / 2 + 0.2, w: BREACH_X1 - BREACH_X0, d: D - EDGE_N + 0.4, height: 3 });
   for (const [x, n, yaw, s] of [[7.6, 21.1, 20, 1.2], [10.4, 21.4, -30, 0.9], [15.5, 21.2, 70, 1.3], [19.4, 21.0, 10, 1.1], [21.6, 21.5, -50, 0.8]] as const) {
     b.prop('rubblePile', { x, n, yawDeg: yaw, scale: s, collider: false });
@@ -174,69 +189,6 @@ function buildBulkhead(b: ZoneBuilder): void {
   buildArm(b, BULK_X, GAP_N, GAP_W, ARM_PIVOT_H);
 }
 
-/** a private stream for set dressing, so the zone's own `b.rand()` sequence (prop variants) is untouched */
-function localRand(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * Integration wave (backlog: "the bulkhead reads as a plain wall"): the bulkhead is a King-era partition brought
- * down in the crash, and must read as one. A broken crest of stepped blocks along its top (kept clear of the
- * gantry), its torn service runs — the relay-route painting's twin gold pipes — along the west face, hanging
- * where the north end broke, and slabs of the fallen upper course resting in the rubble at its foot. Visual only:
- * no colliders, nothing in the walkable floor (the bulkhead's footprint and the gap are unchanged).
- */
-function dressBulkhead(b: ZoneBuilder): void {
-  const g0 = GAP_N - GAP_W / 2;
-  const g1 = GAP_N + GAP_W / 2;
-  const rnd = localRand(4107);
-  // the broken crest: the upper course survives in stepped, uneven blocks, gaps where it fell
-  for (const [n0, n1] of [[0.25, g0 - 1.6], [g1 + 1.6, EDGE_N - 0.2]] as const) {
-    let n = n0;
-    while (n < n1 - 0.35) {
-      const len = Math.min(n1 - n, 0.8 + rnd() * 1.9);
-      if (rnd() > 0.2) {
-        // (≤ 0.95 m thick with the skew: clear of the service conduit on the east face's top)
-        const skew = (rnd() - 0.5) * 0.16;
-        b.wall({ from: [BULK_X + skew, n], to: [BULK_X - skew, n + len], h: BULK_H, height: 0.3 + rnd() * rnd() * 2.2, thickness: 0.7 + rnd() * 0.2, style: 'plain', noCollider: true });
-      }
-      n += len + 0.05 + rnd() * 0.3;
-    }
-  }
-  // the torn service runs on the west face: two gold pipes at the top of the wall, cut at the gap, the north
-  // run hanging where the wall broke
-  const x = BULK_X - 0.84;
-  for (const [dh, dn] of [[0, 0], [0.26, 0.12]] as const) {
-    const h = 2.95 + dh;
-    b.conduit([[x, 0.5, h], [x, g0 - 0.25 - dn, h]], { r: 0.065 });
-    b.conduit([[x, g1 + 0.25 + dn, h], [x, 17.6 - dn, h], [x + 0.1, 18.6 - dn, h - 1.3], [x - 0.05, 19.1 - dn, 0.18]], { r: 0.065 });
-  }
-  // fallen blocks of the upper course in the rubble at the north end (beyond the walkable edge)
-  for (const [n, s, yaw] of [[EDGE_N + 0.5, 1.1, 25], [EDGE_N + 1.2, 0.9, -40]] as const) {
-    // (an explicit variant: no draw from the zone's shared stream, so every other prop keeps its variant)
-    b.prop('fallenPlate', { x: BULK_X - 0.2, n, yawDeg: yaw, scale: s, collider: false, h: 0.25, variant: 0 });
-  }
-}
-
-/**
- * The relay-route painting's walls carry gold service pipes up their faces; the south wall gets three twin runs
- * between its ribs (they jog over at the top, as in the painting). Visual only, tight to the wall.
- */
-function buildPipes(b: ZoneBuilder): void {
-  for (const x of [8.0, 16.0, 23.9]) {
-    for (const dx of [0, 0.3]) {
-      b.conduit([[x + dx, 0.44, 0.15], [x + dx, 0.44, 8.4 - dx], [x + dx + 0.55, 0.44, 9.1 - dx], [x + dx + 0.55, 0.44, WALL_H - 0.2]], { r: 0.075 });
-    }
-  }
-}
-
 /** the lit rib doorway, the buckled shutter jammed in it, the vestibule and a glimpse of the next chamber */
 function buildDoorway(b: ZoneBuilder): void {
   setDoor(b.door({ x: W, n: EXIT_N, yawDeg: FACE.east, frameOnly: true }), true, 'ready');
@@ -249,8 +201,8 @@ function buildDoorway(b: ZoneBuilder): void {
   b.blocker({ x: VEST_X1 - 0.6, n: EXIT_N, w: 1.2, d: 4.4, height: 4 });
   // the far end opens on the next chamber (dark; the passing ship's light shows it once)
   b.floor({ x: VEST_X1 + 10, n: EXIT_N, w: 20, d: 22, h: -0.02, inlay: 'channels', noSurface: true });
-  b.rib({ x: VEST_X1 + 4, n: EXIT_N, span: 20, height: 15, yawDeg: FACE.east, lit: true, noCollider: true });
-  b.rib({ x: VEST_X1 + 12, n: EXIT_N, span: 20, height: 15, yawDeg: FACE.east, lit: true, noCollider: true });
+  b.rib({ x: VEST_X1 + 4, n: EXIT_N, span: 20, height: 15, yawDeg: FACE.east, noCollider: true });
+  b.rib({ x: VEST_X1 + 12, n: EXIT_N, span: 20, height: 15, yawDeg: FACE.east, noCollider: true });
   b.wall({ from: [VEST_X1 + 20, EXIT_N - 11], to: [VEST_X1 + 20, EXIT_N + 11], height: 12, style: 'panelled', noCollider: true });
   const flood = b.panelLight({ x: VEST_X1 - 1.4, n: EXIT_N, w: 2.4, d: 3, h: 4.9, facing: 'down', intensity: 2.6, color: 0xfff0d6 });
   flood.visible = false;
@@ -300,6 +252,19 @@ function buildLight(b: ZoneBuilder): void {
   // air and on its ceiling and the lintel, the parts of it the doorway shot can see)
   const sweep = b.spot({ x: VEST_X1 + 9, n: EXIT_N, h: 6.5, target: [W + 1.5, EXIT_N, 3.6], angleDeg: 20, intensity: 0, color: BLUE, shaft: true });
   S.sweep = sweep;
+  // polish 4 (SKY & SHIPS' answer: the jammed plate takes the far spot): a second beam from just inside the
+  // vestibule, aimed back down through the doorway over the plate, so the blue sweep reads in the room itself
+  S.sweepIn = b.spot({ x: W - 0.4, n: EXIT_N, h: 3.3, target: [W - 7, EXIT_N - 0.6, 0], angleDeg: 34, penumbra: 0.7, intensity: 0, color: 0x6aa6ff });
+  // and the air in the doorway's funnel lights blue with it (a haze volume whose brightness follows the sweep; it
+  // stays black, i.e. invisible, the rest of the time)
+  // (in the open air in front of the portal, x 22.6 … 26.6: nothing inside the box cuts the veil)
+  const haze = b.keep(b.haze({ x: W - 3.4, n: EXIT_N, h: 0.05, w: 4.0, d: 3.0, height: 3.6, density: 0.2, falloff: 0.3, color: 0x6aa6ff, intensity: 1, soft: 0.38 }));
+  const u = ((haze as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms?.uColor as { value: THREE.Color } | undefined;
+  if (u?.value?.isColor) {
+    S.sweepHaze = u;
+    S.sweepHazeColor.copy(u.value);
+    u.value.setScalar(0);
+  }
 }
 
 function buildMarkers(b: ZoneBuilder): void {
@@ -354,6 +319,8 @@ function buildScenic(b: ZoneBuilder): void {
   if (ctl) {
     ctl.engines = 1.4;
     ctl.lights = 1;
+    // (polish 4, SKY & SHIPS: a cool rim and a little sky fill, so the hull reads against the night, not as a hole)
+    ctl.setLook?.({ rim: [0.12, 0.14, 0.18], fill: [0.22, 0.23, 0.26] });
   }
   b.add(ship);
   b.keep(ship);
@@ -426,11 +393,19 @@ function update(z: ZoneRuntime, dt: number): void {
     S.sweep.intensity = 1800 * reveal;
     const u = Math.min(1, Math.max(0, (sec - 3.2) / 2.6));
     S.sweep.position.set(VEST_X1 + 9, 6.5, -(EXIT_N - 4 + 8 * u));
+    if (S.sweepIn) {
+      // (polish 4: stronger than SKY & SHIPS' test — on the pale wet floor a 900 pool barely read)
+      S.sweepIn.intensity = 3200 * reveal;
+      S.sweepIn.target.position.copy(z.P(W - 7, EXIT_N - 1.2 + 1.2 * u, 0));
+    }
+    S.sweepHaze?.value.copy(S.sweepHazeColor).multiplyScalar(1.5 * reveal);
   }
   if (sec >= SHIP_END) {
     S.shipActive = false;
     if (S.key) S.key.intensity = S.keyBase;
     if (S.sweep) S.sweep.intensity = 0;
+    if (S.sweepIn) S.sweepIn.intensity = 0;
+    S.sweepHaze?.value.setScalar(0);
   }
 }
 

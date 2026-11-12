@@ -7,6 +7,10 @@
  *
  * Card text uses the `context` style (serif statement); the readouts of cards 2 and 3 run as the card's text
  * on their own lines, and each fleet's order sits under its fleet as the card's small-caps subline.
+ *
+ * Polish 4 (the plan allows 60 s; it ran 76 s): only the waits no voice-over paces were tightened — the reading
+ * holds of the cards without a voice line (each still ≥ 13 characters a second or slower) and the closing beat.
+ * The voiced cards (Caelus, Sol, Tharne, Selene) keep their timing: the lines pace them.
  */
 import * as THREE from 'three';
 import type { CineCtx, Routine, SayOpts, SpeakerId, ZoneRuntime } from '@/core/api';
@@ -62,13 +66,13 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
     const steps: Step[] = [
       {
         text: 'Aurelion does not look like a battlefield. It looks like the aftermath of an argument between gods.',
-        hold: 8.6,
-        begin: () => ui.fade(0, 4.2),
+        hold: 7.4,
+        begin: () => ui.fade(0, 3.6),
       },
       {
         // S2 — up through the fracture at the sky: the Wound, contained, far off
         text: 'REMOTE ANCHORS: 4 / 4 RELEASE-READY\nTERMINAL ANCHOR: SEALED\nPRIMARY CONTAINMENT: CLOSED\nBOUNDARY PRESSURE: RISING',
-        hold: 6.2,
+        hold: 5.6,
         begin: () => {
           // S2 — at the rubble edge, up at the sky: red remnant left, white remnant right, the Wound low between
           const p = z.P(rib[0], rib[1] - 1.7, 1.0);
@@ -76,12 +80,12 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
           c.moveAsync({ pos: p.clone().add(new THREE.Vector3(0, 0.35, 0)), look: skyLook(z, p, 0, 29), fov: 48 }, 11, 'inOut');
         },
       },
-      { text: 'Four lights. One dark.', hold: 4.2 },
+      { text: 'Four lights. One dark.', hold: 3.2 },
       {
         // S3 — along the Dominion hull: amber emergency light in the smoke
         text: 'The Dominion names the operation LAST THRONE.',
         sub: 'SECONDARY OBJECTIVE: DENY HOSTILE ACCESS',
-        hold: 5,
+        hold: 4.6,
         at: 1.4,
         lines: [['Caelus', 'Then arrive first.']],
         begin: () => {
@@ -93,14 +97,14 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
       {
         text: 'The Reformation names its deployment LAST WOUND.',
         sub: 'SECONDARY OBJECTIVE: DENY UNILATERAL DOMINION CONTROL',
-        hold: 5,
+        hold: 4.6,
         at: 1.4,
         lines: [['Sol', 'Then arrive first.']],
       },
       {
         // the two orders set as a parallel pair, each broken where it reads (the strings are the book's, whole)
         text: 'CROWNMARK V: NO ACTIVATION\nWITHOUT SOVEREIGN AUTHORITY\n\nCROWNMARK V: NO ACTIVATION\nWITHOUT COUNCIL AUTHORITY',
-        hold: 5.4,
+        hold: 4.8,
       },
       {
         // S4 — low on the apron, the fleet battle across the sky
@@ -126,11 +130,11 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
         at: 1.2,
         lines: [['Selene', 'Do not return fire. If we fire now, the next shot becomes intentional.']],
       },
-      { text: 'Nobody declares war. Both fleets simply discover they have already entered one.', hold: 5.6 },
+      { text: 'Nobody declares war. Both fleets simply discover they have already entered one.', hold: 4.8 },
       {
         // S5 — back inside: through the fractured rib toward the Wound; something moves in it
         text: 'Something moves out of the Wound.',
-        hold: 4.4,
+        hold: 3.6,
         begin: () => {
           sky.setBattleIntensity(0.06);
           sky.setWoundActivity(0.95);
@@ -142,7 +146,7 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
       },
       {
         text: 'The fleets stop shooting at one another for nearly four seconds. Then the Eclipse fires.',
-        hold: 6.4,
+        hold: 5.6,
       },
     ];
 
@@ -176,7 +180,7 @@ export function* contextScene(z: ZoneRuntime, wreck: [number, number], rib: [num
       if (s.hold > used) yield s.hold - used;
     }
     ui.card(null);
-    yield 1.6;
+    yield 1.0;
 
     // end state — identical watched or skipped: cards gone, sky as the landing finds it
     ui.card(null);
