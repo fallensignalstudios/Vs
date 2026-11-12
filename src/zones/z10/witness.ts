@@ -11,10 +11,16 @@
 import * as THREE from 'three';
 import type { CineCtx, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { C, DAIS_H, S, Z10_LOOK, terminal, under } from './state';
+import { C, DAIS_H, MARK_CORE, S, Z10_LOOK, terminal, under } from './state';
 import { placeFigure, walkFigure, type WitnessSet } from './witness-set';
 
 const OFF: SayOpts = { offscreen: true };
+
+/**
+ * The Witness's grade: the silver-white memory look (LOOKS.witness) with a little more colour, so skin, armour and the
+ * King's wound read inside the luminous haze.
+ */
+const WITNESS_LOOK = { ...LOOKS.witness, grade: { ...LOOKS.witness.grade, saturation: 0.56 } };
 
 /** show the Witness and hide the chamber (or the reverse); the hidden list is kept so a restore is exact */
 export function showWitness(z: ZoneRuntime, on: boolean): void {
@@ -60,8 +66,11 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     showWitness(z, true);
     game.ui.statusBoard(null);
     sky.setPreset('void');
-    render.setLook({ ...LOOKS.witness, grade: { ...LOOKS.witness.grade, saturation: 0.5 } }, 0);
-    game.audio.setMusic('witness', 1.5);
+    render.setLook(WITNESS_LOOK, 0);
+    // the reflections take the memory's silver haze, not the chamber (restored when the Witness ends)
+    render.refreshEnvironment({ scene: true, position: z.P(C.x, C.n, DAIS_H + 1.6) });
+    // witness_elegy (118 s) plays once under the 2:31 scene, then holds its quiet bed — it never loops back
+    game.audio.setMusic('witness', 1.5, { once: true });
     if (!z.skipping) game.audio.play('witnessEnter');
     // the two watchers, side by side at the front of the dais
     game.player.teleport(z.P(C.x + 0.75, C.n - 4.1, DAIS_H), 0);
@@ -82,8 +91,14 @@ export function* witnessScene(z: ZoneRuntime): Routine {
 
     // ---- part one: the bridge and the trap -------------------------------------------------------------------
     // the chronicler steps up beside the King. “Tarrik goes rigid.”
-    if (W) walkFigure(z, W.vesryn, 0.2, 7.0, 0.9);
-    c.shot(king(), { yawDeg: 200, distance: 5.2, height: 1.62, lookHeight: 1.55, fov: 36 });
+    if (W) {
+      walkFigure(z, W.vesryn, 0.2, 7.0, 0.9);
+      // the two of them talk to each other, not past each other (cosmetic: the update turns them, a skip snaps it)
+      W.king.look = W.vesryn;
+      W.vesryn.look = W.king;
+    }
+    // (polish 4: from his right front — the wounded side — as he turns to the chronicler stepping up beside him)
+    c.shot(king(), { yawDeg: 280, distance: 5.2, height: 1.62, lookHeight: 1.55, fov: 36 });
     yield 2.0;
     c.shot(tar(), { yawDeg: 160, distance: 1.9, height: 1.65, lookHeight: 1.62, fov: 30 });
     yield 0.5;
@@ -136,6 +151,9 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     // and Aurelion answers.”
     if (W) {
       W.tgt.blade = 1;
+      // he turns to the star to raise the blade (the arm's target below assumes he faces north)
+      W.king.look = null;
+      W.king.yaw = 0;
       W.king.visual?.setGlow(2.2);
       // the raised arm at full reach for the 1.76 m King
       const hand = king().add(new THREE.Vector3(0.25, 2.15, -0.35));
@@ -178,6 +196,7 @@ export function* witnessScene(z: ZoneRuntime): Routine {
       W.tgt.blade = 0;
       W.king.visual?.setHandTarget('R', null);
       W.king.visual?.setGlow(1);
+      W.king.look = W.vesryn;
     }
 
     // ---- part three: the terminal anchor ---------------------------------------------------------------------
@@ -263,12 +282,17 @@ export function* witnessScene(z: ZoneRuntime): Routine {
     sky.setPreset('coreChamber');
     sky.setHeading(0);
     render.setLook(Z10_LOOK, 0);
+    render.refreshEnvironment({ scene: true });
     game.audio.setMusic('consequence', 2);
     // back where they stood, at their interfaces
     game.player.teleport(z.m('standS'), z.myaw('standS'));
     if (tarrik) tarrik.teleport(z.m('standT'), z.myaw('standT'));
-    if (S.crownmark) S.crownmark.params.glow = 1;
-    c.cut({ pos: z.P(C.x - 0.9, C.n - 6.8, 1.2), look: z.P(C.x, C.n, 1.7), fov: 36 });
+    // “Crownmark Five ignites.” — and from here its white core is steady rather than pulsing (light only)
+    if (S.crownmark) {
+      S.crownmark.params.glow = 1;
+      S.crownmark.params.steady = 1;
+    }
+    c.cut({ pos: z.P(C.x - 0.9, C.n - 7.6, 1.3), look: z.P(C.x, C.n, MARK_CORE), fov: 38 });
     yield* z.fadeIn(z.skipping ? 0 : 1.2);
     if (!z.skipping) game.vfx.flash(z.P(C.x, C.n, 1.7), 0xfff4e0, 6, 0.6);
     yield 1.0;

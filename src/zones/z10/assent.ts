@@ -54,11 +54,12 @@ export function* protocolScene(z: ZoneRuntime): Routine {
     toPad(z, 'tarrik');
     toPad(z, 'selene');
     // “Two interfaces rise from the floor, one before each of them.” — the crownmark-chamber painting's framing:
-    // low on the axis, the two of them small at their interfaces either side of Crownmark Five, the rings and the
-    // pale pylons filling the volume above; the protocol strings stand at the side, clear of the three of them
+    // low on the axis, the two of them at their interfaces either side of Crownmark Five, the chrome rings and the
+    // light column filling the volume above. Polish 4: tighter, so the bearers stand a quarter of the frame tall
+    // (they were small figures under the overlays); the protocol strings sit at the side, above their heads
     terminal(z, ['MERIDIAN COMPLETION PROTOCOL', 'INDEPENDENT ASSENT REQUIRED'], true, 'side');
-    c.cut({ pos: z.P(C.x, C.n - 11.8, 1.05), look: z.P(C.x, C.n, 4.2), fov: 60 });
-    c.moveAsync({ pos: z.P(C.x, C.n - 10.9, 1.1), look: z.P(C.x, C.n, 4.5), fov: 58 }, 5, 'inOut');
+    c.cut({ pos: z.P(C.x, C.n - 12.6, 1.15), look: z.P(C.x, C.n - 0.5, 3.3), fov: 50 });
+    c.moveAsync({ pos: z.P(C.x, C.n - 11.4, 1.2), look: z.P(C.x, C.n - 0.5, 3.0), fov: 46 }, 5, 'inOut');
     setRise(1);
     if (!z.skipping) {
       game.audio.play('liftMove', { pos: z.m('padT'), volume: 0.6 });

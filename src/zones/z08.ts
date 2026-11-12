@@ -84,7 +84,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   z.npc('tharne', 'tharneStage', 'kneelTend', 'tharne');
   const lyric = z.npc('lyric', 'lyricStage', 'sitInjured', 'lyric');
   // as Z06 / Z07 leave her: the infection in her irises and at her neck only, never cured
-  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face' });
+  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face', arms: 0.25 }); // (+ the arms' trace Z06 leaves)
   spawnSurvivors(z, { walkersOut: !west && stage !== 'A' });
   // the east flank: East opens it in phase A, West at the handoff ("sooner" / later)
   const flank = stage !== 'A';

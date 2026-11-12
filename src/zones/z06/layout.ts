@@ -13,13 +13,14 @@
  *     (x 48), plugged by growth until it bursts. Contamination follows the low conduits a few metres out from each
  *     breach and stops; the stone around stays clean.
  *
- * Look: black mirror stone underfoot with gold channels, white-gold walls and lit ribs under an enclosed vault
- * (ref-concept-quarantine), the LOOKS.breach grade. Violet only at the two breaches and the Weaver's anchor.
+ * Look (polish 4, ref-concept-quarantine): black mirror stone underfoot with fine inlaid gold, white-silver marble
+ * walls (slabs and gold-framed panels) and unlit white ribs under a coffered skylight of daylight haze, the
+ * LOOKS.breach grade opened up to daylight. Violet only at the two breaches and the Weaver's anchor.
  */
 import * as THREE from 'three';
 import type { ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
-import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
+import { BLUE, FACE, GOLD, VIOLET } from '../shared';
 import { buildDressing } from './dressing';
 import { S, resetState } from './state';
 
@@ -30,10 +31,11 @@ import { S, resetState } from './state';
 /** playable envelope (plan §Z06: 56 × 34 m) */
 export const W = 56;
 export const D = 34;
-/** wall height; the enclosed vault springs from it, rib apex above */
+/** wall height (the colliders); the rib apex above it. Polish 4: the hall closes at CEIL_H under a coffered
+ * skylight ceiling (bright daylight haze in every coffer), the walls carried up to it without colliders */
 const WALL_H = 12;
 const RIB_H = 16.5;
-const VAULT_RISE = 5.2;
+const CEIL_H = 17.2;
 /** entry (west wall) and exit (east wall) door centres */
 export const ENTRY_N = 22;
 export const EXIT_N = 24;
@@ -65,11 +67,13 @@ export function build(b: ZoneBuilder): void {
     // integration wave (quarantine painting, which sets the Z06–Z08 interiors): the breach grade lifted out of its
     // night-blue — brighter cool daylight haze on silver-white stone, steel (not blue) shadows, the warmth left
     // to the gold; still darker and hazier than the crucible
+    // polish 4: daylight from within — the coffered skylight fills the hall, so the grade opens up: pale cool haze
+    // in the depth (not night fog), more sky fill and probe light on the silver stone, a softer vignette
     look: {
-      ...LOOKS.breach, exposure: 1.06, envIntensity: 0.95,
-      fog: { color: 0x30343c, density: 0.017 },
-      grade: { ...LOOKS.breach.grade, saturation: 0.9, shadowsTint: 0xb8c0d4, highlightsTint: 0xffe2b0 },
-      ambient: { sky: 0x8a90a0, ground: 0x1a1816, intensity: 0.46 },
+      ...LOOKS.breach, exposure: 1.06, envIntensity: 1.15, vignette: 0.46,
+      fog: { color: 0x6c7078, density: 0.012 },
+      grade: { ...LOOKS.breach.grade, saturation: 0.92, contrast: 1.17, shadowsTint: 0xc0c6d4, highlightsTint: 0xffdca6 },
+      ambient: { sky: 0xc0c4cc, ground: 0x2a2724, intensity: 0.7 },
     },
     // high, from the south-west: the plate's protected face is lit, long shadows fall toward the breaches
     key: { dirFrom: [-20, -24, 50], intensity: 2.3, color: 0xfff0dc },
@@ -93,16 +97,26 @@ export function build(b: ZoneBuilder): void {
 /** floor, the four walls with their openings, the lit rib row and the enclosed vault */
 function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, mat: 'blackStoneFloor' });
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'panelled', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'conduit', doors: [{ at: BREACH_A.x, width: BREACH_W, height: BREACH_H }] });
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'ribbed', doors: [{ at: BREACH_B.x, width: BREACH_W, height: BREACH_H }] });
-  // seven lit ribs carry the vault (legs against the long walls, clear of both breaches and the refuge)
-  b.ribRow({ x: 4, n: D / 2, span: D - 1, height: RIB_H, count: 7, spacing: 8, yawDeg: FACE.east, alongDeg: FACE.east, lit: true });
-  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, style: 'vaultClosed', rise: VAULT_RISE, bay: 8, bayPhase: 4, glow: 3 });
-  // a thin gold line along the foot of the long walls: light as information, it runs east with the route
-  b.channel([[0.4, D - 0.34], [BREACH_A.x - 3, D - 0.34]], { h: 1.1, vertical: true, width: 0.05, color: IVORY, intensity: 2 });
-  b.channel([[BREACH_A.x + 3, D - 0.34], [W - 0.4, D - 0.34]], { h: 1.1, vertical: true, width: 0.05, color: IVORY, intensity: 2 });
+  // polish 4 (quarantine painting): large white-silver marble slabs and gold-framed recessed panels (the colliders
+  // are the plain walls'), carried up to the skylight without colliders
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'slab', doors: [{ at: ENTRY_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'slab', doors: [{ at: EXIT_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'framed', doors: [{ at: BREACH_A.x, width: BREACH_W, height: BREACH_H }] });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'framed', doors: [{ at: BREACH_B.x, width: BREACH_W, height: BREACH_H }] });
+  for (const [from, to] of [[[0, 0], [0, D]], [[W, 0], [W, D]], [[0, D], [W, D]], [[0, 0], [W, 0]]] as Array<[[number, number], [number, number]]>) {
+    b.wall({ from, to, h: WALL_H, height: CEIL_H - WALL_H, style: 'slab', noCollider: true });
+  }
+  // seven ribs carry the hall (legs against the long walls, clear of both breaches and the refuge); polish 4: no
+  // light seams — white stone with a fine gold keel line, under a coffered ceiling full of daylight haze
+  b.ribRow({ x: 4, n: D / 2, span: D - 1, height: RIB_H, count: 7, spacing: 8, yawDeg: FACE.east, alongDeg: FACE.east });
+  // (the coffers' lid is closed; it casts no shadow, so the key still falls into the hall as the daylight entering
+  // through them — as the enclosed vault's shell did)
+  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: CEIL_H, style: 'skylight', coffer: 4, glow: 2.4, hazeDepth: 8 }).traverse((o) => {
+    o.castShadow = false;
+  });
+  // a fine gold line along the foot of the long walls, running east with the route
+  b.channel([[0.4, D - 0.34], [BREACH_A.x - 3, D - 0.34]], { h: 1.1, vertical: true, width: 0.05 });
+  b.channel([[BREACH_A.x + 3, D - 0.34], [W - 0.4, D - 0.34]], { h: 1.1, vertical: true, width: 0.05 });
 }
 
 /** the corridor stub the party comes down (west of the entry door): dark black stone. The door has just shut behind Tarrik
@@ -128,20 +142,15 @@ function buildExit(b: ZoneBuilder): void {
   b.ceiling({ x: W + 3, n: EXIT_N, w: 6, d: 4.4, h: 5, style: 'flat', mat: 'blackStone' });
   b.panelLight({ x: W + 5.6, n: EXIT_N, w: 2.2, d: 2.6, h: 0.9, facing: 'west', intensity: 2.2 });
   b.whitePoint({ x: W - 0.9, n: EXIT_N, h: 5.3, intensity: 1.8 });
-  b.column({ x: W - 0.9, n: EXIT_N - 3.4, height: 8.5, style: 'pylon', lit: true });
-  b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8.5, style: 'pylon', lit: true });
+  b.column({ x: W - 0.9, n: EXIT_N - 3.4, height: 8.5, style: 'pylon' });
+  b.column({ x: W - 0.9, n: EXIT_N + 3.4, height: 8.5, style: 'pylon' });
   // the ground round the plate: one angular gold ring (the King-era floor marks the place, not the fight)
   const ring: Array<[number, number]> = [];
   for (let i = 0; i <= 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     ring.push([PLATE.x + Math.cos(a) * 7.2, PLATE.n + Math.sin(a) * 7.2]);
   }
-  // (its material is also the walls' gold inlay — dressing.ts: the kit's flush-strip gold, whose glow fades to its
-  // true average once a line is under a pixel wide, so the far wall lines do not shimmer)
-  b.channel(ring, { width: 0.06, intensity: 2.4 }).traverse((o) => {
-    const m = (o as THREE.Mesh).material;
-    if (!S.inlayGold && (o as THREE.Mesh).isMesh && m && !Array.isArray(m)) S.inlayGold = m;
-  });
+  b.channel(ring, { width: 0.06 });
   // the route continues: a gold channel from the plate ground to the exit threshold
   b.channel([[31, 10.5], [43, 10.5], [49.5, 17], [W - 0.4, 17], [W - 0.4, EXIT_N - 1.2]], { width: 0.07 });
 }
@@ -165,7 +174,9 @@ function buildPiers(b: ZoneBuilder): void {
     const x1 = p.x + PIER_HALF;
     const n0 = p.n - PIER_HALF;
     const n1 = p.n + PIER_HALF;
-    b.walls([[x0, n0], [x1, n0], [x1, n1], [x0, n1]], { closed: true, height: WALL_H, style: 'ribbed', thickness: 0.6 });
+    b.walls([[x0, n0], [x1, n0], [x1, n1], [x0, n1]], { closed: true, height: WALL_H, style: 'framed', thickness: 0.6 });
+    // (polish 4: carried up to the skylight, without colliders)
+    b.walls([[x0, n0], [x1, n0], [x1, n1], [x0, n1]], { closed: true, h: WALL_H, height: CEIL_H - WALL_H, style: 'slab', thickness: 0.6, noCollider: true });
   }
   b.prop('wallSeam', { x: SEAM.x - 0.02, n: SEAM.n, yawDeg: FACE.west });
   buildSeam(b);
@@ -206,7 +217,8 @@ function buildBreaches(b: ZoneBuilder): void {
   b.wall({ from: [BREACH_A.x - 2.4, an + 3.2], to: [BREACH_A.x + 2.4, an + 3.2], height: BREACH_H, mat: 'blackStone', style: 'plain', noCollider: true });
   b.blocker({ x: BREACH_A.x, n: an + 0.4, w: BREACH_W, d: 0.8, height: BREACH_H });
   b.conduit([[BREACH_A.x - 2.6, an - 0.35, 0.55], [BREACH_A.x - 11, an - 0.35, 0.55]], { r: 0.1, glow: false });
-  b.corruption({ x: BREACH_A.x - 2.5, n: an - 0.3, h: 2.2, r: 1.4, onWall: true, yawDeg: FACE.south, intensity: 0.5 });
+  // (polish 4: the kit's grounded crystal style on the jamb; the conduit's run keeps the tissue)
+  b.corruption({ x: BREACH_A.x - 2.5, n: an - 0.3, h: 0.8, r: 1.4, onWall: true, yawDeg: FACE.south, intensity: 0.5, style: 'crystal', size: 'medium' });
   b.corruption({ x: BREACH_A.x - 5.6, n: an - 0.3, h: 0.7, r: 0.9, onWall: true, yawDeg: FACE.south, intensity: 0.35 });
   b.point({ x: BREACH_A.x, n: an + 1.4, h: 2.4, color: VIOLET, intensity: 6, distance: 9 });
   b.prop('rubblePile', { x: BREACH_A.x + 2.9, n: an - 1.3, yawDeg: 30 });
@@ -218,7 +230,7 @@ function buildBreaches(b: ZoneBuilder): void {
   b.wall({ from: [BREACH_B.x - 2.4, bn - 3.2], to: [BREACH_B.x + 2.4, bn - 3.2], height: BREACH_H, mat: 'blackStone', style: 'plain', noCollider: true });
   b.blocker({ x: BREACH_B.x, n: bn - 0.4, w: BREACH_W, d: 0.8, height: BREACH_H });
   b.conduit([[BREACH_B.x + 2.6, bn + 0.35, 0.55], [BREACH_B.x + 7.5, bn + 0.35, 0.55]], { r: 0.1, glow: false });
-  b.corruption({ x: BREACH_B.x + 2.5, n: bn + 0.3, h: 1.6, r: 1.2, onWall: true, yawDeg: FACE.north, intensity: 0.45 });
+  b.corruption({ x: BREACH_B.x + 2.5, n: bn + 0.3, h: 0.8, r: 1.2, onWall: true, yawDeg: FACE.north, intensity: 0.45, style: 'crystal', size: 'medium' });
   b.corruption({ x: BREACH_B.x + 5.2, n: bn + 0.3, h: 0.7, r: 0.8, onWall: true, yawDeg: FACE.north, intensity: 0.3 });
   const plug = b.keep(b.prop('eclipseGrowth', { x: BREACH_B.x, n: bn - 0.2, scale: 2.4, collider: false, variant: 1 }));
   S.plug = plug;
@@ -311,8 +323,12 @@ function buildLight(b: ZoneBuilder): void {
   // a pale shaft on the plate (the focal point) and one down the left lane
   b.spot({ x: 24, n: 12, h: RIB_H - 0.8, target: [26.5, 13.6, 0], angleDeg: 20, intensity: 820, shaft: true, color: 0xe4ebff });
   b.spot({ x: 14, n: 25, h: RIB_H - 0.8, target: [15, 25.5, 0], angleDeg: 22, intensity: 640, shaft: true, color: 0xe8ecf6 });
-  // cool fills
+  // cool fills; polish 4: daylight down from the skylight onto both long walls
   b.point({ x: 34, n: 22, h: 5.5, color: 0x9fb2d6, intensity: 40, distance: 24 });
+  b.point({ x: 16, n: 17, h: CEIL_H - 3, color: 0xe6eaf2, intensity: 160, distance: 34 });
+  b.point({ x: 42, n: 17, h: CEIL_H - 3, color: 0xe6eaf2, intensity: 160, distance: 34 });
+  // warm gold accents (the painting's): the gallery over the exit, lit from within
+  b.point({ x: W - 2.2, n: EXIT_N, h: 11.4, color: 0xffd39a, intensity: 34, distance: 12 });
   // the refuge reads warm and held: amber from the soldier's lamp
   b.point({ x: 3, n: 6, h: REFUGE.h + 2.2, color: 0xffb060, intensity: 14, distance: 8 });
   // the marines' post is lit by its own lamp (refLamp); the trapped man's suit lamp under the plate's edge

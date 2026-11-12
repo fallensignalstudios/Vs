@@ -5,7 +5,7 @@
  *
  * SPACE (plan coordinates, origin at the south-west corner, x east, n north; detail in ./z09/space.ts): a 55 × 16 m
  * shallow descending curve. A sealed white-gold corridor runs east, bends 15° north down a 12 m ramp into black
- * stone (h 0 → −3), and only after the bend opens north onto a circular overlook behind a glass rail: one arm of
+ * stone (h 0 → −3), and only after the bend opens north onto a circular overlook behind a stone parapet: one arm of
  * a city-scale Crownmark runs out beneath it toward the Wound, which fills half the horizon (red remnant left,
  * white remnant right). The route goes on east to the five-depression threshold and a seamless door in the east
  * wall, framed by the white point. Exit → Z10.
@@ -18,11 +18,11 @@
  * HUD (Z09): nothing is taught; the objective is the white point at the door — no hint, prompt or caption names the
  * Wound or says what the door will do. Every new UI string carries `// NEW`.
  */
-import type { Beat, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
+import type { Beat, Look, Routine, ZoneBuilder, ZoneDef, ZoneRuntime } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { setDoor, standardExit, walkTo } from './shared';
 import { blankRelics, disposeRelics, ensureRelics, overlookScene, recognitionScene, updateRelics, type Relics } from './z09/scenes';
-import { OVERLOOK, buildFlow, buildScenic, buildSpace, updateFlow, type FlowLines, type Z09Space } from './z09/space';
+import { OVERLOOK, buildFlow, buildScenic, buildSpace, updateFlow, wetFloors, type FlowLines, type Z09Space } from './z09/space';
 
 // =====================================================================================================================
 // Constants
@@ -32,6 +32,15 @@ import { OVERLOOK, buildFlow, buildScenic, buildSpace, updateFlow, type FlowLine
 const FLOW_SPEED = 7;
 /** seconds between the tremors that pass through the structure (the first comes sooner) */
 const TREMOR_EVERY = 11;
+/**
+ * The gallery's grade: LOOKS.woundGallery without its blue cast (polish 4) — the wound-overlook painting's stone is a
+ * neutral dark grey with warm gold highlights; the cold belongs to the sky, not to the floor and the walls.
+ */
+const Z09_LOOK: Look = {
+  ...LOOKS.woundGallery,
+  grade: { ...LOOKS.woundGallery.grade, tint: 0xf3f2f1, shadowsTint: 0xc2c5cf },
+  ambient: { ...LOOKS.woundGallery.ambient, sky: 0x4c4d56, intensity: 0.34 },
+};
 /** the overlook scene starts when the lead steps onto the apron past the bend */
 const OVERLOOK_TRIGGER = { x: OVERLOOK.x - 4, n: 7, w: 9, d: 12 } as const;
 
@@ -61,7 +70,7 @@ function build(b: ZoneBuilder): void {
   b.game.sky.reset();
   b.game.sky.setHeading(0); // the overlook faces north: the Wound over the rail, red left, white right
   b.setEnv({
-    sky: 'woundVista', look: LOOKS.woundGallery, ambience: 'woundGallery', music: 'quarantine',
+    sky: 'woundVista', look: Z09_LOOK, ambience: 'woundGallery', music: 'quarantine',
     // steep, from the white remnant's side (north-east): the mirror floor keeps the glint out of the usual view
     key: { dirFrom: [26, 30, 46], intensity: 1.35, color: 0xe6ecff },
   });
@@ -69,6 +78,8 @@ function build(b: ZoneBuilder): void {
   S.flow = buildFlow(b);
   buildScenic(b);
   b.finalize();
+  // polish 4: the black walk mirrors like the painting's wet marble
+  wetFloors(b, 3, 0.08);
 }
 
 // =====================================================================================================================
@@ -83,8 +94,11 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   const sel = stage === 'start' ? 'seleneStart' : stage === 'overlook' ? 'seleneOverlookEnter' : 'seleneRecogEnter';
   z.spawnPlayer('tarrik', at);
   const selene = z.companion('selene', sel, 'follow');
-  // “Her weapon collapsed in her hand, inactive but ready.” — neither has anything drawn
+  // “Her weapon collapsed in her hand, inactive but ready.” — nothing drawn (the loadout), and Verity's hilt held low
+  // at her hip with the blades in: a scripted hold (polish 4) that her follow mode, the scenes' stopAction() and her
+  // lines keep; set on every entry (skip-safe)
   selene.actor.visual?.setLoadout({ melee: false, ranged: false });
+  selene.play('verityCollapsed', { persist: true });
   setDoor(S.space?.entry ?? null, false, 'sealed');
   setDoor(S.space?.door ?? null, false, 'locked');
   // the lines have already run their length when a later beat is entered directly

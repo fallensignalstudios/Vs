@@ -35,8 +35,6 @@ export interface Z06State {
   fightLive: boolean;
   /** materials the zone made itself (the crystal growth): released with the state */
   owned: THREE.Material[];
-  /** the plate ring's gold channel material (the kit's), reused for the walls' gold inlay; not owned */
-  inlayGold: THREE.Material | null;
 }
 
 export let S: Z06State = blank();
@@ -45,7 +43,7 @@ function blank(): Z06State {
   return {
     exit: null, entry: null, plate: null, lift: null, seamMat: null, seamGlow: 0, seamFlicker: 0, lifting: false,
     plug: null, plugLight: null,
-    enc: null, anchor: null, wallrunner: null, weaver: null, king: null, kingLight: null, fightLive: false, owned: [], inlayGold: null,
+    enc: null, anchor: null, wallrunner: null, weaver: null, king: null, kingLight: null, fightLive: false, owned: [],
   };
 }
 

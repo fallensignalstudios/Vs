@@ -5,6 +5,7 @@
  * move a casualty; its passenger is a posed figure owned by the zone.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { CharacterVisual, Companion, HumanoidArchetype, Routine, ZoneRuntime } from '@/core/api';
 import { isHumanoidVisual } from '@/core/api';
 import { BLUE, walkTo } from '../shared';
@@ -24,23 +25,33 @@ export function makeLitter(z: ZoneRuntime, id: string, at: string, passenger: Hu
   const mats = game.mats;
   const g = new THREE.Group();
   g.name = `litter-${id}`;
-  const geos: THREE.BufferGeometry[] = [];
+  // polish 4 (draw calls — Z08 has the least headroom): the sled's boxes are merged into one mesh per material, and
+  // the two light strips share one emissive (each litter: 5 meshes, 4 shadow casters, where it was 10 and 10)
+  const parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
   const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, zz: number): void => {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    geos.push(geo);
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(x, y, zz);
-    m.castShadow = true;
-    g.add(m);
+    const list = parts.get(mat) ?? [];
+    list.push(new THREE.BoxGeometry(w, h, d).translate(x, y, zz));
+    parts.set(mat, list);
   };
+  const glow = mats.emissive(BLUE, 2.6);
   // slate sled, cloth bed, steel side rails, two cold lift pads underneath and a status strip on each side
   box(2.05, 0.12, 0.66, mats.get('refSlate'), 0, BED_H - 0.1, 0);
   box(1.9, 0.06, 0.56, mats.get('refCloth'), 0, BED_H - 0.01, 0);
   for (const s of [-1, 1]) {
     box(2.0, 0.035, 0.035, mats.get('refSteel'), 0, BED_H + 0.06, s * 0.33);
-    box(1.2, 0.025, 0.012, mats.emissive(BLUE, 2.2), 0.1, BED_H - 0.1, s * 0.336);
+    box(1.2, 0.025, 0.012, glow, 0.1, BED_H - 0.1, s * 0.336);
     box(0.42, 0.05, 0.46, mats.get('refNavy'), s * 0.62, BED_H - 0.2, 0);
-    box(0.32, 0.012, 0.36, mats.emissive(BLUE, 3), s * 0.62, BED_H - 0.232, 0);
+    box(0.32, 0.012, 0.36, glow, s * 0.62, BED_H - 0.232, 0);
+  }
+  const geos: THREE.BufferGeometry[] = [];
+  for (const [mat, list] of parts) {
+    const geo = list.length > 1 ? mergeGeometries(list, false) : list[0];
+    if (list.length > 1) for (const l of list) l.dispose();
+    if (!geo) continue;
+    geos.push(geo);
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = mat !== glow;
+    g.add(m);
   }
   g.position.copy(z.m(at));
   g.rotation.y = z.myaw(at) + Math.PI / 2;

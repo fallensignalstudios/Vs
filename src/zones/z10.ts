@@ -23,7 +23,7 @@ import { isHumanoidVisual } from '@/core/api/chars';
 import { palm, confirmYes, meridianScene, placePalm, protocolScene, selenePalmScene, tarrikPalmScene } from './z10/assent';
 import { consequenceScene } from './z10/consequence';
 import { arrivalScene, diagnosticScene } from './z10/diagnostic';
-import { buildScenic, buildSpace } from './z10/space';
+import { buildScenic, buildSpace, wetMirror } from './z10/space';
 import { S, Z10_LOOK, resetState, setLights, setRise, updateShared } from './z10/state';
 import { showWitness, witnessScene } from './z10/witness';
 import { buildWitnessSet, disposeWitnessSet, updateWitnessSet } from './z10/witness-set';
@@ -44,6 +44,8 @@ function build(b: ZoneBuilder): void {
   S.witness = buildWitnessSet(b);
   buildScenic(b);
   b.finalize();
+  // polish 4: the black floor mirrors like the painting's wet marble
+  wetMirror(b, 3.2, 0.07);
 }
 
 // =====================================================================================================================
@@ -95,7 +97,11 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
     S.rings.params.align = meridian ? 1 : 0;
     S.rings.params.energy = meridian ? 1 : 0.45;
   }
-  if (S.crownmark) S.crownmark.params.glow = meridian ? 1 : 0.55;
+  if (S.crownmark) {
+    S.crownmark.params.glow = meridian ? 1 : 0.55;
+    // ignited at the end of the Witness: from the consequence on its core is steady rather than pulsing
+    S.crownmark.params.steady = at(stage, 'consequence') ? 1 : 0;
+  }
   if (S.diag) {
     S.diag.params.visible = stage === 'entry' ? 0 : 1;
     S.diag.params.progress = meridian ? 1 : 0;

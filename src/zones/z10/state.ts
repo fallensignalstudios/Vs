@@ -14,7 +14,8 @@ import type { WitnessSet } from './witness-set';
  */
 export const Z10_LOOK: Look = {
   ...LOOKS.core,
-  exposure: 1.2,
+  // polish 4: exposure up (1.2 → 1.36) toward the painting's bright silver volume
+  exposure: 1.36,
   grade: { ...LOOKS.core.grade, contrast: 1.16, lift: -0.006 },
   ambient: { ...LOOKS.core.ambient, sky: 0x70757f, intensity: 0.46 },
   envIntensity: 1.5,
@@ -36,6 +37,14 @@ export const STEP_H = 0.2;
 export const PAD = { dx: 3.05, dn: -1.9, yawT: 205, yawS: 155 } as const;
 /** the interfaces stand this far below the floor until the protocol raises them */
 export const PAD_SUNK = 1.25;
+/**
+ * Crownmark Five, larger than the 2.8 m prop (the crownmark-chamber painting: the star stands a head above the
+ * bearers, its mechanism reaching toward their interfaces). Its collider grows with it (r 1.78 → 2.49 m), all inside
+ * the Ø 10 m dais at its centre, where nobody walks; the interfaces stand clear of it.
+ */
+export const MARK_SCALE = 1.4;
+/** height of its white core over the chamber floor (the prop's `core` socket stands 1.5 m up at scale 1) */
+export const MARK_CORE = DAIS_H + 1.5 * MARK_SCALE;
 /** the lift (north edge) */
 export const LIFT = { x: C.x, n: C.n + FLOOR_R + 3.2 } as const;
 
@@ -50,7 +59,7 @@ export interface PadState {
 }
 
 export interface Z10State {
-  crownmark: HeroProp<{ glow: number; integrated: number }> | null;
+  crownmark: HeroProp<{ glow: number; integrated: number; steady: number }> | null;
   rings: HeroProp<{ align: number; spin: number; energy: number }> | null;
   padT: PadState;
   padS: PadState;

@@ -23,6 +23,12 @@ const BODY = 'Eclipse body';
  * the amount rises), so the amounts can climb high enough to read at conversation distance.
  */
 export const LYRIC_CORRUPTION = { arrive: 0.38, episode: 0.6, scream: 0.8, peak: 1.0, after: 0.45 } as const;
+/**
+ * Polish 4 (chars `CorruptionOpts.arms`): «Black patterns race down both arms» — the face-mode patterns run down her
+ * arms at the scream (0 → 1 over the beat after it), and a trace of them stays once the presence has gone (Z07 and
+ * Z08 carry the same trace).
+ */
+export const LYRIC_ARMS_AFTER = 0.25;
 
 const _v = new THREE.Vector3();
 
@@ -67,8 +73,9 @@ export function* kingScene(z: ZoneRuntime): Routine {
     yield 1.2;
     // half of it is still a man; one eye fixes on him — close over his shoulder (a soft light on the human half)
     if (S.kingLight) S.kingLight.intensity = 4.5;
-    c.twoShot(kp, tp, { side: -1, distance: 0.9, height: 1.72, fov: 30 });
-    c.dof(2.6, 0.5);
+    // (polish 4: low and close from his side, looking up into the bowed head — the half face fills the frame)
+    c.cut({ pos: z.P(7.3, 20.6, 1.2), look: z.P(8.55, 21.2, 1.45), fov: 28 });
+    c.dof(1.4, 0.5);
     yield 0.5;
     yield* z.say(BODY, 'King?'); // RELOCATED (ch24, Tarrik's approach corridor)
     c.dof(null);
@@ -243,7 +250,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
   const SK = z.m('gSelene');
   const TH = z.m('gTharne');
   const TB = z.m('gTharneBlock');
-  const fig = (amount: number): void => lyric?.actor.visual?.setCorruption(amount, { mode: 'face' });
+  const fig = (amount: number, arms: number): void => lyric?.actor.visual?.setCorruption(amount, { mode: 'face', arms });
 
   yield* z.cinematic('z06-grounding', function* (c: CineCtx): Routine {
     game.audio.setMusic('silence', 2);
@@ -258,7 +265,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     lyric?.teleport(z.m('gLyricFrom'), z.myaw('gLyric'));
     tharne?.teleport(z.m('gTharneFrom'), z.myaw('gLyric'));
     // «Violet patterns now cross most of her face»
-    fig(LYRIC_CORRUPTION.episode);
+    fig(LYRIC_CORRUPTION.episode, 0);
     walkTo(z, lyric, 'gLyric');
     walkTo(z, tharne, 'gTharne');
     c.cut({ pos: z.P(14.6, 2.0, 1.7), look: z.P(12.6, 7.4, 1.25), fov: 44 });
@@ -295,14 +302,18 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     onSelene();
     yield* z.say('Selene', 'Look at me.', { actor: selene });
     // «Black patterns race down both arms, and she screams.»
-    fig(LYRIC_CORRUPTION.scream);
+    fig(LYRIC_CORRUPTION.scream, 0);
     lyric?.actor.visual?.flash(VIOLET, 0.6, 0.45);
     if (!z.skipping) {
       game.audio.play('eclipseBreath', { pos: L, volume: 0.8, pitch: 1.3 });
       game.events.emit('caption', { text: 'Lyric screams', kind: 'alert', pos: L }); // NEW
     }
     onLyricLow();
-    yield 0.9;
+    // the patterns race down both arms over the beat that follows (the same 0.9 s as before)
+    for (let k = 1; k <= 9; k++) {
+      fig(LYRIC_CORRUPTION.scream, k / 9);
+      yield 0.1;
+    }
     yield* z.say('Lyric', 'No. No, no…', { actor: lyric });
     // Tharne grips her hand
     holdHands(tharne, lyric, true);
@@ -344,7 +355,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     selene?.teleport(z.m('gSeleneStand'), z.myaw('gSeleneStand'));
     lyric?.face(T);
     lyric?.actor.visual?.lookAt(T.clone().setY(1.75));
-    fig(LYRIC_CORRUPTION.peak);
+    fig(LYRIC_CORRUPTION.peak, 1);
     lyric?.actor.visual?.flash(VIOLET, 0.9, 0.6);
     if (!z.skipping) game.audio.play('ambWhisper', { pos: L, volume: 0.9 });
     c.cut({ pos: z.P(13.7, 5.6, 1.12), look: z.P(12.5, 7.0, 1.1), fov: 30 });
@@ -374,7 +385,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     pair();
     yield* z.say('Tharne', 'Lyric.', { actor: tharne });
     // «She blinks; the presence behind her eyes vanishes.» — the presence, not the infection
-    fig(LYRIC_CORRUPTION.after);
+    fig(LYRIC_CORRUPTION.after, LYRIC_ARMS_AFTER);
     lyric?.actor.visual?.lookAt(TB.clone().setY(1.0));
     game.player.playScripted('lowerWeapon');
     z.player.visual?.lookAt(null);
@@ -400,7 +411,7 @@ export function* groundingScene(z: ZoneRuntime): Routine {
     reachWrist(tharne, lyric, false);
     lyric?.actor.visual?.lookAt(null);
     selene?.actor.visual?.lookAt(null);
-    fig(LYRIC_CORRUPTION.after);
+    fig(LYRIC_CORRUPTION.after, LYRIC_ARMS_AFTER);
     z.setFlag('z06Grounded', true);
   }, { blendOut: 0.5 });
 }

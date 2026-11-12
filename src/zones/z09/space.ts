@@ -5,7 +5,8 @@
  *   A  sealed white-gold corridor, x 0 → 13, heading east, h 0 (enclosed vault, warm seams)
  *   B  the descent: a 12 m ramp bending 15° north, h 0 → −3; the walls turn to black stone
  *   C  the apron: black stone with gold channels, h −3; its north side opens onto the CIRCULAR OVERLOOK — a half
- *      disc bulging north behind a glass rail. Beyond it: one arm of a city-scale Crownmark and the Wound
+ *      disc bulging north behind a stone parapet (polish 4; it was a glass rail). Beyond it: one arm of a city-scale
+ *      Crownmark and the Wound
  *      (sky `woundVista`, `scenic.terminalVista` + `scenic.crownmarkArm`). The reveal comes only after the bend.
  *   D  the threshold hall, x 41 → 55: the five-depression threshold (`props.recognitionThreshold`) before a seamless
  *      black-stone door in the east wall, framed by the white point.
@@ -15,6 +16,7 @@
 import * as THREE from 'three';
 import type { DoorHandle, HeroProp, ZoneBuilder } from '@/core/api';
 import { FACE, GOLD, IVORY } from '../shared';
+import { buildButtresses, buildParapet, railColliders, type FinSpec } from './overlook';
 
 // =====================================================================================================================
 // Layout constants
@@ -41,6 +43,9 @@ export const OVERLOOK = { x: 34, n: HALL_N1, r: 5.4 } as const;
 /** D: the threshold hall and the door */
 export const DOOR = { x: 55, n: (HALL_N0 + HALL_N1) / 2, width: 3.6, height: 4.6 } as const;
 export const THRESHOLD = { x: 50.4, n: DOOR.n } as const;
+
+/** the cool fill lights: a neutral white (polish 4: was blue 0xaebcff) */
+const FILL = 0xdde2ec;
 
 /** plan point + bearing helpers */
 type P2 = [number, number];
@@ -85,9 +90,13 @@ function buildCorridor(b: ZoneBuilder, out: Z09Space): void {
   out.entry = b.door({ x: 0, n: A_N, yawDeg: FACE.east });
   out.entry.setState('sealed');
   b.wall({ from: [0, n0], to: [A_END + 0.8, n0], height: WALL_TOP, style: 'ribbed' });
-  b.wall({ from: [0, n1], to: [A_END, n1], height: WALL_TOP, style: 'panelled' });
+  // polish 4: the north wall in gold-framed recessed panels, tall soft slots between the ribs, paired pipes along
+  // the top of the south wall (all collider-free; the walls keep their colliders)
+  b.wall({ from: [0, n1], to: [A_END, n1], height: WALL_TOP, style: 'framed' });
   b.ribRow({ x: 2.2, n: A_N, span: CW - 0.6, height: WALL_TOP + 2.4, count: 3, spacing: 4.4, yawDeg: FACE.east, alongDeg: FACE.east });
   b.ceiling({ x: A_END / 2, n: A_N, w: A_END, d: CW, h: WALL_TOP, style: 'vaultClosed', rise: 2.6, bay: 4.4, bayPhase: 2.2, glow: 2.4 });
+  for (const x of [4.4, 8.8]) b.slot({ x, n: n1 - 0.32, h: 0.7, yawDeg: FACE.south, width: 0.4, height: 5.2, intensity: 1.15 });
+  b.pipes([[0.6, n0 + 0.32, WALL_TOP - 1.2], [A_END + 0.4, n0 + 0.32, WALL_TOP - 1.2]], { facing: FACE.north, count: 2, r: 0.06, bracket: 1.6, boxes: false });
 }
 
 /** B — the descent: the ramp bends 15° north; white-gold gives way to black stone */
@@ -111,11 +120,12 @@ function buildDescent(b: ZoneBuilder): void {
   // ribs over the descent: two white-gold, then black stone with gold seams
   for (const [k, mat] of [[0.2, undefined], [0.55, 'blackStone'], [0.88, 'blackStone']] as const) {
     const c = add(P1, fwd(B_BEARING), B_LEN * k);
-    b.rib({ x: c[0], n: c[1], h: LOW, span: CW - 0.5, height: WALL_TOP - LOW + 1.8, yawDeg: B_BEARING, mat, lit: true, noCollider: true });
+    // the black-stone ribs keep their light seams: they lead the eye down into the dark (the white-gold one is fine gold)
+    b.rib({ x: c[0], n: c[1], h: LOW, span: CW - 0.5, height: WALL_TOP - LOW + 1.8, yawDeg: B_BEARING, mat, lit: mat === 'blackStone', noCollider: true });
   }
 }
 
-/** C — the apron and the circular overlook: open to the sky on the north, glass rail, black mirror stone */
+/** C — the apron and the circular overlook: open to the sky on the north, a stone parapet, black mirror stone */
 function buildApron(b: ZoneBuilder): void {
   const x0 = P2_[0];
   // the walkway floor carries only the two flowing route lines and the fine star (the painting's floor: black
@@ -123,10 +133,12 @@ function buildApron(b: ZoneBuilder): void {
   b.floor({ x: (x0 + APRON_X1) / 2, n: (HALL_N0 + HALL_N1) / 2, w: APRON_X1 - x0, d: HALL_N1 - HALL_N0, h: LOW, mat: 'blackStoneFloor', inlay: 'none', reflective: true });
   b.disc({ x: OVERLOOK.x, n: OVERLOOK.n, r: OVERLOOK.r, h: LOW, mat: 'blackStoneFloor', inlay: 'none', reflective: true });
   fineStar(b, OVERLOOK.x, OVERLOOK.n, OVERLOOK.r - 0.9, LOW);
-  // south boundary: the ramp's right wall turns along the apron's south edge to the threshold hall
+  // south boundary: the ramp's right wall turns along the apron's south edge to the threshold hall (polish 4: gold-
+  // framed recessed panels, as the painting's building face on the right of the walk)
   const rEnd = add(P2_, B_RIGHT, CW / 2);
-  b.walls([rEnd, [rEnd[0] + 1.1, HALL_N0], [APRON_X1, HALL_N0]], { h: LOW, height: 9, style: 'ribbed' });
-  // north: the glass rail — from the ramp's left wall, along the apron edge, round the half disc, to D
+  b.walls([rEnd, [rEnd[0] + 1.1, HALL_N0], [APRON_X1, HALL_N0]], { h: LOW, height: 9, style: 'framed' });
+  // north: the parapet — from the ramp's left wall, along the apron edge, round the half disc, to D. Its colliders are
+  // the glass rail's chords, unchanged; its stone follows the true curve (see ./overlook)
   const lEnd = add(P2_, B_RIGHT, -CW / 2);
   const rail: P2[] = [lEnd, [x0 + 0.1, HALL_N1], [OVERLOOK.x - OVERLOOK.r, HALL_N1]];
   const steps = 14;
@@ -135,31 +147,49 @@ function buildApron(b: ZoneBuilder): void {
     rail.push([OVERLOOK.x + Math.sin(a) * OVERLOOK.r, OVERLOOK.n + Math.cos(a) * OVERLOOK.r]);
   }
   rail.push([OVERLOOK.x + OVERLOOK.r, HALL_N1], [APRON_X1, HALL_N1]);
-  for (let i = 0; i < rail.length - 1; i++) b.rail({ from: rail[i], to: rail[i + 1], h: LOW, height: 1.1, style: 'glass' });
-  // a gold channel traces the rail's foot (route light) and the five-pointed inlay's axis toward the threshold —
-  // a fine inlaid line, as the painting's floor, not a glowing tube
-  b.channel(rail.slice(2, rail.length - 1).map((p) => [p[0] + (OVERLOOK.x - p[0]) * 0.06, p[1] + (OVERLOOK.n - p[1]) * 0.06] as P2), { h: LOW, width: 0.035, intensity: 1.2 });
+  railColliders(b, rail, LOW);
+  const curve: P2[] = [lEnd, [x0 + 0.1, HALL_N1]];
+  for (let i = 0; i <= 48; i++) {
+    const a = -Math.PI / 2 + (i / 48) * Math.PI;
+    curve.push([OVERLOOK.x + Math.sin(a) * OVERLOOK.r, OVERLOOK.n + Math.cos(a) * OVERLOOK.r]);
+  }
+  curve.push([APRON_X1, HALL_N1]);
+  buildParapet(b, curve, LOW);
+  // a fine gold line traces the parapet's foot round the half disc (inlaid, not a light strip)
+  b.channel(rail.slice(2, rail.length - 1).map((p) => [p[0] + (OVERLOOK.x - p[0]) * 0.06, p[1] + (OVERLOOK.n - p[1]) * 0.06] as P2), { h: LOW, width: 0.035 });
   // the white-gold structure on the right: three immense ribs rising out of the south wall and leaning over the
-  // walkway (the concept's buttresses) — tiny figures against them
+  // walkway — tiny figures against them. Polish 4: no light strips (fine gold keels), the columns likewise.
   // (a half rib's foot is its local west end: turned to face west, the foot stands south of the wall and the
   // apex hangs over the middle of the walkway)
   for (const x of [29.5, 35.5, 41.5]) {
-    b.rib({ x, n: HALL_N0 + 5.2, h: LOW, span: 14, height: 15, depth: 1.5, yawDeg: FACE.west, style: 'half', lit: true, noCollider: true });
-    b.column({ x: x - 3, n: HALL_N0 - 0.9, h: LOW, r: 0.95, height: 24, style: 'round', lit: true });
+    b.rib({ x, n: HALL_N0 + 5.2, h: LOW, span: 14, height: 15, depth: 1.5, yawDeg: FACE.west, style: 'half', noCollider: true });
+    b.column({ x: x - 3, n: HALL_N0 - 0.9, h: LOW, r: 0.95, height: 24, style: 'round' });
   }
   b.column({ x: x0 + 1.6, n: HALL_N0 + 0.6, h: LOW, r: 0.55, height: 12, style: 'pylon', mat: 'blackStone', lit: true });
+  // the painting's pale buttresses with gold crowns, out beyond the parapet on the north-east
+  buildButtresses(b, FINS);
 }
 
-/** a fine inlaid five-pointed star in a ring (thin gold lines, as the painting's floor), pointing north */
+/**
+ * a fine inlaid five-pointed star in a ring (thin gold lines, as the painting's floor), pointing north — polish 4: the
+ * kit's shader-drawn inlay (anti-aliased, reflective polished gold, one draw call each) instead of channel strips
+ */
 function fineStar(b: ZoneBuilder, x: number, n: number, R: number, h: number): void {
-  const tips: P2[] = [];
-  for (let i = 0; i < 5; i++) tips.push([x + Math.sin((i / 5) * Math.PI * 2) * R, n + Math.cos((i / 5) * Math.PI * 2) * R]);
-  const star: P2[] = [];
-  for (let i = 0; i <= 5; i++) star.push(tips[(i * 2) % 5]);
-  b.channel(star, { h, width: 0.028, intensity: 1.1 });
-  const ring = (r: number): P2[] => Array.from({ length: 49 }, (_, i) => [x + Math.sin((i / 48) * Math.PI * 2) * r, n + Math.cos((i / 48) * Math.PI * 2) * r] as P2);
-  b.channel(ring(R * 0.3), { h, width: 0.024, intensity: 0.9 });
+  b.inlay({ x, n, h: h + 0.003, kind: 'star', r: R, points: 5, width: 0.034 });
+  b.inlay({ x, n, h: h + 0.003, kind: 'rings', r: R * 0.3, count: 1, inner: 1, width: 0.026 });
 }
+
+/**
+ * The painting's pale buttresses (see ./overlook): three fins out beyond the parapet on the north-east, their faces
+ * turned to the walk, leaning over toward the Wound; they fill the right edge of the painting framing behind the pair
+ * at the rail, and stay out of the reveal's view of the Wound. 7–14 m beyond the parapet, rising from 60 m below the
+ * walk: nowhere near the walkable footprint.
+ */
+const FINS: FinSpec[] = [
+  { x: 44.5, n: 18.2, face: 230, h0: LOW - 60, knee: LOW - 6, h1: LOW + 36, w0: 8.6, w1: 1.8, t: 2.2, lean: 10, crowns: [LOW + 4] },
+  { x: 47.6, n: 21.6, face: 233, h0: LOW - 60, knee: LOW - 4, h1: LOW + 42, w0: 8.2, w1: 1.8, t: 2.2, lean: 12, crowns: [LOW + 7] },
+  { x: 50.8, n: 25.2, face: 236, h0: LOW - 60, knee: LOW - 2, h1: LOW + 48, w0: 7.8, w1: 1.8, t: 2.2, lean: 14, crowns: [LOW + 10] },
+];
 
 /** D — the threshold hall: black stone, the five-depression threshold, the seamless door, the white point */
 function buildThresholdHall(b: ZoneBuilder, out: Z09Space): void {
@@ -172,6 +202,13 @@ function buildThresholdHall(b: ZoneBuilder, out: Z09Space): void {
   b.ceiling({ x: (APRON_X1 + DOOR.x) / 2 + 1, n: nMid, w: DOOR.x - APRON_X1 - 2, d, h: LOW + 9, style: 'vaultClosed', rise: 2.8, bay: 4.4, glow: 1.2, mat: 'blackStone' });
   out.door = b.door({ x: DOOR.x, n: nMid, h: LOW, yawDeg: FACE.east, width: DOOR.width, height: DOOR.height, style: 'threshold' });
   out.door.setState('locked');
+  // polish 4: the seamless door sits at the back of a deep stepped portal (two steps, clear of the lit pylons), and
+  // tall soft slots stand in the black stone walls either side of the hall (collider-free)
+  b.portal({ x: DOOR.x, n: nMid, h: LOW, yawDeg: FACE.west, width: DOOR.width, height: DOOR.height, steps: 2, step: 0.26, depth: 0.75, head: 'pointed', mat: 'blackStone' });
+  for (const x of [44.2, 48.4]) {
+    b.slot({ x, n: HALL_N0 + 0.32, h: LOW + 0.8, yawDeg: FACE.north, width: 0.42, height: 6.2, mat: 'blackStone', intensity: 1.1 });
+    b.slot({ x, n: HALL_N1 - 0.32, h: LOW + 0.8, yawDeg: FACE.south, width: 0.42, height: 6.2, mat: 'blackStone', intensity: 1.1 });
+  }
   // beyond the door: a short dark vestibule (Z10 lies beyond)
   b.floor({ x: DOOR.x + 2.6, n: nMid, w: 5.2, d: 4.4, h: LOW, mat: 'blackStoneFloor', inlay: 'none' });
   b.wall({ from: [DOOR.x, nMid - 2.2], to: [DOOR.x + 5.2, nMid - 2.2], h: LOW, height: 5, mat: 'blackStone' });
@@ -205,11 +242,14 @@ function buildThresholdHall(b: ZoneBuilder, out: Z09Space): void {
 function buildLight(b: ZoneBuilder): void {
   b.point({ x: 6.5, n: A_N, h: 4.6, color: IVORY, intensity: 26, distance: 14 });
   const mid = add(P1, fwd(B_BEARING), B_LEN * 0.6);
-  b.point({ x: mid[0], n: mid[1], h: 1.5, color: 0xb8c4ff, intensity: 30, distance: 16 });
+  // polish 4: the fills are a neutral cool white, not blue (the painting's greys carry no blue cast)
+  b.point({ x: mid[0], n: mid[1], h: 1.5, color: FILL, intensity: 30, distance: 16 });
   // the overlook: a steep shaft on the half disc keeps the two figures off the black stone
   b.spot({ x: OVERLOOK.x - 1.5, n: OVERLOOK.n - 3, h: LOW + 16, target: [OVERLOOK.x, OVERLOOK.n + 1, LOW], angleDeg: 26, intensity: 520, shaft: true, color: 0xfff0d8 });
-  b.point({ x: OVERLOOK.x - 3, n: HALL_N0 + 2.2, h: LOW + 3, color: 0xaebcff, intensity: 42, distance: 22 });
-  b.point({ x: 46, n: DOOR.n, h: LOW + 4.5, color: 0xaebcff, intensity: 36, distance: 18 });
+  b.point({ x: OVERLOOK.x - 3, n: HALL_N0 + 2.2, h: LOW + 3, color: FILL, intensity: 42, distance: 22 });
+  b.point({ x: 46, n: DOOR.n, h: LOW + 4.5, color: FILL, intensity: 36, distance: 18 });
+  // the pale buttresses face the walk, away from the key: a broad soft light from over the walk reaches their faces
+  b.spot({ x: 33, n: 9, h: LOW + 18, target: [47.5, 21.5, LOW + 5], angleDeg: 30, penumbra: 0.8, intensity: 1100, color: 0xfff1e0 });
   b.spot({ x: THRESHOLD.x - 3, n: THRESHOLD.n, h: LOW + 8.5, target: [THRESHOLD.x + 0.6, THRESHOLD.n, LOW], angleDeg: 30, intensity: 380, shaft: true, color: 0xfff2dc });
 }
 
@@ -232,6 +272,21 @@ function buildMarkers(b: ZoneBuilder): void {
   b.marker('doorFront', DOOR.x - 1.2, DOOR.n, LOW, FACE.east);
   b.marker('seleneBeyond', DOOR.x + 3.4, DOOR.n + 0.7, LOW, FACE.east);
   b.marker('exit', DOOR.x + 1.6, DOOR.n - 0.4, LOW, FACE.east);
+}
+
+/**
+ * The painting's walk is wet black marble: after `b.finalize()` the zone's polished floors are registered again with a
+ * stronger reflection than the kit's polished default (2.2) and a low blur, so the lanterns, the gold lines and the
+ * pale buttresses stand in the floor as long streaks (polish 4).
+ */
+export function wetFloors(b: ZoneBuilder, strength: number, roughness: number): void {
+  const render = b.game.render;
+  if (typeof render?.registerReflectiveFloor !== 'function') return;
+  const base = b.root.getWorldPosition(new THREE.Vector3()).y;
+  b.root.traverse((o) => {
+    const y = o.userData.kitReflectY;
+    if (typeof y === 'number' && (o as THREE.Mesh).isMesh) render.registerReflectiveFloor(o as THREE.Mesh, { y: y + base, strength, roughness });
+  });
 }
 
 // =====================================================================================================================

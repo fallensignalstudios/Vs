@@ -9,11 +9,13 @@
  *   the one-way descending corridor to Z09. Four King-era isolation barriers stand dormant on pale floor lines:
  *   west (x 24), south (n 9, between the court and the staging), east (x 50.5) and across the exit.
  *
- * Look: black mirror stone underfoot with gold rings round the court, white-gold walls and lit ribs, a vault of
- * glass over a dark sky — the battle outside goes on in amber, blue-white and violet. Violet only at the breach
- * and at the Weaver's anchor (the real sources).
+ * Look (polish 4, the quarantine painting): black mirror stone underfoot with fine inlaid gold rings round the
+ * court, white-silver marble walls with gold-framed panels and tall warm slots, unlit white ribs with a gold keel,
+ * galleries down the side walls and over the recesses, the north doorway as a deep stepped gate washed in warm
+ * light, daylight haze under a vault of glass over a dark sky — the battle outside goes on in amber, blue-white and
+ * violet (the story's sky). Violet only at the breach and at the Weaver's anchor (the real sources). The dressing
+ * is ./dressing.ts.
  */
-import type * as THREE from 'three';
 import type { MissionState, ZoneBuilder } from '@/core/api';
 import { LOOKS } from '@/render/looks';
 import { BLUE, FACE, GOLD, IVORY, VIOLET } from '../shared';
@@ -63,7 +65,7 @@ export function build(b: ZoneBuilder, state: MissionState): void {
   b.setEnv({
     sky: 'breachDeep', ambience: 'crucible', music: 'elite',
     // the crucible grade with a little more daylight fill: the quarantine painting's walls are bright in shadow too
-    look: { ...LOOKS.crucible, exposure: 1.2, ambient: { ...LOOKS.crucible.ambient, sky: 0xb4b8c0, intensity: 0.6 } },
+    look: { ...LOOKS.crucible, exposure: 1.1, ambient: { ...LOOKS.crucible.ambient, sky: 0xb4b8c0, intensity: 0.6 } },
     // high, from the south-west: long rib shadows fall north-east across the court; steep for the mirror floor
     key: { dirFrom: [-22, -30, 54], intensity: 2.1, color: 0xfff0dc },
   });
@@ -71,10 +73,10 @@ export function build(b: ZoneBuilder, state: MissionState): void {
   buildRecesses(b, west);
   buildDeck(b);
   buildCover(b);
-  const gold = buildCourt(b);
+  buildCourt(b);
   buildBarriers(b);
   buildGear(b, west);
-  buildDressing(b, gold);
+  buildDressing(b);
   buildLight(b);
   buildMarkers(b);
   buildScenic(b);
@@ -84,15 +86,18 @@ export function build(b: ZoneBuilder, state: MissionState): void {
 /** floor, walls, glass clerestory, ribs and vault, the two doors, the descending corridor beyond the north door */
 function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, inlay: 'channels', reflective: true, mat: 'blackStoneFloor' });
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'panelled', doors: [{ at: ENTRY_X, width: 4, height: 4.2 }] });
-  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'panelled', doors: [{ at: EXIT_X, width: EXIT_W, height: EXIT_H }] });
-  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'ribbed' });
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'conduit' });
+  // polish 4: the painting's walls — large white-silver marble slabs, gold-framed recessed panels on the long walls
+  // (the side walls carry the galleries of dressing.ts); same colliders as the plain wall
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'framed', doors: [{ at: ENTRY_X, width: 4, height: 4.2 }] });
+  b.wall({ from: [0, D], to: [W, D], height: WALL_H, style: 'framed', doors: [{ at: EXIT_X, width: EXIT_W, height: EXIT_H }] });
+  b.wall({ from: [0, 0], to: [0, D], height: WALL_H, style: 'slab' });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'slab' });
   // the glass band above the solid walls: the battle outside is still visible (book: the transparent ceiling)
   for (const [from, to] of [[[0, 0], [W, 0]], [[0, D], [W, D]], [[0, 0], [0, D]], [[W, 0], [W, D]]] as Array<[[number, number], [number, number]]>) {
     b.wall({ from, to, h: WALL_H, height: RIB_H - WALL_H, style: 'glass', noCollider: true });
   }
-  b.ribRow({ x: 6.25, n: D / 2, span: D - 1, height: RIB_H, count: 6, spacing: 11.5, yawDeg: FACE.east, alongDeg: FACE.east, lit: true });
+  // (polish 4: no light seams — the painting's ribs are white stone with a fine gold keel line)
+  b.ribRow({ x: 6.25, n: D / 2, span: D - 1, height: RIB_H, count: 6, spacing: 11.5, yawDeg: FACE.east, alongDeg: FACE.east });
   b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: RIB_H + 0.3, style: 'glass' });
 
   // south entry: the way the party came in (survivors leave through it in `quarantine`)
@@ -112,14 +117,16 @@ function buildShell(b: ZoneBuilder): void {
   b.wall({ from: [EXIT_X - 3, D + 8], to: [EXIT_X + 3, D + 8], height: 6, mat: 'blackStone', style: 'plain' });
   b.ceiling({ x: EXIT_X, n: cn, w: EXIT_W + 0.6, d: 8, h: 6, style: 'flat', mat: 'blackStone' });
   b.panelLight({ x: EXIT_X, n: D + 7.6, w: 2.6, d: 3, h: 1.2, facing: 'south', intensity: 2.4 });
-  // the white point: the brightest thing at the north end, two lit pylons lead the eye to it
+  // the white point: the brightest thing at the north end (with the gate's lit axis line, dressing.ts); the two
+  // pylons that flank it are white stone with fine gold now (polish 4)
   b.whitePoint({ x: EXIT_X, n: D - 0.9, h: EXIT_H + 1.8, intensity: 1.8 });
-  b.column({ x: EXIT_X - 4.6, n: D - 1.2, height: 9.5, style: 'pylon', lit: true });
-  b.column({ x: EXIT_X + 4.6, n: D - 1.2, height: 9.5, style: 'pylon', lit: true });
-  // the breach: Eclipse growth on the doorway the organism came through (a real source — faint)
-  b.corruption({ x: EXIT_X - 2.9, n: D - 0.35, h: 2.1, r: 1.3, onWall: true, yawDeg: FACE.south, intensity: 0.5 });
-  b.corruption({ x: EXIT_X + 2.9, n: D - 0.35, h: 1.4, r: 1.0, onWall: true, yawDeg: FACE.south, intensity: 0.4 });
-  b.corruption({ x: EXIT_X + 1.2, n: D - 1.6, r: 1.4, intensity: 0.35 });
+  b.column({ x: EXIT_X - 4.6, n: D - 1.2, height: 9.5, style: 'pylon' });
+  b.column({ x: EXIT_X + 4.6, n: D - 1.2, height: 9.5, style: 'pylon' });
+  // the breach: crystal growth the organism brought through (a real source). Polish 4: the kit's grounded crystal
+  // style, moved clear of the doorway's portal (same calls in the same order: the zone's random stream is unchanged)
+  b.corruption({ x: EXIT_X - 7.6, n: D - 0.35, h: 2.1, r: 1.3, onWall: true, yawDeg: FACE.south, intensity: 0.5, style: 'crystal', size: 'medium' });
+  b.corruption({ x: EXIT_X + 7.6, n: D - 0.35, h: 1.4, r: 1.0, onWall: true, yawDeg: FACE.south, intensity: 0.4, style: 'crystal', size: 'medium' });
+  b.corruption({ x: EXIT_X + 4.6, n: D - 3.4, r: 1.4, intensity: 0.35, style: 'crystal', size: 'medium' });
 }
 
 /** W and E survivor recesses: open-fronted shelters behind the fight, warm inside, with their shutters raised */
@@ -129,13 +136,17 @@ function buildRecesses(b: ZoneBuilder, west: boolean): void {
     const mouthX = westSide ? 9 : 66;
     const mouthW = westSide ? 5 : 4;
     // side walls (the E recess uses the room's east wall as its far side)
-    b.wall({ from: [r.x0, r.n0], to: [r.x0, r.n1], height: RECESS_H, style: 'panelled' });
-    if (westSide) b.wall({ from: [r.x1, r.n0], to: [r.x1, r.n1], height: RECESS_H, style: 'panelled' });
-    b.wall({ from: [r.x0, r.n1], to: [r.x1, r.n1], height: RECESS_H, style: 'conduit' });
-    b.wall({ from: [r.x0, r.n0], to: [r.x1, r.n0], height: RECESS_H, style: 'panelled', doors: [{ at: mouthX - r.x0, width: mouthW, height: 3.6 }] });
+    b.wall({ from: [r.x0, r.n0], to: [r.x0, r.n1], height: RECESS_H, style: 'framed' });
+    if (westSide) b.wall({ from: [r.x1, r.n0], to: [r.x1, r.n1], height: RECESS_H, style: 'framed' });
+    b.wall({ from: [r.x0, r.n1], to: [r.x1, r.n1], height: RECESS_H, style: 'framed' });
+    b.wall({ from: [r.x0, r.n0], to: [r.x1, r.n0], height: RECESS_H, style: 'framed', doors: [{ at: mouthX - r.x0, width: mouthW, height: 3.6 }] });
     b.ceiling({ x: (r.x0 + r.x1) / 2, n: (r.n0 + r.n1) / 2, w: r.x1 - r.x0, d: r.n1 - r.n0, h: RECESS_H, style: 'flat' });
-    // the manual shutter of the recess, raised (S-W / S-E on the drawing)
-    b.door({ x: mouthX, n: r.n0, width: mouthW, height: 3.6, style: 'service', open: true }).setState('open');
+    // the manual shutter of the recess, raised (S-W / S-E on the drawing). It never moves again: polish 4 bakes its
+    // visible parts into the static meshes (draw calls); the hidden bolts stay live and hidden, the collider stays
+    const shutter = b.door({ x: mouthX, n: r.n0, width: mouthW, height: 3.6, style: 'service', open: true });
+    shutter.setState('open');
+    shutter.object.traverse((o) => { if (!o.visible) b.keep(o); });
+    b.addStatic(shutter.object);
     // nothing to hide in behind the recess
     b.blocker({ x: (r.x0 + r.x1) / 2, n: (r.n1 + D) / 2, w: r.x1 - r.x0, d: D - r.n1, height: 5 });
   }
@@ -187,41 +198,24 @@ function buildCover(b: ZoneBuilder): void {
   low(40.5, 11.5, FACE.north, 'plate');
 }
 
-/** gold rings round the court: the arena reads from any angle; light as information */
-function buildCourt(b: ZoneBuilder): THREE.Material | null {
-  const ring = (r: number, seg: number, width: number, intensity: number): THREE.Object3D => {
-    const pts: Array<[number, number]> = [];
-    for (let i = 0; i <= seg; i++) {
-      const a = (i / seg) * Math.PI * 2;
-      pts.push([COURT.x + Math.cos(a) * r, COURT.n + Math.sin(a) * r]);
-    }
-    return b.channel(pts, { width, intensity });
-  };
-  // the outer ring's gold is also the walls' inlay (dressing.ts): the kit's flush-strip material, whose glow fades
-  // to its true average once a line is under a pixel wide — far wall lines do not shimmer
-  let gold: THREE.Material | null = null;
-  ring(6.6, 40, 0.07, 2.2).traverse((o) => {
-    const m = (o as THREE.Mesh).material;
-    if (!gold && (o as THREE.Mesh).isMesh && m && !Array.isArray(m)) gold = m;
-  });
-  ring(4.4, 32, 0.05, 1.8);
-  ring(1.6, 16, 0.05, 2.4);
+/**
+ * The court's marks: polish 4 — its concentric rings and spokes are the fine gold inlay of dressing.ts (one shader
+ * quad); the court's square border is a fine inlaid gold line; the clean anchor keeps its glowing ring (light as
+ * information: the one place the corruption does not reach — the players are sent to it).
+ */
+function buildCourt(b: ZoneBuilder): void {
   const x0 = COURT.x - COURT.w / 2, x1 = COURT.x + COURT.w / 2, n0 = COURT.n - COURT.d / 2, n1 = COURT.n + COURT.d / 2;
-  b.channel([[x0, n0], [x1, n0], [x1, n1], [x0, n1], [x0, n0]], { width: 0.08, intensity: 2.4 });
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    b.channel([[COURT.x + Math.cos(a) * 4.6, COURT.n + Math.sin(a) * 4.6], [COURT.x + Math.cos(a) * 6.4, COURT.n + Math.sin(a) * 6.4]], { width: 0.05, intensity: 1.8 });
-  }
-  // the clean anchor by the staging: a ring of steady gold light the corruption does not reach
+  b.channel([[x0, n0], [x1, n0], [x1, n1], [x0, n1], [x0, n0]], { width: 0.07 });
+  // the clean anchor by the staging: a ring of steady gold light the corruption does not reach (kept low: it is
+  // guidance, not a lamp — on the mirror floor it reads from across the court)
   const pts: Array<[number, number]> = [];
   for (let i = 0; i <= 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     pts.push([CLEAN_ANCHOR.x + Math.cos(a) * 1.7, CLEAN_ANCHOR.n + Math.sin(a) * 1.7]);
   }
-  b.channel(pts, { width: 0.09, intensity: 3.2, color: GOLD });
+  b.channel(pts, { width: 0.07, intensity: 1.3, color: GOLD, glow: true });
   // (integration wave: the up-facing light panel that sat inside the ring is gone — on the mirror floor it bloomed
   // into a white slab in every southern view; the bright ring alone marks the anchor)
-  return gold;
 }
 
 /**
@@ -236,7 +230,7 @@ function buildBarriers(b: ZoneBuilder): void {
   for (const [x, n] of [[BARRIER_W_X, BARRIER_S_N], [BARRIER_E_X, BARRIER_S_N]]) b.blocker({ x, n, w: 0.7, d: 0.7, height: BARRIER_H });
   // the lines of pale light the floor divides along (lit when the barriers rise)
   const seam = (pts: Array<[number, number]>) => {
-    const o = b.keep(b.channel(pts, { width: 0.16, color: 0xfff4dc, intensity: 5 }));
+    const o = b.keep(b.channel(pts, { width: 0.16, color: 0xfff4dc, intensity: 5, glow: true }));
     o.visible = false;
     S.seams.push(o);
   };
@@ -278,6 +272,11 @@ function buildLight(b: ZoneBuilder): void {
   b.point({ x: 66, n: 39.5, h: 3.4, color: IVORY, intensity: 22, distance: 10 });
   b.point({ x: 35, n: 5.2, h: 2.8, color: BLUE, intensity: 26, distance: 11 });
   b.point({ x: 35, n: 24, h: 10, color: 0xdfe6ff, intensity: 70, distance: 30 });
+  // polish 4: warm gold light washing the gate from high over the court (the painting's golden focal point), and a
+  // warm glow along the galleries over the recesses
+  b.spot({ x: EXIT_X, n: 34, h: 13.5, target: [EXIT_X, D - 0.4, 6.5], angleDeg: 22, penumbra: 0.6, intensity: 600, color: 0xffd9a4 });
+  b.point({ x: 9, n: 43.5, h: 10.6, color: 0xffd6a0, intensity: 30, distance: 12 });
+  b.point({ x: 66, n: 43.5, h: 10.6, color: 0xffd6a0, intensity: 24, distance: 10 });
   // dark until the finish: the opened core's light on the officer's face (moved there by the script)
   S.officerGlow = b.point({ x: COURT.x, n: COURT.n, h: 2.2, color: VIOLET, intensity: 0, distance: 3.6 });
 }

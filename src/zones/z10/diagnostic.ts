@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { BeamHandle, CineCtx, Routine, SayOpts, ZoneRuntime } from '@/core/api';
 import { atPost, waitOr, walkTo } from '../shared';
-import { C, DAIS_H, S, snapProps, terminal, under } from './state';
+import { C, DAIS_H, MARK_CORE, S, snapProps, terminal, under } from './state';
 
 const RADIO: SayOpts = { offscreen: true, channel: 'radio' };
 
@@ -35,8 +35,8 @@ export function* arrivalScene(z: ZoneRuntime): Routine {
     if (!z.skipping) game.audio.play('meridianAlign', { volume: 0.5 });
     yield 3.2;
     // “Everything focuses on one human-sized object: five points of black-gold metal surrounding a white core.”
-    c.cut({ pos: z.P(C.x - 1.4, C.n - 9.5, 1.5), look: z.P(C.x, C.n, 1.7), fov: 34 });
-    c.moveAsync({ pos: z.P(C.x - 0.9, C.n - 8.0, 1.55), look: z.P(C.x, C.n, 1.75), fov: 32 }, 5, 'inOut');
+    c.cut({ pos: z.P(C.x - 1.4, C.n - 10.4, 1.6), look: z.P(C.x, C.n, MARK_CORE), fov: 34 });
+    c.moveAsync({ pos: z.P(C.x - 0.9, C.n - 8.8, 1.7), look: z.P(C.x, C.n, MARK_CORE + 0.05), fov: 32 }, 5, 'inOut');
     yield 2.2;
     game.player.teleport(z.m('arrive'), z.myaw('arrive'));
     if (selene && z.skipping) selene.teleport(z.m('seleneArrive'), z.myaw('seleneArrive'));

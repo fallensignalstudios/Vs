@@ -75,7 +75,8 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
   if (stage !== 'choice') tharne.play('kneel', { loop: true });
   const lyric = z.companion('lyric', 'lyric', 'hold');
   lyric.play('sitInjured', { loop: true });
-  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face' }); // face-only, as Z06 leaves her
+  // face-only, as Z06 leaves her — with the trace of the patterns that ran down her arms (polish 4)
+  lyric.actor.visual?.setCorruption(LYRIC_CORRUPTION, { mode: 'face', arms: 0.25 });
   for (const c of [tharne, lyric]) c.actor.protectedNpc = true;
   spawnPeople(z, committed ? priority : 'pending');
 

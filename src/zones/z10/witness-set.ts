@@ -23,6 +23,8 @@ export interface Figure {
   target: THREE.Vector3 | null;
   speed: number;
   yaw: number;
+  /** polish 4: when standing, turn to face this figure (the King and his chronicler talk to each other) */
+  look: Figure | null;
 }
 
 export interface WitnessSet {
@@ -34,6 +36,8 @@ export interface WitnessSet {
   wound: THREE.Mesh;
   portal: THREE.Group;
   portalInner: THREE.Mesh;
+  /** the memory's sky: a silver haze instead of a starfield (polish 4) */
+  dome: THREE.Mesh;
   blade: THREE.Mesh;
   king: Figure;
   vesryn: Figure;
@@ -67,6 +71,61 @@ function glowTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+/**
+ * Witness V is remembered, not seen: the bridge stands in a soft silver haze instead of a starfield (palest just above
+ * the horizon, deeper toward the zenith, slow veils) that the whole blue-white star floods with light. When the
+ * star tears, its light goes out of the haze — red to the west, hard white to the east, a cold grey above. Linear HDR
+ * out (the post chain grades and tone-maps it); fog-free; drawn behind everything (radius 3200, inside the far plane).
+ */
+function memoryDome(own: <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(x: T) => T, starDir: THREE.Vector3): THREE.Mesh {
+  const mat = own(new THREE.ShaderMaterial({
+    uniforms: { uDir: { value: starDir.clone().normalize() }, uStar: { value: 1 }, uSunder: { value: 0 } },
+    vertexShader: /* glsl */ `
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uDir;
+      uniform float uStar;
+      uniform float uSunder;
+      varying vec3 vDir;
+      float hash( vec3 p ) { return fract( sin( dot( p, vec3( 12.9898, 78.233, 45.164 ) ) ) * 43758.5453 ); }
+      float vnoise( vec3 p ) {
+        vec3 i = floor( p ); vec3 f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );
+        return mix( mix( mix( hash( i ), hash( i + vec3( 1, 0, 0 ) ), f.x ), mix( hash( i + vec3( 0, 1, 0 ) ), hash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+                    mix( mix( hash( i + vec3( 0, 0, 1 ) ), hash( i + vec3( 1, 0, 1 ) ), f.x ), mix( hash( i + vec3( 0, 1, 1 ) ), hash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+      }
+      void main() {
+        vec3 d = normalize( vDir );
+        float up = smoothstep( -0.02, 0.8, d.y );
+        vec3 horizon = vec3( 0.16, 0.165, 0.178 );
+        vec3 zenith = vec3( 0.036, 0.04, 0.052 );
+        vec3 col = mix( horizon, zenith, pow( up, 0.6 ) );
+        col = mix( col, vec3( 0.08, 0.082, 0.09 ), smoothstep( 0.0, -0.35, d.y ) );
+        // soft veils of haze drifting across the memory
+        float v = vnoise( d * vec3( 2.2, 6.0, 2.2 ) ) * 0.6 + vnoise( d * 7.5 ) * 0.4;
+        col *= 0.84 + 0.3 * v;
+        // the whole star floods the haze round it with blue-white light
+        float s = max( dot( d, uDir ), 0.0 );
+        col += vec3( 0.6, 0.76, 1.0 ) * ( pow( s, 18.0 ) * 0.6 + pow( s, 3.0 ) * 0.1 ) * uStar;
+        // torn: the light goes out of the haze; red bleeds from the west, a hard white from the east
+        float k = uSunder;
+        col *= 1.0 - 0.42 * k;
+        col += vec3( 0.55, 0.12, 0.05 ) * pow( max( -d.x, 0.0 ), 3.0 ) * smoothstep( 0.6, 0.0, abs( d.y - 0.2 ) ) * k;
+        col += vec3( 0.7, 0.72, 0.78 ) * pow( max( d.x, 0.0 ), 6.0 ) * smoothstep( 0.5, 0.0, abs( d.y - 0.15 ) ) * k * 0.6;
+        gl_FragColor = vec4( col, 1.0 );
+      }`,
+    side: THREE.BackSide, fog: false,
+  }));
+  const dome = new THREE.Mesh(own(new THREE.SphereGeometry(3200, 48, 24)), mat);
+  dome.name = 'z10-witness-dome';
+  dome.frustumCulled = false;
+  dome.renderOrder = -10;
+  return dome;
+}
+
 export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   const game = b.game;
   const mats = game.mats;
@@ -79,24 +138,21 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   group.name = 'z10-witness';
   group.visible = false;
 
-  // --- the bridge: a white-gold floor with gold rings, the forward glass as a curved colonnade of frames ---
-  const floor = new THREE.Mesh(own(new THREE.CircleGeometry(15, 64)), mats.get('whiteGoldFloor'));
+  // --- the bridge: a pale wet marble floor with fine inlaid gold rings (polish 4: a luminous silver-white memory
+  // space — no glowing tubes, no sepia), the forward glass as a curved colonnade of frames ---
+  const floorMat = b.surfaceMaterial?.('wet') ?? mats.get('whiteGoldFloor');
+  const floor = new THREE.Mesh(own(new THREE.CircleGeometry(15, 64)), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.copy(P(b, 0, 2, FLOOR + 0.012));
   group.add(floor);
-  const goldLine = mats.emissive(0xffd79a, 2.6);
-  for (const r of [4.5, 9, 13.5]) {
-    const ring = new THREE.Mesh(own(new THREE.RingGeometry(r - 0.04, r + 0.04, 96)), goldLine);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.copy(P(b, 0, 2, FLOOR + 0.02));
-    group.add(ring);
-  }
+  // the inlay is built by the kit into the zone root; it moves into the (hidden) set
+  group.add(b.inlay({ x: C.x, n: C.n + 2, h: FLOOR + 0.016, kind: 'rose', r: 13.5, count: 3, inner: 1 / 3, points: 5, width: 0.045, glow: 0.25 }));
   const frameMat = mats.get('whiteGold');
   const trim = mats.get('goldTrim');
   const post = own(new THREE.BoxGeometry(0.55, 15, 0.7));
   const beam = own(new THREE.BoxGeometry(1, 0.6, 0.8));
   const seam = own(new THREE.BoxGeometry(0.06, 13, 0.06));
-  const seamMat = mats.emissive(0xffe2a8, 3);
+  const seamMat = trim; // polish 4: fine gold, not an emissive strip
   const glassR = 13;
   const posts: THREE.Vector3[] = [];
   for (let i = -4; i <= 4; i++) {
@@ -193,6 +249,11 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   wound.frustumCulled = false;
   group.add(wound);
 
+  // the memory's sky: a silver haze (palest above the horizon and round the star), one draw call
+  const dome = memoryDome(own, dir);
+  dome.position.copy(eye);
+  group.add(dome);
+
   // --- the portal: a standing doorway of white-gold light on the bridge, giving straight onto the dark ---
   const portal = new THREE.Group();
   portal.position.copy(P(b, 3.4, 9.2));
@@ -224,9 +285,11 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
   // The King (the generated `king` body, 1.76 m) as the book has him: “armor broken along one shoulder. Blood runs
   // beneath one eye” — `wounded`; no halo: a real, exhausted man, not an icon. Vesryn (the `vesryn` body, 1.74 m)
   // is plainer and dimmer — his own archetype never has a halo.
-  const king: Figure = { visual: null, target: null, speed: 1.0, yaw: 0 };
-  const vesryn: Figure = { visual: null, target: null, speed: 1.0, yaw: 0 };
-  const kv = game.chars.create('kingWitness', { seed: 1, wounded: true, halo: false });
+  const king: Figure = { visual: null, target: null, speed: 1.0, yaw: 0, look: null };
+  const vesryn: Figure = { visual: null, target: null, speed: 1.0, yaw: 0, look: null };
+  // the break is on his RIGHT (shoulder plate, blood under the right eye): the Witness's two-shots over the chronicler's
+  // shoulder (3–4 m) and its medium shots see him from his right front while he faces his chronicler (polish 4)
+  const kv = game.chars.create('kingWitness', { seed: 1, wounded: true, halo: false, woundSide: 'right' });
   const vv = game.chars.create('vesryn', { seed: 2 });
   if (isHumanoidVisual(kv)) king.visual = kv;
   if (isHumanoidVisual(vv)) vesryn.visual = vv;
@@ -243,7 +306,7 @@ export function buildWitnessSet(b: ZoneBuilder): WitnessSet {
 
   b.add(b.keep(group));
   return {
-    group, star, halo, red, white, wound, portal, portalInner, blade, king, vesryn,
+    group, star, halo, red, white, wound, portal, portalInner, dome, blade, king, vesryn,
     tgt: { star: 1, sunder: 0, wound: 0, portal: 0, blade: 0 },
     cur: { star: 1, sunder: 0, wound: 0, portal: 0, blade: 0 },
     owned,
@@ -257,6 +320,7 @@ export function placeFigure(b: { P: ZoneBuilder['P'] } | ZoneRuntime, f: Figure,
   f.yaw = (-yawDeg * Math.PI) / 180;
   f.visual.root.rotation.y = f.yaw;
   f.target = null;
+  f.look = null;
   f.visual.teleported();
 }
 
@@ -312,6 +376,9 @@ export function updateWitnessSet(z: ZoneRuntime, W: WitnessSet, dt: number): voi
     W.red.scale.multiplyScalar(Math.max(0.02, fade));
     W.white.scale.multiplyScalar(Math.max(0.02, fade));
   }
+  const du = (W.dome.material as THREE.ShaderMaterial).uniforms;
+  du.uStar.value = W.cur.star * (1 - s);
+  du.uSunder.value = s;
   W.wound.visible = W.cur.wound > 0.005;
   W.wound.scale.setScalar(Math.max(0.001, W.cur.wound * 300));
   W.portal.visible = W.cur.portal > 0.005;
@@ -336,6 +403,11 @@ export function updateWitnessSet(z: ZoneRuntime, W: WitnessSet, dt: number): voi
         f.yaw = Math.atan2(-TMP.x, -TMP.z);
         speed = f.speed;
       }
+    }
+    if (!f.target && f.look?.visual) {
+      const o = f.look.visual.root.position;
+      const p = v.root.position;
+      if (Math.hypot(o.x - p.x, o.z - p.z) > 0.2) f.yaw = Math.atan2(-(o.x - p.x), -(o.z - p.z));
     }
     let dy = f.yaw - v.root.rotation.y;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));

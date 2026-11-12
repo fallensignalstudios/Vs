@@ -1,232 +1,178 @@
 /**
- * Z08 — dressing toward the quarantine painting (pdf/ref-concept-quarantine.png): the gold vertical inlay that
- * runs up every white-gold wall, the monumental gold-framed gate round the north doorway (concentric rings over
- * it, a bright line climbing its axis), gold frames on the survivor recesses, and the violet crystal growth that
- * the organism brought through the breach — climbing the north wall and the rib legs either side of the doorway,
- * with dark shards strewn below it (violet only at the real source: the breach and the anchor beside it).
+ * Z08 — dressing toward the quarantine painting (pdf/ref-concept-quarantine.png), the zone the painting is of.
+ * Polish 4: built from the kit's art-direction pieces instead of the zone's own bars and prisms, so all of it joins
+ * the kit's per-material static meshes in finalize() and costs almost no draw calls:
+ *   - the GATE: the north doorway as a deep stepped portal (pointed head), a tall gold frame stepping in at the
+ *     top, concentric gold rings over it, and one bright line up its axis — the painting's column of light and the
+ *     route's white point (the only glowing line in the room besides the clean anchor and the corridor seams);
+ *   - TIERS: two storeys of balconies down the west and east walls (from the floor: a ground storey of gold-framed
+ *     dark doorways, galleries on corbels at 4.6 and 9.2 m), and a gallery over each survivor recess — all
+ *     overhead or beyond the footprint, collider-free;
+ *   - tall soft-lit SLOTS in the bays of the north and south walls, paired PIPES with brackets beside them, fine
+ *     gold lines up the bays and round the recess mouths (`wallLine`);
+ *   - violet CRYSTAL growth, grounded, only at the real sources: the breach (the doorway, the rib legs that flank it,
+ *     shards strewn below it) and the Weaver's anchor;
+ *   - the court's fine gold RINGS (one shader inlay), and the HAZE of the upper hall: daylight from within, under
+ *     the glass band (the sky outside is the story's battle sky and stays).
  *
- * All of it is visual: no collider, no nav change, no light. Two meshes, two draw calls (the gold and the crystal;
- * Z08 has the least draw-call headroom of the zones — layout.ts gave up the court's gold motes for them). The
- * crystal material is the zone's own and is released with the zone state.
+ * No collider, no nav change. The few lights are budgeted kit fixtures.
  */
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ZoneBuilder } from '@/core/api';
-import { D, EXIT_X, ENTRY_X, RECESS_E, RECESS_W, W } from './layout';
-import { S } from './state';
+import { COURT, D, ENTRY_X, EXIT_X, RECESS_E, RECESS_W, W } from './layout';
 
-/** inner wall faces (the walls are 0.6 m thick on their plan line) and the strips' stand-off from them */
-const FACE = 0.3 + 0.05;
+/** the walls' room faces (0.6 m thick on their plan line). (Functions, not constants: layout.ts imports this
+ * module, so its exports are not initialised yet while this module's top level runs.) */
+const nFace = (): number => D - 0.3;
+const S_FACE = 0.3;
+const W_FACE = 0.3;
+const eFace = (): number => W - 0.3;
 /** solid wall height (the glass band starts above it) */
 const WALL_TOP = 14;
-/** the gate round the north doorway: frame half-widths, heights, the medallion over the door */
-const GATE = { inner: 2.95, innerH: 5.05, outer: 3.85, outerH: 12.4, ringH: 8.7, rings: [0.95, 1.65, 2.35] } as const;
-/** bays between the rib legs (x) where a pair of gold lines runs up the north and south walls */
-const BAYS_X = [12, 23.5, 46.5, 58] as const;
-/** gold lines up the west and east walls (n) */
-const SIDE_N_W = [6, 12, 18, 24, 30] as const;
-const SIDE_N_E = [5, 11, 32.5] as const;
+/** the gate: the doorway's opening, the portal's depth, the arched frames' half-width, the rings' centre (the arches' too) */
+const GATE = { w: 5, h: 4.5, depth: 1.2, outerH: 11.4, frame: 4.95, ringH: 8.8, rings: [0.8, 1.45, 2.1] } as const;
+/** bays of the north and south walls between the rib legs (ribs every 11.5 m from x 6.25) */
+const BAYS = [12, 23.5, 46.5, 58] as const;
+/** the slots' light: warm, like the painting's lit slots */
+const SLOT_WARM = 0xffe4bc;
+/** the side galleries: storey height, depth, the stretch of wall they run along (n) */
+const TIER = { lh: 4.6, depth: 3.2, n0: 3.6, n1: 33.6 } as const;
 
-type Strip = [x0: number, n0: number, h0: number, x1: number, n1: number, h1: number, w: number];
-
-/**
- * The growth's own seeded stream (mulberry32): the zone's `rand()` stream also places prop variants and their
- * colliders, so the dressing never draws from it.
- */
-let seed = 0x08c2a7;
-function rand(): number {
-  seed = (seed + 0x6d2b79f5) | 0;
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-}
-
-/** `gold`: the court ring's channel material, shared by the inlay (null → the library's gold channel) */
-export function buildDressing(b: ZoneBuilder, gold: THREE.Material | null): void {
-  seed = 0x08c2a7; // the same growth on every load
-  buildInlays(b, gold);
+export function buildDressing(b: ZoneBuilder): void {
+  buildGate(b);
+  buildTiers(b);
+  buildBays(b);
   buildCrystals(b);
+  buildFloorAndAir(b);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Gold
+// The gate (north doorway: the breach, later the way down)
 // ---------------------------------------------------------------------------------------------------------------------
 
-/** a thin lit bar between two plan points (x, n, h), `w` wide and 4 cm deep, standing off its wall */
-function bar(b: ZoneBuilder, s: Strip): THREE.BufferGeometry {
-  const [x0, n0, h0, x1, n1, h1, w] = s;
-  const a = b.P(x0, n0, h0);
-  const c = b.P(x1, n1, h1);
-  const len = a.distanceTo(c);
-  const geo = new THREE.BoxGeometry(w, len, 0.04);
-  const dir = c.clone().sub(a).normalize();
-  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-  // on an east–west wall every direction in the wall plane turns about z, so the 4 cm depth stays on the normal
-  geo.applyMatrix4(new THREE.Matrix4().compose(a.clone().add(c).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)));
-  return geo;
+function circle(x: number, n: number, h: number, r: number, seg = 56): Array<[number, number, number]> {
+  const pts: Array<[number, number, number]> = [];
+  for (let i = 0; i < seg; i++) {
+    const a = (i / seg) * Math.PI * 2;
+    pts.push([x + Math.cos(a) * r, n, h + Math.sin(a) * r]);
+  }
+  return pts;
 }
 
-function buildInlays(b: ZoneBuilder, mat: THREE.Material | null): void {
-  const gold: THREE.BufferGeometry[] = [];
-  const nN = D - FACE; // north wall, room face
-  const nS = FACE; // south wall
-  const xW = FACE; // west wall
-  const xE = W - FACE; // east wall
-  const up = (x: number, n: number, h0: number, h1: number, w = 0.11): Strip => [x, n, h0, x, n, h1, w];
+function buildGate(b: ZoneBuilder): void {
+  const x = EXIT_X;
+  const n = nFace();
+  // the deep stepped portal round the doorway, round-headed like the painting's nested arches (its aperture is wider
+  // than the opening: the doorway is unchanged)
+  b.portal({ x, n, yawDeg: 180, width: GATE.w, height: GATE.h, steps: 4, depth: GATE.depth, step: 0.34, head: 'round' });
+  // a tall blind arch behind it, stepping back to the wall: the gate reads at the scale of the hall
+  b.portal({ x, n, yawDeg: 180, width: 7.9, height: GATE.outerH, steps: 2, depth: 0.5, step: 0.32, head: 'round', crest: false });
+  // nested round-headed frames round it, the rings at their centre, a line up the axis
+  b.wallLine(arch(x, n, GATE.frame, GATE.outerH - 3.95), { facing: 180, width: 0.05 });
+  for (const r of GATE.rings) b.wallLine(circle(x, n, GATE.ringH, r), { facing: 180, width: r > 2 ? 0.06 : 0.045, closed: true });
+  // the bright line up the axis, from over the portal's crest to under the glass: it guides to the way out
+  b.wallLine([[x, n, GATE.h + 2.4], [x, n, WALL_TOP - 0.3]], { facing: 180, width: 0.1, glow: true, color: 0xfff1d6, intensity: 3.2 });
+  // the entry (south wall): a shallower portal, the way the party came in and the survivors leave
+  b.portal({ x: ENTRY_X, n: S_FACE, yawDeg: 0, width: 4, height: 4.2, steps: 2, depth: 0.5, step: 0.3, head: 'flat' });
+}
 
-  // the bays of the north and south walls: a pair of lines from the skirting to under the glass
-  for (const x of BAYS_X) {
-    for (const n of [nN, nS]) for (const s of [-1, 1]) gold.push(bar(b, up(x + s * 0.6, n, 0.45, WALL_TOP - 0.5)));
-  }
-  // west and east walls (the east one only where the deck and the recess leave it bare): thin side to the room
-  for (const n of SIDE_N_W) for (const s of [-1, 1]) gold.push(sideBar(b, xW, n + s * 0.6, 0.45, WALL_TOP - 0.5, 0.11));
-  for (const n of SIDE_N_E) for (const s of [-1, 1]) gold.push(sideBar(b, xE, n + s * 0.6, 0.45, WALL_TOP - 0.5, 0.11));
+/** a tall rectangle on a north / south wall: half-width `hw`, from `h0` to `h1` */
+function frame(x: number, n: number, hw: number, h0: number, h1: number): Array<[number, number, number]> {
+  return [[x - hw, n, h0], [x - hw, n, h1], [x + hw, n, h1], [x + hw, n, h0]];
+}
 
-  // the gate: an inner frame round the doorway, a tall outer frame, a lintel, and the medallion over the door
-  const gx = EXIT_X;
-  for (const s of [-1, 1]) {
-    gold.push(bar(b, up(gx + s * GATE.inner, nN, 0, GATE.innerH, 0.12)));
-    gold.push(bar(b, up(gx + s * GATE.outer, nN, 0, GATE.outerH, 0.14)));
-    gold.push(bar(b, up(gx + s * (GATE.outer + 0.45), nN, 0.3, GATE.outerH - 1.2, 0.07)));
-    // the outer frame's shoulders step in toward the axis (the painting's stepped gate head)
-    gold.push(bar(b, [gx + s * GATE.outer, nN, GATE.outerH, gx + s * 1.25, nN, GATE.outerH + 0.9, 0.12]));
+/** a round-headed arch outline on a north / south wall: feet at 0.3 m, the head a half circle of radius `f` centred at `hc` */
+function arch(x: number, n: number, f: number, hc: number, seg = 28): Array<[number, number, number]> {
+  const pts: Array<[number, number, number]> = [[x - f, n, 0.3]];
+  for (let i = 0; i <= seg; i++) {
+    const a = Math.PI * (1 - i / seg);
+    pts.push([x + Math.cos(a) * f, n, hc + Math.sin(a) * f]);
   }
-  gold.push(bar(b, [gx - GATE.inner, nN, GATE.innerH, gx + GATE.inner, nN, GATE.innerH, 0.12]));
-  gold.push(bar(b, [gx - GATE.outer, nN, GATE.innerH + 0.6, gx + GATE.outer, nN, GATE.innerH + 0.6, 0.08]));
-  gold.push(bar(b, [gx - 1.25, nN, GATE.outerH + 0.9, gx + 1.25, nN, GATE.outerH + 0.9, 0.12]));
-  const c = b.P(gx, nN - 0.02, GATE.ringH);
-  for (const r of GATE.rings) {
-    const t = new THREE.TorusGeometry(r, r > 2 ? 0.06 : 0.045, 4, 72);
-    t.translate(c.x, c.y, c.z);
-    gold.push(t);
-  }
-  // the line up the gate's axis, from the lintel to the glass (the painting's beam of light): the widest of them
-  gold.push(bar(b, up(gx, nN - 0.03, GATE.innerH + 0.6, WALL_TOP - 0.2, 0.2)));
-  // the entry (south wall): a smaller frame
-  for (const s of [-1, 1]) gold.push(bar(b, up(ENTRY_X + s * 2.75, nS, 0, 5.2, 0.1)));
-  gold.push(bar(b, [ENTRY_X - 2.75, nS, 5.2, ENTRY_X + 2.75, nS, 5.2, 0.1]));
+  pts.push([x + f, n, 0.3]);
+  return pts;
+}
 
-  // gold frames on the survivor recesses (their mouths face south, into the room)
+// ---------------------------------------------------------------------------------------------------------------------
+// Tiers (balconies) — overhead or beyond the footprint, not walkable
+// ---------------------------------------------------------------------------------------------------------------------
+
+function buildTiers(b: ZoneBuilder): void {
+  const nc = (TIER.n0 + TIER.n1) / 2;
+  const width = TIER.n1 - TIER.n0;
+  // down the west and east walls: a ground storey on the wall face, galleries overhead at 4.6 and 9.2 m
+  b.tiers({ x: W_FACE + TIER.depth, n: nc, yawDeg: 90, width, levels: 2, levelHeight: TIER.lh, depth: TIER.depth, rail: 'balusters', stairs: 'none' });
+  b.tiers({ x: eFace() - TIER.depth, n: nc, yawDeg: 270, width, levels: 2, levelHeight: TIER.lh, depth: TIER.depth, rail: 'balusters', stairs: 'none' });
+  // a gallery over each survivor recess, on its roof (4.6 m), against the north wall
+  for (const r of [RECESS_W, RECESS_E]) {
+    const front = 41;
+    b.tiers({
+      x: (r.x0 + r.x1) / 2, n: front, h: 4.8, yawDeg: 180, width: r.x1 - r.x0 + 0.4, levels: 1, levelHeight: 4.3,
+      depth: nFace() - front, rail: 'balusters', stairs: 'none',
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Wall bays: tall lit slots, pipes, gold lines; the recess mouths
+// ---------------------------------------------------------------------------------------------------------------------
+
+function buildBays(b: ZoneBuilder): void {
+  for (const x of BAYS) {
+    // north wall: over the recesses the slot starts above their roof
+    const overRecess = x < RECESS_W.x1 + 1 || x > RECESS_E.x0 - 1;
+    const h0 = overRecess ? 9.4 : 0.8;
+    b.slot({ x, n: nFace(), h: h0, yawDeg: 180, width: 0.8, height: WALL_TOP - 1.2 - h0, intensity: 1.0, color: SLOT_WARM });
+    // a tall gold frame round each slot, and a line either side of it (the painting's gold-lined pilasters)
+    b.wallLine(frame(x, nFace(), 0.75, h0 - 0.35, WALL_TOP - 0.7), { facing: 180, width: 0.05, closed: true });
+    if (!overRecess) {
+      for (const s of [-1, 1]) b.wallLine([[x + s * 1.25, nFace(), 0.4], [x + s * 1.25, nFace(), WALL_TOP - 0.5]], { facing: 180, width: 0.035 });
+    }
+    // south wall
+    b.slot({ x, n: S_FACE, h: 0.8, yawDeg: 0, width: 0.8, height: WALL_TOP - 2, intensity: 1.0, color: SLOT_WARM });
+    b.wallLine(frame(x, S_FACE, 0.75, 0.45, WALL_TOP - 0.7), { facing: 0, width: 0.05, closed: true });
+    for (const s of [-1, 1]) b.wallLine([[x + s * 1.1, S_FACE, 0.4], [x + s * 1.1, S_FACE, WALL_TOP - 0.5]], { facing: 0, width: 0.035 });
+  }
+  // paired service pipes with brackets climbing beside the rib legs of the open bays (north and south walls)
+  for (const px of [20.0, 27.0, 43.0, 50.0]) b.pipes([[px, nFace(), 0.3], [px, nFace(), 13.7]], { facing: 180, count: 2, r: 0.06, mat: 'goldDark', boxes: false });
+  for (const px of [16.2, 53.8]) b.pipes([[px, S_FACE, 0.3], [px, S_FACE, 13.7]], { facing: 0, count: 2, r: 0.06, mat: 'goldDark', boxes: false });
+
+  // gold frames round the survivor recess mouths (they face south, into the room)
   for (const [r, mx, mw] of [[RECESS_W, 9, 5], [RECESS_E, 66, 4]] as const) {
-    const n = r.n0 - FACE;
-    for (const s of [-1, 1]) gold.push(bar(b, up(mx + s * (mw / 2 + 0.25), n, 0, 4.0, 0.1)));
-    gold.push(bar(b, [mx - mw / 2 - 0.25, n, 4.0, mx + mw / 2 + 0.25, n, 4.0, 0.1]));
-    gold.push(bar(b, [r.x0 + 0.4, n, 4.35, r.x1 - 0.4, n, 4.35, 0.06]));
+    const n = r.n0 - 0.3;
+    const hw = mw / 2 + 0.3;
+    b.wallLine([[mx - hw, n, 0], [mx - hw, n, 4.0], [mx + hw, n, 4.0], [mx + hw, n, 0]], { facing: 180, width: 0.05 });
+    b.wallLine([[r.x0 + 0.4, n, 4.3], [r.x1 - 0.4, n, 4.3]], { facing: 180, width: 0.035 });
   }
-
-  // the court ring's gold (the kit's flush-strip material: polygon offset, and no shimmer once a line is thinner
-  // than a pixel at the far walls)
-  add(b, gold, mat ?? b.mats.get('goldChannel'), 'z08-inlay');
-}
-
-/** a vertical bar on a north–south (west / east) wall: thin side toward the room */
-function sideBar(b: ZoneBuilder, x: number, n: number, h0: number, h1: number, w: number): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(0.04, h1 - h0, w);
-  const p = b.P(x, n, (h0 + h1) / 2);
-  geo.translate(p.x, p.y, p.z);
-  return geo;
-}
-
-function add(b: ZoneBuilder, geos: THREE.BufferGeometry[], mat: THREE.Material, name: string): void {
-  if (!geos.length) return;
-  for (let i = 0; i < geos.length; i++) {
-    const g = geos[i];
-    // one attribute layout for the merge (tori and boxes both carry position / normal / uv)
-    if (g.index) geos[i] = g.toNonIndexed();
-  }
-  const merged = mergeGeometries(geos, false);
-  for (const g of geos) g.dispose();
-  if (!merged) return;
-  const mesh = new THREE.Mesh(merged, mat);
-  mesh.name = name;
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  b.add(mesh);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// Violet crystal growth (the organism's breach)
+// Crystal growth — only at the real sources (the breach and the Weaver's anchor), grounded
 // ---------------------------------------------------------------------------------------------------------------------
-
-/** one faceted crystal: a six-sided prism tapering to a point, its base at the origin, along +Y */
-function crystal(len: number, r: number): THREE.BufferGeometry {
-  const pts = [new THREE.Vector2(0, -0.05), new THREE.Vector2(r, 0), new THREE.Vector2(r * 0.82, len * 0.72), new THREE.Vector2(0, len)];
-  return new THREE.LatheGeometry(pts, 6).toNonIndexed();
-}
-
-/**
- * A cluster grown from a point on a surface: `count` crystals fanned round the surface normal `nrm` (world), the
- * longest near the middle, `spread` = the widest tilt from the normal (radians).
- */
-function cluster(out: THREE.BufferGeometry[], at: THREE.Vector3, nrm: THREE.Vector3, count: number, size: number, spread: number): void {
-  const q = new THREE.Quaternion();
-  const m = new THREE.Matrix4();
-  const tangent = new THREE.Vector3().crossVectors(nrm, Math.abs(nrm.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
-  const bit = new THREE.Vector3().crossVectors(nrm, tangent);
-  for (let i = 0; i < count; i++) {
-    const a = rand() * Math.PI * 2;
-    const tilt = Math.pow(rand(), 0.8) * spread;
-    const dir = nrm.clone().multiplyScalar(Math.cos(tilt))
-      .addScaledVector(tangent, Math.sin(tilt) * Math.cos(a))
-      .addScaledVector(bit, Math.sin(tilt) * Math.sin(a))
-      .normalize();
-    const k = 1 - tilt / (spread + 0.01);
-    const len = size * (0.35 + 0.65 * rand()) * (0.55 + 0.45 * k);
-    const r = len * (0.11 + 0.06 * rand());
-    const geo = crystal(len, r);
-    const base = at.clone()
-      .addScaledVector(tangent, (rand() - 0.5) * size * 0.55)
-      .addScaledVector(bit, (rand() - 0.5) * size * 0.55)
-      .addScaledVector(nrm, -0.04);
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    const twist = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand() * Math.PI);
-    m.compose(base, q.multiply(twist), new THREE.Vector3(1, 1, 1));
-    geo.applyMatrix4(m);
-    out.push(geo);
-  }
-}
 
 function buildCrystals(b: ZoneBuilder): void {
-  const out: THREE.BufferGeometry[] = [];
-  const south = new THREE.Vector3(0, 0, 1); // the north wall's room face points south (world +z)
-  const upV = new THREE.Vector3(0, 1, 0);
-  const nN = D - 0.32;
-  const onWall = (x: number, h: number, count: number, size: number): void => cluster(out, b.P(x, nN, h), south, count, size, 0.85);
-  const onFloor = (x: number, n: number, count: number, size: number): void =>
-    cluster(out, b.P(x, n, 0), upV.clone().add(new THREE.Vector3(0, 0, 0.35)).normalize(), count, size, 0.7);
-  // the breach: heaped either side of the doorway, climbing the wall past the gate frame
-  // (between the rib legs: the doorway's bay runs x 30.7–39.3)
-  onWall(EXIT_X - 3.5, 0.3, 11, 2.1);
-  onWall(EXIT_X - 3.4, 2.8, 7, 1.5);
-  onWall(EXIT_X - 3.7, 5.0, 5, 1.1);
-  onWall(EXIT_X - 3.2, 7.2, 3, 0.8);
-  onWall(EXIT_X + 3.5, 0.3, 10, 1.9);
-  onWall(EXIT_X + 3.6, 2.6, 6, 1.3);
-  onWall(EXIT_X + 3.4, 5.2, 4, 1.0);
-  onFloor(EXIT_X - 3.2, D - 1.2, 8, 1.5);
-  onFloor(EXIT_X + 2.7, D - 1.1, 7, 1.2);
-  // up the rib legs either side of the doorway (their keels toward the doorway: ±0.96 m 1.25 m out from the wall)
-  for (const [x, s] of [[29.25, 1], [40.75, -1]] as const) {
-    const side = new THREE.Vector3(s, 0, 0.6).normalize();
-    // (only on the straight foot of the leg: higher up the arch leans in over the room)
-    for (const [h, cnt, size] of [[0.4, 7, 1.4], [2.2, 6, 1.1], [3.8, 4, 0.8]] as const) {
-      cluster(out, b.P(x + s * 0.99, D - 1.25, h), side, cnt, size, 0.8);
-    }
-  }
-  // round the Weaver's anchor (the second source) and along the foot of the north wall toward it
-  onWall(22.5, 0.2, 6, 1.0);
-  onWall(26.5, 1.4, 4, 0.8);
-  onFloor(23.6, D - 0.9, 5, 0.8);
-  // broken shards strewn on the floor below the breach (the painting's black rubble)
-  for (const [x, n, s] of [[31.6, 45.2, 0.45], [38.4, 45.6, 0.5], [33.6, 43.6, 0.35], [41.8, 44.2, 0.4], [28.2, 46.0, 0.4], [36.9, 44.6, 0.3]] as const) {
-    cluster(out, b.P(x, n, 0), new THREE.Vector3(rand() - 0.5, 0.6, rand() - 0.5).normalize(), 3, s, 1.2);
-  }
+  const x = EXIT_X;
+  // heaped at the portal's feet, either side of the doorway
+  b.crystals({ x: x - 4.6, n: D - 1.6, r: 1.3, size: 'large', light: true });
+  b.crystals({ x: x + 4.5, n: D - 1.5, r: 1.1, size: 'large' });
+  // climbing the rib legs that flank the gate (their faces toward the doorway)
+  b.crystals({ x: x - 4.75, n: D - 1.0, h: 2.6, r: 0.7, size: 'medium', onWall: true, yawDeg: 90 });
+  b.crystals({ x: x - 4.75, n: D - 1.0, h: 5.0, r: 0.5, size: 'small', onWall: true, yawDeg: 90 });
+  b.crystals({ x: x + 4.76, n: D - 1.0, h: 3.2, r: 0.6, size: 'medium', onWall: true, yawDeg: 270 });
+  // shards strewn below the breach
+  b.crystals({ x: x - 1.9, n: D - 3.9, r: 0.5, size: 'small' });
+  b.crystals({ x: x + 2.6, n: D - 3.3, r: 0.6, size: 'small' });
+  b.crystals({ x: x + 6.8, n: D - 3.4, r: 0.5, size: 'small' });
+  // the Weaver's anchor (25.6, D − 3.6) and the foot of the north wall toward it
+  b.crystals({ x: 22.6, n: nFace(), h: 1.2, r: 0.8, size: 'medium', onWall: true, yawDeg: 180 });
+  b.crystals({ x: 23.4, n: D - 1.1, r: 1.0, size: 'medium' });
+}
 
-  // one material for all of it (draw calls: Z08 has the least headroom): dark faceted crystal with a violet glow
-  const crystalMat = new THREE.MeshStandardMaterial({
-    color: 0x2a1038, emissive: 0x9a3ce0, emissiveIntensity: 0.26, roughness: 0.12, metalness: 0.5, flatShading: true,
-  });
-  crystalMat.name = 'z08-crystal';
-  S.owned.push(crystalMat);
-  add(b, out, crystalMat, 'z08-crystals');
+// ---------------------------------------------------------------------------------------------------------------------
+// The court's fine gold rings and the upper hall's haze
+// ---------------------------------------------------------------------------------------------------------------------
+
+function buildFloorAndAir(b: ZoneBuilder): void {
+  // concentric fine gold rings round the court (inlaid, reflective, never glowing)
+  b.inlay({ x: COURT.x, n: COURT.n, h: 0.003, kind: 'rose', r: 7.4, count: 5, points: 8, inner: 0.2, width: 0.055 });
+  // daylight haze under the glass band: the upper hall reads bright, the floor stays clear
+  b.haze({ x: W / 2, n: D / 2, h: 5, w: W - 1, d: D - 1, height: 16, density: 0.045, falloff: -0.8, intensity: 1.15, color: 0xf6eee2 });
 }

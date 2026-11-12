@@ -68,8 +68,9 @@ export function build(b: ZoneBuilder): void {
     // the gallery look, with the haze thinned a little: the room looks out into vacuum. Integration wave (quarantine
     // painting): a little more cool fill so the figures read against the walls, the gold staying the only warmth
     look: {
-      ...LOOKS.gallery, exposure: 1.12, envIntensity: 1.0, fog: { color: 0x101820, density: 0.012 },
-      ambient: { sky: 0x6a7284, ground: 0x16130f, intensity: 0.5 },
+      ...LOOKS.gallery, exposure: 1.18, envIntensity: 1.15, fog: { color: 0x101820, density: 0.012 },
+      // polish 4: more fill now that the strips no longer light the room (the slots and their fixtures do)
+      ambient: { sky: 0x7a8294, ground: 0x1c1813, intensity: 0.68 },
     },
     ambience: 'gallery', music: 'breach',
     // cold exterior light falling steeply through the glass (steep: the mirror floor would glint otherwise)
@@ -96,20 +97,22 @@ export function build(b: ZoneBuilder): void {
 function buildShell(b: ZoneBuilder): void {
   b.floor({ x: W / 2, n: D / 2, w: W, d: D, mat: 'blackStoneFloor', reflective: true, inlay: 'channels' });
   // west: entry from Z06 and the west survivor route
+  // (polish 4: gold-framed recessed panels and marble slabs — the painting's walls; the colliders are the plain walls')
   b.wall({
-    from: [0, 0], to: [0, D], height: WALL_H, style: 'ribbed',
+    from: [0, 0], to: [0, D], height: WALL_H, style: 'framed',
     doors: [{ at: ROUTE_N, width: 3, height: 3.5 }, { at: ENTRY_N, width: 3, height: 3.5 }],
   });
   b.door({ x: 0, n: ENTRY_N, yawDeg: FACE.east, style: 'threshold' }).setState('sealed');
   // east: the east survivor route
-  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'ribbed', doors: [{ at: ROUTE_N, width: 3, height: 3.5 }] });
+  b.wall({ from: [W, 0], to: [W, D], height: WALL_H, style: 'framed', doors: [{ at: ROUTE_N, width: 3, height: 3.5 }] });
   // south: the exit to Z08
-  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'conduit', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
+  b.wall({ from: [0, 0], to: [W, 0], height: WALL_H, style: 'slab', doors: [{ at: EXIT_X, width: 3, height: 3.5 }] });
   // north: the glass, floor to ceiling, on white-gold pylons
   b.wall({ from: [0, D], to: [W, D], height: WALL_H, mat: 'blackStone', style: 'glass' });
-  // white-gold pylons (silver stone, the painting's pale pillars) frame the glass against the black walls
-  for (const x of PYLONS) b.column({ x, n: PYLON_N, r: 0.5, height: WALL_H, style: 'pylon', lit: true });
-  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, mat: 'blackStone', style: 'flat' });
+  // white-gold pylons (silver stone, the painting's pale pillars) frame the glass; polish 4: fine gold, no strips
+  for (const x of PYLONS) b.column({ x, n: PYLON_N, r: 0.5, height: WALL_H, style: 'pylon' });
+  // (polish 4: its light troughs kept soft — they read as neon bars at full glow)
+  b.ceiling({ x: W / 2, n: D / 2, w: W, d: D, h: WALL_H, mat: 'blackStone', style: 'flat', glow: 0.4 });
 
   // exit: door, a short lit vestibule beyond it (the way down), the white point above
   S.exit = b.door({ x: EXIT_X, n: 0, style: 'threshold' });
@@ -121,8 +124,8 @@ function buildShell(b: ZoneBuilder): void {
   b.ceiling({ x: EXIT_X, n: -2.6, w: 4.4, d: 5.2, h: 4.2, mat: 'blackStone', style: 'flat' });
   b.panelLight({ x: EXIT_X, n: -4.8, w: 2.4, d: 2.6, h: 0.9, facing: 'north', intensity: 2.0 });
   b.whitePoint({ x: EXIT_X, n: 0.9, h: 5.2, intensity: 1.8 });
-  b.column({ x: EXIT_X - 3.2, n: 0.7, height: 6.2, style: 'pylon', lit: true });
-  b.column({ x: EXIT_X + 3.2, n: 0.7, height: 6.2, style: 'pylon', lit: true });
+  b.column({ x: EXIT_X - 3.2, n: 0.7, height: 6.2, style: 'pylon' });
+  b.column({ x: EXIT_X + 3.2, n: 0.7, height: 6.2, style: 'pylon' });
   // gold route light from the panel to the door
   b.channel([[PANEL[0], 6.0], [PANEL[0] + 1.2, 4.6], [EXIT_X, 4.6], [EXIT_X, 1.2]], { width: 0.07 });
 }
@@ -207,8 +210,14 @@ function buildDressing(b: ZoneBuilder): void {
   b.prop('debrisSmall', { x: 21.5, n: 4.2, yawDeg: 40 });
   b.prop('debrisSmall', { x: 11.2, n: 12.6, yawDeg: 110 });
   b.prop('cableBundle', { x: 10.8, n: 17.2, yawDeg: 15 });
-  b.conduit([[0.5, 15, 5.6], [0.5, 21, 5.6]], { glow: true, r: 0.09 });
-  b.conduit([[33.5, 1, 5.6], [33.5, 21, 5.6]], { glow: true, r: 0.09 });
+  // polish 4: tall soft-lit slots in the south and east walls (the painting's lit slots; the room's soft light now
+  // that the strips are gone), two of them with a weak fixture light
+  // (on the slab-clad south wall the slot stands on the cladding, 6 cm proud of the wall face)
+  for (const x of [5.6, 11.2, 22.8, 28.4]) b.slot({ x, n: 0.37, h: 0.7, yawDeg: FACE.north, width: 0.6, height: 5.4, intensity: 1.15, color: 0xffe4bc, light: x === 11.2 || x === 22.8 });
+  for (const n of [10.2, 15.2]) b.slot({ x: W - 0.3, n, h: 0.7, yawDeg: FACE.west, width: 0.6, height: 5.4, intensity: 1.15, color: 0xffe4bc });
+  // polish 4: paired service pipes with brackets along the side walls (they were lit conduits)
+  b.pipes([[0.3, 15, 5.6], [0.3, 21.2, 5.6]], { facing: 90, count: 2, r: 0.07, bracket: 1.6 });
+  b.pipes([[33.7, 1, 0.3], [33.7, 1, 5.6], [33.7, 21.2, 5.6]], { facing: 270, count: 2, r: 0.07, bracket: 1.6, boxes: [1] });
 }
 
 /**
@@ -220,6 +229,9 @@ function buildLight(b: ZoneBuilder): void {
   b.spot({ x: STATION[0] + 0.6, n: STATION[1] - 2.6, h: WALL_H - 0.3, target: [STATION[0], STATION[1] - 0.6, 0], angleDeg: 26, intensity: 260, shaft: true, shadow: true, color: 0xdfe8ff });
   b.point({ x: 3.0, n: 8.8, h: 2.6, color: AMBER, intensity: 18, distance: 9 });
   b.point({ x: EXIT_X, n: 11, h: 5.6, color: GOLD, intensity: 30, distance: 16 });
+  // polish 4: a warm wash on the pale pylons at the glass from the room side, so the white-gold reads against the
+  // vacuum outside (it replaces the light their strips gave)
+  b.point({ x: 17, n: 16.5, h: 6.2, color: 0xffe0b4, intensity: 26, distance: 14 });
   // Reformation systems (flicker targets): Lyric's corner, the east route, the O3 console
   const ref = [
     b.point({ x: 5.6, n: 18.4, h: 2.4, color: BLUE, intensity: 14, distance: 8 }),
@@ -359,6 +371,11 @@ function buildDisplays(b: ZoneBuilder): void {
   streams.setLabel('top', 'DOMINION ARCS'); // NEW (the book's noun: firing arcs)
   streams.setLabel('bottom', 'REFORMATION TRACKS'); // NEW (the book's noun: Eclipse tracks)
   streams.setLabel('status', 'SHARED TARGETS'); // NEW (plan limit 1: only tracks and arcs are shared)
+  // polish 4 (UI world text): the two lane names drawn legibly at 720p on dark plates over the in-world labels; they
+  // follow the display and hide with it (offsets verified against the hologram by the UI owner)
+  const front = { x: 0, y: 0, z: -1 };
+  b.game.ui.worldText?.('z07-lane-top', { at: streams.object, offset: { x: 0.81, y: 1.825, z: 0 }, faces: front, text: 'DOMINION ARCS', tone: 'amber', align: 'left', size: 0.04 });
+  b.game.ui.worldText?.('z07-lane-bottom', { at: streams.object, offset: { x: 0.81, y: 1.395, z: 0 }, faces: front, text: 'REFORMATION TRACKS', tone: 'cold', align: 'left', size: 0.04 });
   const labels: Array<[string[], number, number, number, number]> = [
     [['WEAPONS AUTHORITY: NOT SHARED', 'COMMAND: NOT SHARED'], 0xf2f6ff, 1.5, 0, 1.5 - 0.72], // NEW (plan limit 2)
   ];

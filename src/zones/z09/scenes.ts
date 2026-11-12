@@ -117,10 +117,12 @@ export function* overlookScene(z: ZoneRuntime): Routine {
     selene?.stopAction();
     walkTo(z, selene, 'seleneRail');
     game.player.teleport(z.m('tarrikRail').setZ(z.m('tarrikRail').z + 2.2), z.myaw('tarrikRail'));
-    // the reveal: behind and to the right of the pair, the glass rail on the left, the arm running out under it to
+    // the reveal: behind and to the right of the pair, the parapet on the left, the arm running out under it to
     // the Wound; the red remnant on the left, the hard white one on the right (the concept painting)
-    c.cut({ pos: z.P(OVERLOOK.x + 4.4, OVERLOOK.n - 3.4, LOW + 1.7), look: z.P(OVERLOOK.x - 9, OVERLOOK.n + 30, LOW + 8.5), fov: 58 });
-    c.moveAsync({ pos: z.P(OVERLOOK.x + 3.4, OVERLOOK.n - 2.0, LOW + 1.75), look: z.P(OVERLOOK.x - 8, OVERLOOK.n + 30, LOW + 9.5), fov: 56 }, 7, 'inOut');
+    // (polish 4: 1.8 m further west than before, so the pale buttresses beyond the parapet on the north-east stay out
+    // of this frame and off the Wound)
+    c.cut({ pos: z.P(OVERLOOK.x + 2.6, OVERLOOK.n - 3.0, LOW + 1.7), look: z.P(OVERLOOK.x - 9, OVERLOOK.n + 30, LOW + 8.5), fov: 58 });
+    c.moveAsync({ pos: z.P(OVERLOOK.x + 1.8, OVERLOOK.n - 1.8, LOW + 1.75), look: z.P(OVERLOOK.x - 8, OVERLOOK.n + 30, LOW + 9.5), fov: 56 }, 7, 'inOut');
     yield waitOr(z, () => z.skipping || atPost(z, selene, 'seleneRail'), 6);
     yield 1.2;
     // she looks back along the path; the line lands on her

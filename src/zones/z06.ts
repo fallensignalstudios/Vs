@@ -20,7 +20,7 @@ import type { Beat, Routine, ZoneDef, ZoneRuntime } from '@/core/api';
 import { setDoor } from './shared';
 import { burstBreachB, liftInteraction, setupE3, startFight, updateFight, wakeE3 } from './z06/fight';
 import { build } from './z06/layout';
-import { LYRIC_CORRUPTION, arrival, groundingScene, kingScene, rescueScene, toTheGallery } from './z06/scenes';
+import { LYRIC_ARMS_AFTER, LYRIC_CORRUPTION, arrival, groundingScene, kingScene, rescueScene, toTheGallery } from './z06/scenes';
 import { S, resetState } from './z06/state';
 
 // =====================================================================================================================
@@ -56,7 +56,7 @@ function spawnCast(z: ZoneRuntime, stage: Stage): void {
     lyric.play('kneel', { loop: true });
   }
   // face-only (the book: the black patterns in her iris, at her neck) — never the whole figure
-  lyric.actor.visual?.setCorruption(after ? LYRIC_CORRUPTION.after : LYRIC_CORRUPTION.arrive, { mode: 'face' });
+  lyric.actor.visual?.setCorruption(after ? LYRIC_CORRUPTION.after : LYRIC_CORRUPTION.arrive, { mode: 'face', arms: after ? LYRIC_ARMS_AFTER : 0 });
   // a Dominion soldier sheltering on the refuge with them; the marine under the plate (or out of it)
   z.npc('dominionSoldier', 'soldierRefuge', 'sitInjured', 'soldier');
   z.npc('reformationMarine', after ? 'marineSafe' : 'marine', after ? 'sitInjured' : 'trapped', 'marine');
